@@ -1,0 +1,44 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "deepseek": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DeepSeek",
+      "options": {
+        "baseURL": "https://api.deepseek.com",
+        "apiKey": "{env:DEEPSEEK_API_KEY}"
+      },
+      "models": {
+        "deepseek-flash": {
+          "id": "deepseek-flash",
+          "name": "DeepSeek V4.1 Flash",
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          }
+        }
+      }
+    }
+  },
+  "model": "deepseek/deepseek-flash",
+  "plugin": [
+    "jev-guard"
+  ],
+  "skills": [
+    "/opt/jev-review/skills"
+  ],
+  "mcp": {
+    "servers": {
+      "jev-review": {
+        "type": "local",
+        "command": [
+          "node",
+          "/opt/jev-review/dist/server.js"
+        ],
+        "environment": {
+          "JEV_API_KEY": "{env:JEV_API_KEY}"
+        }
+      }
+    }
+  }
+}

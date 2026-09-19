@@ -1,0 +1,6 @@
+# System prerequisites (not pip packages):
+# docker (daemon reachable)
+# gh (GitHub CLI, authenticated)
+# git
+# curl
+# python3

@@ -1,0 +1,24 @@
+services:
+  opencode:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-deepseek-jev:robust
+    container_name: opencode-deepseek-jev
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - JEV_API_KEY=${JEV_API_KEY}
+      - OPENCODE_DISABLE_DEFAULT_PLUGINS=true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
