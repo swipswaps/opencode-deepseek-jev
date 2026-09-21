@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+#
+# recover-scan-constraints.sh — restore missing repo artifacts and archive
+# the /tmp scratch patches that should have lived in the repo.
+#
+# ============================================================================
+# AUDIT
+# ============================================================================
+#
+# State observed:
+#
+#   scripts/scan-constraints.py              missing
+#   scripts/scan-constraints.sh              present (naive version)
+#   scripts/chatlog.sh                       modified twice, primary branch
+#                                            references the missing file
+#   scripts/chatlog.sh.bak.<ts>              two backup files
+#   /tmp/patch-ask.sh                        scratch
+#   /tmp/scan-constraints.sh                 scratch
+#   /tmp/patch-chatlog-search.sh             scratch
+#   /tmp/patch-chatlog-search2.sh            scratch
+#   /tmp/patch-scanner-pattern.sh            scratch
+#
+# Remedy:
+#
+#   1. Write scripts/scan-constraints.py in its final form, with
+#      --pattern support built in. No separate patch step.
+#
+#   2. Move the /tmp scratch patches into
+#      scripts/archive/one-shot/tmp-patches/ so the history of the
+#      session is preserved and searchable.
+#
+#   3. Move the two chatlog.sh backups into
+#      scripts/archive/one-shot/backups/.
+#
+#   4. Verify scripts/chatlog.sh calls the scanner correctly.
+#
+#   5. Verify scripts/scan-constraints.py runs against the repo.
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   POSIX find(1)              https://pubs.opengroup.org/onlinepubs/9699919799/utilities/find.html
+#   POSIX mv(1)                https://pubs.opengroup.org/onlinepubs/9699919799/utilities/mv.html
+#   POSIX mkdir(1)             https://pubs.opengroup.org/onlinepubs/9699919799/utilities/mkdir.html
+#   POSIX test(1)              https://pubs.opengroup.org/onlinepubs/9699919799/utilities/test.html
+#   Bash return                https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#   Bash pipefail              https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+#   Python pathlib             https://docs.python.org/3/library/pathlib.html
+#   Python argparse            https://docs.python.org/3/library/argparse.html
+#   Python re                  https://docs.python.org/3/library/re.html
+#
+#   POSIX shell lexical conventions:
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
+#
+#   GNU Bash quoting:
+#     https://www.gnu.org/software/bash/manual/html_node/Quoting.html
+#
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §6.2 "Idempotence".
+#
+#   Raymond, "The Art of Unix Programming", Addison-Wesley, 2003.
+#   ISBN-13: 978-0131429017. §1.6.6 "Rule of Separation".
+#
+# ============================================================================
+
+set -o pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPTS="$REPO_DIR/scripts"
+ONE_SHOT="$SCRIPTS/archive/one-shot"
+TMP_PATCHES="$ONE_SHOT/tmp-patches"
+BACKUPS="$ONE_SHOT/backups"
+
+main() {
+    printf '=== recover-scan-constraints.sh ===\n'
+    printf 'repo: %s\n\n' "$REPO_DIR"
+
+    # ---- ensure target directories exist ------------------------------
+    mkdir -p "$TMP_PATCHES" "$BACKUPS"
+    printf 'ensured directories:\n'
+    printf '  %s\n' "$TMP_PATCHES"
+    printf '  %s\n' "$BACKUPS"
+    printf '\n'
+
+    # ---- write the missing scanner ------------------------------------
+    # This is the single source of truth for scan-constraints.py.
+    # It is written here, not patched later, so the file on disk and the
+    # file in version control are identical from the first write.
+    local scanner="$SCRIPTS/scan-constraints.py"
+    printf 'writing %s\n' "$scanner"
+    cat > "$scanner" <<'PY_SCANNER_EOF'
+#!/usr/bin/env python3
+"""
+scan-constraints.py — scan shell scripts for forbidden patterns, using
+the code/string/comment classifier from clipboard_matcher.py but reading
+files directly instead of going through the clipboard.
+
+The classifier is the only piece of clipboard_matcher.py that matters for
+this task. Reusing it inline avoids the fork-and-round-trip cost of
+piping every file through xclip and reading it back.
+
+Usage:
+    scan-constraints.py [ROOT] [--show-all] [--quiet] [--pattern REGEX]
+
+    ROOT        directory to scan (default: scripts)
+    --show-all  also print matches classified as comment or string
+    --quiet     only print the summary, no per-file detail
+    --pattern   override the default pattern set with a single POSIX ERE
+
+Exit status:
+    0   no matches classified as code
+    1   at least one code match (real constraint violation)
+    2   usage error or ROOT not a directory
+
+Classifier citation:
+
+    The comment/string/code distinction comes from the observable
+    lexical structure of shell source, as described in POSIX shell
+    lexical conventions:
+        https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
+
+    Quoting rules for the classifier's quote-counting logic:
+        https://www.gnu.org/software/bash/manual/html_node/Quoting.html
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import Iterator, NamedTuple
+
+
+# ---------------------------------------------------------------------------
+# Default constraint patterns
+# ---------------------------------------------------------------------------
+# Each entry is (name, compiled-regex). Compiled once at import.
+# ---------------------------------------------------------------------------
+DEFAULT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("2>/dev/null",    re.compile(r"2>/dev/null")),
+    ("sed",            re.compile(r"(?:^|[^A-Za-z0-9_])sed(?:[^A-Za-z0-9_]|$)")),
+    ("rm -rf",         re.compile(r"\brm\s+-rf\b")),
+    ("set -e",         re.compile(r"(?:^|[^A-Za-z0-9_])set\s+-e(?:[^A-Za-z0-9_]|$)")),
+    ("exit 1",         re.compile(r"(?:^|[^A-Za-z0-9_])exit\s+1(?:[^A-Za-z0-9_]|$)")),
+    ("subprocess.run", re.compile(r"subprocess\.run")),
+    ("kill N",         re.compile(r"(?:^|[^A-Za-z0-9_])kill\s+-?[0-9]+(?:[^0-9]|$)")),
+]
+
+
+class Hit(NamedTuple):
+    path: Path
+    line_number: int
+    line: str
+    pattern: str
+    match_type: str
+
+
+# ---------------------------------------------------------------------------
+# Classifier
+# ---------------------------------------------------------------------------
+# Given a line and a byte range within it, decide whether the range is
+# inside a comment, inside a string, or bare code.
+#
+# The heuristic counts unescaped double and single quotes in the prefix
+# of the line. Odd count of either means the range is inside a string
+# literal that opened earlier. If not inside a string, any '#' appearing
+# earlier on the line means the range is inside a comment.
+#
+# This is not a full shell lexer. It does not track heredocs, here-
+# strings, or backslash escapes spanning lines. For the practical case
+# of detecting whether a match is a promise-in-a-comment versus an
+# executed statement, it is correct on the shell source in this repo.
+# ---------------------------------------------------------------------------
+def classify(line: str, start: int, end: int) -> str:
+    before = line[:start]
+    double_quotes = before.count('"') - before.count('\\"')
+    single_quotes = before.count("'") - before.count("\\'")
+    inside_string = (double_quotes % 2 == 1) or (single_quotes % 2 == 1)
+
+    if not inside_string:
+        if before.rfind("#") != -1:
+            return "comment"
+
+    if inside_string:
+        return "string"
+
+    return "code"
+
+
+# ---------------------------------------------------------------------------
+# File scanning
+# ---------------------------------------------------------------------------
+def iter_shell_files(root: Path) -> Iterator[Path]:
+    for path in sorted(root.rglob("*.sh")):
+        if path.is_file():
+            yield path
+
+
+def scan_file(path: Path, patterns: list[tuple[str, re.Pattern[str]]]) -> Iterator[Hit]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(f"read error: {path}: {exc}", file=sys.stderr)
+        return
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for name, regex in patterns:
+            for match in regex.finditer(line):
+                kind = classify(line, match.start(), match.end())
+                yield Hit(path, line_number, line, name, kind)
+
+
+# ---------------------------------------------------------------------------
+# Reporting
+# ---------------------------------------------------------------------------
+def format_hit(hit: Hit, root: Path) -> str:
+    try:
+        rel = hit.path.relative_to(root)
+    except ValueError:
+        rel = hit.path
+    return f"  {rel}:{hit.line_number}  [{hit.match_type}]  {hit.pattern}"
+
+
+def report(
+    root: Path,
+    patterns: list[tuple[str, re.Pattern[str]]],
+    show_all: bool,
+    quiet: bool,
+) -> int:
+    files_scanned = 0
+    code_hits: list[Hit] = []
+    other_hits: list[Hit] = []
+    per_file: dict[Path, list[Hit]] = {}
+
+    for path in iter_shell_files(root):
+        files_scanned += 1
+        for hit in scan_file(path, patterns):
+            per_file.setdefault(path, []).append(hit)
+            if hit.match_type == "code":
+                code_hits.append(hit)
+            else:
+                other_hits.append(hit)
+
+    if not quiet:
+        for path, hits in per_file.items():
+            interesting = hits if show_all else [h for h in hits if h.match_type == "code"]
+            if not interesting:
+                continue
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                rel = path
+            print(f"=== {rel} ===")
+            for h in interesting:
+                print(format_hit(h, root))
+            print()
+
+    print("=== summary ===")
+    print(f"  files scanned: {files_scanned}")
+    print(f"  code hits:     {len(code_hits)}")
+    print(f"  comment/string hits: {len(other_hits)}")
+    if show_all and other_hits and not quiet:
+        print("  (non-code hits shown above; only code hits fail the scan)")
+
+    if code_hits:
+        print("\nresult: FAIL")
+        return 1
+    print("\nresult: PASS")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Scan shell scripts for forbidden patterns, "
+                    "classifying each match as code, string, or comment.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Exit status:\n"
+            "  0  no code hits\n"
+            "  1  at least one code hit\n"
+            "  2  usage error\n"
+        ),
+    )
+    parser.add_argument("root", nargs="?", default="scripts", type=Path,
+                        help="directory to scan (default: scripts)")
+    parser.add_argument("--show-all", action="store_true",
+                        help="also show comment and string hits")
+    parser.add_argument("--quiet", action="store_true",
+                        help="print only the summary")
+    parser.add_argument("--pattern", default=None, metavar="REGEX",
+                        help="override the default constraint pattern set "
+                             "with a single POSIX ERE")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv if argv is not None else sys.argv[1:])
+    if not args.root.is_dir():
+        print(f"error: {args.root} is not a directory", file=sys.stderr)
+        return 2
+
+    if args.pattern is not None:
+        try:
+            compiled = re.compile(args.pattern)
+        except re.error as exc:
+            print(f"error: invalid --pattern: {exc}", file=sys.stderr)
+            return 2
+        patterns = [("user", compiled)]
+    else:
+        patterns = DEFAULT_PATTERNS
+
+    return report(args.root, patterns, args.show_all, args.quiet)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PY_SCANNER_EOF
+
+    chmod +x "$scanner"
+    printf '  wrote and marked executable\n\n'
+
+    # ---- archive /tmp scratch patches ---------------------------------
+    printf 'archiving /tmp scratch patches to %s\n' "$TMP_PATCHES"
+    for name in patch-ask.sh scan-constraints.sh patch-chatlog-search.sh \
+                patch-chatlog-search2.sh patch-scanner-pattern.sh; do
+        src="/tmp/$name"
+        if [ -f "$src" ]; then
+            mv "$src" "$TMP_PATCHES/$name"
+            printf '  archived: %s\n' "$name"
+        fi
+    done
+    printf '\n'
+
+    # ---- archive chatlog.sh backups -----------------------------------
+    printf 'archiving chatlog.sh backups to %s\n' "$BACKUPS"
+    for f in "$SCRIPTS"/chatlog.sh.bak.*; do
+        [ -e "$f" ] || continue
+        mv "$f" "$BACKUPS/$(basename "$f")"
+        printf '  archived: %s\n' "$(basename "$f")"
+    done
+    printf '\n'
+
+    # ---- verify -----------------------------------------------
+    printf '=== verification ===\n'
+
+    printf 'scanner exists: '
+    if [ -x "$scanner" ]; then
+        printf 'yes\n'
+    else
+        printf 'NO\n'
+    fi
+
+    printf 'chatlog.sh search branch:\n'
+    awk '/^    search\)/,/^        ;;/' "$SCRIPTS/chatlog.sh" | head -20
+
+    printf '\nscanner smoke test (default patterns):\n'
+    python3 "$scanner" "$SCRIPTS" --quiet || true
+
+    printf '\nscanner smoke test (--pattern):\n'
+    python3 "$scanner" "$SCRIPTS" --pattern 'Docker Root Dir' --show-all --quiet || true
+
+    printf '\n=== done ===\n'
+    printf 'next: ./scripts/test-repo.sh should still pass\n'
+    return 0
+}
+
+main "$@"

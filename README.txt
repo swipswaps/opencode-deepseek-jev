@@ -7,9 +7,9 @@ Prerequisites
 -------------
 - Docker Engine (daemon reachable by current user)
 - gh (GitHub CLI), authenticated
-- DeepSeek API key (DEEPSEEK_API_KEY, prefix sk-)
+- DeepSeek API key (prefix sk-)
   https://platform.deepseek.com/api_keys
-- Jev API key (JEV_API_KEY, prefix apikey_)
+- Jev API key (prefix apikey_)
   https://console.typesafe.ai/settings/keys
 
 Quick Start
@@ -18,52 +18,55 @@ cd docker
 ./build.sh
 ./run.sh
 
-API keys are cached in ../.env.local (mode 0600, gitignored).
+Keys are cached in ../.env.local (mode 0600, gitignored).
 
-Both keys are validated before the Docker build:
-- DeepSeek: GET https://api.deepseek.com/user/balance must return 200
-- Jev: POST https://api.typesafe.ai/v1/systemone with a minimal
-  noul question (type + instructions) must return 200
+Telemetry policy
+----------------
+Smoke tests stream stdout and stderr live via process substitution
+(> >(tee file)). No buffering. The user sees the model's response
+as it arrives. The safety timeout (120s) fires only if the process
+genuinely makes no progress.
 
-If a cached key fails, the script prompts for a new value once.
-If the new value also fails, the script aborts. No retry loop,
-no server spam.
+Smoke test methodology
+---------------------
+opencode 1.18.31 exits non-zero after a successful non-TTY response.
+The staging script asserts on response text ("OK") instead of exit
+code. Elapsed time and exit code are reported for diagnostic purposes
+but do not determine pass/fail.
 
-Architecture
+UID handling
 ------------
-- Base image: node:22-bookworm-slim
-- npm upgraded within current major (npm@10) for Node 22
-- Uses existing node user (UID 1000, GID 1000)
-- Repo mounted at /workspace
-- jev-guard: installed via "opencode plugin jev-guard@<resolved> --global"
-- jev-review: MCP server at /opt/jev-review/dist/server.js
-- OPENCODE_DISABLE_DEFAULT_PLUGINS=true disables bundled plugins
+Container runs with --user $(id -u):$(id -g). /home/node is chmod 777
+at build time.
 
-Model
------
-DeepSeek V4.1 Flash via official API.
-Model ID: deepseek-flash. Base URL: https://api.deepseek.com.
-Context: 1,000,000 tokens. Max output: 384,000 tokens.
+Secrets hygiene
+---------------
+- Keys never appear on docker CLI argv (bare -e VAR).
+- curl Authorization headers written to mode-0600 temp files.
+- .env.local is gitignored and mode 0600.
 
-Verification
-------------
-docker run --rm -e DEEPSEEK_API_KEY -e JEV_API_KEY <image> plugin list
-docker run --rm -e DEEPSEEK_API_KEY -e JEV_API_KEY <image> mcp list
+Logs
+----
+Full staging output captured to ../staging.log.
+
+Verification (V1 command surface)
+---------------------------------
+opencode V1 has no "mcp list" subcommand. MCP servers are read from
+opencode.json. The staging script verifies:
+- opencode --help loads the binary
+- opencode.json parses and lists mcp.servers keys via python3
+- the image builds
+- DeepSeek smoke test returns response text "OK"
+- plugin list returns output (exit code informational)
 
 Troubleshooting
 ---------------
-Authentication Fails (DeepSeek): key invalid or revoked. Get a new key at
-  https://platform.deepseek.com/api_keys
-Jev key rejected: must start with apikey_ or sk-. Get a key at
-  https://console.typesafe.ai/settings/keys
-  Docs: https://docs.typesafe.ai/
-HTTP 422 from TypeSafe: request format issue. The probe uses the
-  documented format: {"type":"noul","instructions":"..."}.
-jev-review MCP not found: dist/server.js not built.
-jev-guard not loading: check resolved version in Dockerfile.
+EACCES on /workspace: host UID mismatch. Script uses --user $(id -u).
+HTTP 401 from DeepSeek: verbatim body printed by the script.
+HTTP 422 from TypeSafe: request body format issue.
 docker build permission denied: add user to docker group.
-
-Re-run determinism
-------------------
-Re-running is idempotent: cached keys are validated and shown masked.
-To force re-prompt, delete .env.local.
+Smoke test FAIL despite OK response: known opencode exit-code bug.
+  Script asserts on text, not exit code, to work around this.
+Silent stall during smoke test: process substitution ensures live
+  streaming. If this recurs, check that bash is version 4+ (process
+  substitution is a bash feature).

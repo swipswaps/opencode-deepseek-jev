@@ -1,0 +1,56 @@
+=== Recovery analysis ===
+Timestamp: 2026-09-20T13:53:39Z
+=== Step 1: journalctl diagnostics ===
+
+-- systemd units matching docker --
+  containerd.service                                                                        loaded    active   running containerd container runtime
+  docker.service                                                                            loaded    active   running Docker Application Container Engine
+
+-- journalctl entries for docker.service last 24h (raw, last 20 lines) --
+Sep 19 19:33:13 fedora dockerd[1266]: time="2026-09-19T19:33:13.007454611-04:00" level=info msg="ignoring event" container=77413b1dd6c65a90aaaee94c844a73ed894e6e347c946ca294df56282ef1c705 module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+Sep 19 19:36:40 fedora dockerd[1266]: time="2026-09-19T19:36:39.431391010-04:00" level=info msg="ignoring event" container=c92a8d36af82448c01b16971fd95974d13f838cd575c31b814a197acab2a7605 module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+Sep 19 19:40:23 fedora dockerd[1266]: time="2026-09-19T19:40:23.247638091-04:00" level=info msg="ignoring event" container=1045c755062bcd9baaf79f7d2e993e2ae5192684bb9a7019d9742449eb562787 module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+Sep 19 19:53:05 fedora dockerd[1266]: time="2026-09-19T19:53:05.829651570-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 19:57:53 fedora dockerd[1266]: time="2026-09-19T19:57:53.781028737-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 19:58:18 fedora dockerd[1266]: time="2026-09-19T19:58:18.920146066-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 19:59:41 fedora dockerd[1266]: time="2026-09-19T19:59:41.735518402-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:01:00 fedora dockerd[1266]: time="2026-09-19T20:01:00.468456029-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:02:25 fedora dockerd[1266]: time="2026-09-19T20:02:25.893910511-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:03:22 fedora dockerd[1266]: time="2026-09-19T20:03:22.860930894-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:03:50 fedora dockerd[1266]: time="2026-09-19T20:03:50.922846930-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:04:50 fedora dockerd[1266]: time="2026-09-19T20:04:50.350476203-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:05:25 fedora dockerd[1266]: time="2026-09-19T20:05:25.639246420-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:05:55 fedora dockerd[1266]: time="2026-09-19T20:05:55.289737401-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 20:11:03 fedora dockerd[1266]: time="2026-09-19T20:11:03.008432130-04:00" level=info msg="ignoring event" container=87db30509851097b4ac266ae03bacfa286e7afbd425ce541db268aa60bce2a75 module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+Sep 19 21:45:23 fedora dockerd[1266]: 2026/09/19 21:45:23 http2: server: error reading preface from client @: read unix /run/docker.sock->@: read: connection reset by peer
+Sep 19 22:15:40 fedora dockerd[1266]: 2026/09/19 22:15:40 http2: server: error reading preface from client @: read unix /run/docker.sock->@: read: connection reset by peer
+Sep 20 09:26:04 fedora dockerd[1266]: time="2026-09-20T09:26:04.290346167-04:00" level=info msg="ignoring event" container=e9c14abce89bfbdcd2e9ef008956c624492d5f5804397fc416f93992ad04587f module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+Sep 20 09:26:11 fedora dockerd[1266]: time="2026-09-20T09:26:11.689738198-04:00" level=warning msg="xtables contention detected while running [-t raw -C PREROUTING -d 172.17.0.3 ! -i docker0 -j DROP]: Waited for 2.30 seconds and received \"\""
+Sep 20 09:35:28 fedora dockerd[1266]: time="2026-09-20T09:35:28.398921215-04:00" level=info msg="ignoring event" container=833e6b32115bfc1eaa13d3bf8a7ce1a8b0998c4142730e851bf47ce7099ffc02 module=libcontainerd namespace=moby topic=/tasks/delete type="*events.TaskDelete"
+
+-- journalctl entries for docker.socket last 24h --
+-- No entries --
+
+-- journalctl entries containing 'dockerd' last 24h --
+Sep 19 16:37:53 fedora dockerd[1266]: 2026/09/19 16:37:53 http2: server: error reading preface from client @: read unix /run/docker.sock->@: read: connection reset by peer
+Sep 19 16:40:01 fedora dockerd[1266]: time="2026-09-19T16:40:01.017713807-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 16:40:06 fedora dockerd[1266]: time="2026-09-19T16:40:06.013500701-04:00" level=warning msg="xtables contention detected while running [-t raw -C PREROUTING -d 172.17.0.2 ! -i docker0 -j DROP]: Waited for 5.12 seconds and received \"\""
+Sep 19 16:45:11 fedora dockerd[1266]: time="2026-09-19T16:45:11.030016243-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 16:45:17 fedora dockerd[1266]: time="2026-09-19T16:45:17.634722008-04:00" level=warning msg="failed to read oom_kill event" error="open /sys/fs/cgroup/system.slice:docker:dxn8sj2gi57x78hs0zqttsziq/memory.events: no such file or directory" span="[ 3/12] RUN groupadd --gid 1000 opencode     && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash opencode" spanID=906243c8fb3c8a6c traceID=38f46d785a044b3d57d16eea98d8e181
+Sep 19 16:45:38 fedora dockerd[1266]: time="2026-09-19T16:45:38.166901444-04:00" level=error msg=/moby.buildkit.v1.Control/Solve error="rpc error: code = Unknown desc = process \"/bin/sh -c groupadd --gid 1000 opencode     && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash opencode\" did not complete successfully: exit code: 4" spanID=24d277d337525fd3 traceID=38f46d785a044b3d57d16eea98d8e181
+Sep 19 16:55:33 fedora dockerd[1266]: 2026/09/19 16:55:33 http2: server: error reading preface from client @: read unix /run/docker.sock->@: read: connection reset by peer
+Sep 19 16:55:46 fedora dockerd[1266]: time="2026-09-19T16:55:46.092250826-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 16:56:33 fedora dockerd[1266]: time="2026-09-19T16:56:33.431329390-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 16:56:40 fedora dockerd[1266]: time="2026-09-19T16:56:40.851339405-04:00" level=warning msg="failed to read oom_kill event" error="open /sys/fs/cgroup/system.slice:docker:4e6etuaan6ggathwszy497yhm/memory.events: no such file or directory" span="[ 4/12] RUN opencode plugin add jev-guard@0.2.1" spanID=19b62301fd6e73d0 traceID=977dd651c61812e2230b2b97f1013203
+Sep 19 16:57:02 fedora dockerd[1266]: time="2026-09-19T16:56:59.321360173-04:00" level=error msg=/moby.buildkit.v1.Control/Solve error="rpc error: code = Unknown desc = process \"/bin/sh -c opencode plugin add jev-guard@0.2.1\" did not complete successfully: exit code: 1" spanID=2cbf19575b20ffcf traceID=977dd651c61812e2230b2b97f1013203
+Sep 19 17:04:35 fedora dockerd[1266]: 2026/09/19 17:04:35 http2: server: error reading preface from client @: read unix /run/docker.sock->@: read: connection reset by peer
+Sep 19 17:04:56 fedora dockerd[1266]: time="2026-09-19T17:04:56.220947287-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 17:05:16 fedora dockerd[1266]: time="2026-09-19T17:05:16.735734220-04:00" level=warning msg="failed to read oom_kill event" error="open /sys/fs/cgroup/system.slice:docker:qs82jxoixxugj1gvl2j1pbsbz/memory.events: no such file or directory" span="[ 4/12] RUN opencode plugin jev-guard@0.2.1 --global" spanID=22018a7b1e200979 traceID=48d74f3f04dbbe3a5e0dce643dcb838b
+Sep 19 17:05:41 fedora dockerd[1266]: time="2026-09-19T17:05:41.216556780-04:00" level=error msg=/moby.buildkit.v1.Control/Solve error="rpc error: code = Unknown desc = process \"/bin/sh -c opencode plugin jev-guard@0.2.1 --global\" did not complete successfully: exit code: 1" spanID=6fa8d96435552b71 traceID=48d74f3f04dbbe3a5e0dce643dcb838b
+Sep 19 17:11:47 fedora dockerd[1266]: time="2026-09-19T17:11:47.093562475-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 17:12:34 fedora dockerd[1266]: time="2026-09-19T17:12:34.344807600-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 17:13:20 fedora dockerd[1266]: time="2026-09-19T17:13:20.451692268-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 17:13:47 fedora dockerd[1266]: time="2026-09-19T17:13:47.113483149-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+Sep 19 17:15:08 fedora dockerd[1266]: time="2026-09-19T17:15:08.297627773-04:00" level=info msg="detected 127.0.0.53 nameserver, assuming systemd-resolved, so using resolv.conf: /run/systemd/resolve/resolv.conf"
+
+-- journalctl entries containing 'container' last 24h --

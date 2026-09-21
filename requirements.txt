@@ -4,3 +4,4 @@
 # git
 # curl
 # python3
+# coreutils (timeout)

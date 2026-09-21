@@ -1,0 +1,22 @@
+OpenCode + DeepSeek V4.1 Flash + Jev — quick start
+===================================================
+
+1. Bring up the management UI:
+
+       cd scripts
+       ./deploy-dockge.sh
+
+2. Refresh the stack list after adding a new project:
+
+       ./flatten-dockge-stacks.sh
+
+3. Open the browser:
+
+       http://localhost:5001
+
+Full description: scripts/README.txt
+
+The Docker image is built from docker/ in this directory. It embeds
+the OpenCode binary, DeepSeek provider configuration, jev-guard
+plugin, and jev-review MCP server. See docker/Dockerfile for the
+build recipe.

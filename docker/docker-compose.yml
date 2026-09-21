@@ -5,14 +5,15 @@ services:
       dockerfile: docker/Dockerfile
     image: opencode-deepseek-jev:robust
     container_name: opencode-deepseek-jev
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     stdin_open: true
     tty: true
     working_dir: /workspace
     volumes:
       - ..:/workspace
     environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - JEV_API_KEY=${JEV_API_KEY}
+      - DEEPSEEK_API_KEY
+      - JEV_API_KEY
       - OPENCODE_DISABLE_DEFAULT_PLUGINS=true
     security_opt:
       - no-new-privileges:true

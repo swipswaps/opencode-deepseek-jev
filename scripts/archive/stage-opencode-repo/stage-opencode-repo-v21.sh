@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage, create, push, verify OpenCode + DeepSeek V4.1 Flash + Jev.
-# v18: apikey_ prefix for Jev; single-validation probes for both keys;
-#      interactive re-prompt on failure (no loop); saves v10-v18 in scripts/.
+# v21: bare -e VAR for docker (no key on argv); curl headers via @file;
+#      staging.log via tee. Saves v10-v21 in scripts/.
 # Plain ASCII. No markdown. No sed. No rm -rf. No set -e. No exit 1.
 # No 2>/dev/null. No subprocess.run. No kill without signal.
 
@@ -9,10 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
 SCRIPTS_DIR="$REPO_DIR/scripts"
 ENV_FILE="$REPO_DIR/.env.local"
+LOG_FILE="$REPO_DIR/staging.log"
 GITHUB_REPO="opencode-deepseek-jev"
 GITHUB_USER=""
 JEV_REVIEW_COMMIT="3fb6042ebf07f0fdaae30d65c6393848e1a549e3"
 JEV_GUARD_VERSION=""
+
+DEEPSEEK_KEY_URL="https://platform.deepseek.com/api_keys"
+DEEPSEEK_DOCS_URL="https://api-docs.deepseek.com/"
+TYPESAFE_KEY_URL="https://console.typesafe.ai/settings/keys"
+TYPESAFE_DOCS_URL="https://docs.typesafe.ai/"
 
 load_env_file() {
     if [ ! -f "$ENV_FILE" ]; then
@@ -20,8 +26,8 @@ load_env_file() {
     fi
     while IFS='=' read -r key value; do
         case "$key" in
-            DEEPSEEK_API_KEY) CACHED_DEEPSEEK_API_KEY="$value" ;;
-            JEV_API_KEY)      CACHED_JEV_API_KEY="$value" ;;
+            DEEPSEEK_API_KEY) CACHED_DEEPSEEK_API_KEY=$(printf '%s' "$value" | tr -d '\r\n') ;;
+            JEV_API_KEY)      CACHED_JEV_API_KEY=$(printf '%s' "$value" | tr -d '\r\n') ;;
         esac
     done < "$ENV_FILE"
 }
@@ -29,8 +35,8 @@ load_env_file() {
 save_env_file() {
     touch "$ENV_FILE"
     chmod 600 "$ENV_FILE"
-    printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$ENV_FILE"
-    printf 'JEV_API_KEY=%s\n' "$JEV_API_KEY" >> "$ENV_FILE"
+    printf 'DEEPSEEK_API_KEY=%s\n' "$(printf '%s' "$DEEPSEEK_API_KEY" | tr -d '\r\n')" > "$ENV_FILE"
+    printf 'JEV_API_KEY=%s\n' "$(printf '%s' "$JEV_API_KEY" | tr -d '\r\n')" >> "$ENV_FILE"
 }
 
 mask_secret() {
@@ -60,19 +66,53 @@ resolve_jev_guard_version() {
     return 0
 }
 
+# Write Authorization header to mode-0600 temp file so key never appears in argv.
+curl_with_auth_header() {
+    local key="$1"
+    shift
+    local header_file
+    header_file=$(mktemp)
+    chmod 600 "$header_file"
+    printf 'Authorization: Bearer %s\n' "$key" > "$header_file"
+    curl -H @"$header_file" "$@"
+    local status=$?
+    rm -f "$header_file"
+    return $status
+}
+
 validate_deepseek_key() {
     local key="$1"
     if [ -z "$key" ]; then
         return 1
     fi
+    local tmp
+    tmp=$(mktemp)
     local http_code
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
-        -H "Authorization: Bearer $key" \
+    http_code=$(curl_with_auth_header "$key" -s -o "$tmp" -w '%{http_code}' \
         https://api.deepseek.com/user/balance)
+    local body
+    body=$(cat "$tmp")
+    rm -f "$tmp"
     if [ "$http_code" = "200" ]; then
         return 0
     fi
-    echo "  FAIL: DeepSeek API returned HTTP $http_code for /user/balance"
+    echo "  FAIL: DeepSeek API returned HTTP $http_code"
+    echo "  Verbatim response body:"
+    printf '%s\n' "$body"
+    case "$http_code" in
+        401)
+            echo "  401 from DeepSeek means the key presented was not accepted."
+            echo "  Possible causes:"
+            echo "    - key was revoked in the DeepSeek console"
+            echo "    - key was copied with a trailing newline or space"
+            echo "    - key belongs to a different DeepSeek account"
+            echo "    - transient DeepSeek authentication service issue"
+            ;;
+        402) echo "  402 means insufficient balance. Top up at https://platform.deepseek.com/top_up" ;;
+        429) echo "  429 means rate limited. Wait and retry." ;;
+    esac
+    echo "  Get a key at: $DEEPSEEK_KEY_URL"
+    echo "  Docs: $DEEPSEEK_DOCS_URL"
     return 1
 }
 
@@ -81,29 +121,57 @@ validate_jev_key() {
     if [ -z "$key" ]; then
         return 1
     fi
-    # Accept apikey_ (current), sk-, ts_, jev- (legacy/documented variants)
     case "$key" in
         apikey_*|sk-*|ts_*|jev-*) ;;
         *)
-            echo "  FAIL: Jev key must start with apikey_, sk-, ts_, or jev-"
+            echo "  FAIL: Jev key must start with apikey_ or sk-"
+            echo "  Get a key at: $TYPESAFE_KEY_URL"
+            echo "  Docs: $TYPESAFE_DOCS_URL"
             return 1
             ;;
     esac
-    # Single live probe: minimal noul question, ~$1e-5
+    local tmp
+    tmp=$(mktemp)
     local http_code
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+    http_code=$(curl_with_auth_header "$key" -s -o "$tmp" -w '%{http_code}' \
         -X POST https://api.typesafe.ai/v1/systemone \
-        -H "Authorization: Bearer $key" \
         -H "Content-Type: application/json" \
-        -d '{"model":"jev-latest","state":"ok","questions":{"q":{"noul":"Is this valid?"}}}')
+        -d '{
+          "state": "validation probe",
+          "model": "jev-latest",
+          "questions": {
+            "probe": {
+              "type": "noul",
+              "instructions": "Is this request valid?"
+            }
+          }
+        }')
+    local body
+    body=$(cat "$tmp")
+    rm -f "$tmp"
     if [ "$http_code" = "200" ]; then
         return 0
     fi
-    echo "  FAIL: TypeSafe API returned HTTP $http_code for /v1/systemone"
+    echo "  FAIL: Jev API returned HTTP $http_code"
+    echo "  Verbatim response body:"
+    printf '%s\n' "$body"
+    case "$http_code" in
+        401) echo "  401 means the key was not accepted." ;;
+        422) echo "  422 means the request body format was rejected." ;;
+        429) echo "  429 means rate limited. Wait and retry." ;;
+        529) echo "  529 means TypeSafe is overloaded. Wait and retry." ;;
+    esac
+    echo "  Get a key at: $TYPESAFE_KEY_URL"
+    echo "  Docs: $TYPESAFE_DOCS_URL"
     return 1
 }
 
 main() {
+    # Capture all output to staging.log while still displaying on terminal.
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    echo "=== staging started: $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+    echo "Log: $LOG_FILE"
+
     for bin in gh git docker python3 curl; do
         if ! command -v "$bin" > /dev/null; then
             echo "GATE FAIL: $bin not found. Install it first."
@@ -162,7 +230,6 @@ main() {
     echo "=== API Key Validation ==="
     NEEDS_SAVE=0
 
-    # --- DeepSeek ---
     if [ -n "$CACHED_DEEPSEEK_API_KEY" ]; then
         MASKED=$(mask_secret "$CACHED_DEEPSEEK_API_KEY")
         echo "  Cached DEEPSEEK_API_KEY: [$MASKED]"
@@ -170,9 +237,11 @@ main() {
             echo "  PASS: DEEPSEEK_API_KEY validated"
             DEEPSEEK_API_KEY="$CACHED_DEEPSEEK_API_KEY"
         else
-            echo "  Cached key invalid. Enter a new one."
+            echo "  Cached key rejected. Enter a new one."
+            echo "  DeepSeek keys: $DEEPSEEK_KEY_URL"
             read -r -s -p "Enter DEEPSEEK_API_KEY (sk-...): " DEEPSEEK_API_KEY
             echo ""
+            DEEPSEEK_API_KEY=$(printf '%s' "$DEEPSEEK_API_KEY" | tr -d '\r\n')
             if validate_deepseek_key "$DEEPSEEK_API_KEY"; then
                 echo "  PASS: DEEPSEEK_API_KEY validated"
                 NEEDS_SAVE=1
@@ -182,8 +251,10 @@ main() {
             fi
         fi
     else
+        echo "  DeepSeek keys: $DEEPSEEK_KEY_URL"
         read -r -s -p "Enter DEEPSEEK_API_KEY (sk-...): " DEEPSEEK_API_KEY
         echo ""
+        DEEPSEEK_API_KEY=$(printf '%s' "$DEEPSEEK_API_KEY" | tr -d '\r\n')
         if validate_deepseek_key "$DEEPSEEK_API_KEY"; then
             echo "  PASS: DEEPSEEK_API_KEY validated"
             NEEDS_SAVE=1
@@ -193,7 +264,6 @@ main() {
         fi
     fi
 
-    # --- Jev ---
     if [ -n "$CACHED_JEV_API_KEY" ]; then
         MASKED=$(mask_secret "$CACHED_JEV_API_KEY")
         echo "  Cached JEV_API_KEY: [$MASKED]"
@@ -201,9 +271,11 @@ main() {
             echo "  PASS: JEV_API_KEY validated"
             JEV_API_KEY="$CACHED_JEV_API_KEY"
         else
-            echo "  Cached key invalid. Enter a new one."
+            echo "  Cached key rejected. Enter a new one."
+            echo "  Jev keys: $TYPESAFE_KEY_URL"
             read -r -s -p "Enter JEV_API_KEY (apikey_...): " JEV_API_KEY
             echo ""
+            JEV_API_KEY=$(printf '%s' "$JEV_API_KEY" | tr -d '\r\n')
             if validate_jev_key "$JEV_API_KEY"; then
                 echo "  PASS: JEV_API_KEY validated"
                 NEEDS_SAVE=1
@@ -213,8 +285,10 @@ main() {
             fi
         fi
     else
+        echo "  Jev keys: $TYPESAFE_KEY_URL"
         read -r -s -p "Enter JEV_API_KEY (apikey_...): " JEV_API_KEY
         echo ""
+        JEV_API_KEY=$(printf '%s' "$JEV_API_KEY" | tr -d '\r\n')
         if validate_jev_key "$JEV_API_KEY"; then
             echo "  PASS: JEV_API_KEY validated"
             NEEDS_SAVE=1
@@ -238,13 +312,13 @@ main() {
         echo "GATE FAIL: Could not create $SCRIPTS_DIR"
         return 1
     fi
-    for v in 10 11 12 13 14 15 16 17 18; do
+    for v in 10 11 12 13 14 15 16 17 18 19 20 21; do
         src="$REPO_DIR/stage-opencode-repo-v${v}.sh"
         if [ -f "$src" ]; then
             cp "$src" "$SCRIPTS_DIR/stage-opencode-repo-v${v}.sh"
         fi
     done
-    echo "  PASS: scripts/ directory prepared (v10-v18)"
+    echo "  PASS: scripts/ directory prepared (v10-v21)"
 
     # 1. DOCKERFILE
     mkdir -p "$REPO_DIR/docker"
@@ -299,8 +373,8 @@ services:
     volumes:
       - ..:/workspace
     environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - JEV_API_KEY=${JEV_API_KEY}
+      - DEEPSEEK_API_KEY
+      - JEV_API_KEY
       - OPENCODE_DISABLE_DEFAULT_PLUGINS=true
     security_opt:
       - no-new-privileges:true
@@ -391,7 +465,7 @@ BUILD_EOF
     chmod +x "$REPO_DIR/docker/build.sh"
     echo "  PASS: docker/build.sh"
 
-    # 5. RUN SCRIPT
+    # 5. RUN SCRIPT (bare -e VAR; no key on argv)
     cat > "$REPO_DIR/docker/run.sh" <<'RUN_EOF'
 #!/usr/bin/env bash
 IMAGE_NAME="opencode-deepseek-jev:robust"
@@ -409,10 +483,12 @@ main() {
         docker info
         return 1
     fi
+    # Bare -e VAR: docker inherits value from caller's environment.
+    # The value never appears on the docker CLI argv.
     docker run -it --rm \
         -v "$REPO_DIR:/workspace" \
-        -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-        -e JEV_API_KEY="$JEV_API_KEY" \
+        -e DEEPSEEK_API_KEY \
+        -e JEV_API_KEY \
         -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
         --security-opt no-new-privileges:true \
         --cap-drop ALL \
@@ -451,8 +527,9 @@ Prerequisites
 - Docker Engine (daemon reachable by current user)
 - gh (GitHub CLI), authenticated
 - DeepSeek API key (DEEPSEEK_API_KEY, prefix sk-)
-- Jev API key from https://console.typesafe.ai/settings/keys
-  (JEV_API_KEY, prefix apikey_)
+  https://platform.deepseek.com/api_keys
+- Jev API key (JEV_API_KEY, prefix apikey_)
+  https://console.typesafe.ai/settings/keys
 
 Quick Start
 -----------
@@ -461,15 +538,19 @@ cd docker
 ./run.sh
 
 API keys are cached in ../.env.local (mode 0600, gitignored).
+Both keys are validated against the provider before the Docker build.
 
-Both keys are validated before the Docker build:
-- DeepSeek: GET https://api.deepseek.com/user/balance must return 200
-- Jev: POST https://api.typesafe.ai/v1/systemone with a minimal
-  noul question must return 200
+Secrets hygiene
+---------------
+- Keys are never passed as docker CLI arguments. Docker uses
+  bare -e VAR to inherit values from the caller's environment.
+- curl Authorization headers are written to mode-0600 temp files.
+- Keys are never committed. .env.local is gitignored.
 
-If a cached key fails, the script prompts for a new value once.
-If the new value also fails, the script aborts. No retry loop,
-no server spam.
+Logs
+----
+Full staging output is written to ../staging.log and displayed on
+the terminal. Inspect it after a failed run.
 
 Architecture
 ------------
@@ -487,25 +568,18 @@ DeepSeek V4.1 Flash via official API.
 Model ID: deepseek-flash. Base URL: https://api.deepseek.com.
 Context: 1,000,000 tokens. Max output: 384,000 tokens.
 
-Verification
-------------
-docker run --rm -e DEEPSEEK_API_KEY -e JEV_API_KEY <image> plugin list
-docker run --rm -e DEEPSEEK_API_KEY -e JEV_API_KEY <image> mcp list
-
 Troubleshooting
 ---------------
-Authentication Fails (DeepSeek): key invalid or revoked. Script validates
-  before build. If it fails after validation, rotate the key in the
-  DeepSeek console and re-run.
-Jev key rejected: must start with apikey_ (current TypeSafe format).
-  Legacy sk-, ts_, jev- prefixes are also accepted.
+HTTP 401 from DeepSeek: key not accepted. Verbatim body printed.
+  Get a new key at: https://platform.deepseek.com/api_keys
+HTTP 422 from TypeSafe: request body format issue.
+  Docs: https://docs.typesafe.ai/
 jev-review MCP not found: dist/server.js not built.
-jev-guard not loading: check resolved version in Dockerfile.
 docker build permission denied: add user to docker group.
 
 Re-run determinism
 ------------------
-Re-running is idempotent: cached keys are validated and shown masked.
+Re-running is idempotent: cached keys validated, shown masked.
 To force re-prompt, delete .env.local.
 README_EOF
     echo "  PASS: README.txt"
@@ -520,6 +594,7 @@ dist
 __pycache__
 .git
 verification.log
+staging.log
 DOCKERIGNORE_EOF
     echo "  PASS: .dockerignore"
 
@@ -532,6 +607,7 @@ dist/
 .env.local
 __pycache__/
 .DS_Store
+staging.log
 GITIGNORE_EOF
     echo "  PASS: .gitignore"
 
@@ -575,12 +651,12 @@ GITIGNORE_EOF
         return 1
     fi
 
-    # 13. BEHAVIORAL SMOKE TEST: DeepSeek
+    # 13. BEHAVIORAL SMOKE TEST: DeepSeek (bare -e VAR)
     echo ""
     echo "=== Behavioral Smoke Test: DeepSeek ==="
     if docker run --rm \
-        -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-        -e JEV_API_KEY="$JEV_API_KEY" \
+        -e DEEPSEEK_API_KEY \
+        -e JEV_API_KEY \
         -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
         "opencode-deepseek-jev:robust" \
         run --model deepseek/deepseek-flash "Reply: OK"; then
@@ -594,8 +670,8 @@ GITIGNORE_EOF
     echo ""
     echo "=== Behavioral Smoke Test: Plugins ==="
     if docker run --rm \
-        -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-        -e JEV_API_KEY="$JEV_API_KEY" \
+        -e DEEPSEEK_API_KEY \
+        -e JEV_API_KEY \
         -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
         "opencode-deepseek-jev:robust" \
         plugin list; then
@@ -608,8 +684,8 @@ GITIGNORE_EOF
     echo ""
     echo "=== Behavioral Smoke Test: MCP ==="
     if docker run --rm \
-        -e DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
-        -e JEV_API_KEY="$JEV_API_KEY" \
+        -e DEEPSEEK_API_KEY \
+        -e JEV_API_KEY \
         -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
         "opencode-deepseek-jev:robust" \
         mcp list; then
@@ -639,7 +715,7 @@ GITIGNORE_EOF
 
     git -C "$REPO_DIR" add -A
     if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
-        if git -C "$REPO_DIR" commit -m "OpenCode + DeepSeek V4.1 Flash + Jev: v18"; then
+        if git -C "$REPO_DIR" commit -m "OpenCode + DeepSeek V4.1 Flash + Jev: v21"; then
             echo "  PASS: git commit"
         else
             echo "  FAIL: git commit failed"
@@ -761,12 +837,19 @@ GITIGNORE_EOF
     PERM=$(stat -c '%a' "$ENV_FILE" 2>&1)
     if [ "$PERM" = "600" ]; then echo "  PASS" | tee -a "$VERIFY_LOG"; else echo "  FAIL: mode $PERM" | tee -a "$VERIFY_LOG"; fi
 
-    echo "REPORT 13: scripts/ contains v18" | tee -a "$VERIFY_LOG"
-    if [ -f "$SCRIPTS_DIR/stage-opencode-repo-v18.sh" ]; then echo "  PASS" | tee -a "$VERIFY_LOG"; else echo "  FAIL" | tee -a "$VERIFY_LOG"; fi
+    echo "REPORT 13: scripts/ contains v21" | tee -a "$VERIFY_LOG"
+    if [ -f "$SCRIPTS_DIR/stage-opencode-repo-v21.sh" ]; then echo "  PASS" | tee -a "$VERIFY_LOG"; else echo "  FAIL" | tee -a "$VERIFY_LOG"; fi
+
+    echo "REPORT 14: no key on docker argv in run.sh" | tee -a "$VERIFY_LOG"
+    if grep -qE '\-e (DEEPSEEK|JEV)_API_KEY=' "$REPO_DIR/docker/run.sh"; then
+        echo "  FAIL: key=value found on docker argv" | tee -a "$VERIFY_LOG"
+    else
+        echo "  PASS" | tee -a "$VERIFY_LOG"
+    fi
 
     git -C "$REPO_DIR" add verification.log
     if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
-        git -C "$REPO_DIR" commit -m "Add verification log v18"
+        git -C "$REPO_DIR" commit -m "Add verification log v21"
     fi
     if git -C "$REPO_DIR" push origin main; then
         echo "  PASS: verification log pushed"
@@ -785,11 +868,12 @@ GITIGNORE_EOF
     echo "Compose:     $BASE/docker/docker-compose.yml"
     echo "build.sh:    $BASE/docker/build.sh"
     echo "run.sh:      $BASE/docker/run.sh"
-    echo "Scripts v18: $BASE/scripts/stage-opencode-repo-v18.sh"
+    echo "Scripts v21: $BASE/scripts/stage-opencode-repo-v21.sh"
     echo "Verify log:  $BASE/verification.log"
     echo ""
     echo "=== Staging Complete ==="
     echo "Repo: https://github.com/$GITHUB_USER/$GITHUB_REPO"
+    echo "Log:  $LOG_FILE"
 }
 
 main "$@"

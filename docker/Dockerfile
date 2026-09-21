@@ -1,8 +1,12 @@
 FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates \
+    git curl ca-certificates coreutils \
     && apt-get clean
+
+RUN chmod 777 /home/node && \
+    mkdir -p /home/node/.config/opencode /home/node/.cache && \
+    chmod -R 777 /home/node/.config /home/node/.cache
 
 USER root
 RUN echo "npm before: $(npm --version)" && \

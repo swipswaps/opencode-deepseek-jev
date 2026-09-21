@@ -1,0 +1,99 @@
+Docker data-root migration — 2026-09-21
+========================================
+
+Cause
+-----
+
+Before migration:
+
+  /var/lib/docker on /dev/sda3, a 5400 RPM rotational disk
+  (ST1000LM035). fsync await reported by iostat was 111 ms.
+  `docker run --rm alpine:latest echo __HELLO__` took 34.261 s.
+
+  /dev/nvme0n1p1 (WDC PC SN530, NVMe) held 214 GB free, unused.
+
+Fix
+---
+
+Migrated /var/lib/docker to /mnt/nvme/docker. Steps:
+
+  1. systemctl stop docker.socket docker containerd
+  2. rsync -aHAX --sparse --numeric-ids /var/lib/docker/ /mnt/nvme/docker/
+  3. semanage fcontext -a -t container_var_lib_t "/mnt/nvme/docker(/.*)?"
+  4. restorecon -R /mnt/nvme/docker
+  5. wrote {"data-root": "/mnt/nvme/docker"} into /etc/docker/daemon.json
+  6. systemctl start docker
+  7. verified: docker info reports the new root, doctor.sh passes
+
+Post-migration timing
+---------------------
+
+First `docker run --rm alpine:latest echo __HELLO__` after migration:
+6177 ms. Expected to fall below 1000 ms once the overlay2 layer index
+is warm in the daemon.
+
+Rollback
+--------
+
+If the NVMe fails or the migration is otherwise unsuitable:
+
+  sudo systemctl stop docker
+  sudo cp /etc/docker/daemon.json.<timestamp>.bak /etc/docker/daemon.json
+  sudo systemctl start docker
+
+The old data root remains at /var/lib/docker for at least one week.
+Do not delete it until the new location has been stable through at
+least one full reboot and one week of operation.
+
+Known open items
+----------------
+
+1. /etc/fstab entry for /mnt/nvme uses defaults,noatime but not
+   nofail. Adding nofail prevents boot from blocking if the NVMe is
+   ever unavailable.
+     https://www.freedesktop.org/software/systemd/man/systemd-fstab-generator.html
+
+2. Image count decreased from 81 distinct IDs to 40 during
+   migration. Most of the difference is likely dangling <none>
+   layers removed by Docker on first start with the new data root.
+   Confirm by running `docker image ls` and comparing to expected
+   project images. Re-pull any missing with `docker compose pull`
+   in the corresponding project directory.
+
+3. scripts/prune-docker.sh and scripts/migrate-docker-to-nvme.sh
+   contained a top-level `return 0` (invalid Bash) that allowed
+   dry-run mode to fall through into apply. Both were archived
+   after use. Any successor script must place all logic inside a
+   function and call `main "$@"` at the bottom.
+     https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+
+Citations
+---------
+
+  Docker daemon.json:
+    https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-configuration-file
+
+  overlay2 storage driver:
+    https://docs.docker.com/storage/storagedriver/overlayfs-driver/
+
+  rsync -H hardlink semantics:
+    https://download.samba.org/pub/rsync/rsync.1#opt--hard-links
+
+  fstab(5):
+    https://man7.org/linux/man-pages/man5/fstab.5.html
+
+  systemd fstab-generator:
+    https://www.freedesktop.org/software/systemd/man/systemd-fstab-generator.html
+
+  Bash return builtin:
+    https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+
+  Brendan Gregg, "Systems Performance: Enterprise and the Cloud",
+  2nd ed., Addison-Wesley, 2020. ISBN-13: 978-0136820154. §8.
+
+  Michael Kerrisk, "The Linux Programming Interface", No Starch
+  Press, 2010. ISBN-13: 978-1593272203. §13.3.
+
+  W. Richard Stevens and Stephen A. Rago, "Advanced Programming in
+  the UNIX Environment", 3rd ed., Addison-Wesley, 2013.
+  ISBN-13: 978-0321637734.
