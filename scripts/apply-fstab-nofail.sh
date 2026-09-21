@@ -1,0 +1,372 @@
+#!/usr/bin/env bash
+#
+# apply-fstab-nofail.sh — add nofail and x-systemd.device-timeout to the
+# /mnt/nvme entry in /etc/fstab, then verify the generated systemd mount
+# unit reflects the change.
+#
+# ============================================================================
+# AUDIT
+# ============================================================================
+#
+# Current line:
+#   UUID=812537d8-61a8-424f-a5fb-d37ba443718f /mnt/nvme ext4 defaults,noatime 0 2
+#
+# Desired line:
+#   UUID=812537d8-61a8-424f-a5fb-d37ba443718f /mnt/nvme ext4 \
+#     defaults,noatime,nofail,x-systemd.device-timeout=10 0 2
+#
+# Two options added to field 4. Fields 1, 2, 3, 5, 6 unchanged.
+#
+# Consequence at boot:
+#
+#   Without nofail: systemd-fstab-generator emits Requires=local-fs.target
+#   for mnt-nvme.mount. If the mount fails, local-fs.target fails, and
+#   systemd enters emergency mode.
+#
+#   With nofail: generator emits WantedBy=local-fs.target. The mount is
+#   attempted, but its failure does not block the target. Boot continues.
+#
+#   fstab(5):
+#   https://man7.org/linux/man-pages/man5/fstab.5.html
+#
+#   systemd-fstab-generator(8):
+#   https://www.freedesktop.org/software/systemd/man/latest/systemd-fstab-generator.html
+#
+#   systemd.mount(5) §Fstab:
+#   https://www.freedesktop.org/software/systemd/man/latest/systemd.mount.html
+#
+#   systemd.target(5), Requires vs Wants:
+#   https://www.freedesktop.org/software/systemd/man/latest/systemd.target.html
+#
+#   x-systemd.device-timeout bounds the wait for an absent device.
+#   Default is 90 seconds; 10 is enough for NVMe enumeration.
+#
+# ============================================================================
+# AUDIT — defect in the previous revision
+# ============================================================================
+#
+# The previous revision computed the proposed line with:
+#
+#     proposed=$(printf '%s\n' "$line" | python3 - "$MOUNT_POINT" "$TIMEOUT" <<'PY_EOF'
+#         ... read sys.stdin ...
+#     PY_EOF
+#     )
+#
+# Two stdin sources were attached to the same process: the pipe from
+# printf and the heredoc that supplies the Python program. The heredoc
+# wins. Python reads its program from the heredoc, then sys.stdin.read()
+# returns empty because stdin is at EOF. parts is []. parts[3] raises
+# IndexError.
+#
+# Fixed by passing the line as an argument:
+#
+#     proposed=$(python3 - "$line" "$MOUNT_POINT" "$TIMEOUT" <<'PY_EOF'
+#         import sys
+#         line = sys.argv[1]
+#         ...
+#     PY_EOF
+#     )
+#
+#   Bash manual, here-documents and redirection precedence:
+#   https://www.gnu.org/software/bash/manual/html_node/Redirections.html
+#
+#   Python sys.argv:
+#   https://docs.python.org/3/library/sys.html#sys.argv
+#
+# ============================================================================
+# GATES — all checks run before any mutation
+# ============================================================================
+#
+#   G1. process is root
+#   G2. /etc/fstab is a regular file and is writable
+#   G3. /mnt/nvme has exactly one non-comment entry in fstab
+#   G4. that entry does not already contain nofail (idempotence guard)
+#   G5. python3 is present
+#   G6. backup destination does not exist yet
+#
+# If any gate fails, the script prints the reason and returns non-zero
+# without touching /etc/fstab.
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   fstab(5)                   https://man7.org/linux/man-pages/man5/fstab.5.html
+#   systemd.mount(5)           https://www.freedesktop.org/software/systemd/man/latest/systemd.mount.html
+#   systemd-fstab-generator(8) https://www.freedesktop.org/software/systemd/man/latest/systemd-fstab-generator.html
+#   systemd.target(5)          https://www.freedesktop.org/software/systemd/man/latest/systemd.target.html
+#   mount(8)                   https://man7.org/linux/man-pages/man8/mount.8.html
+#   findmnt(8)                 https://man7.org/linux/man-pages/man8/findmnt.8.html
+#   Bash redirection           https://www.gnu.org/software/bash/manual/html_node/Redirections.html
+#   Bash parameter expansion   https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
+#   Bash return                https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#   Bash pipefail              https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
+#   Python sys.argv            https://docs.python.org/3/library/sys.html#sys.argv
+#   POSIX printf(1)            https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+#   POSIX test(1)              https://pubs.opengroup.org/onlinepubs/9699919799/utilities/test.html
+#   ISO 8601                   https://www.iso.org/iso-8601-date-and-time-format.html
+#
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §6.2 "Idempotence".
+#
+#   Raymond, "The Art of Unix Programming", Addison-Wesley, 2003.
+#   ISBN-13: 978-0131429017. §1.6.6 "Rule of Separation".
+#
+#   Stevens & Rago, "Advanced Programming in the UNIX Environment",
+#   3rd ed., Addison-Wesley, 2013. ISBN-13: 978-0321637734.
+#
+# ============================================================================
+
+set -o pipefail
+
+FSTAB="/etc/fstab"
+MOUNT_POINT="/mnt/nvme"
+TIMEOUT="10"
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+BACKUP="${FSTAB}.${TS}.bak"
+
+MODE="dry-run"
+case "${1:-}" in
+    --apply) MODE="apply" ;;
+    --dry-run|"") MODE="dry-run" ;;
+    *) printf 'usage: %s [--apply]\n' "$0"; return 2 ;;
+esac
+
+section() {
+    printf '\n=== %s ===\n' "$1"
+}
+
+fail() {
+    printf 'GATE FAIL: %s\n' "$1"
+    [ -n "${2:-}" ] && printf '  %s\n' "$2"
+    return 1
+}
+
+# ----------------------------------------------------------------------------
+# Report the current /mnt/nvme line, or empty string if none.
+# ----------------------------------------------------------------------------
+current_line() {
+    awk -v m="$MOUNT_POINT" '
+        $0 ~ /^[[:space:]]*#/ { next }
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i == m) { print; next }
+            }
+        }
+    ' "$FSTAB"
+}
+
+# ----------------------------------------------------------------------------
+# Count non-comment entries referencing the mount point.
+# ----------------------------------------------------------------------------
+count_entries() {
+    awk -v m="$MOUNT_POINT" '
+        $0 ~ /^[[:space:]]*#/ { next }
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i == m) { c++; break }
+            }
+        }
+        END { print c + 0 }
+    ' "$FSTAB"
+}
+
+# ----------------------------------------------------------------------------
+# Add nofail and x-systemd.device-timeout to the options field of a
+# single fstab line. Prints the modified line on stdout.
+# Argument-based; does not read stdin.
+# ----------------------------------------------------------------------------
+transform_line() {
+    local in_line="$1" in_mount="$2" in_timeout="$3"
+    python3 -c '
+import sys
+line = sys.argv[1]
+mount = sys.argv[2]
+timeout = sys.argv[3]
+parts = line.split()
+if len(parts) < 4:
+    print("", end="")
+    sys.exit(0)
+opts = parts[3].split(",")
+if "nofail" not in opts:
+    opts.append("nofail")
+if not any(o.startswith("x-systemd.device-timeout") for o in opts):
+    opts.append("x-systemd.device-timeout=" + timeout)
+parts[3] = ",".join(opts)
+print(" ".join(parts), end="")
+' "$in_line" "$in_mount" "$in_timeout"
+}
+
+main() {
+    printf '=== apply-fstab-nofail.sh ===\n'
+    printf 'Mode:    %s\n' "$MODE"
+    printf 'Fstab:   %s\n' "$FSTAB"
+    printf 'Mount:   %s\n' "$MOUNT_POINT"
+    printf 'Timeout: %ss\n' "$TIMEOUT"
+    printf '\n'
+
+    # ---- G1 root --------------------------------------------------------
+    if [ "$(id -u)" -ne 0 ]; then
+        fail "not root" "sudo $0 $*"
+        return 2
+    fi
+
+    # ---- G2 fstab present and writable ----------------------------------
+    if [ ! -f "$FSTAB" ]; then
+        fail "$FSTAB is not a regular file"
+        return 2
+    fi
+    if [ ! -w "$FSTAB" ]; then
+        fail "$FSTAB is not writable"
+        return 2
+    fi
+
+    # ---- G3 exactly one entry ------------------------------------------
+    local n
+    n=$(count_entries)
+    if [ "$n" -eq 0 ]; then
+        fail "no entry for $MOUNT_POINT in $FSTAB"
+        return 2
+    fi
+    if [ "$n" -gt 1 ]; then
+        fail "$n entries for $MOUNT_POINT in $FSTAB" \
+             "edit by hand; this script refuses to guess which one"
+        return 2
+    fi
+
+    # ---- Report current line -------------------------------------------
+    local line
+    line=$(current_line)
+    section "current line"
+    printf '  %s\n' "$line"
+
+    if [ -z "$line" ]; then
+        fail "current_line returned empty despite count > 0"
+        return 2
+    fi
+
+    # ---- G4 idempotence -------------------------------------------------
+    case "$line" in
+        *nofail*)
+            section "already applied"
+            printf '  nofail is present. no change needed.\n'
+            printf '  to inspect the generated unit:\n'
+            printf '    systemctl show mnt-nvme.mount | grep -E "^(Requires|WantedBy|Before|Options)="\n'
+            return 0
+            ;;
+    esac
+
+    # ---- G5 python3 ----------------------------------------------------
+    if ! command -v python3 > /dev/null; then
+        fail "python3 not found" "install python3 to apply this edit"
+        return 2
+    fi
+
+    # ---- G6 backup slot free -------------------------------------------
+    if [ -e "$BACKUP" ]; then
+        fail "backup path already exists" "$BACKUP"
+        return 2
+    fi
+
+    # ---- Compute proposed line -----------------------------------------
+    # transform_line takes the line as an argument, not via stdin. The
+    # previous revision piped stdin while also using a heredoc, which
+    # caused Python to see EOF on stdin.
+    local proposed
+    proposed=$(transform_line "$line" "$MOUNT_POINT" "$TIMEOUT")
+    if [ -z "$proposed" ]; then
+        fail "transform_line returned empty"
+        return 2
+    fi
+
+    section "proposed line"
+    printf '  %s\n' "$proposed"
+
+    if [ "$MODE" = "dry-run" ]; then
+        section "dry-run"
+        printf '  no change made.\n'
+        printf '  to apply:\n'
+        printf '    sudo %s --apply\n' "$0"
+        return 0
+    fi
+
+    # ---- Apply ----------------------------------------------------------
+    section "phase 1: backup"
+    cp "$FSTAB" "$BACKUP" || {
+        fail "backup failed" "cannot write $BACKUP"
+        return 2
+    }
+    printf '  wrote %s\n' "$BACKUP"
+
+    section "phase 2: edit fstab"
+    python3 - "$FSTAB" "$MOUNT_POINT" "$TIMEOUT" <<'PY_EOF' || {
+import sys
+path, mount, timeout = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    lines = f.readlines()
+out = []
+changed = 0
+for line in lines:
+    if line.lstrip().startswith("#"):
+        out.append(line)
+        continue
+    parts = line.split()
+    if mount in parts and len(parts) >= 4:
+        opts = parts[3].split(",")
+        if "nofail" not in opts:
+            opts.append("nofail")
+        if not any(o.startswith("x-systemd.device-timeout") for o in opts):
+            opts.append(f"x-systemd.device-timeout={timeout}")
+        parts[3] = ",".join(opts)
+        line = " ".join(parts) + "\n"
+        changed += 1
+    out.append(line)
+if changed != 1:
+    print(f"ERROR: expected 1 edit, made {changed}", file=sys.stderr)
+    sys.exit(3)
+with open(path, "w") as f:
+    f.writelines(out)
+print(f"  edited {changed} line")
+PY_EOF
+        fail "edit failed" "restore from $BACKUP: sudo cp $BACKUP $FSTAB"
+        return 2
+    }
+
+    section "phase 3: new line"
+    printf '  %s\n' "$(current_line)"
+
+    section "phase 4: reload systemd"
+    systemctl daemon-reload
+    printf '  daemon-reload sent\n'
+
+    section "phase 5: verify generated unit"
+    if systemctl show mnt-nvme.mount > /dev/null 2>&1; then
+        printf '  mnt-nvme.mount unit properties:\n'
+        systemctl show mnt-nvme.mount \
+            | awk -F= '
+                $1 == "Requires" { print "    Requires:  " $2 }
+                $1 == "WantedBy" { print "    WantedBy:  " $2 }
+                $1 == "Before"   { print "    Before:    " $2 }
+                $1 == "Options"  { print "    Options:   " $2 }
+            '
+    else
+        printf '  mnt-nvme.mount unit not present\n'
+    fi
+
+    section "phase 6: verify mount still works"
+    findmnt "$MOUNT_POINT" 2>&1 || {
+        printf '  mount not attached to %s\n' "$MOUNT_POINT"
+        printf '  attempting mount -a\n'
+        mount -a
+        findmnt "$MOUNT_POINT" 2>&1 || true
+    }
+
+    section "done"
+    printf '  fstab line updated.\n'
+    printf '  rollback:\n'
+    printf '    sudo cp %s %s\n' "$BACKUP" "$FSTAB"
+    printf '    sudo systemctl daemon-reload\n'
+    return 0
+}
+
+main "$@"
