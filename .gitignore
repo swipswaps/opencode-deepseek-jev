@@ -10,3 +10,4 @@ data/opencode/
 logs/artifacts-*/dump-*/
 logs/artifacts-*/stall-*/
 .env.local.bak.*
+*.bak.*
