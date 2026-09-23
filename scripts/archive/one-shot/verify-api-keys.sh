@@ -32,18 +32,22 @@ main() {
     section "2. auth.json"
     docker exec "$C" sh -c "ls -la '$DATA_DIR/auth.json' 2>&1 && head -c 200 '$DATA_DIR/auth.json'" | indent
     section "3. HTTP listener"
-    local code
-    code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$HTTP_URL/" 2>&1)
-    printf '  http=%s\n' "$code"
+    local code="" tries=0
+    while [ "$tries" -lt 30 ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$HTTP_URL/")
+        if [ -n "$code" ] && [ "$code" != "000" ]; then break; fi
+        tries=$((tries + 1))
+        sleep 1
+    done
+    printf '  http=%s (after %s probe(s))\n' "$code" "$tries"
     section "4. providers"
     docker exec -w /workspace "$C" sh -c 'opencode providers list' 2>&1 | indent
-    section "5. DeepSeek one-shot"
+    section "5. DeepSeek one-shot (streaming)"
     local log
     log="/tmp/verify-keys-$(date -u +%Y%m%dT%H%M%SZ).log"
     docker exec -w /workspace "$C" sh -c \
-        "opencode run --model '$MODEL' 'Reply with exactly: KEYSOK'" \
-        > "$log" 2>&1
-    tail -8 "$log" | indent
+        "opencode run --print-logs --model '$MODEL' 'Reply with exactly: KEYSOK'" \
+        2>&1 | tee "$log"
     if grep -q 'KEYSOK' "$log"; then
         printf '\n  PASS DeepSeek key works\n'
     else
