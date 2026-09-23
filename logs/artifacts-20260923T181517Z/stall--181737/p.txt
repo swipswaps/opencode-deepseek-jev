@@ -1,0 +1,4 @@
+1 S opencode
+264 S sh
+46 S sh
+53 R opencode

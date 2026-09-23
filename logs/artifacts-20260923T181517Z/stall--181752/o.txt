@@ -1,0 +1,10 @@
+timestamp=2026-09-23T18:16:03.393Z level=INFO run=b906d387 message=loading path=/home/node/.config/opencode/opencode.jsonc
+timestamp=2026-09-23T18:16:03.671Z level=INFO run=b906d387 message=loading path=/workspace/opencode.json
+timestamp=2026-09-23T18:16:03.053Z level=INFO run=1d2b88ca message=bootstrapping directory=/workspace
+timestamp=2026-09-23T18:16:03.441Z level=INFO run=1d2b88ca message=loading path=/workspace/opencode.json
+timestamp=2026-09-23T18:16:03.844Z level=INFO run=1d2b88ca message=loading path=/home/node/.opencode/opencode.json
+timestamp=2026-09-23T18:16:03.851Z level=INFO run=1d2b88ca message=loading path=/home/node/.opencode/opencode.jsonc
+timestamp=2026-09-23T18:16:04.233Z level=DEBUG run=b906d387 message="loading config from /home/node/.opencode/opencode.json"
+timestamp=2026-09-23T18:16:04.234Z level=INFO run=b906d387 message=loading path=/home/node/.opencode/opencode.json
+timestamp=2026-09-23T18:16:04.237Z level=DEBUG run=b906d387 message="loading config from /home/node/.opencode/opencode.jsonc"
+timestamp=2026-09-23T18:16:04.237Z level=INFO run=b906d387 message=loading path=/home/node/.opencode/opencode.jsonc
