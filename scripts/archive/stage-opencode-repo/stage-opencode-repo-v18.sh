@@ -451,7 +451,7 @@ Prerequisites
 - Docker Engine (daemon reachable by current user)
 - gh (GitHub CLI), authenticated
 - DeepSeek API key (DEEPSEEK_API_KEY, prefix sk-)
-- Jev API key from https://console.typesafe.ai/settings/keys
+- Jev API key from https://console.typesafe.ai/keys
   (JEV_API_KEY, prefix apikey_)
 
 Quick Start

@@ -10,7 +10,7 @@ Prerequisites
 - DeepSeek API key (prefix sk-)
   https://platform.deepseek.com/api_keys
 - Jev API key (prefix apikey_)
-  https://console.typesafe.ai/settings/keys
+  https://console.typesafe.ai/keys
 
 Quick Start
 -----------

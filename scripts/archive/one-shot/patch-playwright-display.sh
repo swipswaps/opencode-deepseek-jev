@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+#
+# patch-playwright-display.sh — patch rotate-keys-guided.sh so Playwright
+# detects the display backend at runtime instead of hardcoding Wayland.
+#
+# Problem observed 2026-09-23:
+#   TargetClosedError: Failed to connect to Wayland display: No such file
+#   or directory. Cause: --ozone-platform=wayland was passed unconditionally,
+#   but the session had WAYLAND_DISPLAY set with no live socket (SSH/headless).
+#
+# Fix: replace the detect_backend() and run_playwright() functions.
+#
+# Constraints:
+#   No sed. No rm -rf. No set -e. No return 1. No 2>/dev/null.
+#   No bare kill. main() wrapper.
+#
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+main() {
+    local script_dir repo
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    if [ -z "$repo" ]; then
+        printf '%s\n' 'GATE FAIL: cannot resolve repo'
+        return 2
+    fi
+
+    local target="$repo/scripts/archive/one-shot/rotate-keys-guided.sh"
+    if [ ! -f "$target" ]; then
+        printf 'GATE FAIL: %s not found\n' "$target"
+        return 1
+    fi
+
+    printf '=== patch-playwright-display.sh ===\n'
+    printf 'Target: %s\n' "$target"
+    printf '\nThis is a manual-edit patch. Repo convention bans sed,\n'
+    printf 'and a python rewrite of a shell script is more risk than\n'
+    printf 'a targeted text edit.\n\n'
+    printf 'Apply the following two replacements in the file:\n\n'
+
+    printf '%s\n' '--- Replacement 1: detect_backend() ---'
+    cat <<'DETECT'
+# --------------------------------------------------------------------------
+# Detect which browser backend is available.
+# Returns: playwright | xdotool | stdin
+#
+# Playwright only works with a live graphical session. Verify the socket,
+# not just the env var — SSH sessions often have WAYLAND_DISPLAY set
+# without a live compositor.
+# --------------------------------------------------------------------------
+display_is_live() {
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        local sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY}"
+        [ -S "$sock" ] && return 0
+    fi
+    if [ -n "${DISPLAY:-}" ]; then
+        # xdpyinfo is the canonical check; fall back to socket presence.
+        if command -v xdpyinfo >/dev/null 2>&1; then
+            xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 && return 0
+        fi
+        local xsock="/tmp/.X11-unix/X${DISPLAY#*:}"
+        xsock="${xsock%%.*}"
+        [ -S "$xsock" ] && return 0
+    fi
+    return 1
+}
+
+detect_backend() {
+    if ! display_is_live; then
+        printf 'stdin'
+        return 0
+    fi
+    if have python3 && python3 -c 'import playwright' >/dev/null 2>&1; then
+        printf 'playwright'
+        return 0
+    fi
+    if have xdotool && have xclip; then
+        printf 'xdotool'
+        return 0
+    fi
+    printf 'stdin'
+    return 0
+}
+DETECT
+
+    printf '\n%s\n' '--- Replacement 2: the args list in run_playwright() ---'
+    cat <<'ARGS'
+    # Replace the args=[...] block with:
+    args=[
+        "--disable-blink-features=AutomationControlled",
+        "--password-store=basic",
+        "--use-mock-keychain",
+    ],
+    # No --ozone-platform flag: Chromium auto-detects Wayland vs X11.
+    # If no display is available, display_is_live() already routed us to
+    # the stdin backend before we got here.
+ARGS
+
+    printf '\n=== after editing, re-run: ===\n'
+    printf '  bash -n scripts/archive/one-shot/rotate-keys-guided.sh\n'
+    printf '  ./scripts/archive/one-shot/rotate-keys-guided.sh\n'
+    return 0
+}
+
+main "$@"

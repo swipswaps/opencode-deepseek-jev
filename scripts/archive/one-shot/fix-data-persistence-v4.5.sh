@@ -1,0 +1,461 @@
+#!/usr/bin/env bash
+#
+# fix-data-persistence-v4.5.sh
+#
+# v4.4 diagnostic bugs fixed:
+#   B1  STDBUF_PREFIX was concatenated without a space
+#       ("stdbuf -oL -eLopencode ..." instead of "... -eL opencode ...")
+#   B2  docker exec -i in a background job without a TTY returns 125
+#       before the process starts; -i removed.
+#   B3  Snapshots only fire at 15s/60s/timeout. Fast failures produced no
+#       capture at all. v4.5 snapshots at START (always) and at END
+#       (on any non-zero rc), plus the existing threshold crossings.
+#
+# Diagnostic additions:
+#   - opencode_invoke emits its resolved command string as a record
+#     before invoking.
+#   - On any non-zero subprocess rc, the last 20 lines of its logfile are
+#     emitted as records, so WHY is visible even for sub-second failures.
+#   - emit_artifact still captures full log to disk.
+#
+# Telemetry contract: unchanged from v4.3 (P3.1-P3.7).
+#
+# Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
+# no rm -rf, no subprocess.run, no bare kill, printf only.
+#
+set -o pipefail
+
+C="opencode-deepseek-web"
+COMPOSE_REL="docker/docker-compose.yml"
+DATA_CONT="/home/node/.local/share/opencode"
+DATA_HOST_REL="data/opencode"
+HTTP_URL="http://127.0.0.1:4096"
+MODEL="deepseek/deepseek-flash"
+RUN_TIMEOUT=180
+
+REPO=""; LOG=""; ARTIFACT_DIR=""
+COUNTS_PASS=0; COUNTS_FAIL=0; COUNTS_SKIP=0; COUNTS_INC=0
+SUMMARY_TEXT=""
+STDBUF_PREFIX=""
+
+log() {
+    local level="$1" phase="$2" stage="$3" status="$4" msg="$5"
+    shift 5
+    local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+    local kv="" p
+    for p in "$@"; do kv="$kv $p"; done
+    local record="ts=$ts level=$level phase=$phase stage=$stage status=$status msg=\"$msg\"$kv"
+    printf '%s\n' "$record" >> "$LOG"
+    printf '%s\n' "$record"
+}
+
+record_check() {
+    local name="$1" status="$2" observed="$3" criterion="$4"
+    case "$status" in
+        PASS) COUNTS_PASS=$((COUNTS_PASS + 1)) ;;
+        FAIL) COUNTS_FAIL=$((COUNTS_FAIL + 1)) ;;
+        SKIP) COUNTS_SKIP=$((COUNTS_SKIP + 1)) ;;
+        INCONCLUSIVE) COUNTS_INC=$((COUNTS_INC + 1)) ;;
+    esac
+    log INFO check "$name" "$status" "$criterion" "observed=\"$observed\""
+}
+
+emit_artifact() {
+    local file="$1" purpose="$2"
+    if [ ! -f "$file" ]; then
+        log WARN artifact "$purpose" MISSING "no file" "path=$file"
+        return 0
+    fi
+    local bytes sha
+    bytes=$(wc -c < "$file" | tr -d ' ')
+    sha=$(sha256sum "$file" | cut -d' ' -f1)
+    log INFO artifact "$purpose" READY "content preserved" \
+        "path=$file" "bytes=$bytes" "sha256=$sha"
+}
+
+# Emit the last N lines of a logfile as individual telemetry records.
+# Used on non-zero exit to expose WHY without truncation.
+emit_log_tail() {
+    local file="$1" label="$2" n="${3:-20}"
+    [ -f "$file" ] || { log WARN logtail "$label" MISSING "no file" "path=$file"; return 0; }
+    local total i=0
+    total=$(wc -l < "$file" | tr -d ' ')
+    log INFO logtail "$label" EMIT "last $n lines of subprocess log" \
+        "path=$file" "total_lines=$total"
+    tail -n "$n" "$file" 2>&1 | while IFS= read -r line; do
+        i=$((i + 1))
+        # Escape embedded double quotes to keep records parseable.
+        local esc
+        esc=$(printf '%s' "$line" | tr '"' "'")
+        log DEBUG logtail "$label" LINE "log line $i" "text=\"$esc\""
+    done
+}
+
+snapshot() {
+    local label="$1" threshold="$2"
+    local sdir="$ARTIFACT_DIR/snap-${label}-${threshold}s"
+    mkdir -p "$sdir"
+
+    docker stats --no-stream \
+        --format 'cpu={{.CPUPerc}} mem={{.MemUsage}} pids={{.PIDs}}' \
+        "$C" > "$sdir/docker-stats.txt" 2>&1
+
+    docker exec "$C" cat /proc/net/tcp > "$sdir/proc-net-tcp.txt" 2>&1
+
+    docker exec "$C" sh -c '
+        for p in /proc/[0-9]*; do
+            pid=$(basename "$p")
+            [ -r "$p/comm" ] || continue
+            comm=$(cat "$p/comm" 2>&1)
+            state=$(awk "/^State:/{print \$2}" "$p/status" 2>&1)
+            printf "%s %s %s\n" "$pid" "$state" "$comm"
+        done
+    ' > "$sdir/procs.txt" 2>&1
+
+    docker exec "$C" sh -c '
+        d=/home/node/.local/share/opencode/log
+        if [ -d "$d" ]; then
+            ls -la "$d"
+            latest=""; for _f in "$d"/*; do [ -f "$_f" ] || continue; if [ -z "$latest" ] || [ "$_f" -nt "$latest" ]; then latest="$_f"; fi; done
+            if [ -n "$latest" ]; then
+                printf "=== tail of %s ===\n" "$latest"
+                tail -15 "$latest"
+            else
+                printf "(log dir empty)\n"
+            fi
+        else
+            printf "(no log dir)\n"
+        fi
+    ' > "$sdir/opencode-log.txt" 2>&1
+
+    local cpu mem pids tcp_estab n_procs procs_head opencode_last
+    cpu=$(grep -o 'cpu=[^ ]*' "$sdir/docker-stats.txt" | head -1)
+    mem=$(grep -o 'mem=[^ ]*' "$sdir/docker-stats.txt" | head -1)
+    pids=$(grep -o 'pids=[^ ]*' "$sdir/docker-stats.txt" | head -1)
+    tcp_estab=$(awk '$4=="01"' "$sdir/proc-net-tcp.txt" | wc -l | tr -d ' ')
+    n_procs=$(grep -c . "$sdir/procs.txt" | tr -d ' ')
+    procs_head=$(head -4 "$sdir/procs.txt" | tr '\n' ';')
+    opencode_last=$(grep -v '^===' "$sdir/opencode-log.txt" | grep -v '^total' \
+        | tail -1 | head -c 120)
+
+    log INFO subprocess "$label" SNAPSHOT "forensic capture at ${threshold}s" \
+        "dir=$sdir" "$cpu" "$mem" "$pids" \
+        "tcp_estab=$tcp_estab" "n_procs=$n_procs" \
+        "procs_head=\"$procs_head\"" \
+        "opencode_last=\"$opencode_last\""
+
+    emit_artifact "$sdir/docker-stats.txt" "snap-${label}-${threshold}s-stats"
+    emit_artifact "$sdir/proc-net-tcp.txt"  "snap-${label}-${threshold}s-net-tcp"
+    emit_artifact "$sdir/procs.txt"         "snap-${label}-${threshold}s-procs"
+    emit_artifact "$sdir/opencode-log.txt"  "snap-${label}-${threshold}s-opencode-log"
+}
+
+run_traced() {
+    local label="$1" timeout_s="$2" logfile="$3"
+    shift 3
+
+    : > "$logfile"
+    local flag_timeout="$ARTIFACT_DIR/flag-timeout-${label}"
+    : > "$flag_timeout"
+
+    log INFO subprocess "$label" START "subprocess starting" \
+        "cmd=\"$*\"" "logfile=$logfile" "timeout_s=$timeout_s"
+
+    # Baseline snapshot at t=0. Fires unconditionally.
+    snapshot "$label" "start"
+
+    local start_epoch
+    start_epoch=$(date +%s)
+
+    "$@" > "$logfile" 2>&1 &
+    local child=$!
+
+    (
+        local c15=0 c60=0 cto=0
+        while sleep 1; do
+            kill -0 "$child" >/dev/null 2>&1 || exit 0
+            local now elapsed
+            now=$(date +%s); elapsed=$((now - start_epoch))
+
+            if [ "$elapsed" -ge 15 ] && [ "$c15" -eq 0 ]; then
+                snapshot "$label" 15; c15=1
+            fi
+            if [ "$elapsed" -ge 60 ] && [ "$c60" -eq 0 ]; then
+                snapshot "$label" 60; c60=1
+            fi
+            if [ "$elapsed" -ge "$timeout_s" ] && [ "$cto" -eq 0 ]; then
+                snapshot "$label" "timeout"
+                printf 'TIMEOUT\n' > "$flag_timeout"
+                log WARN subprocess "$label" TIMEOUT "sending TERM" \
+                    "elapsed_s=$elapsed" "timeout_s=$timeout_s"
+                kill -TERM "$child" >/dev/null 2>&1
+                sleep 2
+                kill -KILL "$child" >/dev/null 2>&1
+                cto=1; exit 0
+            fi
+        done
+    ) &
+    local watcher=$!
+
+    wait "$child"
+    local child_rc=$?
+    kill -TERM "$watcher" >/dev/null 2>&1
+    wait "$watcher" >/dev/null 2>&1
+
+    local end_epoch elapsed_ms status rc
+    end_epoch=$(date +%s)
+    elapsed_ms=$(( (end_epoch - start_epoch) * 1000 ))
+
+    if [ -s "$flag_timeout" ]; then
+        rc=124; status="TIMEOUT"
+    elif [ "$child_rc" -ne 0 ]; then
+        rc=$child_rc; status="ERROR"
+    else
+        rc=0; status="END"
+    fi
+
+    log INFO subprocess "$label" "$status" "subprocess finished" \
+        "rc=$rc" "child_rc=$child_rc" "elapsed_ms=$elapsed_ms" \
+        "logfile=$logfile"
+
+    # Non-zero exit → surface WHY immediately.
+    if [ "$rc" -ne 0 ]; then
+        emit_log_tail "$logfile" "$label" 20
+    fi
+
+    return "$rc"
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+live_has_data_mount() {
+    docker inspect "$C" --format '{{json .Mounts}}' 2>&1 \
+      | grep -F "\"Destination\":\"$DATA_CONT\"" >/dev/null
+}
+
+count_sessions() {
+    local auth="$1" outfile="$2"
+    curl -s -u "$auth" -m 10 "$HTTP_URL/api/session" -o "$outfile" 2>&1
+    local rc=$?
+    if [ "$rc" -ne 0 ] || [ ! -s "$outfile" ]; then printf 'ERR'; return 0; fi
+    if grep -q '"data"' "$outfile"; then
+        grep -o '"id":"ses_' "$outfile" | wc -l | tr -d ' '
+    else
+        printf 'ERR'
+    fi
+}
+
+wait_http() {
+    local tries=0 code=""
+    while [ "$tries" -lt 60 ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$HTTP_URL/" 2>&1)
+        if [ $((tries % 5)) -eq 0 ] || [ "$code" != "000" ]; then
+            log DEBUG http wait POLL "polling" "attempt=$((tries+1))" "http=$code"
+        fi
+        [ -n "$code" ] && [ "$code" != "000" ] && break
+        tries=$((tries + 1)); sleep 2
+    done
+}
+
+# ---------------------------------------------------------------------------
+# opencode_invoke MODEL PROMPT
+#   Resolves the exact command, logs it, then executes.
+#   No docker exec -i (background jobs lack a TTY; docker returns 125).
+#   stdbuf prefix joined with a space, only when non-empty.
+# ---------------------------------------------------------------------------
+opencode_invoke() {
+    local model="$1" prompt="$2"
+    local inner="opencode run --print-logs --log-level DEBUG --model '$model' '$prompt'"
+    local full="$inner"
+    if [ -n "$STDBUF_PREFIX" ]; then
+        full="$STDBUF_PREFIX $inner"
+    fi
+    log DEBUG invoke dispatch RESOLVED "command resolved" "argv=\"$full\""
+    docker exec -w /workspace "$C" sh -c "$full"
+}
+
+main() {
+    local script_dir repo compose data_host ts
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    [ -z "$repo" ] && { printf '%s\n' 'GATE FAIL: cannot resolve repo'; return 2; }
+    REPO="$repo"
+    compose="$repo/$COMPOSE_REL"
+    data_host="$repo/$DATA_HOST_REL"
+    ts=$(date -u +%Y%m%dT%H%M%SZ)
+
+    mkdir -p "$repo/logs"
+    LOG="$repo/logs/telemetry-$(date -u +%Y-%m-%d).log"
+    ARTIFACT_DIR="$repo/logs/artifacts-$ts"
+    mkdir -p "$ARTIFACT_DIR"
+
+    log INFO session start START "fix-data-persistence-v4.5" \
+        "repo=$repo" "compose=$compose" "log=$LOG" "artifact_dir=$ARTIFACT_DIR"
+
+    [ -f "$compose" ] || { log ERROR preflight compose MISSING "compose not found"; return 1; }
+    have python3    || { log ERROR preflight python3 MISSING "python3 not on PATH"; return 1; }
+    have curl       || { log ERROR preflight curl    MISSING "curl not on PATH";    return 1; }
+
+    local probe
+    probe=$(docker exec "$C" sh -c 'command -v stdbuf' 2>&1)
+    case "$probe" in
+        */stdbuf) STDBUF_PREFIX="stdbuf -oL -eL" ;;
+        *)        STDBUF_PREFIX="" ;;
+    esac
+    log INFO preflight stdbuf PROBE "stdbuf availability" \
+        "found=\"$probe\"" "prefix=\"$STDBUF_PREFIX\""
+
+    [ -d "$data_host" ] || mkdir -p "$data_host"
+    chown -R "$(id -u):$(id -g)" "$data_host" 2>&1 || true
+
+    log INFO R1 phase START "reading current state"
+    local mounts_before="$ARTIFACT_DIR/mounts-before.json"
+    docker inspect "$C" --format '{{json .Mounts}}' > "$mounts_before" 2>&1
+    emit_artifact "$mounts_before" "mounts-before"
+
+    log INFO R2 gate START "evaluating mount presence"
+    if live_has_data_mount; then
+        record_check "live-has-data-mount" PASS "present" "mount-active"
+        log INFO R2 gate SKIP "no action needed"
+    else
+        record_check "live-has-data-mount" FAIL "absent" "mount-active"
+        SUMMARY_TEXT="Mount not active. Re-run v4.1 first."
+        render_summary 1
+        return 1
+    fi
+
+    log INFO persistence phase START "two-session recreate test"
+
+    local pass
+    pass=$(docker exec "$C" sh -c 'printf "%s" "$OPENCODE_SERVER_PASSWORD"' 2>&1)
+    if [ -z "$pass" ]; then
+        record_check "password-present" FAIL "empty" "password-nonempty"
+        SUMMARY_TEXT="OPENCODE_SERVER_PASSWORD empty in container."
+        render_summary 1
+        return 1
+    fi
+    record_check "password-present" PASS "length=${#pass}" "password-nonempty"
+    local auth="opencode:$pass"
+
+    local log1="$ARTIFACT_DIR/p1.log" log2="$ARTIFACT_DIR/p2.log"
+
+    run_traced "P1" "$RUN_TIMEOUT" "$log1" \
+        opencode_invoke "$MODEL" "Reply with exactly: P1"
+    local rc1=$?
+    emit_artifact "$log1" "P1-run-log"
+
+    run_traced "P2" "$RUN_TIMEOUT" "$log2" \
+        opencode_invoke "$MODEL" "Reply with exactly: P2"
+    local rc2=$?
+    emit_artifact "$log2" "P2-run-log"
+
+    local p1_ok=0 p2_ok=0
+    grep -q 'P1' "$log1" && p1_ok=1
+    grep -q 'P2' "$log2" && p2_ok=1
+
+    if [ "$p1_ok" -eq 1 ]; then
+        record_check "P1-reply" PASS "token found" "reply-contains-token"
+    else
+        record_check "P1-reply" INCONCLUSIVE "rc=$rc1 token missing" "reply-contains-token"
+    fi
+    if [ "$p2_ok" -eq 1 ]; then
+        record_check "P2-reply" PASS "token found" "reply-contains-token"
+    else
+        record_check "P2-reply" INCONCLUSIVE "rc=$rc2 token missing" "reply-contains-token"
+    fi
+
+    if [ "$p1_ok" -eq 0 ] || [ "$p2_ok" -eq 0 ]; then
+        log ERROR persistence phase ABORT "model run incomplete"
+        SUMMARY_TEXT="Model run did not return its token. See status=LINE records (logtail) and snap-* artifacts for WHY."
+        render_summary 1
+        return 1
+    fi
+
+    local before_body="$ARTIFACT_DIR/before-body.json"
+    local after_body="$ARTIFACT_DIR/after-body.json"
+    local before after
+
+    before=$(count_sessions "$auth" "$before_body")
+    emit_artifact "$before_body" "api-before"
+    if [ "$before" = "ERR" ]; then
+        record_check "sessions-before" INCONCLUSIVE "api-non-json" "api-returns-json"
+        SUMMARY_TEXT="Before-recreate /api/session did not return JSON."
+        render_summary 1
+        return 1
+    fi
+    record_check "sessions-before" PASS "count=$before" "count-ge-2"
+
+    if [ "$before" -lt 2 ]; then
+        record_check "sessions-before-count" FAIL "count=$before" "count-ge-2"
+        SUMMARY_TEXT="Only $before sessions before recreate."
+        render_summary 1
+        return 1
+    fi
+
+    log INFO recreate phase START "second recreate"
+    ( cd "$repo/docker" && \
+      run_traced "recreate-2" 60 "$ARTIFACT_DIR/recreate-2.log" \
+          docker compose up -d --force-recreate opencode-web )
+    emit_artifact "$ARTIFACT_DIR/recreate-2.log" "recreate-2-log"
+    wait_http
+
+    after=$(count_sessions "$auth" "$after_body")
+    emit_artifact "$after_body" "api-after"
+    if [ "$after" = "ERR" ]; then
+        record_check "sessions-after" INCONCLUSIVE "api-non-json" "api-returns-json"
+        SUMMARY_TEXT="After-recreate /api/session did not return JSON."
+        render_summary 1
+        return 1
+    fi
+
+    if [ "$after" = "$before" ] && [ "$before" -ge 2 ]; then
+        record_check "sessions-after" PASS "count=$after" "count-equal-before"
+        SUMMARY_TEXT="Persistence verified. $before sessions survived a full recreate."
+        render_summary 0
+        return 0
+    fi
+
+    record_check "sessions-after" FAIL "before=$before after=$after" "count-equal-before"
+    SUMMARY_TEXT="Persistence FAILED. Sessions dropped $before -> $after."
+    render_summary 1
+    return 1
+}
+
+render_summary() {
+    local rc="$1"
+    printf '\n'
+    printf 'SUMMARY log=%s pass=%d fail=%d skip=%d inconclusive=%d rc=%d\n' \
+        "$LOG" "$COUNTS_PASS" "$COUNTS_FAIL" "$COUNTS_SKIP" "$COUNTS_INC" "$rc"
+    printf '%s\n' "$SUMMARY_TEXT"
+    log INFO session end END "summary rendered" \
+        "pass=$COUNTS_PASS" "fail=$COUNTS_FAIL" "skip=$COUNTS_SKIP" \
+        "inconclusive=$COUNTS_INC" "rc=$rc"
+    printf '\n'
+    printf 'log:       %s\n' "$LOG"
+    printf 'artifacts: %s\n' "$ARTIFACT_DIR"
+    printf '\nsnapshots:\n'
+    local found=0 d
+    for d in "$ARTIFACT_DIR"/snap-*; do
+        if [ -d "$d" ]; then
+            printf '  %s\n' "$d"
+            found=1
+        fi
+    done
+    if [ "$found" -eq 0 ]; then
+        printf '  (none)\n'
+    fi
+}
+
+main "$@"

@@ -57,7 +57,7 @@
 #   Docker entrypoint      https://docs.docker.com/engine/reference/builder/#entrypoint
 #   Docker kill            https://docs.docker.com/engine/reference/commandline/kill/
 #   DeepSeek balance API   https://api-docs.deepseek.com/api/get-user-balance
-#   TypeSafe console       https://console.typesafe.ai/settings/keys
+#   TypeSafe console       https://console.typesafe.ai/keys
 #
 #   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
 #   1999. ISBN-13: 978-0201615869. §5.1 "Debugging".
@@ -229,7 +229,7 @@ tier4() {
     case "$JEV_API_KEY" in
         apikey_*|sk-*|ts_*|jev-*) ;;
         *) fail "unexpected Jev key prefix" \
-                "expected apikey_, sk-, ts_, or jev-; get one at https://console.typesafe.ai/settings/keys"
+                "expected apikey_, sk-, ts_, or jev-; get one at https://console.typesafe.ai/keys"
            return ;;
     esac
     pass "key prefix recognized"
@@ -249,7 +249,7 @@ tier4() {
     case "$http" in
         200) pass "key accepted by provider (HTTP 200)" ;;
         401) fail "key rejected (HTTP 401)" "$body"
-             printf '        issue a fresh key at https://console.typesafe.ai/settings/keys\n' ;;
+             printf '        issue a fresh key at https://console.typesafe.ai/keys\n' ;;
         422) fail "request body rejected (HTTP 422)" "$body"
              printf '        this is a bug in the doctor script, not in your key\n' ;;
         *)   fail "unexpected provider response (HTTP $http)" "$body" ;;

@@ -16,7 +16,7 @@ JEV_GUARD_VERSION=""
 
 DEEPSEEK_KEY_URL="https://platform.deepseek.com/api_keys"
 DEEPSEEK_DOCS_URL="https://api-docs.deepseek.com/"
-TYPESAFE_KEY_URL="https://console.typesafe.ai/settings/keys"
+TYPESAFE_KEY_URL="https://console.typesafe.ai/keys"
 TYPESAFE_DOCS_URL="https://docs.typesafe.ai/"
 
 load_env_file() {
@@ -490,7 +490,7 @@ Prerequisites
 - DeepSeek API key (DEEPSEEK_API_KEY, prefix sk-)
   https://platform.deepseek.com/api_keys
 - Jev API key (JEV_API_KEY, prefix apikey_)
-  https://console.typesafe.ai/settings/keys
+  https://console.typesafe.ai/keys
 
 Quick Start
 -----------
@@ -535,7 +535,7 @@ Troubleshooting
 Authentication Fails (DeepSeek): key invalid or revoked. Get a new key at
   https://platform.deepseek.com/api_keys
 Jev key rejected: must start with apikey_ or sk-. Get a key at
-  https://console.typesafe.ai/settings/keys
+  https://console.typesafe.ai/keys
   Docs: https://docs.typesafe.ai/
 HTTP 422 from TypeSafe: request format issue. The probe uses the
   documented format: {"type":"noul","instructions":"..."}.

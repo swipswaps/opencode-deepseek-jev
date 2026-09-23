@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+#
+# audit-via-agent.sh (v2)
+#
+# v1 defects:
+#   D1  Subprocess output redirected to file; terminal silent entire run.
+#   D2  Stall detector correct but unused because no stall happened;
+#       still, no progress was visible.
+#   D3  Final-reply extraction picked the last 5 non-timestamp lines,
+#       which are command output, not the model's message.
+#   D4  No push, no raw links.
+#
+# v2:
+#   - Tails the subprocess transcript in real time.
+#   - Classifies each line: SHOW or HIDE by known-noise patterns.
+#     SHOW goes to terminal and log. HIDE goes to log only.
+#     Never echoes everything; never silences the important.
+#   - Stall detector still active on file growth.
+#   - Final reply extracted by "last block after message=stream" logic.
+#   - Pushes to GitHub and prints raw URLs at the end.
+#
+# Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
+# no rm -rf, no subprocess.run, no bare kill (TERM only), printf only,
+# ASCII only, main() wrapper.
+#
+set -o pipefail
+
+C="opencode-deepseek-web"
+MODEL="deepseek/deepseek-flash"
+HARD_TIMEOUT=900
+STALL_AFTER=15
+STALL_REPEAT=15
+
+REPO=""; LOG=""; ARTIFACT_DIR=""; CHILD=""; PUSHER=""
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+log() {
+    local level="$1" phase="$2" status="$3" msg="$4"
+    shift 4
+    local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+    local kv="" p; for p in "$@"; do kv="$kv $p"; done
+    printf '%s\n' "ts=$ts level=$level phase=$phase status=$status msg=\"$msg\"$kv" >> "$LOG"
+}
+
+cleanup() {
+    [ -n "$CHILD" ]  && kill -TERM "$CHILD"  >/dev/null 2>&1
+    [ -n "$PUSHER" ] && kill -TERM "$PUSHER" >/dev/null 2>&1
+    exit 130
+}
+
+# classify: return 0 if this transcript line is worth showing.
+# Rules:
+#   - skip known noisy DEBUG patterns (tracking, loading paths)
+#   - show WARN/ERROR
+#   - show all non-timestamp lines (agent output)
+#   - default: show
+show_line() {
+    case "$1" in
+        *"level=DEBUG"*"tracking hash="*)     return 1 ;;
+        *"level=DEBUG"*"loading path="*)      return 1 ;;
+        *"level=DEBUG"*"loading config"*)     return 1 ;;
+        *"message=\"project copy refresh"*)   return 1 ;;
+        *"message=\"watcher backend\""*)      return 1 ;;
+        *"message=bootstrapping"*)            return 1 ;;
+        *"message=fromDirectory"*)            return 1 ;;
+        *"message=\"creating instance\""*)    return 1 ;;
+        *)                                    return 0 ;;
+    esac
+}
+
+snapshot() {
+    local label="$1" reason="$2"
+    local sdir="$ARTIFACT_DIR/stall-${label}-$(date -u +%H%M%S)"
+    mkdir -p "$sdir"
+
+    docker stats --no-stream \
+        --format 'cpu={{.CPUPerc}} mem={{.MemUsage}} pids={{.PIDs}}' \
+        "$C" > "$sdir/stats.txt" 2>&1
+    docker exec "$C" cat /proc/net/tcp > "$sdir/net-tcp.txt" 2>&1
+    docker exec "$C" sh -c '
+        for p in /proc/[0-9]*; do
+            pid=$(basename "$p")
+            [ -r "$p/comm" ] || continue
+            comm=$(cat "$p/comm" 2>&1)
+            state=$(awk "/^State:/{print \$2}" "$p/status" 2>&1)
+            printf "%s %s %s\n" "$pid" "$state" "$comm"
+        done
+    ' > "$sdir/procs.txt" 2>&1
+    docker exec "$C" sh -c '
+        d=/home/node/.local/share/opencode/log
+        [ -d "$d" ] || { printf "(no log dir)\n"; exit 0; }
+        latest=$(ls -t "$d"/* 2>/dev/null | head -1)
+        [ -n "$latest" ] || { printf "(no log file)\n"; exit 0; }
+        tail -10 "$latest"
+    ' > "$sdir/opencode-log-tail.txt" 2>&1
+
+    local cpu mem pids tcp_estab n_procs procs_head oc_last
+    cpu=$(grep -o 'cpu=[^ ]*' "$sdir/stats.txt" | head -1)
+    mem=$(grep -o 'mem=[^ ]*' "$sdir/stats.txt" | head -1)
+    pids=$(grep -o 'pids=[^ ]*' "$sdir/stats.txt" | head -1)
+    tcp_estab=$(awk '$4=="01"' "$sdir/net-tcp.txt" | wc -l | tr -d ' ')
+    n_procs=$(grep -c . "$sdir/procs.txt" | tr -d ' ')
+    procs_head=$(head -3 "$sdir/procs.txt" | tr '\n' ';')
+    oc_last=$(tail -1 "$sdir/opencode-log-tail.txt" | head -c 140 | tr '"' "'")
+
+    log WARN agent SNAPSHOT "diagnostic" \
+        "reason=$reason" "$cpu" "$mem" "$pids" \
+        "tcp_estab=$tcp_estab" "n_procs=$n_procs" \
+        "procs=\"$procs_head\"" "oc_last=\"$oc_last\"" \
+        "dir=$sdir"
+
+    printf '    [stall/%s] %s %s %s tcp=%s procs=%s\n' \
+        "$reason" "$cpu" "$mem" "$pids" "$tcp_estab" "$n_procs"
+    printf '        oc_last: %s\n' "$(printf '%.100s' "$oc_last")"
+}
+
+# extract_final_reply TRANSCRIPT OUTFILE
+#   Lines between the last "message=stream providerID" and the next
+#   "message=loop" (or EOF). That window contains the model's reply.
+extract_final_reply() {
+    local t="$1" out="$2"
+    python3 - "$t" "$out" <<'PY'
+import sys
+t, out = sys.argv[1], sys.argv[2]
+lines = open(t, errors="replace").read().splitlines()
+# Find last line with 'message=stream providerID'
+start = None
+for i, ln in enumerate(lines):
+    if "message=stream" in ln and "providerID=" in ln:
+        start = i
+if start is None:
+    # Fallback: last 12 non-empty non-timestamp lines
+    tail = [ln for ln in lines if ln.strip() and not ln.startswith("timestamp=")]
+    open(out, "w").write("\n".join(tail[-12:]))
+    sys.exit(0)
+# Take up to next 'message=loop' or 'exiting loop'
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    if "message=loop" in lines[j] or "exiting loop" in lines[j]:
+        end = j
+        break
+window = lines[start + 1:end]
+# Filter: drop timestamp= lines and blanks, keep model text
+keep = [ln for ln in window if ln.strip() and not ln.startswith("timestamp=")]
+open(out, "w").write("\n".join(keep))
+PY
+}
+
+main() {
+    local script_dir repo ts
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    [ -z "$repo" ] && { printf 'GATE FAIL: no repo\n'; return 2; }
+    REPO="$repo"
+    ts=$(date -u +%Y%m%dT%H%M%SZ)
+
+    mkdir -p "$repo/logs"
+    LOG="$repo/logs/telemetry-$(date -u +%Y-%m-%d).log"
+    ARTIFACT_DIR="$repo/logs/artifacts-$ts"
+    mkdir -p "$ARTIFACT_DIR"
+
+    trap cleanup INT TERM
+
+    log INFO session START "audit-via-agent-v2" \
+        "repo=$repo" "artifact_dir=$ARTIFACT_DIR" \
+        "stall_after_s=$STALL_AFTER" "stall_repeat_s=$STALL_REPEAT" \
+        "hard_timeout_s=$HARD_TIMEOUT"
+
+    printf '=== audit-via-agent.sh ===\n'
+    printf 'repo:        %s\n' "$repo"
+    printf 'artifact:    %s\n' "$ARTIFACT_DIR"
+    printf 'stall model: %ss idle -> snapshot, repeat %ss\n' "$STALL_AFTER" "$STALL_REPEAT"
+    printf 'hard timeout: %ss\n\n' "$HARD_TIMEOUT"
+
+    # Preconditions
+    if ! docker exec "$C" sh -c '[ -d /notes ]' 2>&1; then
+        log ERROR gate FAIL "container lacks /notes"
+        printf 'GATE FAIL: /notes not visible in container\n'
+        return 1
+    fi
+    local n_notes
+    n_notes=$(docker exec "$C" sh -c 'ls -1 /notes | wc -l' 2>&1 | tr -d ' ')
+    if [ "$n_notes" -lt 1 ]; then
+        log ERROR gate FAIL "/notes empty" "entries=$n_notes"
+        printf 'GATE FAIL: /notes empty\n'
+        return 1
+    fi
+    log INFO gate PASS "/notes has content" "entries=$n_notes"
+    printf '[gate] /notes: %s files\n' "$n_notes"
+
+    # Deliver prompt
+    local prompt_remote="/tmp/audit-prompt.txt"
+    docker exec -i "$C" sh -c "cat > $prompt_remote" <<'PROMPT'
+You are auditing a Docker-packaged coding agent environment.
+
+Readable:
+  /workspace   the project repo (read/write)
+  /notes       chat logs (read-only)
+
+Skip /workspace/data entirely. It holds a git pack store; nothing there is worth reading.
+
+Produce a report at /workspace/logs/sidebar-audit.md with these sections:
+
+## Project identity
+One paragraph. Read README.txt, QUICKSTART.txt, opencode.json.
+
+## Rule system
+grep /notes for #N patterns. Report top 20 rule IDs by frequency.
+Cross-reference scripts/archive/one-shot/push_notes_v18.sh. Report cited-but-undefined and defined-but-uncited.
+
+## JEV
+Where JEV appears in /notes and /workspace. What it is.
+
+## Current state
+Paste the opencode-web block from docker/docker-compose.yml.
+Paste docker/web-entrypoint.sh.
+Query: sqlite3 /workspace/data/opencode/opencode.db "select count(*) from session;"
+
+## Sidebar streaming question
+The operator asks: when the agent is processing, does the sidebar show the session? yes/no + one sentence of evidence.
+
+## Best next steps for the operator
+Five concrete bullets.
+
+Then call jev_review once with the report as diff.
+
+Reply with exactly two lines:
+correctness=<score>
+summary=<one sentence>
+PROMPT
+
+    printf '[prompt] delivered to %s (%s bytes)\n' \
+        "$prompt_remote" \
+        "$(docker exec "$C" sh -c "wc -c < $prompt_remote" 2>&1 | tr -d ' ')"
+    printf '[prompt] first line: %s\n\n' \
+        "$(docker exec "$C" sh -c "head -1 $prompt_remote" 2>&1)"
+
+    local transcript="$ARTIFACT_DIR/agent-transcript.log"
+    : > "$transcript"
+
+    log INFO agent START "invoking" "model=$MODEL" "timeout=$HARD_TIMEOUT"
+    printf '[agent] running. important lines surface as they arrive.\n\n'
+
+    local start_epoch
+    start_epoch=$(date +%s)
+
+    docker exec -w /workspace "$C" sh -c \
+        "opencode run --print-logs --log-level DEBUG --model '$MODEL' \"\$(cat $prompt_remote)\"" \
+        > "$transcript" 2>&1 &
+    CHILD=$!
+
+    # Live filter: tail the transcript, decide show/hide per line.
+    # Runs in background, exits when stopfile appears.
+    local stopfile="$ARTIFACT_DIR/.stream-stop"
+    rm -f "$stopfile"
+    (
+        while [ ! -f "$transcript" ]; do sleep 0.2; done
+        tail -F -n +1 "$transcript" 2>&1 | while IFS= read -r line; do
+            [ -f "$stopfile" ] && exit 0
+            if show_line "$line"; then
+                local esc; esc=$(printf '%s' "$line" | tr '"' "'")
+                local ts2; ts2=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+                printf '%s\n' "ts=$ts2 level=INFO phase=agent stage=live status=LINE text=\"$esc\"" >> "$LOG"
+                printf '    %s\n' "$line"
+            fi
+        done
+    ) &
+    local streamer=$!
+
+    # Stall/progress loop.
+    local last_size=0 last_growth=$start_epoch last_snap=0
+    local in_stall=0 stall_count=0
+    while kill -0 "$CHILD" >/dev/null 2>&1; do
+        sleep 2
+        local now elapsed cur_size
+        now=$(date +%s); elapsed=$((now - start_epoch))
+        cur_size=$(wc -c < "$transcript" 2>&1 | tr -d ' ')
+
+        if [ "$cur_size" -gt "$last_size" ]; then
+            last_size=$cur_size
+            last_growth=$now
+            if [ "$in_stall" -eq 1 ]; then
+                log INFO agent RESUME "transcript growing" \
+                    "stall_count=$stall_count" "elapsed_s=$elapsed" "bytes=$cur_size"
+                printf '    [resume] %ss  bytes=%s\n' "$elapsed" "$cur_size"
+                in_stall=0
+            fi
+        else
+            local idle=$((now - last_growth))
+            if [ "$idle" -ge "$STALL_AFTER" ]; then
+                if [ "$in_stall" -eq 0 ]; then
+                    in_stall=1; stall_count=$((stall_count + 1))
+                    log WARN agent STALL "no growth" \
+                        "elapsed_s=$elapsed" "idle_s=$idle" \
+                        "stall_count=$stall_count" "bytes=$cur_size"
+                    snapshot "s${stall_count}" "stall"
+                    last_snap=$now
+                elif [ $((now - last_snap)) -ge "$STALL_REPEAT" ]; then
+                    log WARN agent STALL "still no growth" \
+                        "elapsed_s=$elapsed" "idle_s=$idle"
+                    snapshot "s${stall_count}" "stall-continued"
+                    last_snap=$now
+                fi
+            fi
+        fi
+
+        if [ "$elapsed" -ge "$HARD_TIMEOUT" ]; then
+            log WARN agent TIMEOUT "hard timeout" "elapsed_s=$elapsed"
+            printf '    [timeout] %ss\n' "$elapsed"
+            kill -TERM "$CHILD" >/dev/null 2>&1
+            sleep 2; kill -KILL "$CHILD" >/dev/null 2>&1
+            break
+        fi
+    done
+
+    wait "$CHILD" 2>&1
+    local rc=$?
+    CHILD=""
+
+    touch "$stopfile"
+    sleep 1
+    kill -TERM "$streamer" >/dev/null 2>&1
+    wait "$streamer" >/dev/null 2>&1
+
+    local end_epoch elapsed_ms
+    end_epoch=$(date +%s); elapsed_ms=$(( (end_epoch - start_epoch) * 1000 ))
+    log INFO agent END "finished" \
+        "rc=$rc" "elapsed_ms=$elapsed_ms" "stall_count=$stall_count"
+
+    # Extract final reply properly.
+    local reply_file="$ARTIFACT_DIR/final-reply.txt"
+    extract_final_reply "$transcript" "$reply_file"
+
+    printf '\n===== agent final reply =====\n'
+    if [ -s "$reply_file" ]; then
+        cat "$reply_file"
+    else
+        printf '(empty; transcript: %s)\n' "$transcript"
+    fi
+
+    printf '\n===== report =====\n'
+    if [ -f "$repo/logs/sidebar-audit.md" ]; then
+        printf 'path:  %s\n' "$repo/logs/sidebar-audit.md"
+        printf 'bytes: %s\n' "$(wc -c < "$repo/logs/sidebar-audit.md" | tr -d ' ')"
+    else
+        printf 'missing at %s\n' "$repo/logs/sidebar-audit.md"
+    fi
+
+    log INFO session END "done" "rc=$rc" "stall_count=$stall_count"
+
+    # Push and print raw links.
+    local pusher="$repo/scripts/archive/one-shot/push-telemetry.sh"
+    if [ -x "$pusher" ]; then
+        printf '\n===== push =====\n'
+        "$pusher" 2>&1
+    else
+        printf '\n(push-telemetry.sh not found at %s)\n' "$pusher"
+    fi
+
+    printf '\ntranscript: %s\n' "$transcript"
+    printf 'log:        %s\n' "$LOG"
+    printf 'artifacts:  %s\n' "$ARTIFACT_DIR"
+    return "$rc"
+}
+
+main "$@"

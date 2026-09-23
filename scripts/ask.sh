@@ -154,12 +154,53 @@ tag_stream() {
 # Kill observers gracefully on exit. SIGTERM is the named signal.
 # ----------------------------------------------------------------------------
 stop_observers() {
-    if [ -n "$EVENTS_PID" ]; then
-        kill -TERM "$EVENTS_PID" 2>&1 || true
-    fi
-    if [ -n "$JOURNAL_PID" ]; then
-        kill -TERM "$JOURNAL_PID" 2>&1 || true
-    fi
+    # pid_alive — true if PID exists on this host.
+    # /proc/<pid> exists only for live processes. No signal is sent,
+    # so no "No such process" message is ever produced.
+    #   Linux procfs:
+    #     https://man7.org/linux/man-pages/man5/proc.5.html
+    _pid_alive() {
+        [ -n "$1" ] && [ -d "/proc/$1" ]
+    }
+
+    # Phase 1: TERM live recorded PIDs.
+    local pid
+    for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+        if _pid_alive "$pid"; then
+            kill -TERM "$pid"
+        fi
+    done
+
+    # Phase 2: TERM orphaned grandchildren by pattern.
+    # pkill prints nothing when no match. || true catches exit 1.
+    pkill -TERM -f "docker events --filter image=$IMAGE" 2>&1 || true
+    pkill -TERM -f "journalctl -u docker -f -n 0" 2>&1 || true
+
+    # Phase 3: 2-second bounded wait.
+    local deadline=$(( $(date +%s) + 2 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        local alive=0
+        for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+            _pid_alive "$pid" && alive=1
+        done
+        pgrep -f "docker events --filter image=$IMAGE" > /dev/null && alive=1
+        pgrep -f "journalctl -u docker -f -n 0" > /dev/null && alive=1
+        [ "$alive" -eq 0 ] && break
+        sleep 0.1
+    done
+
+    # Phase 4: KILL survivors.
+    for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+        if _pid_alive "$pid"; then
+            kill -KILL "$pid"
+        fi
+    done
+    pkill -KILL -f "docker events --filter image=$IMAGE" 2>&1 || true
+    pkill -KILL -f "journalctl -u docker -f -n 0" 2>&1 || true
+
+    EVENTS_PID=""
+    JOURNAL_PID=""
+    TOP_PID=""
 }
 
 # ----------------------------------------------------------------------------

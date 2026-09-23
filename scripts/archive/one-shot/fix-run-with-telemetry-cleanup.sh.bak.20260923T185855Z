@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+#
+# fix-run-with-telemetry-cleanup.sh — guard run-with-telemetry.sh's
+# cleanup() against calling kill on already-reaped PIDs.
+#
+# ============================================================================
+# AUDIT
+# ============================================================================
+#
+# Observed:
+#     ./scripts/run-with-telemetry.sh: line 132: kill: (3668893) - No such process
+#
+# The cleanup trap fires at script exit. By then the watcher process
+# (its bash + its tail child) has already exited on its own. Calling
+# kill on a reaped PID causes the shell to print this message to stderr.
+#
+# The user's constraint forbids 2>/dev/null. The correct fix is a
+# signal-free liveness check via /proc/<pid>.
+#
+#   Linux procfs:
+#     https://man7.org/linux/man-pages/man5/proc.5.html
+#   POSIX kill(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/kill.html
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   Linux procfs:
+#     https://man7.org/linux/man-pages/man5/proc.5.html
+#   POSIX kill(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/kill.html
+#   pgrep(1) / pkill(1):
+#     https://man7.org/linux/man-pages/man1/pgrep.1.html
+#   Bash trap:
+#     https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#
+# ============================================================================
+
+set -o pipefail
+
+MODE="dry-run"
+case "${1:-}" in
+    --apply) MODE="apply" ;;
+    --dry-run|"") MODE="dry-run" ;;
+    *) printf 'usage: %s [--apply]\n' "$0"; return 2 ;;
+esac
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+[ -z "$REPO_DIR" ] && REPO_DIR=$(resolve_repo "$PWD")
+
+TARGET="$REPO_DIR/scripts/run-with-telemetry.sh"
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+
+main() {
+    printf '=== fix-run-with-telemetry-cleanup.sh ===\n'
+    printf 'Mode: %s\n' "$MODE"
+    printf 'File: %s\n\n' "$TARGET"
+
+    if [ ! -f "$TARGET" ]; then
+        printf 'GATE FAIL: %s not found\n' "$TARGET"
+        return 1
+    fi
+    printf '  PASS: target present\n'
+
+    if grep -q '_rt_pid_alive' "$TARGET"; then
+        printf '  PASS: guard already present; nothing to do\n'
+        return 0
+    fi
+
+    if [ "$MODE" = "apply" ]; then
+        cp "$TARGET" "$TARGET.bak.${TS}"
+        printf '  backup: %s.bak.%s\n' "$TARGET" "$TS"
+    fi
+
+    python3 - "$TARGET" "$MODE" <<'PY_EOF'
+import re, sys
+
+path, mode = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    src = f.read()
+
+# Locate cleanup() by name, walk to its closing brace, replace it.
+pat = re.compile(r'^cleanup\(\)\s*\{', re.MULTILINE)
+m = pat.search(src)
+if not m:
+    print("ERROR: cleanup() not found", file=sys.stderr)
+    sys.exit(3)
+
+i = m.end()
+depth = 1
+in_s = in_d = in_c = False
+while i < len(src) and depth > 0:
+    c = src[i]
+    if in_c:
+        if c == "\n": in_c = False
+    elif in_s:
+        if c == "'": in_s = False
+    elif in_d:
+        if c == '"': in_d = False
+    else:
+        if c == "#": in_c = True
+        elif c == "'": in_s = True
+        elif c == '"': in_d = True
+        elif c == "{": depth += 1
+        elif c == "}": depth -= 1
+    i += 1
+
+new_func = '''cleanup() {
+    # pid_alive — /proc/<pid> exists only for live processes.
+    # Signal-free liveness probe; no "No such process" message can occur.
+    #   Linux procfs:
+    #     https://man7.org/linux/man-pages/man5/proc.5.html
+    _rt_pid_alive() {
+        [ -n "$1" ] && [ -d "/proc/$1" ]
+    }
+
+    # Stop the watcher bash process if still alive.
+    if _rt_pid_alive "$WATCHER_PID"; then
+        kill -TERM "$WATCHER_PID"
+    fi
+
+    # Stop any watcher bash or tail child by command-line pattern.
+    # pkill prints nothing when no match; || true swallows exit 1.
+    pkill -TERM -f 'watch-test-tools\\.sh' 2>&1 || true
+    pkill -TERM -f 'tail -F.*test-tools\\.status' 2>&1 || true
+
+    sleep 1
+
+    if _rt_pid_alive "$WATCHER_PID"; then
+        kill -KILL "$WATCHER_PID"
+    fi
+    pkill -KILL -f 'watch-test-tools\\.sh' 2>&1 || true
+    pkill -KILL -f 'tail -F.*test-tools\\.status' 2>&1 || true
+
+    WATCHER_PID=""
+}'''
+
+src = src[:m.start()] + new_func + src[i:]
+
+if mode == "apply":
+    with open(path, "w") as f:
+        f.write(src)
+print("  cleanup() replaced")
+PY_EOF
+
+    if [ "$MODE" = "apply" ]; then
+        printf '\n  syntax:\n'
+        if bash -n "$TARGET" 2>&1; then
+            printf '    PASS\n'
+        else
+            printf '    FAIL\n'
+            return 1
+        fi
+    fi
+
+    printf '\n=== summary ===\n'
+    printf '  mode: %s\n' "$MODE"
+    if [ "$MODE" = "dry-run" ]; then
+        printf '\n  DRY-RUN. Rerun with --apply.\n'
+    else
+        printf '\n  APPLIED. backup: %s.bak.%s\n' "$TARGET" "$TS"
+        printf '\n  verify:\n'
+        printf '    ./scripts/run-with-telemetry.sh\n'
+        printf '  expected: no "No such process" line at exit.\n'
+    fi
+    return 0
+}
+
+main "$@"

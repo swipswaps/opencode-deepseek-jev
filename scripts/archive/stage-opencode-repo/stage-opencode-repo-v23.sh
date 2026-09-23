@@ -18,7 +18,7 @@ JEV_GUARD_VERSION=""
 
 DEEPSEEK_KEY_URL="https://platform.deepseek.com/api_keys"
 DEEPSEEK_DOCS_URL="https://api-docs.deepseek.com/"
-TYPESAFE_KEY_URL="https://console.typesafe.ai/settings/keys"
+TYPESAFE_KEY_URL="https://console.typesafe.ai/keys"
 TYPESAFE_DOCS_URL="https://docs.typesafe.ai/"
 
 load_env_file() {
@@ -472,7 +472,7 @@ Prerequisites
 - DeepSeek API key (prefix sk-)
   https://platform.deepseek.com/api_keys
 - Jev API key (prefix apikey_)
-  https://console.typesafe.ai/settings/keys
+  https://console.typesafe.ai/keys
 
 Quick Start
 -----------

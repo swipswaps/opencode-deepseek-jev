@@ -53,7 +53,7 @@ DEFAULT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("set -e",         re.compile(r"(?:^|[^A-Za-z0-9_])set\s+-e(?:[^A-Za-z0-9_]|$)")),
     ("exit 1",         re.compile(r"(?:^|[^A-Za-z0-9_])exit\s+1(?:[^A-Za-z0-9_]|$)")),
     ("subprocess.run", re.compile(r"subprocess\.run")),
-    ("kill N",         re.compile(r"(?:^|[^A-Za-z0-9_])kill\s+-?[0-9]+(?:[^0-9]|$)")),
+    ("kill N",         re.compile(r"(?:^|[^A-Za-z0-9_])kill\s+[1-9][0-9]*(?:[^0-9]|$)")),
 ]
 
 

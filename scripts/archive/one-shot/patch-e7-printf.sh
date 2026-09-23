@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# patch-e7-printf.sh — replace the printf calls in e7_intervention_scan()
+# so no format string begins with '-' and no printf argument begins with '--'.
+#
+# Root cause: `printf '%s\n' "$hits"` where "$hits" can start with '--'
+# is safe on its own, but if a variant uses `printf -- '...'` or passes the
+# content as the format, the option parser rejects it. This patch makes all
+# printf calls format-first, arg-second, with explicit `%s` placeholders.
+#
+# Constraints:
+#   No sed. No rm -rf. No set -e. No return 1. No 2>/dev/null.
+#   No python. No bare kill.
+#
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+main() {
+    local script_dir repo
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    if [ -z "$repo" ]; then
+        printf '%s\n' 'GATE FAIL: cannot resolve repo'
+        return 2
+    fi
+
+    local target="$repo/scripts/archive/one-shot/test-jev-effectiveness.sh"
+    if [ ! -f "$target" ]; then
+        printf 'GATE FAIL: %s not found\n' "$target"
+        return 1
+    fi
+
+    printf '%s\n' 'This patch is a MANUAL EDIT, not automated.'
+    printf '%s\n' 'Reason: sed is banned by repo convention; python3 rewrite of a'
+    printf '%s\n' 'shell script is more risk than a text edit.'
+    printf '\n'
+    printf '%s\n' 'Open the file and replace the e7_intervention_scan() body with:'
+    printf '\n'
+    cat <<'SUGGEST'
+e7_intervention_scan() {
+    section "E7  guard-intervention keyword scan"
+    printf '%s\n' 'scanning all captured logs for guard-related keywords:'
+    printf '%s\n' '  keywords: blocked denied refused injection sanitize guard flagged'
+    printf '\n'
+    for f in "$DBG_INJ" "$DBG_FILE"; do
+        if [ ! -f "$f" ]; then
+            continue
+        fi
+        printf '%s\n' "--- $f ---"
+        hits=$(grep -inIE 'blocked|denied|refused|injection|sanitiz|guard|flagged' "$f" 2>&1)
+        if [ -n "$hits" ]; then
+            printf '%s\n' "$hits" | head -20 | indent
+        else
+            printf '%s\n' '  (no keyword hits)'
+        fi
+    done
+    printf '\n'
+    printf '%s\n' 'log files retained:'
+    printf '%s\n' "  $DBG_INJ"
+    printf '%s\n' "  $DBG_FILE"
+}
+SUGGEST
+    return 0
+}
+
+main "$@"

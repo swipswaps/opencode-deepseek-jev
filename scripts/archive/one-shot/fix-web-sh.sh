@@ -1,0 +1,327 @@
+#!/usr/bin/env bash
+#
+# fix-web-sh.sh — rewrite scripts/web.sh to source .env.local and to
+# accept any HTTP response (including 401) as "server is up", then add
+# scripts/web-logs.sh.
+#
+# ============================================================================
+# AUDIT — three defects in the previous web.sh
+# ============================================================================
+#
+# D1. web.sh did not load .env.local. Compose read ${DEEPSEEK_API_KEY}
+#     as empty. Fix: source .env.local, export DEEPSEEK_API_KEY and
+#     JEV_API_KEY before invoking compose.
+#
+# D2. Readiness check grepped for '^(2|3)' against the HTTP status.
+#     With OPENCODE_SERVER_PASSWORD set, opencode's web server returns
+#     401 for unauthenticated probes. '401' does not match ^(2|3), so
+#     the loop never succeeded. Fix: accept any response other than 000.
+#
+#         HTTP basic auth challenge semantics, RFC 7235 §4.1:
+#           https://www.rfc-editor.org/rfc/rfc7235#section-4.1
+#
+# D3. The log hint said `docker compose logs opencode-web` from the
+#     repo root. Compose looks for docker-compose.yml in the current
+#     directory. Fix: add scripts/web-logs.sh that cd's into docker/.
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   OpenCode Web UI:
+#     https://opencode.ai/docs/web/
+#   OpenCode Server:
+#     https://opencode.ai/docs/server/
+#   Docker Compose file reference:
+#     https://docs.docker.com/compose/compose-file/
+#   Docker Compose logs:
+#     https://docs.docker.com/engine/reference/commandline/compose_logs/
+#   HTTP Basic auth, RFC 7235:
+#     https://www.rfc-editor.org/rfc/rfc7235
+#   POSIX test(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/test.html
+#   Bash parameter expansion:
+#     https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
+#
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §5.1 "Debugging".
+#
+# ============================================================================
+
+set -o pipefail
+
+MODE="dry-run"
+case "${1:-}" in
+    --apply) MODE="apply" ;;
+    --dry-run|"") MODE="dry-run" ;;
+    *) printf 'usage: %s [--apply]\n' "$0"; return 2 ;;
+esac
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+if [ -z "$REPO_DIR" ]; then
+    printf 'GATE FAIL: cannot resolve repo root\n'
+    return 2
+fi
+
+WEB_SH="$REPO_DIR/scripts/web.sh"
+WEB_LOGS="$REPO_DIR/scripts/web-logs.sh"
+WEB_STOP="$REPO_DIR/scripts/web-stop.sh"
+ENV_FILE="$REPO_DIR/.env.local"
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+
+section() { printf '\n=== %s ===\n' "$1"; }
+
+main() {
+    printf '=== fix-web-sh.sh ===\n'
+    printf 'Mode: %s\n' "$MODE"
+    printf 'Repo: %s\n\n' "$REPO_DIR"
+
+    if [ ! -d "$REPO_DIR/scripts" ]; then
+        printf 'GATE FAIL: scripts/ not found\n'
+        return 1
+    fi
+    printf '  PASS: scripts/ present\n'
+
+    if [ ! -f "$ENV_FILE" ]; then
+        printf '  WARN: %s not present; web.sh will not load keys\n' "$ENV_FILE"
+    fi
+
+    if [ "$MODE" = "apply" ]; then
+        if [ -f "$WEB_SH" ]; then
+            cp "$WEB_SH" "$WEB_SH.bak.${TS}"
+            printf '  backup: %s.bak.%s\n' "$WEB_SH" "$TS"
+        fi
+    fi
+
+    # ---- 1. rewrite web.sh --------------------------------------------
+    section "1. scripts/web.sh"
+
+    if [ "$MODE" = "apply" ]; then
+        cat > "$WEB_SH" <<'WEB_EOF'
+#!/usr/bin/env bash
+#
+# web.sh — start OpenCode's web UI in a Docker container.
+#
+# Sources .env.local so the container receives DEEPSEEK_API_KEY and
+# JEV_API_KEY. Publishes port 4096. Respects OPENCODE_SERVER_PASSWORD
+# for HTTP basic authentication (username defaults to "opencode").
+#
+#   https://opencode.ai/docs/web/
+#   https://opencode.ai/docs/server/
+#
+# Plain ASCII. No sed. No rm -rf. No set -e. No return 1.
+# No 2>/dev/null. No subprocess.run. No kill without signal.
+#
+# ============================================================================
+
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+if [ -z "$REPO_DIR" ]; then
+    printf 'GATE FAIL: cannot resolve repo root\n'
+    return 2
+fi
+
+ENV_FILE="$REPO_DIR/.env.local"
+COMPOSE_DIR="$REPO_DIR/docker"
+
+main() {
+    printf '=== web.sh ===\n'
+    printf 'Repo: %s\n' "$REPO_DIR"
+
+    if ! command -v docker > /dev/null; then
+        printf 'GATE FAIL: docker not found\n'
+        return 1
+    fi
+    if ! docker info > /dev/null; then
+        printf 'GATE FAIL: docker daemon not reachable\n'
+        return 1
+    fi
+
+    # ---- Load keys from .env.local --------------------------------
+    if [ -f "$ENV_FILE" ]; then
+        while IFS='=' read -r k v; do
+            case "$k" in
+                DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
+                JEV_API_KEY)      JEV_API_KEY="$v" ;;
+            esac
+        done < "$ENV_FILE"
+        export DEEPSEEK_API_KEY
+        export JEV_API_KEY
+        printf 'loaded %s\n' "$ENV_FILE"
+    else
+        printf 'WARN: %s not found; container will lack keys\n' "$ENV_FILE"
+    fi
+
+    if [ -z "$DEEPSEEK_API_KEY" ]; then
+        printf 'WARN: DEEPSEEK_API_KEY is empty\n'
+    fi
+    if [ -z "$JEV_API_KEY" ]; then
+        printf 'WARN: JEV_API_KEY is empty\n'
+    fi
+    if [ -z "$OPENCODE_SERVER_PASSWORD" ]; then
+        printf 'WARN: OPENCODE_SERVER_PASSWORD is unset; web UI unauthenticated\n'
+    fi
+
+    cd "$COMPOSE_DIR"
+    printf 'starting opencode-web container\n'
+    docker compose up -d opencode-web
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        printf 'FAIL: docker compose up returned %d\n' "$rc"
+        return 1
+    fi
+
+    # ---- Readiness: accept any HTTP response other than 000 -------
+    # 200 means ready; 401 means ready with auth challenge.
+    # 000 means no TCP listener. RFC 7235 §4.1:
+    #   https://www.rfc-editor.org/rfc/rfc7235#section-4.1
+    printf '\nwaiting for server\n'
+    local tries=0
+    local code=""
+    while [ "$tries" -lt 60 ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4096/ 2>&1 || true)
+        if [ -n "$code" ] && [ "$code" != "000" ]; then
+            break
+        fi
+        tries=$((tries + 1))
+        printf '  probe %d/60: code=%s\n' "$tries" "$code"
+        sleep 1
+    done
+
+    if [ -z "$code" ] || [ "$code" = "000" ]; then
+        printf '\nFAIL: no listener on 127.0.0.1:4096 after 60s\n'
+        printf 'last 40 lines of container log:\n'
+        docker compose logs --tail=40 opencode-web
+        return 1
+    fi
+
+    printf '\n=== OpenCode web UI is running ===\n'
+    printf 'URL:      http://127.0.0.1:4096\n'
+    printf 'HTTP:     %s\n' "$code"
+    if [ -n "$OPENCODE_SERVER_PASSWORD" ]; then
+        printf 'Username: %s\n' "${OPENCODE_SERVER_USERNAME:-opencode}"
+        printf 'Password: (the value you exported)\n'
+    else
+        printf 'Auth:     none\n'
+    fi
+    printf '\nlogs:  ./scripts/web-logs.sh\n'
+    printf 'stop:  ./scripts/web-stop.sh\n'
+    return 0
+}
+
+main "$@"
+WEB_EOF
+        chmod +x "$WEB_SH"
+        printf '  wrote %s\n' "$WEB_SH"
+    else
+        printf '  would rewrite %s\n' "$WEB_SH"
+    fi
+
+    # ---- 2. web-logs.sh -----------------------------------------------
+    section "2. scripts/web-logs.sh"
+
+    if [ "$MODE" = "apply" ]; then
+        cat > "$WEB_LOGS" <<'LOGS_EOF'
+#!/usr/bin/env bash
+#
+# web-logs.sh — show opencode-web container logs.
+#
+# cd's into docker/ first so `docker compose` finds its configuration.
+#
+# Usage:
+#   ./scripts/web-logs.sh            last 80 lines
+#   ./scripts/web-logs.sh -f         follow
+#   ./scripts/web-logs.sh 200        last 200 lines
+#
+# ============================================================================
+
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+
+main() {
+    cd "$REPO_DIR/docker" || return 1
+    case "${1:-}" in
+        -f|--follow)
+            docker compose logs -f opencode-web
+            ;;
+        ""|*[!0-9]*)
+            docker compose logs --tail=80 opencode-web
+            ;;
+        *)
+            docker compose logs --tail="$1" opencode-web
+            ;;
+    esac
+}
+
+main "$@"
+LOGS_EOF
+        chmod +x "$WEB_LOGS"
+        printf '  wrote %s\n' "$WEB_LOGS"
+    else
+        printf '  would write %s\n' "$WEB_LOGS"
+    fi
+
+    section "summary"
+    printf '  mode: %s\n' "$MODE"
+    if [ "$MODE" = "dry-run" ]; then
+        printf '\n  DRY-RUN. Rerun with --apply.\n'
+    else
+        printf '\n  APPLIED.\n'
+        printf '\n  next:\n'
+        printf '    ./scripts/web-logs.sh        # what the container is doing\n'
+        printf '    ./scripts/web.sh             # restart with keys loaded\n'
+    fi
+    return 0
+}
+
+main "$@"

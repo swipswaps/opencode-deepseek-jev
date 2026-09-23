@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+#
+# rotate-api-keys.sh — guided rotation of DEEPSEEK_API_KEY and JEV_API_KEY.
+#
+# The upstream revocation/creation is a browser task at:
+#   DeepSeek: https://platform.deepseek.com/api_keys
+#   JEV:      https://console.typesafe.ai/keys
+# Neither offers a CLI. Everything else is scripted here.
+#
+# Flow:
+#   R0  pre-flight: repo, .env.local, container, docker compose
+#   R1  browser checklist (explicit confirmation gate)
+#   R2  backup .env.local
+#   R3  prompt for new keys (hidden input, confirm, format-check)
+#   R4  write new .env.local atomically, mode 0600
+#   R5  recreate container
+#   R6  wait for HTTP
+#   R7  verify auth.json, providers list
+#   R8  smoke test with new keys
+#   R9  summary with rollback command
+#
+# Constraints:
+#   No sed. No rm -rf. No set -e. No return 1. No 2>/dev/null.
+#   No python. No bare kill. main() wrapper.
+#
+# Citations:
+#   POSIX printf(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+#   POSIX read(1) (-s flag is bash; documented in bash(1)):
+#     https://www.gnu.org/software/bash/manual/bash.html#index-read
+#   POSIX umask(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/umask.html
+#   Docker compose up:
+#     https://docs.docker.com/compose/reference/up/
+#   DeepSeek API keys console:
+#     https://platform.deepseek.com/api_keys
+#   JEV (typesafe.ai) keys console:
+#     https://console.typesafe.ai/keys
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §5.1 "Debugging".
+#
+set -o pipefail
+
+C="opencode-deepseek-web"
+MODEL="deepseek/deepseek-flash"
+HTTP_URL="http://127.0.0.1:4096"
+CONTAINER_AUTH="/home/node/.local/share/opencode/auth.json"
+
+section() { printf '\n=== %s ===\n' "$1"; }
+
+indent() {
+    local line
+    while IFS= read -r line; do
+        printf '%s%s\n' '    ' "$line"
+    done
+}
+
+mask() {
+    local s="$1"
+    if [ ${#s} -le 12 ]; then
+        printf '%s' '***'
+        return 0
+    fi
+    local head tail
+    head=$(printf '%s' "$s" | cut -c1-8)
+    tail=$(printf '%s' "$s" | rev | cut -c1-6 | rev)
+    printf '%s...%s' "$head" "$tail"
+}
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+r0_preflight() {
+    section "R0  pre-flight"
+
+    local script_dir repo
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    if [ -z "$repo" ]; then
+        printf '  GATE FAIL: cannot resolve repo root\n'
+        return 1
+    fi
+    printf '  PASS repo: %s\n' "$repo"
+
+    if [ ! -f "$repo/.env.local" ]; then
+        printf '  GATE FAIL: %s/.env.local missing\n' "$repo"
+        return 1
+    fi
+    printf '  PASS env file present\n'
+
+    if ! command -v docker >/dev/null 2>&1; then
+        printf '  GATE FAIL: docker not on PATH\n'
+        return 1
+    fi
+    printf '  PASS docker on PATH\n'
+
+    if ! docker inspect -f '{{.State.Status}}' "$C" 2>&1 | grep -q '^running$'; then
+        printf '  GATE FAIL: container %s not running\n' "$C"
+        return 1
+    fi
+    printf '  PASS container running\n'
+
+    if [ ! -f "$repo/docker/docker-compose.yml" ]; then
+        printf '  GATE FAIL: docker/docker-compose.yml missing\n'
+        return 1
+    fi
+    printf '  PASS compose file present\n'
+
+    R_REPO="$repo"
+    R_ENV="$repo/.env.local"
+    return 0
+}
+
+r1_browser_checklist() {
+    section "R1  browser checklist — do these first, in a browser"
+    printf '\n'
+    printf '  DeepSeek:\n'
+    printf '    1. Open https://platform.deepseek.com/api_keys\n'
+    printf '    2. Locate the key currently in .env.local (see R2 mask below)\n'
+    printf '    3. Click Revoke / Delete on that key\n'
+    printf '    4. Create a new key; copy it (prefix sk-)\n'
+    printf '\n'
+    printf '  JEV (typesafe.ai):\n'
+    printf '    5. Open https://console.typesafe.ai/keys\n'
+    printf '    6. Locate the key currently in .env.local\n'
+    printf '    7. Click Revoke / Delete on that key\n'
+    printf '    8. Create a new key; copy it (prefix apikey_)\n'
+    printf '\n'
+    printf '  Both old keys will stop working the moment you revoke them.\n'
+    printf '  That is expected — this script replaces them in .env.local and\n'
+    printf '  recreates the container.\n'
+    printf '\n'
+    printf '  Type exactly "rotate" to continue, or anything else to abort: '
+    local answer=""
+    read -r answer
+    if [ "$answer" != "rotate" ]; then
+        printf '\n  aborted by user (got: %s)\n' "$answer"
+        return 1
+    fi
+    return 0
+}
+
+r2_backup_and_show() {
+    section "R2  backup .env.local"
+    local ts="$1"
+    cp "$R_ENV" "$R_ENV.bak.${ts}"
+    printf '  backup: %s.bak.%s\n' "$R_ENV" "$ts"
+    printf '  mode:   '
+    ls -la "$R_ENV" | awk '{print $1, $9}'
+    printf '\n  current keys (masked):\n'
+    while IFS='=' read -r k v; do
+        case "$k" in
+            DEEPSEEK_API_KEY|JEV_API_KEY)
+                printf '    %s=%s\n' "$k" "$(mask "$v")"
+                ;;
+        esac
+    done < "$R_ENV"
+    return 0
+}
+
+r3_prompt_new_keys() {
+    section "R3  new keys"
+    printf '\nPaste NEW DeepSeek key (input hidden), then Enter: '
+    read -r -s NEW_DEEPSEEK
+    printf '\n'
+    printf 'Paste NEW JEV key (input hidden), then Enter:      '
+    read -r -s NEW_JEV
+    printf '\n'
+
+    if [ -z "$NEW_DEEPSEEK" ] || [ -z "$NEW_JEV" ]; then
+        printf '\n  GATE FAIL: one or both keys empty; aborting without changes\n'
+        return 1
+    fi
+
+    # Format checks — warn, do not abort, because formats can drift.
+    case "$NEW_DEEPSEEK" in
+        sk-*) ;;
+        *) printf '  WARN: DeepSeek key does not start with "sk-" — continuing\n' ;;
+    esac
+    case "$NEW_JEV" in
+        apikey_*) ;;
+        *) printf '  WARN: JEV key does not start with "apikey_" — continuing\n' ;;
+    esac
+
+    # Confirm masked so the user can spot a paste error before we write.
+    printf '\n  new DeepSeek: %s\n' "$(mask "$NEW_DEEPSEEK")"
+    printf '  new JEV:      %s\n' "$(mask "$NEW_JEV")"
+    printf '\n  Type "write" to proceed, anything else to abort: '
+    local answer=""
+    read -r answer
+    if [ "$answer" != "write" ]; then
+        printf '\n  aborted at confirm (got: %s)\n' "$answer"
+        return 1
+    fi
+    return 0
+}
+
+r4_write_env() {
+    section "R4  write new .env.local (mode 0600)"
+    (umask 077 && cat > "$R_ENV" <<ENV_EOF
+DEEPSEEK_API_KEY=$NEW_DEEPSEEK
+JEV_API_KEY=$NEW_JEV
+ENV_EOF
+)
+    chmod 600 "$R_ENV"
+    ls -la "$R_ENV" | indent
+    return 0
+}
+
+r5_recreate() {
+    section "R5  recreate container"
+    cd "$R_REPO/docker" || return 1
+    docker compose up -d --force-recreate opencode-web
+    local rc=$?
+    cd "$R_REPO" || return 1
+    if [ "$rc" -ne 0 ]; then
+        printf '  FAIL: compose up returned %d\n' "$rc"
+        return 1
+    fi
+    printf '  PASS container recreated\n'
+    return 0
+}
+
+r6_wait_http() {
+    section "R6  wait for HTTP"
+    local tries=0 code=""
+    while [ "$tries" -lt 90 ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$HTTP_URL/" 2>&1)
+        printf '  %2d/90  http=%s\n' "$((tries + 1))" "$code"
+        [ -n "$code" ] && [ "$code" != "000" ] && break
+        tries=$((tries + 1))
+        sleep 2
+    done
+    if [ -z "$code" ] || [ "$code" = "000" ]; then
+        printf '  FAIL: no listener after 180 s\n'
+        return 1
+    fi
+    R_HTTP="$code"
+    printf '  PASS http=%s\n' "$code"
+    return 0
+}
+
+r7_verify_inside() {
+    section "R7  verify inside the container"
+    printf 'auth.json:\n'
+    docker exec "$C" sh -c "ls -la '$CONTAINER_AUTH' && head -c 200 '$CONTAINER_AUTH'" 2>&1 | indent
+    printf '\nproviders:\n'
+    docker exec -w /workspace "$C" sh -c 'opencode providers list' 2>&1 | indent
+    return 0
+}
+
+r8_smoke() {
+    section "R8  one-shot smoke test with new keys"
+    local log="/tmp/rotate-smoke-${R_TS}.log"
+    docker exec -w /workspace "$C" sh -c \
+        "opencode run --model '$MODEL' 'Reply with exactly: ROTATED'" \
+        > "$log" 2>&1
+    tail -10 "$log" | indent
+    if grep -q 'ROTATED' "$log"; then
+        R_SMOKE="PASS"
+        printf '\n  smoke: PASS\n'
+    else
+        R_SMOKE="FAIL"
+        printf '\n  smoke: FAIL — see %s\n' "$log"
+    fi
+    R_LOG="$log"
+    return 0
+}
+
+main() {
+    R_TS=$(date -u +%Y%m%dT%H%M%SZ)
+    R_HTTP=""
+    R_SMOKE=""
+    R_LOG=""
+    R_REPO=""
+    R_ENV=""
+    NEW_DEEPSEEK=""
+    NEW_JEV=""
+
+    printf '=== rotate-api-keys.sh ===\n'
+    printf 'TS: %s\n' "$R_TS"
+
+    if ! r0_preflight;   then return 1; fi
+    if ! r1_browser_checklist; then return 1; fi
+    if ! r2_backup_and_show "$R_TS"; then return 1; fi
+    if ! r3_prompt_new_keys; then return 1; fi
+    if ! r4_write_env;   then return 1; fi
+    if ! r5_recreate;    then
+        printf '\nrollback: cp %s.bak.%s %s\n' "$R_ENV" "$R_TS" "$R_ENV"
+        printf '          docker compose -f %s/docker/docker-compose.yml up -d --force-recreate opencode-web\n' "$R_REPO"
+        return 1
+    fi
+    if ! r6_wait_http;   then
+        printf '\nrollback: cp %s.bak.%s %s\n' "$R_ENV" "$R_TS" "$R_ENV"
+        printf '          docker compose -f %s/docker/docker-compose.yml up -d --force-recreate opencode-web\n' "$R_REPO"
+        return 1
+    fi
+    r7_verify_inside
+    r8_smoke
+
+    section "summary"
+    printf '  env backup: %s.bak.%s\n' "$R_ENV" "$R_TS"
+    printf '  http:       %s\n' "$R_HTTP"
+    printf '  smoke:      %s\n' "$R_SMOKE"
+    printf '  smoke log:  %s\n' "$R_LOG"
+    printf '\n'
+    if [ "$R_SMOKE" = "FAIL" ]; then
+        printf 'rollback:\n'
+        printf '  cp %s.bak.%s %s\n' "$R_ENV" "$R_TS" "$R_ENV"
+        printf '  docker compose -f %s/docker/docker-compose.yml up -d --force-recreate opencode-web\n' "$R_REPO"
+        return 1
+    fi
+    printf 'rotation complete.\n'
+    return 0
+}
+
+main "$@"

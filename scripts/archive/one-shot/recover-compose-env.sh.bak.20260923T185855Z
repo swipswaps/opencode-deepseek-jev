@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+#
+# recover-compose-env.sh — recover opencode-web after
+# normalize-opencode-web-service.sh broke env var delivery.
+#
+# Root cause: template used pass-through syntax (`- DEEPSEEK_API_KEY`),
+# which reads from the compose process's host shell. In a fresh shell
+# those vars are unset, so compose sets them to empty — overriding
+# env_file values (documented precedence: environment > env_file).
+#
+# Fix: env_file only for DEEPSEEK/JEV. Hardcode DISABLE_DEFAULT_PLUGINS.
+# Pass OPENCODE_SERVER_PASSWORD via explicit substitution.
+# Also exports all three into the compose process's shell as belt+suspenders.
+#
+# Constraints:
+#   No sed. No rm -rf. No set -e. No exit 1. No 2>/dev/null.
+#   No bare kill. main() wrapper. python3 for text edits only.
+#
+# Citations:
+#   POSIX printf(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+#   Compose env_file precedence:
+#     https://docs.docker.com/compose/compose-file/05-services/#env_file
+#   Compose environment:
+#     https://docs.docker.com/compose/compose-file/05-services/#environment
+#   Compose variable substitution:
+#     https://docs.docker.com/compose/compose-file/12-interpolation/
+#   Compose config:
+#     https://docs.docker.com/reference/cli/docker/compose/config/
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §5.1 "Debugging".
+#
+set -o pipefail
+
+C="opencode-deepseek-web"
+HTTP_URL="http://127.0.0.1:4096"
+COMPOSE_REL="docker/docker-compose.yml"
+ENV_REL=".env.local"
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+section() { printf '\n=== %s ===\n' "$1"; }
+
+indent() {
+    local line
+    while IFS= read -r line; do
+        printf '%s%s\n' '    ' "$line"
+    done
+}
+
+mask() {
+    local s="$1"
+    if [ ${#s} -le 12 ]; then printf '***'; return 0; fi
+    printf '%s...%s' \
+        "$(printf '%s' "$s" | cut -c1-8)" \
+        "$(printf '%s' "$s" | rev | cut -c1-6 | rev)"
+}
+
+main() {
+    local script_dir repo compose env_file ts
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    if [ -z "$repo" ]; then
+        printf 'GATE FAIL: cannot resolve repo\n'
+        return 2
+    fi
+    compose="$repo/$COMPOSE_REL"
+    env_file="$repo/$ENV_REL"
+    ts=$(date -u +%Y%m%dT%H%M%SZ)
+
+    printf '=== recover-compose-env.sh ===\n'
+    printf 'Repo:    %s\n' "$repo"
+    printf 'Compose: %s\n' "$compose"
+    printf 'Env:     %s\n' "$env_file"
+    printf 'TS:      %s\n' "$ts"
+
+    section "1. current opencode-web block (raw file)"
+    awk '/^  opencode-web:/{s=1} s{print} s && /^  [a-z]/ && !/^  opencode-web:/{exit}' "$compose" | indent
+
+    section "2. docker/.env (compose default env file)"
+    if [ -f "$repo/docker/.env" ]; then
+        printf '  present: %s\n' "$repo/docker/.env"
+        printf '  keys (masked):\n'
+        while IFS='=' read -r k v; do
+            case "$k" in
+                OPENCODE_SERVER_PASSWORD|DEEPSEEK_API_KEY|JEV_API_KEY)
+                    printf '    %s=%s\n' "$k" "$(mask "$v")" ;;
+                "") ;;
+                *) printf '    %s=%s\n' "$k" "$v" ;;
+            esac
+        done < "$repo/docker/.env"
+    else
+        printf '  absent\n'
+    fi
+
+    section "3. read .env.local, export to compose process"
+    if [ ! -f "$env_file" ]; then
+        printf '  GATE FAIL: %s missing\n' "$env_file"
+        return 1
+    fi
+    DEEPSEEK_API_KEY=""
+    JEV_API_KEY=""
+    OPENCODE_SERVER_PASSWORD=""
+    while IFS='=' read -r k v; do
+        case "$k" in
+            DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
+            JEV_API_KEY) JEV_API_KEY="$v" ;;
+            OPENCODE_SERVER_PASSWORD) OPENCODE_SERVER_PASSWORD="$v" ;;
+        esac
+    done < "$env_file"
+    if [ -z "$DEEPSEEK_API_KEY" ] || [ -z "$JEV_API_KEY" ]; then
+        printf '  GATE FAIL: missing key in %s\n' "$env_file"
+        return 1
+    fi
+    printf '  DEEPSEEK_API_KEY=%s\n' "$(mask "$DEEPSEEK_API_KEY")"
+    printf '  JEV_API_KEY=%s\n' "$(mask "$JEV_API_KEY")"
+    if [ -z "$OPENCODE_SERVER_PASSWORD" ]; then
+        OPENCODE_SERVER_PASSWORD="$(openssl rand -base64 24 2>&1 | tr -d '\n')"
+        printf '  OPENCODE_SERVER_PASSWORD: generated %s (ephemeral — add to %s to persist)\n' \
+            "$(mask "$OPENCODE_SERVER_PASSWORD")" "$env_file"
+    else
+        printf '  OPENCODE_SERVER_PASSWORD=%s\n' "$(mask "$OPENCODE_SERVER_PASSWORD")"
+    fi
+    export DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD
+
+    section "4. rewrite opencode-web block (env_file only)"
+    cp "$compose" "$compose.bak.${ts}"
+    printf '  backup: %s.bak.%s\n' "$compose" "$ts"
+
+    python3 - "$compose" <<'PY'
+import re, sys
+path = sys.argv[1]
+with open(path) as fh:
+    text = fh.read()
+
+TEMPLATE = """  opencode-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-deepseek-jev:robust
+    container_name: opencode-deepseek-web
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /workspace
+    entrypoint: ["/workspace/docker/web-entrypoint.sh"]
+    ports:
+      - "4096:4096"
+    volumes:
+      - ..:/workspace
+    env_file:
+      - ../.env.local
+    environment:
+      OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+      OPENCODE_SERVER_PASSWORD: "${OPENCODE_SERVER_PASSWORD:-}"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+"""
+
+pattern = re.compile(
+    r'^  opencode-web:\n(?:[ \t].*\n|\n)*?(?=^  [a-zA-Z]|\Z)',
+    re.MULTILINE,
+)
+m = pattern.search(text)
+if not m:
+    print("  WARN: opencode-web block not found; no change")
+    sys.exit(0)
+
+text = text[:m.start()] + TEMPLATE + text[m.end():]
+with open(path, "w") as fh:
+    fh.write(text)
+print("  opencode-web block replaced")
+PY
+
+    section "5. validate compose"
+    ( cd "$repo/docker" && docker compose config >/dev/null 2>&1 )
+    local cfg_rc=$?
+    if [ "$cfg_rc" -ne 0 ]; then
+        printf '  FAIL: compose config rc=%d\n' "$cfg_rc"
+        ( cd "$repo/docker" && docker compose config 2>&1 | head -20 ) | indent
+        printf '  rollback: cp %s.bak.%s %s\n' "$compose" "$ts" "$compose"
+        return 1
+    fi
+    printf '  compose config: OK\n'
+
+    section "6. recreate container"
+    ( cd "$repo/docker" && docker compose up -d --force-recreate opencode-web )
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        printf '  FAIL: compose up rc=%d\n' "$rc"
+        return 1
+    fi
+
+    section "7. wait for HTTP"
+    local tries=0 code=""
+    while [ "$tries" -lt 60 ]; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 "$HTTP_URL/" 2>&1)
+        printf '  %2d/60  http=%s\n' "$((tries + 1))" "$code"
+        [ -n "$code" ] && [ "$code" != "000" ] && break
+        tries=$((tries + 1))
+        sleep 2
+    done
+
+    section "8. container env after recreate"
+    docker exec "$C" sh -c 'env | grep -E "^(DEEPSEEK|JEV|OPENCODE)" | sort' 2>&1 | \
+        while IFS='=' read -r k v; do
+            case "$k" in
+                DEEPSEEK_API_KEY|JEV_API_KEY|OPENCODE_SERVER_PASSWORD)
+                    printf '  %s=%s\n' "$k" "$(mask "$v")" ;;
+                *)
+                    printf '  %s=%s\n' "$k" "$v" ;;
+            esac
+        done
+
+    section "9. auth.json + providers"
+    docker exec "$C" sh -c 'ls -la /home/node/.local/share/opencode/auth.json' 2>&1 | indent
+    docker exec -w /workspace "$C" sh -c 'opencode providers list' 2>&1 | indent
+
+    section "10. one-shot smoke test"
+    local log="/tmp/recover-smoke-${ts}.log"
+    docker exec -w /workspace "$C" sh -c \
+        "opencode run --model deepseek/deepseek-flash 'Reply with exactly: RECOVERED'" \
+        > "$log" 2>&1
+    tail -5 "$log" | indent
+    if grep -q 'RECOVERED' "$log"; then
+        printf '  PASS\n'
+    else
+        printf '  FAIL — see %s\n' "$log"
+    fi
+
+    section "summary"
+    printf '  compose backup: %s.bak.%s\n' "$compose" "$ts"
+    printf '  HTTP:           %s\n' "$code"
+    printf '  password:       %s\n' "$(mask "$OPENCODE_SERVER_PASSWORD")"
+    printf '\n  to persist password, append to %s:\n' "$env_file"
+    printf '    OPENCODE_SERVER_PASSWORD=%s\n' "$OPENCODE_SERVER_PASSWORD"
+
+    local missing=0
+    for v in DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD; do
+        if ! docker exec "$C" sh -c "env | grep -q '^${v}='" 2>&1; then
+            printf '  STILL MISSING: %s\n' "$v"
+            missing=1
+        fi
+    done
+    if [ "$missing" -eq 1 ]; then
+        return 1
+    fi
+    return 0
+}
+
+main "$@"

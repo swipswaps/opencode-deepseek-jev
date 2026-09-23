@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# patch-web-gui-url.sh — update the TypeSafe link in rotate-keys-web.py.
+# Manual-edit patch: prints the exact one-line change.
+#
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"; return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+main() {
+    local script_dir repo
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo=$(resolve_repo "$script_dir")
+    [ -z "$repo" ] && repo=$(resolve_repo "$PWD")
+    if [ -z "$repo" ]; then
+        printf '%s\n' 'GATE FAIL: cannot resolve repo'
+        return 2
+    fi
+
+    local target="$repo/scripts/archive/one-shot/rotate-keys-web.py"
+    if [ ! -f "$target" ]; then
+        printf 'SKIP: %s not present\n' "$target"
+        return 0
+    fi
+
+    printf '=== patch-web-gui-url.sh ===\n'
+    printf 'Target: %s\n\n' "$target"
+    printf 'Change this line in the HTML template:\n\n'
+    printf '  BEFORE:\n'
+    printf '    <a class="console" href="https://console.typesafe.ai/keys" target="_blank">\n'
+    printf '\n  AFTER:\n'
+    printf '    <a class="console" href="https://console.typesafe.ai/keys" target="_blank">\n'
+    printf '\nNote: fix-typesafe-url.sh will catch this automatically if run first.\n'
+    printf 'This script is a fallback if you skipped that step.\n'
+    return 0
+}
+
+main "$@"

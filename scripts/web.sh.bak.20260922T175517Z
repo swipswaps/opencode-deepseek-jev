@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# web.sh — start OpenCode's web UI in a Docker container.
+#
+# The container runs `opencode web --hostname 0.0.0.0 --port 4096` with
+# the repo mounted at /workspace. The host's port 4096 maps to the
+# container's port 4096.
+#
+# Authentication: set OPENCODE_SERVER_PASSWORD in the host environment
+# before invoking. Without it, the web UI is unauthenticated.
+# Username defaults to "opencode"; override with OPENCODE_SERVER_USERNAME.
+#
+#   https://opencode.ai/docs/web/
+#   https://opencode.ai/docs/server/
+#
+# Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
+# No 2>/dev/null. No subprocess.run. No kill without signal.
+#
+# ============================================================================
+
+set -o pipefail
+
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+if [ -z "$REPO_DIR" ]; then
+    printf 'GATE FAIL: cannot resolve repo root\n'
+    return 2
+fi
+
+main() {
+    printf '=== web.sh ===\n'
+    printf 'Repo: %s\n' "$REPO_DIR"
+
+    if ! command -v docker > /dev/null; then
+        printf 'GATE FAIL: docker not found\n'
+        return 1
+    fi
+    if ! docker info > /dev/null; then
+        printf 'GATE FAIL: docker daemon not reachable\n'
+        return 1
+    fi
+
+    cd "$REPO_DIR/docker"
+
+    if [ -z "$DEEPSEEK_API_KEY" ]; then
+        printf 'WARN: DEEPSEEK_API_KEY is not set\n'
+    fi
+    if [ -z "$JEV_API_KEY" ]; then
+        printf 'WARN: JEV_API_KEY is not set\n'
+    fi
+    if [ -z "$OPENCODE_SERVER_PASSWORD" ]; then
+        printf 'WARN: OPENCODE_SERVER_PASSWORD is not set; web UI will be unauthenticated\n'
+    fi
+
+    printf 'starting opencode-web container\n'
+    docker compose up -d opencode-web
+    local rc=$?
+
+    if [ "$rc" -ne 0 ]; then
+        printf 'FAIL: docker compose up returned %d\n' "$rc"
+        return 1
+    fi
+
+    printf '\nwaiting for server to become ready\n'
+    local tries=0
+    while [ "$tries" -lt 30 ]; do
+        if curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4096/ | grep -qE '^(2|3)'; then
+            break
+        fi
+        tries=$((tries + 1))
+        sleep 1
+    done
+
+    if [ "$tries" -ge 30 ]; then
+        printf 'WARN: server did not answer on 127.0.0.1:4096 within 30s\n'
+        printf '      check logs: docker compose logs opencode-web\n'
+        return 1
+    fi
+
+    printf '\n=== OpenCode web UI is running ===\n'
+    printf 'URL:      http://127.0.0.1:4096\n'
+    if [ -n "$OPENCODE_SERVER_PASSWORD" ]; then
+        printf 'Username: %s\n' "${OPENCODE_SERVER_USERNAME:-opencode}"
+        printf 'Password: (the value you exported)\n'
+    else
+        printf 'Auth:     none (no password set)\n'
+    fi
+    printf '\nStop with:\n'
+    printf '  ./scripts/web-stop.sh\n'
+    return 0
+}
+
+main "$@"

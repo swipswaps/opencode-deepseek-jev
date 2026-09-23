@@ -1,0 +1,71 @@
+# Docker Compose definition for the OpenCode + DeepSeek + Jev image.
+#
+# Two modes:
+#
+#   TUI     docker compose run --rm opencode
+#   Web     docker compose up -d opencode-web
+#
+# The web service publishes port 4096 and reads OPENCODE_SERVER_PASSWORD
+# from the host environment. If unset, the server has no auth; do not
+# expose to an untrusted network in that case.
+#
+# References:
+#   https://opencode.ai/docs/web/
+#   https://opencode.ai/docs/server/
+#   https://docs.docker.com/compose/compose-file/
+
+services:
+  opencode:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-deepseek-jev:robust
+    container_name: opencode-deepseek-jev
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - ../data/opencode:/home/node/.local/share/opencode
+    environment:
+      - DEEPSEEK_API_KEY
+      - JEV_API_KEY
+      - OPENCODE_DISABLE_DEFAULT_PLUGINS=true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  opencode-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: opencode-deepseek-jev:robust
+    container_name: opencode-deepseek-web
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /workspace
+    entrypoint: ["/workspace/docker/web-entrypoint.sh"]
+    ports:
+      - "4096:4096"
+    volumes:
+      - ..:/workspace
+      - ../data/opencode:/home/node/.local/share/opencode
+      - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/notes:ro
+    env_file:
+      - ../.env.local
+    environment:
+      OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID

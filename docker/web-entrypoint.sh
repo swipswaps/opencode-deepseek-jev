@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# web-entrypoint.sh — write ~/.local/share/opencode/auth.json from
+# DEEPSEEK_API_KEY, then exec opencode web.
+#
+# Uses node for JSON serialisation because node is installed in the
+# image; no sed, no shell escaping pitfalls.
+#
+# OpenCode providers:
+#   https://opencode.ai/docs/providers/
+# XDG Base Directory Specification:
+#   https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+# Node.js fs API:
+#   https://nodejs.org/api/fs.html
+# ----------------------------------------------------------------------------
+
+set -u
+
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
+AUTH_FILE="$DATA_DIR/auth.json"
+
+mkdir -p "$DATA_DIR"
+
+# Expose /workspace under $HOME so the SPA project picker can find it.
+if [ ! -e /home/node/workspace ]; then
+    ln -s /workspace /home/node/workspace
+fi
+
+if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    node -e '
+        const fs = require("fs");
+        const path = require("path");
+        const file = process.argv[1];
+        const key = process.argv[2];
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        const data = { deepseek: { type: "api", key: key } };
+        fs.writeFileSync(file, JSON.stringify(data) + "\n");
+        console.error("[web-entrypoint] wrote " + file + " (" + fs.statSync(file).size + " bytes)");
+    ' "$AUTH_FILE" "$DEEPSEEK_API_KEY"
+else
+    printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json not written\n' >&2
+fi
+
+exec opencode web --hostname 0.0.0.0 --port 4096

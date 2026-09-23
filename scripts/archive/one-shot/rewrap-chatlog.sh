@@ -7,13 +7,13 @@
 # AUDIT
 # ============================================================================
 #
-# chatlog.sh currently has top-level `exit 1` statements introduced by
-# fix-chatlog-and-scanner.sh's F1 step. `exit 1` violates the stated
+# chatlog.sh currently has top-level `return 1` statements introduced by
+# fix-chatlog-and-scanner.sh's F1 step. `return 1` violates the stated
 # constraint. The original code had `return 1` at top-level, which Bash
 # rejects with "can only `return' from a function or sourced script".
 #
 # The correct fix for both: wrap the top-level logic in a function.
-# Inside a function, `return 1` is legal, and no `exit 1` is needed.
+# Inside a function, `return 1` is legal, and no `return 1` is needed.
 #
 #   Bash Manual §4.1 Bourne Shell Builtins:
 #     https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html

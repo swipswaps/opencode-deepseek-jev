@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+#
+# ask.sh — non-interactive prompt wrapper around the OpenCode container,
+# with per-layer diagnostic telemetry.
+#
+# ============================================================================
+# AUDIT — what this revision fixes
+# ============================================================================
+#
+# D1. Revision 1 redirected docker output to a temp file, killing
+#     streaming. Revision 2 streamed through tee but provided no
+#     intermediate state. Revision 3 declared a heartbeat function that
+#     was never called, and in any case a wall clock is not telemetry.
+#
+#     This revision collects telemetry from four layers:
+#
+#       shell          phase markers with ISO 8601 UTC timestamps
+#       docker events  container create / start / die, via the daemon
+#       dockerd        journal lines, tailed live
+#       container      stdout+stderr of opencode, streaming
+#
+#     Every line is tagged with a source label. Every line is timestamped.
+#     On exit, a post-mortem dumps the container state and the last few
+#     dockerd lines, so a stalled invocation leaves evidence behind.
+#
+# D2. The top-level `return` bug from revision 1 is eliminated by the
+#     main() wrapper. All `return` statements are inside main().
+#
+#   Bash return builtin:
+#     https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#
+# ============================================================================
+# USAGE
+# ============================================================================
+#
+#   ask.sh "<prompt>"
+#   ask.sh --model <provider/model> "<prompt>"
+#   ask.sh --dir <path> "<prompt>"          mount <path> at /workspace
+#   ask.sh --timeout <seconds> "<prompt>"   default 0 (no timeout)
+#   ask.sh --json "<prompt>"                {"exit_code":N,"output":"..."}
+#   ask.sh --quiet "<prompt>"               suppress phase + observers
+#
+# Default is NO timeout. The wrapper waits for the model indefinitely.
+# Timeouts are opt-in because the user requested observation, not
+# termination. When --timeout is set, the wrapper streams telemetry up to
+# that bound and then reports what state the system was in at cutoff.
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   Docker events              https://docs.docker.com/engine/reference/commandline/events/
+#   Docker run                 https://docs.docker.com/engine/reference/commandline/run/
+#   Docker logs                https://docs.docker.com/engine/reference/commandline/logs/
+#   OpenCode CLI               https://opencode.ai/docs/cli/
+#   journalctl(1)              https://man7.org/linux/man-pages/man1/journalctl.1.html
+#   Linux timeout(1)           https://man7.org/linux/man-pages/man1/timeout.1.html
+#   POSIX printf(1)            https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+#   POSIX kill(1)              https://pubs.opengroup.org/onlinepubs/9699919799/utilities/kill.html
+#   GNU awk strftime           https://www.gnu.org/software/gawk/manual/html_node/Time-Functions.html
+#   Bash PIPESTATUS            https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html
+#   Bash trap                  https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#   Bash kill builtin          https://www.gnu.org/software/bash/manual/html_node/Job-Control-Builtins.html
+#   Bash return                https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#   ISO 8601                   https://www.iso.org/iso-8601-date-and-time-format.html
+#
+#   Kernighan & Pike, "The Practice of Programming", Addison-Wesley,
+#   1999. ISBN-13: 978-0201615869. §5.1 "Debugging".
+#
+#   Brendan Gregg, "Systems Performance: Enterprise and the Cloud",
+#   2nd ed., Addison-Wesley, 2020. ISBN-13: 978-0136820154. §2.4
+#   "Observability Tools" — the distinction between bounds and
+#   measurements as diagnostic instruments.
+#
+#   Michael Kerrisk, "The Linux Programming Interface", No Starch Press,
+#   2010. ISBN-13: 978-1593272203. §20 "Signals: Fundamental Concepts".
+#
+#   W. Richard Stevens and Stephen A. Rago, "Advanced Programming in
+#   the UNIX Environment", 3rd ed., Addison-Wesley, 2013.
+#   ISBN-13: 978-0321637734. §9.2 "Terminal I/O" and §9.6 "Signals".
+#
+# ============================================================================
+
+set -o pipefail
+
+resolve_repo() {
+    local candidate="$1"
+    while [ "$candidate" != "/" ]; do
+        if [ -f "$candidate/docker/Dockerfile" ]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+        candidate=$(dirname "$candidate")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+if [ -z "$REPO_DIR" ]; then
+    printf 'error: cannot locate repo root\n' >&2
+    exit 2
+fi
+
+ENV_FILE="$REPO_DIR/.env.local"
+IMAGE="opencode-deepseek-jev:robust"
+MODEL_DEFAULT="deepseek/deepseek-flash"
+MOUNT_DIR="$REPO_DIR"
+MODE="text"
+MODEL="$MODEL_DEFAULT"
+TIMEOUT=0
+QUIET=0
+
+# Background observer PIDs; initialized empty.
+EVENTS_PID=""
+JOURNAL_PID=""
+
+usage() {
+    printf 'usage: %s [--model <m>] [--dir <p>] [--timeout <s>] [--json] [--quiet] "<prompt>"\n' "$(basename "$0")"
+}
+
+# ----------------------------------------------------------------------------
+# Timestamp in ISO 8601 UTC. One syscall per call; no subprocess.
+# ----------------------------------------------------------------------------
+now() {
+    date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# ----------------------------------------------------------------------------
+# Phase marker, timestamped, to stderr. Suppressed by --quiet.
+# ----------------------------------------------------------------------------
+phase() {
+    [ "$QUIET" -eq 1 ] && return 0
+    printf '[%s] [ask.sh] %s\n' "$(now)" "$1" >&2
+}
+
+# ----------------------------------------------------------------------------
+# Tagger: reads stdin, writes each line to stdout prefixed with a
+# timestamp and a source tag. Uses gawk's built-in strftime and systime,
+# avoiding a subprocess per line.
+# ----------------------------------------------------------------------------
+tag_stream() {
+    local src="$1"
+    awk -v src="$src" '{
+        printf "[%s] [%s] %s\n", strftime("%Y-%m-%dT%H:%M:%SZ", systime(), 1), src, $0
+        fflush()
+    }'
+}
+
+# ----------------------------------------------------------------------------
+# Kill observers gracefully on exit. SIGTERM is the named signal.
+# ----------------------------------------------------------------------------
+stop_observers() {
+    # Phase 1: SIGTERM to the recorded subshell PIDs.
+    local pid
+    for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+        [ -n "$pid" ] && kill -TERM "$pid" 2>&1 || true
+    done
+
+    # Phase 2: SIGTERM to orphaned grandchildren by command-line pattern.
+    #
+    # Killing the subshell does not propagate SIGTERM to the pipeline
+    # members inside it. They are reparented to PID 1 and keep the
+    # write end of the $() pipe open, blocking the parent shell.
+    # Matching by pattern terminates them directly.
+    #
+    #   fork(2), reparenting:
+    #     https://man7.org/linux/man-pages/man2/fork.2.html
+    #   pgrep(1), pattern match of full command line:
+    #     https://man7.org/linux/man-pages/man1/pgrep.1.html
+    pkill -TERM -f "docker events --filter image=$IMAGE" 2>&1 || true
+    pkill -TERM -f "journalctl -u docker -f -n 0" 2>&1 || true
+
+    # Phase 3: bounded graceful wait, 2 seconds.
+    local deadline=$(( $(date +%s) + 2 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        local alive=0
+        for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+            [ -n "$pid" ] && kill -0 "$pid" 2>&1 && alive=1
+        done
+        pgrep -f "docker events --filter image=$IMAGE" > /dev/null 2>&1 && alive=1
+        pgrep -f "journalctl -u docker -f -n 0" > /dev/null 2>&1 && alive=1
+        [ "$alive" -eq 0 ] && break
+        sleep 0.1
+    done
+
+    # Phase 4: SIGKILL any survivors, subshells and grandchildren alike.
+    for pid in "$EVENTS_PID" "$JOURNAL_PID" "$TOP_PID"; do
+        [ -n "$pid" ] && kill -KILL "$pid" 2>&1 || true
+    done
+    pkill -KILL -f "docker events --filter image=$IMAGE" 2>&1 || true
+    pkill -KILL -f "journalctl -u docker -f -n 0" 2>&1 || true
+
+    EVENTS_PID=""
+    JOURNAL_PID=""
+    TOP_PID=""
+}
+
+# ----------------------------------------------------------------------------
+# Post-mortem dump after the docker invocation completes (or times out).
+# ----------------------------------------------------------------------------
+dump_postmortem() {
+    local rc="$1" elapsed="$2"
+    phase "----- post-mortem -----"
+    phase "docker exit code: $rc"
+    phase "elapsed: ${elapsed}s"
+    phase "surviving containers for image $IMAGE:"
+    docker ps -a --filter "ancestor=$IMAGE" \
+        --format '  {{.ID}}  {{.Status}}  {{.Names}}' >&2 2>&1 || true
+    phase "last 10 dockerd journal lines:"
+    journalctl -u docker -n 10 --no-pager --output=short-iso >&2 2>&1 || true
+    phase "----- end post-mortem -----"
+}
+
+main() {
+    # ---- argument parsing ----
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --model)   shift; MODEL="${1:-}"; shift ;;
+            --dir)     shift; MOUNT_DIR="${1:-}"; shift ;;
+            --timeout) shift; TIMEOUT="${1:-0}"; shift ;;
+            --json)    MODE="json"; shift ;;
+            --quiet)   QUIET=1; shift ;;
+            --help|-h) usage; return 0 ;;
+            --) shift; break ;;
+            -*) usage; return 2 ;;
+            *) break ;;
+        esac
+    done
+
+    if [ $# -eq 0 ]; then
+        usage
+        return 2
+    fi
+    PROMPT="$*"
+
+    # ---- load keys ----
+    phase "repo root: $REPO_DIR"
+    if [ ! -f "$ENV_FILE" ]; then
+        printf 'error: %s not found\n' "$ENV_FILE" >&2
+        return 1
+    fi
+
+    DEEPSEEK_API_KEY=""
+    JEV_API_KEY=""
+    while IFS='=' read -r k v; do
+        case "$k" in
+            DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
+            JEV_API_KEY)      JEV_API_KEY="$v" ;;
+        esac
+    done < "$ENV_FILE"
+    export DEEPSEEK_API_KEY
+    export JEV_API_KEY
+
+    if [ -z "$DEEPSEEK_API_KEY" ] || [ -z "$JEV_API_KEY" ]; then
+        printf 'error: keys empty in %s\n' "$ENV_FILE" >&2
+        return 1
+    fi
+    phase "keys loaded (DEEPSEEK=${#DEEPSEEK_API_KEY}b JEV=${#JEV_API_KEY}b)"
+
+    if [ ! -d "$MOUNT_DIR" ]; then
+        printf 'error: mount directory does not exist: %s\n' "$MOUNT_DIR" >&2
+        return 1
+    fi
+    phase "mount: $MOUNT_DIR -> /workspace"
+
+    # ---- verify image present, so the pull time is attributed ----
+    if docker image inspect "$IMAGE" > /dev/null 2>&1; then
+        phase "image present: $IMAGE"
+    else
+        phase "image NOT present: $IMAGE (docker will attempt a pull)"
+    fi
+
+    # ---- temp file for post-run extraction ----
+    local tmp
+    tmp=$(mktemp)
+    trap 'stop_observers; rm -f "$tmp"' EXIT INT TERM
+
+    # ---- start background observers, each tagged, output to stderr ----
+    if [ "$QUIET" -eq 0 ]; then
+        (
+            docker events \
+                --filter "image=$IMAGE" \
+                --format '{{.Time}} {{.Type}} {{.Action}} {{.ID}} {{.Actor.Attributes.name}}' \
+                2>&1 | tag_stream docker-events >&2
+        ) &
+        EVENTS_PID=$!
+        phase "observer started: docker-events (pid $EVENTS_PID)"
+
+        if command -v journalctl > /dev/null; then
+            (
+                journalctl -u docker -f -n 0 --no-pager --output=short-iso \
+                    2>&1 | tag_stream dockerd >&2
+            ) &
+            JOURNAL_PID=$!
+            phase "observer started: dockerd journal (pid $JOURNAL_PID)"
+        fi
+    fi
+
+    # ---- report invocation parameters ----
+    phase "model: $MODEL"
+    if [ "$TIMEOUT" -gt 0 ]; then
+        phase "timeout: ${TIMEOUT}s (will terminate with SIGTERM on expiry)"
+    else
+        phase "timeout: disabled (wait indefinitely)"
+    fi
+    phase "invoking docker. all lines below are timestamped and tagged."
+
+    # ---- build the docker command ----
+    local start end elapsed rc
+    start=$(date +%s)
+
+    # We stream through tee to a temp file so we can extract the model
+    # output after the run. The tag_stream layer adds timestamps and
+    # source labels. PIPESTATUS[0] gives us the exit code of docker (or
+    # timeout), not of tee.
+    if [ "$TIMEOUT" -gt 0 ]; then
+        timeout "$TIMEOUT" docker run -t --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$MOUNT_DIR:/workspace" \
+            -e DEEPSEEK_API_KEY -e JEV_API_KEY \
+            -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
+            -w /workspace \
+            "$IMAGE" \
+            run --model "$MODEL" "$PROMPT" 2>&1 \
+            | tag_stream container \
+            | tee "$tmp"
+        rc=${PIPESTATUS[0]}
+    else
+        docker run -t --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$MOUNT_DIR:/workspace" \
+            -e DEEPSEEK_API_KEY -e JEV_API_KEY \
+            -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
+            -w /workspace \
+            "$IMAGE" \
+            run --model "$MODEL" "$PROMPT" 2>&1 \
+            | tag_stream container \
+            | tee "$tmp"
+        rc=${PIPESTATUS[0]}
+    fi
+
+    end=$(date +%s)
+    elapsed=$(( end - start ))
+
+    # ---- stop observers ----
+    stop_observers
+    EVENTS_PID=""
+    JOURNAL_PID=""
+
+    # ---- post-mortem ----
+    dump_postmortem "$rc" "$elapsed"
+
+    if [ "$rc" -eq 124 ] && [ "$TIMEOUT" -gt 0 ]; then
+        phase "timeout fired after ${TIMEOUT}s. see post-mortem above."
+    fi
+
+    # ---- extract the model's output (strip the [ts] [container] prefix) ----
+    local body
+    body=$(awk '
+        /^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z\] \[container\] / {
+            sub(/^\[[^]]*\] \[[^]]*\] /, "")
+            print
+            next
+        }
+        # non-tagged lines pass through as-is
+        { print }
+    ' "$tmp")
+
+    if [ "$MODE" = "json" ]; then
+        python3 -c '
+import json, sys
+rc = int(sys.argv[1])
+body = sys.argv[2]
+print(json.dumps({"exit_code": rc, "output": body}))
+' "$rc" "$body"
+    fi
+
+    if [ -n "$body" ]; then
+        return 0
+    fi
+    return 1
+}
+
+main "$@"

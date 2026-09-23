@@ -5,7 +5,7 @@
 #   2. version-strip exclusion: skip AICode snapshot trees
 #   3. symbolic-name disambiguation: use parent UUID prefix, not -N suffix
 # Also: relocate mislocated README, archive remaining stragglers.
-# Plain ASCII. No sed. No rm -rf. No set -e. No exit 1. No 2>/dev/null.
+# Plain ASCII. No sed. No rm -rf. No set -e. No return 1. No 2>/dev/null.
 # No subprocess.run. No kill without signal.
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"

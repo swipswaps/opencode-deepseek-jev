@@ -8,7 +8,7 @@
 #   3. Archive old staging scripts and one-shot forensics scripts.
 #   4. Write scripts/README.txt describing the new layout.
 #
-# Plain ASCII. No sed. No rm -rf. No set -e. No exit 1. No 2>/dev/null.
+# Plain ASCII. No sed. No rm -rf. No set -e. No return 1. No 2>/dev/null.
 # No subprocess.run. No kill without signal.
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

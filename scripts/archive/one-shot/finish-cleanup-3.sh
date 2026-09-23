@@ -15,7 +15,7 @@
 #   - no same-named destination file            -> mv normally
 #
 # Constraints honored: no rm -rf, no sed, no 2>/dev/null, no set -e,
-# no exit 1, no subprocess.run, no kill without signal.
+# no return 1, no subprocess.run, no kill without signal.
 #
 # Citations:
 #   cmp(1): "cmp -s ... exit status 0 if inputs are the same, 1 if

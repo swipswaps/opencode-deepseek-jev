@@ -1,5 +1,15 @@
 FROM node:22-bookworm-slim
 
+# xdg-open shim ----------------------------------------------------------
+# opencode web tries to spawn xdg-open to launch a browser. That
+# binary is not present in node:22-bookworm-slim; Bun's spawn throws
+# ENOENT and the process exits. A no-op shim that returns 0 lets
+# opencode proceed to serve; the actual client is the host browser.
+#   https://www.freedesktop.org/wiki/Software/xdg-utils/
+RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open \
+    && chmod +x /usr/local/bin/xdg-open
+
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl ca-certificates coreutils \
     && apt-get clean

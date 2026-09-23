@@ -102,3 +102,39 @@ Paths used by the tools
   model           deepseek/deepseek-flash
   opencode.json   at repo root
   .env.local      at repo root, mode 0600, gitignored
+
+Scripting conventions
+---------------------
+
+Every operation that can be typed is scripted. Scripts live in the repo
+under scripts/ or scripts/archive/one-shot/. Nothing lives only in /tmp
+and nothing lives only in a chat transcript.
+
+A response that emits multiple files does so through one script. That
+script creates each file via a heredoc. The recipient pastes the whole
+script once. Prose, if any, comes before the script or after it, never
+between heredocs.
+
+Rationale: the shell reads a heredoc from its opening marker to the
+matching closing delimiter at column zero. Any text between the marker
+and the delimiter becomes file content. Any heredoc whose closing
+delimiter is not at column zero is unterminated and the entire input is
+discarded. Interleaving breaks pasteability silently.
+
+  POSIX shell, here-documents:
+    https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
+  Bash manual, here-documents:
+    https://www.gnu.org/software/bash/manual/html_node/Here-Documents.html
+
+  Raymond, "The Art of Unix Programming", Addison-Wesley, 2003,
+  ISBN-13: 978-0131429017, §1.6.2 "Rule of Clarity": complexity is a
+  cost; a pasteable script is a clear interface.
+
+Indent control
+--------------
+
+When writing a heredoc whose content is itself a shell script, avoid
+closing the outer heredoc with a delimiter that also appears inside the
+inner script. Use a distinct delimiter per nesting level, e.g.
+SCRIPT_EOF, PATCH_EOF, WATCH_EOF. The delimiter must appear on a line
+of its own with no leading whitespace.

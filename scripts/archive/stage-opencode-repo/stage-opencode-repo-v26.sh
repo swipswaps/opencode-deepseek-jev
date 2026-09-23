@@ -22,7 +22,7 @@ JEV_GUARD_VERSION=""
 
 DEEPSEEK_KEY_URL="https://platform.deepseek.com/api_keys"
 DEEPSEEK_DOCS_URL="https://api-docs.deepseek.com/"
-TYPESAFE_KEY_URL="https://console.typesafe.ai/settings/keys"
+TYPESAFE_KEY_URL="https://console.typesafe.ai/keys"
 TYPESAFE_DOCS_URL="https://docs.typesafe.ai/"
 
 trap 'echo ""; echo "Interrupted. Cleaning up..."; pkill -TERM -f "docker run -t --rm" 2>&1 || true; sleep 2; pkill -KILL -f "docker run -t --rm" 2>&1 || true; docker ps -q 2>&1 | while read -r c; do docker kill "$c" 2>&1 || true; done; exit 130' INT TERM
@@ -550,7 +550,7 @@ Prerequisites
 - DeepSeek API key (prefix sk-)
   https://platform.deepseek.com/api_keys
 - Jev API key (prefix apikey_)
-  https://console.typesafe.ai/settings/keys
+  https://console.typesafe.ai/keys
 
 Quick Start
 -----------

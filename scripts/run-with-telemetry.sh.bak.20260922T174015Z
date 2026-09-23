@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+#
+# run-with-telemetry.sh — run test-tools.sh while the watcher is active,
+# so the transition timeline is visible in real time and preserved as a
+# log file.
+#
+# ============================================================================
+# AUDIT
+# ============================================================================
+#
+# The workflow requires two terminals:
+#
+#   terminal B:  ./scripts/watch-test-tools.sh
+#   terminal A:  TEST_TOOLS_VERBOSE=1 ./scripts/test-tools.sh --full
+#
+# This script collapses that to one command. It starts the watcher in
+# the background writing to a log file, runs the test in the foreground
+# with verbose streaming, stops the watcher, and prints its log.
+#
+# The watch-test-tools.sh script runs `tail -F` on the status file. When
+# its parent bash exits, the tail child is orphaned and keeps the pipe
+# open. The wrapper kills both the watcher's bash process and its tail
+# child by command-line pattern.
+#
+#   Linux fork(2), orphan reparenting:
+#     https://man7.org/linux/man-pages/man2/fork.2.html
+#   pgrep(1) / pkill(1):
+#     https://man7.org/linux/man-pages/man1/pgrep.1.html
+#   POSIX kill(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/kill.html
+#
+# ============================================================================
+# USAGE
+# ============================================================================
+#
+#   ./scripts/run-with-telemetry.sh             fast mode
+#   ./scripts/run-with-telemetry.sh --full      adds T8 ask and T9 summarize
+#   ./scripts/run-with-telemetry.sh --quiet     hide watcher log on exit
+#
+# ============================================================================
+# CITATIONS
+# ============================================================================
+#
+#   POSIX tail(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/tail.html
+#   POSIX kill(1):
+#     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/kill.html
+#   Linux fork(2):
+#     https://man7.org/linux/man-pages/man2/fork.2.html
+#   pgrep(1) / pkill(1):
+#     https://man7.org/linux/man-pages/man1/pgrep.1.html
+#   Bash trap:
+#     https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html
+#   Bash special parameter $!:
+#     https://www.gnu.org/software/bash/manual/html_node/Special-Parameters.html
+#   ISO 8601:
+#     https://www.iso.org/iso-8601-date-and-time-format.html
+#
+#   Stevens & Rago, "Advanced Programming in the UNIX Environment",
+#   3rd ed., Addison-Wesley, 2013. ISBN-13: 978-0321637734. §9.4.
+#
+# ============================================================================
+
+set -o pipefail
+
+# ----------------------------------------------------------------------------
+# Argument parsing (top level: use exit for early termination, not return)
+# ----------------------------------------------------------------------------
+FULL_ARG=""
+QUIET=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --full)  FULL_ARG="--full" ;;
+        --quiet) QUIET=1 ;;
+        -h|--help)
+            printf 'usage: %s [--full] [--quiet]\n' "$0"
+            exit 0
+            ;;
+        *)
+            printf 'usage: %s [--full] [--quiet]\n' "$0"
+            exit 2
+            ;;
+    esac
+done
+
+# ----------------------------------------------------------------------------
+# Repo root
+# ----------------------------------------------------------------------------
+resolve_repo() {
+    local c="$1"
+    while [ "$c" != "/" ]; do
+        if [ -f "$c/opencode.json" ] && [ -f "$c/docker/Dockerfile" ]; then
+            printf '%s' "$c"
+            return 0
+        fi
+        c=$(dirname "$c")
+    done
+    return 1
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR=$(resolve_repo "$SCRIPT_DIR")
+if [ -z "$REPO_DIR" ]; then
+    REPO_DIR=$(resolve_repo "$PWD")
+fi
+if [ -z "$REPO_DIR" ]; then
+    printf 'GATE FAIL: cannot resolve repo root\n'
+    exit 2
+fi
+
+SCRIPTS="$REPO_DIR/scripts"
+WATCHER="$SCRIPTS/watch-test-tools.sh"
+TEST_TOOLS="$SCRIPTS/test-tools.sh"
+LOGS_ROOT="$SCRIPTS/archive/logs"
+STATUS_FILE="$LOGS_ROOT/test-tools.status"
+WATCH_LOG="$LOGS_ROOT/watcher-last-run.log"
+
+# ----------------------------------------------------------------------------
+# Cleanup: stop the watcher and its tail child.
+# ----------------------------------------------------------------------------
+WATCHER_PID=""
+
+cleanup() {
+    if [ -n "$WATCHER_PID" ]; then
+        kill -TERM "$WATCHER_PID" 2>&1 || true
+    fi
+    pkill -TERM -f 'watch-test-tools\.sh' 2>&1 || true
+    pkill -TERM -f 'tail -F.*test-tools\.status' 2>&1 || true
+    sleep 1
+    if [ -n "$WATCHER_PID" ]; then
+        kill -KILL "$WATCHER_PID" 2>&1 || true
+    fi
+    pkill -KILL -f 'watch-test-tools\.sh' 2>&1 || true
+    pkill -KILL -f 'tail -F.*test-tools\.status' 2>&1 || true
+    WATCHER_PID=""
+}
+
+trap cleanup EXIT INT TERM
+
+# ----------------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------------
+main() {
+    printf '=== run-with-telemetry.sh ===\n'
+    printf 'Repo:      %s\n' "$REPO_DIR"
+    printf 'Watcher:   %s\n' "$WATCHER"
+    printf 'Test:      %s %s\n' "$TEST_TOOLS" "$FULL_ARG"
+    printf 'Watch log: %s\n' "$WATCH_LOG"
+    printf '\n'
+
+    # Gates
+    if [ ! -x "$WATCHER" ]; then
+        printf 'GATE FAIL: watcher not executable: %s\n' "$WATCHER"
+        return 1
+    fi
+    if [ ! -x "$TEST_TOOLS" ]; then
+        printf 'GATE FAIL: test-tools.sh not executable: %s\n' "$TEST_TOOLS"
+        return 1
+    fi
+
+    mkdir -p "$LOGS_ROOT"
+
+    # Reset status file so the run begins from a known state.
+    : > "$STATUS_FILE"
+
+    # Start watcher in background writing to the log file.
+    printf 'starting watcher\n'
+    "$WATCHER" > "$WATCH_LOG" 2>&1 &
+    WATCHER_PID=$!
+    printf '  watcher pid: %s\n\n' "$WATCHER_PID"
+
+    # Small delay to allow the tail to open the file and print its header.
+    sleep 1
+
+    # Run test in foreground with verbose streaming.
+    printf 'running test\n\n'
+    if [ -n "$FULL_ARG" ]; then
+        TEST_TOOLS_VERBOSE=1 "$TEST_TOOLS" --full
+    else
+        TEST_TOOLS_VERBOSE=1 "$TEST_TOOLS"
+    fi
+    local test_rc=$?
+
+    # Stop watcher.
+    cleanup
+    printf '\n=== end of run ===\n\n'
+
+    # Show the watcher timeline.
+    if [ "$QUIET" -eq 0 ] && [ -f "$WATCH_LOG" ]; then
+        printf '=== watcher log (%s) ===\n' "$WATCH_LOG"
+        cat "$WATCH_LOG"
+        printf '\n'
+    fi
+
+    printf '=== test-tools.sh exit code: %d ===\n' "$test_rc"
+    if [ "$test_rc" -eq 0 ]; then
+        printf 'result: OK\n'
+        return 0
+    fi
+    printf 'result: FAIL\n'
+    return 1
+}
+
+main "$@"
