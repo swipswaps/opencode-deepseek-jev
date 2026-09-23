@@ -409,6 +409,37 @@ tier8() {
     rm -f "$tmp"
 }
 
+# ----------------------------------------------------------------------------
+# Tier 9 — Jev functional proof (needs --full)
+# ----------------------------------------------------------------------------
+tier9() {
+    printf 'Tier 9: Jev functional proof\n'
+    if [ "$FULL" -ne 1 ]; then
+        skip "run with --full to enable (costs ~3e-4 USD)"
+        return
+    fi
+    if ! command -v docker > /dev/null; then
+        skip "docker not present"
+        return
+    fi
+
+    local script="$REPO_DIR/scripts/test-jev-functional.sh"
+    if [ ! -x "$script" ]; then
+        fail "missing $script"
+        return
+    fi
+
+    local out rc
+    out=$("$script" 2>&1)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+        pass "jev_review invoked and returned applicable metrics"
+    else
+        fail "Jev functional proof failed (rc=$rc)"
+        print_lines '        ' "$out"
+    fi
+}
+
 summary() {
     printf '\n=== summary ===\n'
     printf '  pass: %d\n' "$pass_count"
@@ -436,6 +467,7 @@ main() {
     tier6
     tier7
     tier8
+    tier9
 
     summary
 }

@@ -59,6 +59,40 @@ opencode.json. The staging script verifies:
 - DeepSeek smoke test returns response text "OK"
 - plugin list returns output (exit code informational)
 
+Cost monitoring
+---------------
+    ./scripts/cost.sh
+
+Prints DeepSeek cost accounting from two sources: the opencode database
+(per-session USD cost and input/output/reasoning/cache tokens) and the
+provider balance endpoint (https://api.deepseek.com/user/balance). The
+API key is read from .env.local and never printed. Note that jev-review
+MCP calls are billed separately by TypeSafe and do not appear in the
+DeepSeek balance.
+
+Live activity ("thinking")
+--------------------------
+    ./scripts/thinking.sh
+
+Tails the opencode database and prints what the agent is doing in real
+time: step boundaries, tool calls (with running/completed/error state
+and the command), reasoning text, and answer text. Polls every 2s by
+default (THINKING_POLL=1 for 1s). Runs in the container and on the host.
+
+Jev functional proof
+--------------------
+    ./scripts/test-jev-functional.sh
+
+Invokes the jev-review MCP tool for real and fails (non-zero) unless the
+tool fires and returns at least one applicable metric with a score. Runs
+from the host. doctor.sh --full (Tier 9) runs it automatically.
+
+Image tooling
+-------------
+The image includes python3 and sqlite3 (docker/Dockerfile apt install).
+The database lives at data/opencode/opencode.db, mounted from
+../data/opencode into the container.
+
 Troubleshooting
 ---------------
 EACCES on /workspace: host UID mismatch. Script uses --user $(id -u).

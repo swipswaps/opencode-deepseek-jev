@@ -23,9 +23,30 @@ doctor.sh
     Ordered health check: binaries, docker daemon, keys, provider
     liveness, image presence, and an end-to-end model round-trip.
     Fast mode (no arguments) is free.
-    --full adds plugin/MCP checks and a live model call (~$1e-4).
+    --full adds plugin/MCP checks, a live model call (~$1e-4), and a
+    Jev functional proof (Tier 9, invokes jev_review for real).
 
     Exit 0 on success, non-zero on failure. The output is the diagnostic.
+
+Monitor cost and activity
+-------------------------
+
+cost.sh
+    DeepSeek cost accounting: totals from the opencode database (sessions,
+    USD cost, input/output/reasoning/cache tokens) plus the provider
+    balance endpoint. Reads DEEPSEEK_API_KEY from .env.local; never prints
+    it. Works on the host and in the container.
+
+thinking.sh
+    Live view of what the agent is doing while "thinking". Tails the
+    opencode database and prints step boundaries, tool calls (with state
+    and command), reasoning text, and answer text as they are written.
+    Polls every 2s by default (THINKING_POLL=1 for 1s).
+
+test-jev-functional.sh
+    Behavioral Jev proof: invokes the jev-review MCP tool and fails
+    (non-zero) unless it fires and returns an applicable metric with a
+    score. Host-side; also run by doctor.sh --full as Tier 9.
 
 Work with the model
 -------------------

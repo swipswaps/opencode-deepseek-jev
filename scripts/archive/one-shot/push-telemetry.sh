@@ -58,7 +58,24 @@ audit_staged() {
     return 0
 }
 
+usage() {
+    printf 'Usage: %s [OPTIONS]\n' "$(basename "${BASH_SOURCE[0]}")"
+    printf 'Commit logs/telemetry-*.log and logs/artifacts-*/, push, and verify links.\n'
+    printf 'Options:\n'
+    printf '  -h, --help   Show this help and exit\n'
+    printf 'No positional arguments are accepted.\n'
+}
+
 main() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -h|--help) usage; return 0 ;;
+            -*) log ERROR usage FAIL "unknown option" "arg=$1"; return 2 ;;
+            *)  log ERROR usage FAIL "unexpected argument" "arg=$1"; return 2 ;;
+        esac
+        shift
+    done
+
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REPO=$(resolve_repo "$script_dir")
