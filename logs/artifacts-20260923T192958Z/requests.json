@@ -1,0 +1,98 @@
+[
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/site.webmanifest",
+    "body": null,
+    "t": 1790191816.1283736
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/global/health",
+    "body": null,
+    "t": 1790191821.5303426
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/api/health",
+    "body": null,
+    "t": 1790191821.5319486
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/api/session?limit=5000&order=desc",
+    "body": null,
+    "t": 1790191821.5334198
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/favicon-v3.ico",
+    "body": null,
+    "t": 1790191821.5362134
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/global/config",
+    "body": null,
+    "t": 1790191821.5401723
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/provider",
+    "body": null,
+    "t": 1790191821.5422025
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/path",
+    "body": null,
+    "t": 1790191821.5488703
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/session/status",
+    "body": null,
+    "t": 1790191821.5528655
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/project",
+    "body": null,
+    "t": 1790191821.5549088
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/global/event",
+    "body": null,
+    "t": 1790191821.5563703
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/find/file?query=&dirs=true&limit=50&directory=%2Fhome%2Fnode",
+    "body": null,
+    "t": 1790191827.7275586
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/file?path=&directory=%2Fhome%2Fnode",
+    "body": null,
+    "t": 1790191829.8039508
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/assets/sprite-Fb-TFjRY.svg",
+    "body": null,
+    "t": 1790191829.8086412
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/api/health",
+    "body": null,
+    "t": 1790191830.5246456
+  },
+  {
+    "m": "GET",
+    "u": "http://127.0.0.1:4096/file?path=.&directory=%2Fhome%2Fnode%2F.cache",
+    "body": null,
+    "t": 1790191831.380275
+  }
+]
