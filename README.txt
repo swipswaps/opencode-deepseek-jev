@@ -95,7 +95,28 @@ Image tooling
 -------------
 The image includes python3 and sqlite3 (docker/Dockerfile apt install).
 The database lives at data/opencode/opencode.db, mounted from
-../data/opencode into the container.
+../data/opencode into the container. The base image is pinned by digest
+and the opencode installer is pinned to 1.18.32 for reproducible builds.
+
+Two modes (operator vs. agent)
+------------------------------
+There are two distinct surfaces and the scripts do not cross over.
+
+    Operator (host terminal)     docker, docker compose, the scripts
+                                 under scripts/ that call docker.
+
+    Agent (browser UI, 4096)     edits /workspace, runs opencode run,
+                                 calls DeepSeek/Jev. No docker inside.
+
+Do not paste host-script paths into the browser chat; the agent's shell
+has no docker. To verify the agent's environment from inside the
+container, run:
+
+    ./scripts/verify-from-inside.sh [--full]
+
+To confirm a session streams into the sidebar while it processes:
+
+    ./scripts/test-sidebar-streaming.sh [--insecure]
 
 Troubleshooting
 ---------------

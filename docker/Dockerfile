@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim
+# Base image pinned by digest (linux/amd64 manifest) for reproducible builds.
+# node:22-bookworm-slim, resolved 2026-09-23.
+FROM node:22-bookworm-slim@sha256:43aeff40f4afc22e83f7589a2f37e111cff5ca84529571f1c8415bcc5fcc21b2
 
 # xdg-open shim ----------------------------------------------------------
 # opencode web tries to spawn xdg-open to launch a browser. That
@@ -24,7 +26,7 @@ RUN echo "npm before: $(npm --version)" && \
     echo "npm after:  $(npm --version)"
 
 USER node
-RUN curl -fsSL https://opencode.ai/install | bash
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --version 1.18.32
 ENV PATH="/home/node/.opencode/bin:${PATH}"
 ENV OPENCODE_DISABLE_DEFAULT_PLUGINS=true
 RUN echo "installing jev-guard@0.3.1" && \

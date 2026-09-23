@@ -59,6 +59,18 @@ web.sh
     refuses to start an unauthenticated server unless --insecure is
     passed.
 
+verify-from-inside.sh
+    In-container self-check (no docker): opencode binary, auth.json,
+    key env vars, opencode.json parse, jev-review server.js. --full adds
+    a live "PONG" round-trip. Counterpart to the host-side
+    verify-api-keys.sh.
+
+test-sidebar-streaming.sh
+    Regression test that a session appears in the sidebar while it is
+    processing: opens the /api/event SSE stream, triggers a real session,
+    and asserts session.created + message.updated events are emitted.
+    Host-side; requires OPENCODE_SERVER_PASSWORD (or --insecure).
+
 Work with the model
 -------------------
 
