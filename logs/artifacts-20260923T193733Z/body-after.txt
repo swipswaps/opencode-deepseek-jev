@@ -1,0 +1,46 @@
+Projects
+W
+workspace
+Settings
+Help
+New session
+Today
+W
+OpenCode DeepSeek JEV container audit
+workspace
+W
+Sidebar audit and JEV review of notes
+workspace
+W
+Docker coding agent sidebar audit
+workspace
+W
+Docker coding agent environment audit report
+workspace
+W
+Docker coding agent audit report
+workspace
+W
+Docker coding agent audit report
+workspace
+W
+New session
+workspace
+W
+Exact reply request: P2
+workspace
+W
+Exact P1 reply instruction
+workspace
+W
+Instruction to reply exactly P2
+workspace
+W
+Instruction to reply exactly P1
+workspace
+W
+Reply exactly: P2
+workspace
+W
+Exact P1 reply request
+workspace
