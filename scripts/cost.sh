@@ -2,10 +2,12 @@
 #
 # cost.sh — DeepSeek cost accounting for this repository's opencode usage.
 #
-# Two sections:
+# Three sections:
 #   T1  local accounting — totals from the opencode SQLite database:
 #       sessions, USD cost, input/output/reasoning/cache tokens.
 #   T2  provider balance — DeepSeek GET /user/balance via curl.
+#   T3  Jev usage — jev_review invocation count (TypeSafe billing is
+#       separate and has no public balance API).
 #
 # Reads DEEPSEEK_API_KEY from .env.local (mode 0600). The key is never
 # printed. Works on the host and inside the container (the database is
@@ -98,6 +100,29 @@ t2_balance() {
     return 0
 }
 
+t3_jev_usage() {
+    section "T3  Jev usage (jev_review invocations)"
+    local db="$REPO/data/opencode/opencode.db"
+    if [ ! -f "$db" ]; then
+        printf 'SKIP: no database at %s\n' "$db"
+        return 0
+    fi
+    if ! have node; then
+        printf 'SKIP: node required to read the database\n'
+        return 0
+    fi
+    node --no-warnings --experimental-sqlite - "$db" <<'NODE_EOF'
+const { DatabaseSync } = require("node:sqlite");
+const db = new DatabaseSync(process.argv[2], { readOnly: true });
+const total = db.prepare("SELECT COUNT(*) n FROM part WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') LIKE '%jev%'").get();
+console.log("jev_review invocations = " + total.n);
+const bySess = db.prepare("SELECT session_id, COUNT(*) n FROM part WHERE json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.tool') LIKE '%jev%' GROUP BY session_id ORDER BY n DESC").all();
+for (const r of bySess) console.log("  session " + r.session_id + " : " + r.n);
+console.log("note: TypeSafe exposes no public balance API; see https://console.typesafe.ai for Jev-side billing.");
+NODE_EOF
+    return 0
+}
+
 main() {
     REPO=$(resolve_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")
     [ -z "$REPO" ] && REPO=$(resolve_repo "$PWD")
@@ -111,6 +136,7 @@ main() {
 
     t1_accounting
     t2_balance
+    t3_jev_usage
     return 0
 }
 

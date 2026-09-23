@@ -44,6 +44,10 @@ Secrets hygiene
 - Keys never appear on docker CLI argv (bare -e VAR).
 - curl Authorization headers written to mode-0600 temp files.
 - .env.local is gitignored and mode 0600.
+- The web UI (port 4096) requires OPENCODE_SERVER_PASSWORD; web.sh
+  refuses to start without it (pass --insecure to override).
+- Stale *.bak.* snapshots (including old .env.local.bak.* key copies)
+  are removed with ./scripts/cleanup-baks.sh --apply.
 
 Logs
 ----

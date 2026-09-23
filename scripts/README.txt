@@ -33,9 +33,10 @@ Monitor cost and activity
 
 cost.sh
     DeepSeek cost accounting: totals from the opencode database (sessions,
-    USD cost, input/output/reasoning/cache tokens) plus the provider
-    balance endpoint. Reads DEEPSEEK_API_KEY from .env.local; never prints
-    it. Works on the host and in the container.
+    USD cost, input/output/reasoning/cache tokens), the DeepSeek balance
+    endpoint, and a Jev usage count (jev_review invocations; TypeSafe has
+    no public balance API). Reads DEEPSEEK_API_KEY from .env.local; never
+    prints it. Works on the host and in the container.
 
 thinking.sh
     Live view of what the agent is doing while "thinking". Tails the
@@ -47,6 +48,16 @@ test-jev-functional.sh
     Behavioral Jev proof: invokes the jev-review MCP tool and fails
     (non-zero) unless it fires and returns an applicable metric with a
     score. Host-side; also run by doctor.sh --full as Tier 9.
+
+cleanup-baks.sh
+    List or remove the *.bak.* snapshot files that accumulate during
+    script iteration (including stale .env.local.bak.* key backups).
+    List-only by default; --apply gitignores *.bak.* and removes them.
+
+web.sh
+    Starts the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD;
+    refuses to start an unauthenticated server unless --insecure is
+    passed.
 
 Work with the model
 -------------------

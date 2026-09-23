@@ -3,8 +3,9 @@
 # web.sh — start OpenCode's web UI in a Docker container.
 #
 # Sources .env.local so the container receives DEEPSEEK_API_KEY and
-# JEV_API_KEY. Publishes port 4096. Respects OPENCODE_SERVER_PASSWORD
-# for HTTP basic authentication (username defaults to "opencode").
+# JEV_API_KEY. Publishes port 4096. Requires OPENCODE_SERVER_PASSWORD
+# for HTTP basic authentication (username defaults to "opencode");
+# refuses to start without it unless --insecure is passed.
 #
 #   https://opencode.ai/docs/web/
 #   https://opencode.ai/docs/server/
@@ -42,6 +43,13 @@ ENV_FILE="$REPO_DIR/.env.local"
 COMPOSE_DIR="$REPO_DIR/docker"
 
 main() {
+    local insecure=0
+    case "${1:-}" in
+        --insecure) insecure=1 ;;
+        "") ;;
+        *) printf 'usage: %s [--insecure]\n' "$0"; return 2 ;;
+    esac
+
     printf '=== web.sh ===\n'
     printf 'Repo: %s\n' "$REPO_DIR"
 
@@ -75,8 +83,13 @@ main() {
     if [ -z "$JEV_API_KEY" ]; then
         printf 'WARN: JEV_API_KEY is empty\n'
     fi
+    if [ -z "$OPENCODE_SERVER_PASSWORD" ] && [ "$insecure" -ne 1 ]; then
+        printf 'GATE FAIL: OPENCODE_SERVER_PASSWORD is unset; refusing to start an unauthenticated server\n'
+        printf '  set OPENCODE_SERVER_PASSWORD in %s, or pass --insecure to override\n' "$ENV_FILE"
+        return 1
+    fi
     if [ -z "$OPENCODE_SERVER_PASSWORD" ]; then
-        printf 'WARN: OPENCODE_SERVER_PASSWORD is unset; web UI unauthenticated\n'
+        printf 'WARN: --insecure: starting WITHOUT authentication\n'
     fi
 
     cd "$COMPOSE_DIR"
