@@ -1,0 +1,7 @@
+1 S opencode
+1603 S sh
+48 S sh
+49 S sh
+61 R opencode
+64 S tail
+909 S node

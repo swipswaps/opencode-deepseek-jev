@@ -1,0 +1,6 @@
+1 S opencode
+48 S sh
+49 S sh
+61 R opencode
+628 S sh
+64 S tail

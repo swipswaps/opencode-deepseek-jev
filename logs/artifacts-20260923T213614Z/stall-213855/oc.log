@@ -1,0 +1,20 @@
+timestamp=2026-09-23T21:37:01.668Z level=INFO run=0a6f37bd message="creating instance" directory=/home/node/.opencode
+timestamp=2026-09-23T21:37:01.670Z level=INFO run=0a6f37bd message=fromDirectory directory=/home/node/.opencode
+timestamp=2026-09-23T21:37:01.835Z level=INFO run=0a6f37bd message=bootstrapping directory=/home/node/.opencode
+timestamp=2026-09-23T21:37:02.395Z level=INFO run=0a6f37bd message=loading path=/home/node/.opencode/opencode.json
+timestamp=2026-09-23T21:37:02.470Z level=INFO run=0a6f37bd message=loading path=/home/node/.opencode/opencode.jsonc
+timestamp=2026-09-23T21:38:24.003Z level=WARN run=0a6f37bd message="background dependency install failed" dir=/home/node/.config/opencode error="Cause([Die(ReleaseError: metadata missing)])"
+timestamp=2026-09-23T21:38:32.647Z level=INFO run=0a6f37bd message="all LSPs are disabled"
+timestamp=2026-09-23T21:38:32.664Z level=INFO run=0a6f37bd message="all formatters are disabled"
+timestamp=2026-09-23T21:38:32.664Z level=INFO run=0a6f37bd message=init
+timestamp=2026-09-23T21:38:33.433Z level=INFO run=0a6f37bd message=init count=1
+timestamp=2026-09-23T21:38:44.690Z level=INFO run=0a6f37bd message="watcher backend" directory=/home/node/.opencode platform=linux backend=inotify
+timestamp=2026-09-23T21:38:44.894Z level=INFO run=0a6f37bd message="project copy refresh started" projectID=global
+timestamp=2026-09-23T21:38:44.920Z level=INFO run=0a6f37bd message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-09-23T21:38:45.060Z level=INFO run=0a6f37bd message="booting location services" directory=/home/node/.opencode workspaceID=undefined
+timestamp=2026-09-23T21:38:48.451Z level=WARN run=e4f76900 message="background dependency install failed" dir=/home/node/.opencode error="Cause([Die(ReleaseError: metadata missing)])"
+timestamp=2026-09-23T21:38:50.856Z level=INFO run=e4f76900 message="all LSPs are disabled"
+timestamp=2026-09-23T21:38:50.874Z level=INFO run=e4f76900 message="all formatters are disabled"
+timestamp=2026-09-23T21:38:50.875Z level=INFO run=e4f76900 message=init
+timestamp=2026-09-23T21:38:52.469Z level=INFO run=e4f76900 message=created id=ses_f2fcaf44cffecB1bK1UZFJrWKy slug=eager-squid version=1.18.32 projectID=39d7a49f1aa9fe534ca73a25e33e631a28fc478e directory=/workspace path="" workspaceID=undefined parentID=undefined title="New session - 2026-09-23T21:38:52.469Z" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1790199532469 time.updated=1790199532469
+timestamp=2026-09-23T21:38:52.613Z level=INFO run=e4f76900 message="event connected"

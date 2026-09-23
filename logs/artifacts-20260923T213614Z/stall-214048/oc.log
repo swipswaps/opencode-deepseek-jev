@@ -1,0 +1,20 @@
+timestamp=2026-09-23T21:40:28.890Z level=INFO run=e4f76900 message=stream providerID=deepseek modelID=deepseek-flash session.id=ses_f2fcaf44cffecB1bK1UZFJrWKy small=false agent=build mode=primary
+timestamp=2026-09-23T21:40:28.906Z level=INFO run=e4f76900 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=deepseek llm.model=deepseek-flash
+timestamp=2026-09-23T21:40:35.218Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="command -v curl" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.219Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="echo \"--- /api/session GET ---\"" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.220Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="curl -s -m 5 -o /tmp/sess.json -w 'HTTP %{http_code}\\n' \"http://127.0.0.1:4096/api/session?directory=/workspace\"" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.220Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="wc -c /tmp/sess.json" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.220Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="head -c 400 /tmp/sess.json" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.220Z level=INFO run=e4f76900 message=evaluated permission=bash pattern=echo action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.221Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="echo \"--- /api/event SSE (2s) ---\"" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.221Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="timeout 3 curl -s -N -m 2 \"http://127.0.0.1:4096/api/event\"" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.222Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="head -c 800" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.722Z level=INFO run=e4f76900 message="resolved path" arg=/workspace resolved=/workspace
+timestamp=2026-09-23T21:40:35.725Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="node --experimental-sqlite -e '\nconst { DatabaseSync } = require(\"node:sqlite\");\nconst db = new DatabaseSync(\"data/opencode/opencode.db\");\nconst p = db.prepare(\"SELECT id,title,time_created FROM session ORDER BY time_created DESC LIMIT 5\").all();\nfor (const r of p) console.log(r.id, \"|\", r.title);\n'" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:35.726Z level=INFO run=e4f76900 message=evaluated permission=bash pattern="grep -v -i warning" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T21:40:37.068Z level=INFO run=e4f76900 message=tracking hash=95716b16b326c110f02de5bf660f15bc855b941b cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T21:40:37.902Z level=INFO run=e4f76900 message=loop session.id=ses_f2fcaf44cffecB1bK1UZFJrWKy step=9
+timestamp=2026-09-23T21:40:38.778Z level=INFO run=e4f76900 message=tracking hash=95716b16b326c110f02de5bf660f15bc855b941b cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T21:40:38.812Z level=INFO run=e4f76900 message=process session.id=ses_f2fcaf44cffecB1bK1UZFJrWKy messageID=msg_0d036a7aa001myJlfxIUuBee4T
+timestamp=2026-09-23T21:40:38.817Z level=INFO run=e4f76900 message=stream providerID=deepseek modelID=deepseek-flash session.id=ses_f2fcaf44cffecB1bK1UZFJrWKy small=false agent=build mode=primary
+timestamp=2026-09-23T21:40:38.920Z level=INFO run=e4f76900 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=deepseek llm.model=deepseek-flash

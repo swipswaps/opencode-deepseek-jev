@@ -1,0 +1,6 @@
+1 S opencode
+478 S sh
+48 S sh
+49 S sh
+61 S opencode
+64 S tail

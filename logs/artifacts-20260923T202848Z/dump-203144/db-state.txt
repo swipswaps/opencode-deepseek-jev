@@ -1,0 +1,10 @@
+total 12980
+drwxr-xr-x. 1 node node     132 Sep 23 16:16 .
+drwxr-xr-x. 3 node node    4096 Sep 22 18:48 ..
+-rw-r--r--. 1 node node      72 Sep 23 20:29 auth.json
+drwxr-xr-x. 1 node node      24 Sep 23 16:14 log
+-rw-r--r--. 1 node node 9056256 Sep 23 20:29 opencode.db
+-rw-r--r--. 1 node node   32768 Sep 23 20:31 opencode.db-shm
+-rw-r--r--. 1 node node 4185952 Sep 23 20:31 opencode.db-wal
+drwxr-xr-x. 1 node node       0 Sep 23 16:13 repos
+drwxr-xr-x. 1 node node      80 Sep 23 16:16 snapshot

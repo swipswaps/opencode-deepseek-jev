@@ -1,0 +1,49 @@
+      pid=1      ppid=0      state=S  rss=326136   wchan=ep_poll                  comm=opencode
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 0 -> /dev/null
+        fd: l-wx------. 1 node node 64 Sep 23 20:29 1 -> pipe:[52505620]
+        fd: lr-x------. 1 node node 64 Sep 23 20:29 10 -> /proc/1/statm
+        fd: l-wx------. 1 node node 64 Sep 23 20:29 11 -> pipe:[52505621]
+        fd: l-wx------. 1 node node 64 Sep 23 20:29 12 -> pipe:[52505620]
+        fd: l-wx------. 1 node node 64 Sep 23 20:29 13 -> /home/node/.local/share/opencode/log/opencode.log
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 14 -> /home/node/.local/share/opencode/opencode.db
+      pid=2290   ppid=61     state=S  rss=66068    wchan=ep_poll                  comm=node
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:31 0 -> socket:[52526312]
+        fd: lrwx------. 1 node node 64 Sep 23 20:31 1 -> socket:[52526315]
+        fd: lr-x------. 1 node node 64 Sep 23 20:31 10 -> pipe:[52528293]
+        fd: l-wx------. 1 node node 64 Sep 23 20:31 11 -> pipe:[52528293]
+        fd: lrwx------. 1 node node 64 Sep 23 20:31 12 -> anon_inode:[eventfd]
+        fd: lrwx------. 1 node node 64 Sep 23 20:31 13 -> anon_inode:[eventpoll]
+        fd: lr-x------. 1 node node 64 Sep 23 20:31 14 -> pipe:[52523793]
+      pid=3428   ppid=0      state=S  rss=1720     wchan=anon_pipe_read           comm=sh
+        fd: total 0
+        fd: lr-x------. 1 node node 64 Sep 23 20:33 0 -> /dev/null
+        fd: l-wx------. 1 node node 64 Sep 23 20:33 1 -> pipe:[52530838]
+        fd: l-wx------. 1 node node 64 Sep 23 20:33 2 -> pipe:[52530839]
+      pid=48     ppid=0      state=S  rss=1716     wchan=do_wait                  comm=sh
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 0 -> /dev/pts/0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 1 -> /dev/pts/0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 2 -> /dev/pts/0
+      pid=54     ppid=0      state=S  rss=1700     wchan=do_wait                  comm=sh
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 0 -> /dev/pts/1
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 1 -> /dev/pts/1
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 2 -> /dev/pts/1
+      pid=61     ppid=54     state=R  rss=829096   wchan=0                        comm=opencode
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 0 -> /dev/pts/1
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 1 -> /dev/pts/1
+        fd: lr-x------. 1 node node 64 Sep 23 20:29 10 -> /proc/61/statm
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 11 -> /dev/pts/1
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 12 -> /dev/pts/1
+        fd: l-wx------. 1 node node 64 Sep 23 20:29 13 -> /home/node/.local/share/opencode/log/opencode.log
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 14 -> /home/node/.local/share/opencode/opencode.db
+      pid=63     ppid=48     state=S  rss=1456     wchan=poll_schedule_timeout.constprop.0 comm=tail
+        fd: total 0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 0 -> /dev/pts/0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 1 -> /dev/pts/0
+        fd: lrwx------. 1 node node 64 Sep 23 20:29 2 -> /dev/pts/0
+        fd: lr-x------. 1 node node 64 Sep 23 20:29 3 -> /home/node/.local/share/opencode/log/opencode.log
+        fd: lr-x------. 1 node node 64 Sep 23 20:29 4 -> anon_inode:inotify
