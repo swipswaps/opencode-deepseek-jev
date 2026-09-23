@@ -1,0 +1,20 @@
+total 28
+drwxr-xr-x. 1 node node    24 Sep 23 16:14 .
+drwxr-xr-x. 1 node node   132 Sep 23 16:16 ..
+-rw-r--r--. 1 node node 19338 Sep 23 16:26 opencode.log
+=== tail of /home/node/.local/share/opencode/log/opencode.log ===
+timestamp=2026-09-23T16:26:12.961Z level=INFO run=afdcca0b message=stream providerID=deepseek modelID=deepseek-flash session.id=ses_f30e9898affexC9fZogzxi9IZq small=false agent=build mode=primary
+timestamp=2026-09-23T16:26:12.984Z level=INFO run=afdcca0b message="llm runtime selected" llm.runtime=ai-sdk llm.provider=deepseek llm.model=deepseek-flash
+timestamp=2026-09-23T16:26:12.146Z level=INFO run=4776ae24 message=init count=2
+timestamp=2026-09-23T16:26:14.937Z level=INFO run=afdcca0b message=tracking hash=134d57aca285335004248b7712f9931ddaa82c2e cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T16:26:13.757Z level=INFO run=4776ae24 message="watcher backend" directory=/workspace platform=linux backend=inotify
+timestamp=2026-09-23T16:26:13.836Z level=INFO run=4776ae24 message="project copy refresh started" projectID=39d7a49f1aa9fe534ca73a25e33e631a28fc478e
+timestamp=2026-09-23T16:26:18.623Z level=INFO run=4776ae24 message="project copy refresh done" projectID=39d7a49f1aa9fe534ca73a25e33e631a28fc478e updated=[] removed=[]
+timestamp=2026-09-23T16:26:19.015Z level=INFO run=4776ae24 message="booting location services" directory=/workspace workspaceID=undefined
+timestamp=2026-09-23T16:26:19.155Z level=INFO run=4776ae24 message=process session.id=ses_f30e965a4ffeqcKx3WxqV8Gg2Q messageID=msg_0cf16b918001hbyOZuMERsqayc
+timestamp=2026-09-23T16:26:19.165Z level=INFO run=4776ae24 message=stream providerID=deepseek modelID=deepseek-flash session.id=ses_f30e965a4ffeqcKx3WxqV8Gg2Q small=false agent=build mode=primary
+timestamp=2026-09-23T16:26:19.244Z level=INFO run=4776ae24 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=deepseek llm.model=deepseek-flash
+timestamp=2026-09-23T16:26:21.088Z level=INFO run=4776ae24 message=tracking hash=134d57aca285335004248b7712f9931ddaa82c2e cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T16:26:21.515Z level=INFO run=4776ae24 message=loop session.id=ses_f30e965a4ffeqcKx3WxqV8Gg2Q step=1
+timestamp=2026-09-23T16:26:21.524Z level=INFO run=4776ae24 message="exiting loop" session.id=ses_f30e965a4ffeqcKx3WxqV8Gg2Q
+timestamp=2026-09-23T16:26:21.691Z level=INFO run=4776ae24 message="disposing instance" directory=/workspace

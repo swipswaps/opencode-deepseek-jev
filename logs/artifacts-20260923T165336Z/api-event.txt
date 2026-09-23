@@ -1,0 +1,4 @@
+data: {"id":"evt_0cf2fe69f001Hhj30TqIxmXDNH","type":"server.connected","data":{}}
+
+: heartbeat
+

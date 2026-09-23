@@ -1,0 +1,1 @@
+[{"Type":"bind","Source":"/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo","Destination":"/workspace","Mode":"rw","RW":true,"Propagation":"rprivate"},{"Type":"bind","Source":"/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo/data/opencode","Destination":"/home/node/.local/share/opencode","Mode":"rw","RW":true,"Propagation":"rprivate"}]
