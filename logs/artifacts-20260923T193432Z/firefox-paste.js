@@ -1,0 +1,4 @@
+// Paste in Firefox DevTools Console at http://localhost:4096, then reload
+localStorage.setItem("opencode.global.dat:server", "{\"list\": [], \"projects\": {\"local\": [{\"worktree\": \"/workspace\", \"expanded\": true}]}, \"lastProject\": {\"local\": \"/workspace\"}, \"recentlyClosed\": {}}");
+localStorage.setItem("opencode.global.dat:layout", "{\"sidebar\": {\"opened\": true, \"width\": 344, \"workspaces\": {}, \"workspacesDefault\": false}, \"terminal\": {\"height\": 280, \"opened\": false}, \"review\": {\"diffStyle\": \"split\", \"panelOpened\": false}, \"fileTree\": {\"opened\": false, \"width\": 200, \"tab\": \"changes\"}, \"session\": {\"width\": 600}, \"mobileSidebar\": {\"opened\": false}, \"sessionTabs\": {}, \"sessionView\": {}, \"handoff\": {}, \"home\": {\"selection\": {\"server\": \"http://127.0.0.1:4096\", \"directory\": \"/workspace\"}}}");
+location.reload();
