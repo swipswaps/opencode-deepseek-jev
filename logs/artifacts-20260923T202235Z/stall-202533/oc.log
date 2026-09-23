@@ -1,0 +1,20 @@
+timestamp=2026-09-23T20:22:38.203Z level=INFO run=915197ac message="exiting loop" session.id=ses_f30134983ffecfRtqfSPlmLm6F
+timestamp=2026-09-23T20:23:04.678Z level=INFO run=11f1262b message=loading path=/home/node/.config/opencode/config.json
+timestamp=2026-09-23T20:23:04.708Z level=INFO run=11f1262b message=loading path=/home/node/.config/opencode/opencode.json
+timestamp=2026-09-23T20:23:04.721Z level=INFO run=11f1262b message=loading path=/home/node/.config/opencode/opencode.jsonc
+timestamp=2026-09-23T20:23:21.357Z level=INFO run=10fcea66 message="creating instance" directory=/workspace
+timestamp=2026-09-23T20:23:21.379Z level=INFO run=10fcea66 message=fromDirectory directory=/workspace
+timestamp=2026-09-23T20:23:22.238Z level=INFO run=10fcea66 message=bootstrapping directory=/workspace
+timestamp=2026-09-23T20:23:22.391Z level=INFO run=10fcea66 message=loading path=/home/node/.config/opencode/config.json
+timestamp=2026-09-23T20:23:22.398Z level=INFO run=10fcea66 message=loading path=/home/node/.config/opencode/opencode.json
+timestamp=2026-09-23T20:23:22.450Z level=INFO run=10fcea66 message=loading path=/home/node/.config/opencode/opencode.jsonc
+timestamp=2026-09-23T20:23:22.623Z level=INFO run=10fcea66 message=loading path=/workspace/opencode.json
+timestamp=2026-09-23T20:23:23.016Z level=DEBUG run=10fcea66 message="loading config from /home/node/.opencode/opencode.json"
+timestamp=2026-09-23T20:23:23.017Z level=INFO run=10fcea66 message=loading path=/home/node/.opencode/opencode.json
+timestamp=2026-09-23T20:23:23.085Z level=DEBUG run=10fcea66 message="loading config from /home/node/.opencode/opencode.jsonc"
+timestamp=2026-09-23T20:23:23.087Z level=INFO run=10fcea66 message=loading path=/home/node/.opencode/opencode.jsonc
+timestamp=2026-09-23T20:25:28.661Z level=INFO run=10fcea66 message="all LSPs are disabled"
+timestamp=2026-09-23T20:25:28.680Z level=INFO run=10fcea66 message="all formatters are disabled"
+timestamp=2026-09-23T20:25:28.681Z level=INFO run=10fcea66 message=init
+timestamp=2026-09-23T20:25:30.429Z level=INFO run=10fcea66 message=created id=ses_f300e1fc4ffe42GcsrNkZzgN3N slug=hidden-engine version=1.18.32 projectID=39d7a49f1aa9fe534ca73a25e33e631a28fc478e directory=/workspace path="" workspaceID=undefined parentID=undefined title="New session - 2026-09-23T20:25:30.429Z" agent=undefined model=undefined metadata=undefined permission="[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]" cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1790195130429 time.updated=1790195130429
+timestamp=2026-09-23T20:25:30.585Z level=INFO run=10fcea66 message="event connected"

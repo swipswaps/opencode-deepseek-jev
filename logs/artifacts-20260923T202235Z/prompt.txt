@@ -1,0 +1,16 @@
+Audit the OpenCode + DeepSeek + JEV container.
+
+Read /workspace/notes (read-only, 41 files) and /workspace.
+
+Write /workspace/logs/sidebar-audit.md with:
+1. Project identity (README, QUICKSTART, opencode.json).
+2. Rule system: grep -rhoE "#[0-9]+" /workspace/notes --include="*.txt" | sort | uniq -c | sort -rn | head -30. Cross-reference /workspace/push_notes_v18.sh.
+3. JEV references in /workspace/notes and /workspace.
+4. Current state: opencode-web block, docker/web-entrypoint.sh, session count via node --experimental-sqlite.
+5. Sidebar streaming: is a processing session visible in the UI? yes/no + one sentence.
+6. Five next steps for the operator.
+
+Then call jev_review once with the report as diff.
+Reply with exactly:
+correctness=<score>
+summary=<one sentence>

@@ -1,0 +1,8 @@
+1 S opencode
+1081 S node
+1293 S sh
+1301 awk: cannot open /proc/1301/status (No such file or directory) cat: /proc/1301/comm: No such file or directory
+49 S sh
+50 S sh
+63 R opencode
+66 S tail

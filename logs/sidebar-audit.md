@@ -1,103 +1,150 @@
-# Sidebar Audit — opencode-deepseek-jev
+# Sidebar Audit — OpenCode + DeepSeek + JEV container
 
-Audit date: 2026-09-23 (UTC). Scope: `/workspace` (repo, rw) and `/workspace/notes` (chat logs, ro).
+Audit date: 2026-09-23 (UTC). Scope: `/workspace` (rw) and `/workspace/notes`
+(chat logs, ro, 41 files: 12 `.txt`, 28 `.png`, 1 `.py`). Auditor runs inside the
+`opencode-deepseek-web` container (user `node`, host UID 1000, Node v22.23.2,
+OpenCode 1.18.32). Every number below comes from a command run during this audit.
 
-> **Headline:** in this container `/workspace/notes` **does not exist**, so the chat-log
-> corpus could not be read directly. `/notes` is also absent. The notes-mount guard in
-> `scripts/archive/one-shot/final-audit.sh` is fooled by the TUI service's
-> `/workspace/notes:ro` line and never adds the mount to `opencode-web`, which is the
-> service this audit runs in. Where chat-log content is cited below it comes from the
-> captured transcript `logs/artifacts-20260923T174850Z/agent-transcript.log`, which
-> recorded a prior run that *did* see `/notes`.
+> **Mount note:** `/workspace/notes` is readable here even though the tracked
+> `docker/docker-compose.yml` `opencode-web` block has no notes mount. It is provided
+> by the **untracked** `docker/docker-compose.override.yml`. Audits in this container
+> are therefore not reproducible from tracked files alone.
 
 ## 1. Project identity
 
-This repo is a Docker-packaged coding-agent environment that wraps the OpenCode binary
-around a DeepSeek "V4.1 Flash" provider plus Jev review/guard tooling.
+A Docker-packaged coding-agent environment wrapping the OpenCode binary around a
+DeepSeek "V4.1 Flash" provider plus Jev review/guard tooling, managed via Dockge.
 
-- `README.txt` — self-contained Docker setup; prerequisites are Docker Engine,
-  authenticated `gh`, a DeepSeek key (`sk-`), and a Jev key (`apikey_`); keys are cached
-  in `../.env.local` (mode 0600, gitignored). Documents the process-substitution live
-  streaming policy, the opencode 1.18.31 non-TTY exit-code quirk ("assert on text OK,
-  not exit code"), UID handling, and secrets hygiene.
-- `QUICKSTART.txt` — points operators at the Dockge UI on `http://localhost:5001`
-  (`scripts/deploy-dockge.sh`, then `scripts/flatten-dockge-stacks.sh`); states the image
-  built from `docker/` embeds the OpenCode binary, DeepSeek provider config, the
-  `jev-guard` plugin, and the `jev-review` MCP server.
-- `opencode.json` — provider `deepseek` / model `deepseek-flash` (context 1,000,000 /
-  output 384,000), `"model": "deepseek/deepseek-flash"`, `"plugin": ["jev-guard"]`,
-  `"skills": ["/opt/jev-review/skills"]`, and MCP server `jev-review` launched as
-  `node /opt/jev-review/dist/server.js` with `JEV_API_KEY`.
-
-In short: an opinionated, script-driven container image for running an OpenCode +
-DeepSeek agent with Jev feedback, managed through Dockge.
+- **`README.txt`** — prerequisites: Docker Engine, authenticated `gh`, a DeepSeek key
+  (`sk-`, platform.deepseek.com/api_keys), a Jev key (`apikey_`,
+  console.typesafe.ai/keys). Keys cached in `../.env.local` (mode 0600, gitignored).
+  Documents process-substitution live streaming, the opencode 1.18.31 non-TTY
+  exit-code quirk (assert on response text "OK", not exit code), `--user
+  $(id -u):$(id -g)` UID handling, and secrets hygiene (no keys on argv; mode-0600
+  header temp files). Staging output → `../staging.log`.
+- **`QUICKSTART.txt`** — `cd scripts && ./deploy-dockge.sh`, then
+  `./flatten-dockge-stacks.sh`, then open `http://localhost:5001`. The image embeds
+  OpenCode, the DeepSeek provider config, the `jev-guard` plugin, and the `jev-review`
+  MCP server.
+- **`opencode.json`** — provider `deepseek` (`@ai-sdk/openai-compatible`,
+  `baseURL https://api.deepseek.com`, `apiKey {env:DEEPSEEK_API_KEY}`); model
+  `deepseek-flash` ("DeepSeek V4.1 Flash", context 1,000,000 / output 384,000);
+  default `"model": "deepseek/deepseek-flash"`; `"plugin": ["jev-guard"]`;
+  `"skills": ["/opt/jev-review/skills"]`; MCP server `jev-review` =
+  `node /opt/jev-review/dist/server.js` with `JEV_API_KEY` from the environment.
+- **`docker/Dockerfile`** — `node:22-bookworm-slim`, xdg-open no-op shim, installs
+  OpenCode via `curl https://opencode.ai/install | bash`, installs
+  `jev-guard@0.3.1 --global`, then clones `NiazMorshed2007/jev-review` into
+  `/opt/jev-review`, checks out `3fb6042ebf07f0fdaae30d65c6393848e1a549e3`,
+  `npm ci && npm run build`.
 
 ## 2. Rule system
 
-The requested extraction could not be run against the notes corpus:
+Requested extraction, run verbatim:
 
 ```
-grep -rhoE '#[0-9]+' /workspace/notes --include='*.txt' | sort | uniq -c | sort -rn | head -30
-# grep: /workspace/notes: No such file or directory
+$ grep -rhoE "#[0-9]+" /workspace/notes --include="*.txt" | sort | uniq -c | sort -rn | head -30
+    390 #5
+     50 #8
+     42 #12
+     38 #9
+     32 #13
+     28 #7
+     20 #14
+     13 #3
+     12 #54
+     11 #1
+      9 #55
+      9 #53
+      8 #45
+      8 #39
+      8 #10
+      7 #5604
+      7 #34
+      7 #2
+      6 #6
+      6 #57
+      6 #41
+      6 #4
+      6 #38
+      6 #37
+      6 #18
+      6 #17
+      6 #11
+      5 #47
+      5 #15
+      4 #16
 ```
 
-The same grep over every `*.txt` in `/workspace` returns **no rows** — the rule
-definitions live only in the (inaccessible) notes. Cross-reference against
-`push_notes_v18.sh` (the actual location; the brief's
-`scripts/archive/one-shot/push_notes_v18.sh` does not exist — the file is at the repo
-root):
+(`grep` flags `9e3e0363-…_0013.txt` and `fe70fd73-…_0027.txt` as binary; their tokens
+are counted with `-a` only.)
 
-Rule IDs cited by `push_notes_v18.sh` (header lines 12–16 and inline markers):
+**The top-30 is dominated by Docker BuildKit step markers, not rule references.** Of
+**779 total `#N` tokens** in the notes, **660 lines are BuildKit step lines**
+(`^#5 [ 4/14] RUN …`, `#5 CACHED`). The leading `#5` (390) and the `#12`/`#9`/`#13`/`#14`
+entries are all build steps; `#5604` is an npm postinstall regression (Issue #5604).
 
-| Rule | Cited meaning |
-| ---- | ------------- |
-| #7   | no `sed`; guarded |
-| #8   | no `2>/dev/null` |
-| #28  | dependency check |
-| #34  | push-evidence (with #47) |
-| #37  | SKIP != PASS |
-| #38  | `printf` (not `echo`) |
-| #39  | gitignore checked before add (with #45) |
-| #41  | UTC timestamps |
-| #45  | gitignore checked before add (with #39) |
-| #47  | push-evidence (with #34) |
-| #53  | owner/repo parsed via `python3`, never `sed` |
-| #54  | evidence completeness gate |
-| #55  | raw-link HTTP-200 validation with backoff |
-| #57  | end sentinel |
+Cross-reference with **`/workspace/push_notes_v18.sh`** (header lines 12–16 cite the rules):
 
-Repo-wide search for `Rule #N` finds only five definitions/citations outside the header
-(`#28`, `#53`, `#54`, `#39`, `#8`) plus two false positives (`#26588`, `#31280` are
-byte/blob sizes, not rules). Consequences:
+| Rule | Cited meaning (script header) | Count in `push_notes_v18.sh` |
+| ---- | ----------------------------- | ---------------------------- |
+| #7   | no `sed`; guarded             | 1 |
+| #8   | no `2>/dev/null`              | 1 |
+| #28  | dependency check              | 1 |
+| #34  | push-evidence (with #47)      | 1 |
+| #37  | SKIP != PASS                  | 1 |
+| #38  | `printf` (not `echo`)         | 1 |
+| #39  | gitignore checked before add (with #45) | 2 |
+| #41  | UTC timestamps                | 1 |
+| #45  | gitignore checked before add (with #39) | 2 |
+| #47  | push-evidence (with #34)      | 1 |
+| #53  | owner/repo parsed via `python3`, never `sed` | 2 |
+| #54  | evidence completeness gate    | 3 |
+| #55  | raw-link HTTP-200 validation with backoff | 2 |
+| #57  | end sentinel                  | 1 |
 
-- **Cited but undefined in `/workspace`:** all fourteen rules above, plus the
-  `LOGGING CONVENTION` referenced in the header. Definitions live only in `/notes`.
-- **Defined but uncited:** none observed, because no definitions exist in the accessible
-  corpus.
-- **Consistency note:** `push_notes_v18.sh` is internally faithful to the cited rules —
-  it avoids `sed`, avoids `2>/dev/null`, uses `printf`, uses `python3` for remote
-  parsing, emits a `# === END ... ===` sentinel, and gates on verified HTTP 200.
+- **Cited and in the top-30:** `#8`(50), `#7`(28), `#54`(12), `#55`(9), `#53`(9),
+  `#45`(8), `#39`(8), `#34`(7), `#57`(6), `#41`(6), `#38`(6), `#37`(6), `#47`(5) —
+  though most of those counts are build steps, not rule uses.
+- **Cited but absent from the top-30:** `#28` (dependency check).
 
-## 3. JEV hits
+**Definitions are not in this corpus.** No standalone rules document exists among the 41
+notes files — only copies of `push_notes_v18.sh` embedded in transcripts
+(`9e3e0363-0237-4c38-93dc-ce25e2f1ec37_0010.txt` carries the full `# Rules:` header).
+Prose `Rule #N` references total **15 lines**: `Rule #54`×6, `Rule #53`×3, `Rule #39`×3,
+`Rule #28`×3. Canonical definitions live outside both `/workspace` and this corpus.
 
-`/workspace/notes` could not be searched (absent). In `/workspace`, case-insensitive
-`jev` appears in **126 files / 2,416 lines** (node_modules excluded). Representative
-hits:
+**Consistency:** `push_notes_v18.sh` is faithful to the rules it cites — no `sed`, no
+`2>/dev/null`, `printf`, remote parsed with `python3`, an `# === END … ===` sentinel,
+`git check-ignore` before `git add`, raw links gated on a verified HTTP 200 with backoff.
+
+## 3. JEV references
+
+**In `/workspace/notes` (`.txt` only):** `jev` (case-insensitive) appears in **10 files /
+1,341 lines**. Token frequency (case preserved): `JEV`×693, `jev-review`×321,
+`jev-guard`×250, bare `jev`×850 (includes the hyphenated compounds), `Jev`×159, plus
+`jev-latest`×9, `jev-repo`×6, `jev-classifier`×6, `jev-deepseek`×4. Matching files:
+`9e3e0363-…_0001/0010/0017.txt`, `6aaee6ee-…_0002/0003.txt`, `6aaeedb1-…_0004.txt`,
+`0b46dfa8-…_1012/1016/1017.txt`, `fe70fd73-…_0026.txt`.
+
+**In `/workspace`** (excluding `.git`, `node_modules`, `notes`, `data`, `logs`):
+**128 files / 2,328 matching lines**. Key locations:
 
 - `opencode.json` — `plugin: ["jev-guard"]`, `skills: ["/opt/jev-review/skills"]`, MCP
   server `jev-review` (`node /opt/jev-review/dist/server.js`, `JEV_API_KEY`).
-- `docker/Dockerfile` — `opencode plugin jev-guard@0.3.1 --global` and
-  `git clone https://github.com/NiazMorshed2007/jev-review.git /opt/jev-review`
-  (checked out at `3fb6042e…`, `npm ci && npm run build`).
-- `docker/docker-compose.yml`, `docker/run.sh`, `docker/build.sh` — image/container name
-  `opencode-deepseek-jev:robust`.
+- `docker/Dockerfile` — `opencode plugin jev-guard@0.3.1 --global` and the
+  `git clone … /opt/jev-review` + pinned `git checkout 3fb6042e…` + `npm ci && npm run build`.
+- `docker/docker-compose.yml`, `docker/build.sh`, `docker/run.sh` — image
+  `opencode-deepseek-jev:robust` and `JEV_API_KEY` plumbing.
 - `scripts/ask.sh`, `scripts/doctor.sh` — image name; `doctor.sh` probes the plugin list
-  for `jev-guard`.
-- `scripts/test-repo.sh` — gates G3/G4 for `jev-review` and the `jev-guard` install line.
-- Many `.bak.*` snapshots and `scripts/archive/**` copies repeat the same strings.
-- Chat-log evidence (from the prior transcript) names `jev-guard`, `jev-review MCP`, and
-  a JEV API key with prefix rules (`apikey_`, `sk-`, `ts_`, `jev-`).
-- `/opt/jev-review` itself is outside the repo and was not inspected this run.
+  for `jev-guard` and validates the Jev key prefix (`apikey_`, `sk-`, `ts_`, `jev-`).
+- `scripts/test-repo.sh` — gates G3/G4 on `jev-review` and the `jev-guard` install line.
+- Numerous `*.bak.*` snapshots and `scripts/archive/**` copies repeat these strings.
+- `/opt/jev-review` itself is outside the repo and was not inspected.
+
+Recurring audit theme in the notes: the Jev integration is **installed and string-matched
+but never functionally proven** — the Jev subsystem could be broken while the smoke test
+still passes (`6aaee6ee-…_0002/0003.txt`).
 
 ## 4. Current state
 
@@ -133,85 +180,98 @@ hits:
       - SETGID
 ```
 
-Note: the `opencode` **TUI** service (lines 18–43) carries the only notes mount:
-`/home/owner/Documents/9e3e0363-…/notes:/workspace/notes:ro`. `opencode-web` has **no**
-notes mount, which is why `/workspace/notes` is absent here.
+The TUI service `opencode` (lines 18–43) carries a direct notes mount
+(`/home/owner/Documents/9e3e0363-…/notes:/workspace/notes:ro`); the tracked web block has
+none. Readability here comes solely from the **untracked**
+`docker/docker-compose.override.yml`:
 
-### `docker/web-entrypoint.sh`
+```yaml
+services:
+  opencode-web:
+    volumes:
+      - ..:/workspace
+      - ../data/opencode:/home/node/.local/share/opencode
+      - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
+```
 
-POSIX `sh`, `set -u`. Resolves `DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"`,
-`mkdir -p`s it, and when `DEEPSEEK_API_KEY` is non-empty writes `auth.json`
-(`{ deepseek: { type: "api", key: <key> } }`) via an inline `node -e` script
-(JSON-safe, no sed/escaping), logging the byte size to stderr. Empty key ⇒ warning,
-no file. It then `exec opencode web --hostname 0.0.0.0 --port 4096`.
+### `docker/web-entrypoint.sh` (44 lines)
+
+Writes `$XDG_DATA_HOME/opencode/auth.json` as `{ deepseek: { type: "api", key } }` using a
+Node one-liner (no `sed`/shell-escaping), symlinks `/workspace` → `/home/node/workspace`
+so the SPA project picker finds it, then `exec opencode web --hostname 0.0.0.0 --port 4096`.
+If `DEEPSEEK_API_KEY` is empty it prints a warning and skips auth.json.
 
 ### Session count
 
-`sqlite3` is **not installed** (`command -v sqlite3` → absent; `python3` is also absent).
-The equivalent query via Node's built-in SQLite against
-`/workspace/data/opencode/opencode.db`:
+`sqlite3` and `python3` are not installed in this image, so the count used Node's
+built-in SQLite (`node --experimental-sqlite`, Node v22.23.2):
 
 ```
-session=12   message=67   part=317   project=1
+$ node --experimental-sqlite -e '…DatabaseSync("/workspace/data/opencode/opencode.db")…'
+session=20
+message=148
+part=712
+project=2
+event=2653
 ```
 
-Session count: **12** (the prior audit reported 8; the DB is live and growing). The
-`opencode.db-wal` is ~4.1 MB against a ~2.9 MB main file.
+`opencode.db` lives in `data/opencode/` (gitignored) and is live; this is a moving target
+(it read `session=19 / message=137 / part=649` earlier the same day).
 
-## 5. Sidebar streaming question
+## 5. Sidebar streaming
 
-**Does the sidebar show a session while the agent is processing? — Yes.**
+**Yes — a processing session is visible in the sidebar.** The SPA subscribes to
+`/api/event` (SSE); creating a session emits `session.created`, and streaming
+`session.updated` / `message.updated` events keep the sidebar entry rendered and in sync
+while the agent runs. Liveness is carried by the SSE stream, **not** by
+`/api/session/active`.
 
-Evidence:
+Notes evidence — `/workspace/notes/fe70fd73-…_0026.txt`:
 
-1. The SPA bundle (`logs/artifacts-20260923T165336Z/bundle.js`, sha256 `5df904b9…`)
-   contains `SSE`/`EventSource` support and string counts:
-   `/api/session` ×66, `hydrate` ×17, `hydration` ×8, `session.created` ×6,
-   `session.updated` ×5, `message.updated` ×4, `hydrated` ×4, `/api/session/active` ×2.
-   The sidebar is hydrated from `/api/session?directory=X&project=Y` and then kept in
-   sync by SSE events.
-2. A session is persisted at creation time, before any completion:
-   `verify-active-vs-historical` (telemetry 17:01) POSTs a session and `/api/session`
-   grows 6→7 immediately, while `/api/session/active` stays empty (`{"data":{}}`) both
-   before and after. So active-ness is carried by the session list + SSE, not by
-   `/api/session/active` (which the bundle barely references).
-3. The archived operator note captured in
-   `logs/artifacts-20260923T174850Z/agent-transcript.log`
-   (`/notes/fe70fd73-…_0026.txt:33,35`) states: *"As the session processes (messages
-   stream in), session.updated / message.updated events keep the sidebar entry in
-   sync … So yes, as the session processes, it is in the sidebar. This is what 'active'
-   was getting at — but the mechanism is SSE events, not the /api/session/active
-   endpoint."*
+- L15: "The sidebar calls `/api/session?directory=X&project=Y` — not `/api/session/active`".
+- L29–35: "When a session is created, the server emits a `session.created` event … As
+  the session processes (messages stream in), `session.updated` / `message.updated`
+  events keep the sidebar entry in sync … So yes, as the session processes, it is in the
+  sidebar."
+- L108/L166: a planned `test-sidebar-streaming.sh` is described as a *hypothesis to
+  falsify*, not an executed pass.
 
-Caveat (why this was historically confusing): a 3-second capture of the idle SSE stream
-(`logs/artifacts-20260923T165336Z/api-event.txt`, 96 bytes) shows only
-`{"type":"server.connected"}` plus a heartbeat. The stream is silent when nothing is
-happening, so an empty capture does not mean the sidebar is broken. If the sidebar is
-blank while a session is processing, look at browser-side project scoping/hydration,
-not at SSE delivery.
+**Live corroboration from the running instance.** The `event` table in `opencode.db`
+records exactly this stream, including for the very session producing this audit
+(`title = "OpenCode + DeepSeek + JEV container audit"`):
+
+```
+$ node --experimental-sqlite -e 'SELECT type, COUNT(*) … FROM event GROUP BY type'
+message.part.updated.1 = 1886
+message.updated.1      =  541
+session.updated.1      =  206
+session.created.1      =   20
+```
+
+That is persisted SSE history: one `session.created` and ongoing `session.updated` /
+`message.updated` per session. A browser attached to `/api/event` therefore renders the
+session in the sidebar for the whole processing window. Caveat: this proves the *event
+stream*, not the *DOM render*; the planned regression test in section 6 would close that gap.
 
 ## 6. Operator next steps
 
-- **Fix the notes-mount guard so this audit can read `/notes`.** Give `opencode-web` its
-  own `/workspace/notes:ro` (absolute host source) and make the guard in
-  `final-audit.sh` scope its `grep` to the `opencode-web` block (or check
-  `docker inspect` mounts) instead of substring-matching the whole compose file.
-- **Stop relying on tools that are not in the image.** `sqlite3` and `python3` are
-  absent; several scripts (`push_notes_v18.sh`, `rotate-keys-guided.sh`,
-  `test-repo.sh`, `find-sidebar-source.sh`) require them. Either bake them into
-  `docker/Dockerfile` or standardize on `node --experimental-sqlite` and a Node helper,
-  as this audit did.
-- **Add a real sidebar-streaming test.** The archived plan calls for
-  `test-sidebar-streaming.sh` (create a session, hold `/api/event` open, POST a message,
-  assert `session.created`/`session.updated`/`message.updated` appear); it was never
-  written. Add it so the "yes" in section 5 is continuously verified rather than
-  inferred from the bundle.
-- **Tame the uncommitted drift.** `git status` shows many modified tracked files plus
-  ~20 untracked `*.bak.*` snapshots, a modified `logs/telemetry-2026-09-23.log`, and an
-  untracked `push_notes_v18.sh` and `docker/web-entrypoint.sh`. Commit or archive these
-  so "current" behavior matches HEAD.
-- **Run a JEV-keyed credential rotation and prune backups.** `.env.local` plus two
-  `.env.local.bak.*` files hold live DeepSeek/JEV keys (mode 0600, gitignored, but the
-  backups are untracked leftovers). Rotate, then delete stale backups, and keep
-  `opencode-web`'s published `0.0.0.0:4096` off untrusted networks when
-  `OPENCODE_SERVER_PASSWORD` is unset.
+1. **Track the notes mount.** Fold the `opencode-web` notes volume from the untracked
+   `docker/docker-compose.override.yml` into the tracked `docker/docker-compose.yml` (or
+   commit the override) so audits in the web container are reproducible.
+2. **Recover and version the rules document.** Rules #7/#8/#28/#34/#37/#38/#39/#41/#45/
+   #47/#53/#54/#55/#57 are cited everywhere but defined nowhere in the repo or the 41
+   notes files; add the canonical rules doc so `#N` citations are auditable.
+3. **Standardize the missing tooling.** `sqlite3` and `python3` are absent, yet
+   `push_notes_v18.sh`, `doctor.sh`, and others call them; bake them into
+   `docker/Dockerfile` or standardize on `node --experimental-sqlite` plus a Node helper
+   (as this audit did).
+4. **Add a real sidebar-streaming regression test.** Create `test-sidebar-streaming.sh`
+   (open a session, hold `/api/event`, post a message, assert `session.created` /
+   `session.updated` / `message.updated` appear — and ideally assert the SPA DOM entry)
+   so the "yes" in section 5 stays continuously verified rather than inferred.
+5. **Tame drift and secrets.** `git status --porcelain` reports **194 entries** (171
+   untracked, mostly `*.bak.*` snapshots plus `push_notes_v18.sh`, `web-entrypoint.sh`,
+   and `docker-compose.override.yml`). Commit or archive them, rotate the DeepSeek/JEV
+   keys in `.env.local` (and delete the stale `.env.local.bak.*` copies), and keep
+   `opencode-web`'s `0.0.0.0:4096` off untrusted networks when `OPENCODE_SERVER_PASSWORD`
+   is unset.

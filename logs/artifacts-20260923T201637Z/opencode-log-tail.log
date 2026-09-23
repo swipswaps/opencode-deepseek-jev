@@ -1,0 +1,21 @@
+timestamp=2026-09-23T20:16:44.971Z level=INFO run=3ff57322 message=evaluated permission=bash pattern="head -120" action.permission=* action.action=allow action.pattern=*
+timestamp=2026-09-23T20:16:46.216Z level=INFO run=3ff57322 message=tracking hash=2837e650b2cf726401dde04f8b7fb9f005b4fd4b cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T20:16:47.147Z level=INFO run=3ff57322 message=loop session.id=ses_f301753ebffegaumn18JrXc07n step=8
+timestamp=2026-09-23T20:16:48.165Z level=INFO run=3ff57322 message=tracking hash=2837e650b2cf726401dde04f8b7fb9f005b4fd4b cwd=/workspace git=/home/node/.local/share/opencode/snapshot/39d7a49f1aa9fe534ca73a25e33e631a28fc478e/8af22c44f40455ccc731201a5e49607eaac89fef
+timestamp=2026-09-23T20:16:48.512Z level=INFO run=3ff57322 message=process session.id=ses_f301753ebffegaumn18JrXc07n messageID=msg_0cfe9e443001oAKd28MzZJOV5i
+timestamp=2026-09-23T20:16:48.516Z level=INFO run=3ff57322 message=stream providerID=deepseek modelID=deepseek-flash session.id=ses_f301753ebffegaumn18JrXc07n small=false agent=build mode=primary
+timestamp=2026-09-23T20:16:48.625Z level=INFO run=3ff57322 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=deepseek llm.model=deepseek-flash
+timestamp=2026-09-23T20:17:08.656Z level=INFO run=f2ba8730 message=loading path=/home/node/.config/opencode/config.json
+timestamp=2026-09-23T20:17:08.689Z level=INFO run=f2ba8730 message=loading path=/home/node/.config/opencode/opencode.json
+timestamp=2026-09-23T20:17:08.701Z level=INFO run=f2ba8730 message=loading path=/home/node/.config/opencode/opencode.jsonc
+timestamp=2026-09-23T20:17:26.843Z level=INFO run=915197ac message="creating instance" directory=/workspace
+timestamp=2026-09-23T20:17:26.865Z level=INFO run=915197ac message=fromDirectory directory=/workspace
+timestamp=2026-09-23T20:17:27.997Z level=INFO run=915197ac message=bootstrapping directory=/workspace
+timestamp=2026-09-23T20:17:28.120Z level=INFO run=915197ac message=loading path=/home/node/.config/opencode/config.json
+timestamp=2026-09-23T20:17:28.126Z level=INFO run=915197ac message=loading path=/home/node/.config/opencode/opencode.json
+timestamp=2026-09-23T20:17:28.167Z level=INFO run=915197ac message=loading path=/home/node/.config/opencode/opencode.jsonc
+timestamp=2026-09-23T20:17:28.430Z level=INFO run=915197ac message=loading path=/workspace/opencode.json
+timestamp=2026-09-23T20:17:28.913Z level=DEBUG run=915197ac message="loading config from /home/node/.opencode/opencode.json"
+timestamp=2026-09-23T20:17:28.914Z level=INFO run=915197ac message=loading path=/home/node/.opencode/opencode.json
+timestamp=2026-09-23T20:17:28.917Z level=DEBUG run=915197ac message="loading config from /home/node/.opencode/opencode.jsonc"
+timestamp=2026-09-23T20:17:28.918Z level=INFO run=915197ac message=loading path=/home/node/.opencode/opencode.jsonc
