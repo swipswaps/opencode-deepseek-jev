@@ -1,0 +1,17 @@
+# LiteLLM proxy config — add hard budget caps, rate limits, and a unified
+# cost dashboard in front of DeepSeek. Optional; see HANDOFF.md.
+#
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+# Budgets: https://docs.litellm.ai/docs/budget_manager
+#
+model_list:
+  - model_name: deepseek-flash
+    litellm_params:
+      model: deepseek/deepseek-chat          # verify exact DeepSeek model id
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+litellm_settings:
+  # Hard cap in USD. 30d = rolling 30 days; also: 1d, 1h.
+  max_budget: 5.0
+  budget_duration: 30d
+  request_timeout: 120

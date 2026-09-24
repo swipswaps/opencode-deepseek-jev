@@ -23,6 +23,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-jev-functional.sh` | behavioral Jev proof (invokes jev_review) |
 | `verify-from-inside.sh [--full]` | in-container self-check (no docker) |
 | `verify-password-drift.sh` | 4-gate password consistency check |
+| `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
@@ -33,7 +34,17 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 - **`.env.local` is the only source of truth.** `web.sh` and `doctor.sh` read it;
   the container gets it via compose `env_file`.
 - **Ports:** 4096 (opencode web, auth required), 5099 (dashboard, localhost-only),
-  5001 (Dockge). Firefox blocks 6000–6010 (X11) — use 5099/8080/3000.
+  5001 (Dockge), 4000 (optional LiteLLM proxy). Firefox blocks 6000–6010 (X11)
+  — use 5099/8080/3000.
+
+## Cost model
+- `session.cost` (USD) and `tokens_input/output/reasoning` live in
+  `data/opencode/opencode.db`. **Input tokens (context) are the cost driver** —
+  a session that inlines a large file/context can cost ~$0.78 (e.g. "ip addr
+  output": 938k in). `cost.sh` summarizes; `dashboard.sh`/`/viz` charts it.
+- Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
+  (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
+  that cost.
 - **Rules:** no `sed` (#7), no `2>/dev/null` (#8), `printf` not `echo`,
   `main()` wrapper, no `set -e` (pipefail only). See `RULES.md`.
 - **Pinned supply chain:** base image digest, opencode `1.18.32`,

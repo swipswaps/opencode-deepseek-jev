@@ -42,7 +42,7 @@ function apiCost() {
     "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
   )[0];
   const sessions = query(
-    "SELECT title, cost, tokens_input, tokens_output, tokens_reasoning, time_created FROM session ORDER BY time_created DESC LIMIT 12"
+    "SELECT title, cost, tokens_input, tokens_output, tokens_reasoning, time_created, time_updated FROM session ORDER BY time_created DESC LIMIT 12"
   );
   const latest = query("SELECT title FROM session ORDER BY time_created DESC LIMIT 1")[0];
   const lastPart = query("SELECT MAX(time_created) m FROM part")[0];
@@ -249,8 +249,16 @@ function item(x){
   return '<div class="item"'+click+'><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
 }
 function tog(ts){expanded[ts]=expanded[ts]?0:1;refreshActivity();}
+function dur(s){var d=Number(s.time_updated||0)-Number(s.time_created||0);return d>0?(d/1000).toFixed(0)+'s':'';}
 function sessRow(s){
-  return '<tr><td>'+esc(s.title||'(untitled)')+'</td><td class="num">$'+(+s.cost).toFixed(4)+'</td><td class="num">'+fmt(s.tokens_input)+'</td><td class="num">'+fmt(s.tokens_output)+'</td><td class="num">'+fmt(s.tokens_reasoning)+'</td></tr>';
+  var c=+s.cost||0;
+  var cls=c>=0.10?' class="num" style="color:#ff7b72"':' class="num"';
+  return '<tr><td title="'+esc(s.title||'')+'">'+esc(s.title||'(untitled)')+'</td>'
+    +'<td'+cls+'>$'+c.toFixed(4)+'</td>'
+    +'<td class="num">'+fmt(s.tokens_input)+'</td>'
+    +'<td class="num">'+fmt(s.tokens_output)+'</td>'
+    +'<td class="num">'+fmt(s.tokens_reasoning)+'</td>'
+    +'<td class="num">'+dur(s)+'</td></tr>';
 }
 var bal=null;
 async function refreshCost(){
@@ -267,9 +275,10 @@ async function refreshCost(){
       '<div class="stat"><b>'+fmt(t.i)+'</b><span>tokens in</span></div>'+
       '<div class="stat"><b>'+fmt(t.o)+'</b><span>tokens out</span></div>'+
       '<div class="stat"><b>'+fmt(t.r)+'</b><span>reasoning</span></div>';
-    var sh='<table><tr><th>title</th><th class="num">cost</th><th class="num">in</th><th class="num">out</th><th class="num">reas</th></tr>';
+    var sh='<table><tr><th>title</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
     for(var i=0;i<c.sessions.length;i++){sh+=sessRow(c.sessions[i]);}
-    document.getElementById('sessions').innerHTML=sh+'</table>';
+    sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10.</div>';
+    document.getElementById('sessions').innerHTML=sh;
   }
 }
 async function refreshActivity(){

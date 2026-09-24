@@ -1,0 +1,21 @@
+# LiteLLM proxy alongside the agent. Optional cost-governance layer.
+#
+# To route the agent through it, point opencode.json's provider baseURL at
+# http://127.0.0.1:4000/v1 (and set the key to the LiteLLM master key).
+#
+#   cd docker && docker compose -f docker-compose.litellm.yml up -d
+#
+# Docs: https://docs.litellm.ai/docs/proxy/docker_quick_start
+#
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./litellm.config.yaml:/app/config.yaml
+    env_file:
+      - ../.env.local
+    command: ["--config", "/app/config.yaml"]
+    restart: unless-stopped
