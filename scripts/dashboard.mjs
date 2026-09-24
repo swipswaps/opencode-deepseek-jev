@@ -290,7 +290,7 @@ const vizHtml = `<!doctype html>
 <h1>opencode viz &nbsp;<a href="/">[dashboard]</a> <a href="/api/export">[export csv]</a></h1>
 <h2>Sessions over time — bar color = cost</h2>
 <div class="chart" id="gantt"></div>
-<h2>Latest session — part timeline (tool/reasoning/text duration)</h2>
+<h2>Part timeline — <span id="tl-title">latest session</span> <a href="#" onclick="renderTimeline(null,null);return false;">[reset]</a></h2>
 <div class="chart" id="timeline"></div>
 <h2>Term frequency — reasoning + answer text</h2>
 <div class="chart" id="cloud"></div>
@@ -322,14 +322,18 @@ async function renderGantt(){
     .attr('width',function(d){return Math.max(2,x(d.time_updated||d.time_created)-x(d.time_created));})
     .attr('height',6)
     .attr('fill',function(d){return c(d.cost);})
-    .on('mousemove',function(ev,d){moveTip(ev);tip(d.title+'<br>$'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning));})
+    .style('cursor','pointer')
+    .on('click',function(ev,d){renderTimeline(d.id,d.title);})
+    .on('mousemove',function(ev,d){moveTip(ev);tip(d.title+'<br>$'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning)+' (click to drill down)');})
     .on('mouseleave',function(){tip(null);});
   svg.append('g').attr('transform','translate(0,'+(data.length*7)+')').call(d3.axisBottom(x).ticks(6).tickFormat(timeFmt));
 }
 
-async function renderTimeline(){
-  var data=await j('/api/parts?limit=600');
+async function renderTimeline(id,title){
+  var url='/api/parts?limit=600'+(id?'&session='+encodeURIComponent(id):'');
+  var data=await j(url);
   var el=d3.select('#timeline');
+  d3.select('#tl-title').text(title||'latest session');
   if(!data||!data.length){el.text('(no parts)');return;}
   var margin={top:8,right:16,bottom:24,left:8};
   var w=1000-margin.left-margin.right, h=120;

@@ -41,6 +41,14 @@ else
     printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json not written\n' >&2
 fi
 
+# Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;
+# bypass only with an explicit OPENCODE_ALLOW_INSECURE=1.
+if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && [ "${OPENCODE_ALLOW_INSECURE:-0}" != "1" ]; then
+    printf '[web-entrypoint] OPENCODE_SERVER_PASSWORD is not set; refusing to start unsecured.\n' >&2
+    printf '[web-entrypoint] set OPENCODE_SERVER_PASSWORD in .env.local, or set OPENCODE_ALLOW_INSECURE=1 to bypass.\n' >&2
+    exit 1
+fi
+
 # Start the read-only observability dashboard on :5099. Bind 0.0.0.0 so the
 # published port (127.0.0.1:5099 on the host) can reach it. The database is
 # the same file opencode uses; read-only access coexists with the writer.
