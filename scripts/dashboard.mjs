@@ -470,6 +470,19 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on("error", (err) => {
+  if (err && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
+    console.error(
+      "error: cannot bind http://" + host + ":" + port + " (" + err.code + "). " +
+      "The dashboard is already running (the opencode-web container publishes " +
+      "127.0.0.1:5099). Open http://127.0.0.1:5099, or set DASH_PORT to a free port."
+    );
+  } else {
+    console.error("error: " + (err && err.message ? err.message : err));
+  }
+  process.exit(1);
+});
+
 server.listen(port, host, () => {
   console.log("opencode observability: http://" + host + ":" + port + "  (db: " + dbPath + ")");
 });

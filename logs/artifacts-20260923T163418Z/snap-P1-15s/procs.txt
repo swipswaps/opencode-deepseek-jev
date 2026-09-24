@@ -1,5 +1,0 @@
-1 S opencode
-201 Z git
-308 S sh
-314 R opencode
-346 S sh

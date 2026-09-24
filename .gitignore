@@ -11,3 +11,7 @@ logs/artifacts-*/dump-*/
 logs/artifacts-*/stall-*/
 .env.local.bak.*
 *.bak.*
+
+# host notes bind-mount (ro) + runtime telemetry
+notes/
+logs/

@@ -1,1 +1,0 @@
-cpu=144.96% mem=607.2MiB / 14.84GiB pids=38
