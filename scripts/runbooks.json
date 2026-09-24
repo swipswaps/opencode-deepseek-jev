@@ -77,5 +77,16 @@
       "./scripts/cost.sh --estimate IN OUT REASONING"
     ],
     "note": "Input tokens (context) are the cost driver."
+  },
+  {
+    "id": "search-index",
+    "title": "Rebuild the search index",
+    "purpose": "Build the on-disk FTS5 index over session parts (data/search/). The dashboard builds the same index in memory on demand.",
+    "where": "container",
+    "commands": [
+      "./scripts/semantic-search.sh --rebuild",
+      "./scripts/semantic-search.sh <query>"
+    ],
+    "note": "Ranked cross-session search over text, reasoning, and tool commands. Also live in the dashboard search box."
   }
 ]

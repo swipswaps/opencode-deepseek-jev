@@ -218,6 +218,72 @@ function apiSearch(q, limit) {
   return { q: needle, sessions, hits };
 }
 
+let fts = { db: null, at: 0, count: -1, sourceMax: -1 };
+
+function sanitizeFts(q) {
+  const words = String(q || "").toLowerCase().match(/[a-z0-9_]+/g) || [];
+  return words.map((w) => '"' + w + '"').join(" ");
+}
+
+function ftsSource() {
+  return query(
+    "SELECT COUNT(*) n, COALESCE(MAX(time_created),0) m FROM part " +
+    "WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+  )[0];
+}
+
+function ensureFts() {
+  const src = ftsSource();
+  const n = Number(src.n), m = Number(src.m);
+  if (fts.db && fts.count === n && fts.sourceMax === m && Date.now() - fts.at < 60000) return fts.db;
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
+  const rows = query(
+    "SELECT id, session_id, json_extract(data,'$.type') type, " +
+    "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
+    "FROM part WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+  );
+  const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
+  db.exec("BEGIN");
+  for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+  db.exec("COMMIT");
+  fts = { db, at: Date.now(), count: n, sourceMax: m };
+  return db;
+}
+
+function apiSemantic(q, limit) {
+  const raw = String(q || "");
+  const needle = sanitizeFts(raw);
+  const sessions = query(
+    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
+    "%" + raw.replace(/[%_\\]/g, "") + "%", limit
+  );
+  if (!needle) return { q: raw, mode: "fts", indexed: fts.count, sessions, results: [] };
+  let db;
+  try { db = ensureFts(); } catch (e) {
+    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  }
+  let rows;
+  try {
+    rows = db.prepare(
+      "SELECT part_id, session_id, type, snippet(parts_fts, 3, '[', ']', '...', 14) snip, bm25(parts_fts) score " +
+      "FROM parts_fts WHERE parts_fts MATCH ? ORDER BY score LIMIT ?"
+    ).all(needle, limit);
+  } catch (e) {
+    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  }
+  const ids = [...new Set(rows.map((r) => r.session_id))];
+  const titles = {};
+  if (ids.length) {
+    const ph = ids.map(() => "?").join(",");
+    for (const t of query("SELECT id, title FROM session WHERE id IN (" + ph + ")", ...ids)) titles[t.id] = t.title;
+  }
+  return {
+    q: needle, mode: "fts", indexed: fts.count, sessions,
+    results: rows.map((r) => ({ session: r.session_id, title: titles[r.session_id] || "", type: r.type, snippet: r.snip, score: r.score, part: r.part_id }))
+  };
+}
+
 const STOP = new Set(("the a an and or but if then else of to in on for with is are was were be been this that these those it its as at by from we you i he she they not no do does did can could will would should may might about into over under out up down so very just than what when where which who how all any more most other some only own same your our").split(" "));
 
 function apiWords(limit) {
@@ -319,7 +385,7 @@ const html = `<!doctype html>
 <h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
-<div class="card"><h3>Search <span class="muted">(title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
+<div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
 <div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"></div></div>
 <div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"></div></div>
 <div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
@@ -445,18 +511,29 @@ async function doSearch(){
   var q=document.getElementById('q').value.trim();
   var el=document.getElementById('searchres');
   if(!q){el.innerHTML='';return;}
-  var r=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20');
-  if(!r){el.innerHTML='<span class="muted">search failed</span>';return;}
   var h='';
-  if(r.sessions&&r.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
-    for(var i=0;i<r.sessions.length;i++){var s=r.sessions[i];
-      h+='<div class="item" style="cursor:pointer" onclick="drill(\''+s.id+'\')"><span class="tag STEP">session</span>'+esc(s.title)+' <span class="muted">$'+(+s.cost).toFixed(4)+'</span></div>';}}
-  if(r.hits&&r.hits.length){h+='<div class="muted" style="font-size:11px">matches</div>';
-    for(var k=0;k<r.hits.length;k++){var x=r.hits[k];
-      h+='<div class="item" style="cursor:pointer" onclick="drill(\''+x.session+'\')"><span class="tag STEP">'+esc(x.type)+'</span>'+esc(x.snippet)+'</div>';}}
+  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=20');
+  if(r&&r.mode==='fts'){
+    if(r.sessions&&r.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
+      for(var i=0;i<r.sessions.length;i++){var s=r.sessions[i];
+        h+='<div class="item" data-go="'+esc(s.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(s.title)+' <span class="muted">$'+(+s.cost).toFixed(4)+'</span></div>';}}
+    if(r.results&&r.results.length){h+='<div class="muted" style="font-size:11px">ranked matches</div>';
+      for(var k=0;k<r.results.length;k++){var x=r.results[k];
+        h+='<div class="item" data-go="'+esc(x.session)+'" style="cursor:pointer"><span class="tag STEP">'+esc(x.type||'part')+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
+  } else {
+    var f=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20');
+    if(f&&f.sessions){for(var a=0;a<f.sessions.length;a++){var ss=f.sessions[a];
+      h+='<div class="item" data-go="'+esc(ss.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(ss.title)+'</div>';}}
+    if(f&&f.hits){for(var b=0;b<f.hits.length;b++){var y=f.hits[b];
+      h+='<div class="item" data-go="'+esc(y.session)+'" style="cursor:pointer"><span class="tag STEP">'+esc(y.type)+'</span>'+esc(y.snippet)+'</div>';}}
+  }
   el.innerHTML=h||'<span class="muted">no matches</span>';
 }
 document.getElementById('q').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch();}});
+document.getElementById('searchres').addEventListener('click',function(ev){
+  var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;
+  if(t){drill(t.getAttribute('data-go'));}
+});
 document.getElementById('sessions').addEventListener('click',function(ev){
   var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
   if(tr){drill(tr.getAttribute('data-id'));}
@@ -698,6 +775,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiSessionDetail(params.id, Number(params.limit) || 400)), "application/json");
   } else if (url === "/api/search") {
     send(res, 200, JSON.stringify(apiSearch(params.q, Number(params.limit) || 20)), "application/json");
+  } else if (url === "/api/semantic") {
+    send(res, 200, JSON.stringify(apiSemantic(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/export/session") {
     const fmt = (params.format || "txt").toLowerCase();
     const body = apiExportSession(params.id, fmt === "md" ? "md" : fmt === "json" ? "json" : "txt");

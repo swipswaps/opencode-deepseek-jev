@@ -91,13 +91,17 @@ main() {
     has 'container only' "$work/runbooks.html" && ok 'filter: container only' || bad 'filter: container only'
     has 'id="count"' "$work/runbooks.html" && ok 'runbooks count element' || bad 'runbooks count element'
 
-    python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$work/runbooks.html" > "$work/inline.js"
-    if [ -s "$work/inline.js" ] && node --check "$work/inline.js" 2>"$work/inline.err"; then
-        ok 'inline browser script parses'
-    else
-        bad 'inline browser script parses'
-        cat "$work/inline.err"
-    fi
+    local page pname
+    for page in "$work/home.html" "$work/runbooks.html"; do
+        pname=$(basename "$page")
+        python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
+        if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
+            ok "inline script parses ($pname)"
+        else
+            bad "inline script parses ($pname)"
+            cat "$work/${pname}.err"
+        fi
+    done
 
     curl -s "http://$HOST:$PORT/api/runbooks" > "$work/runbooks.json"
     python3 - "$work/runbooks.json" > "$work/rbcheck.txt" <<'PY'
@@ -129,7 +133,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=7' "$work/rbcheck.txt" && ok 'runbooks count=7' || bad 'runbooks count=7'
+    has 'count=8' "$work/rbcheck.txt" && ok 'runbooks count=8' || bad 'runbooks count=8'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"
@@ -155,8 +159,21 @@ PY
         has '# ' "$work/exp.md" && ok 'api/export/session md' || bad 'api/export/session md'
         curl -s "http://$HOST:$PORT/api/search?q=the&limit=3" > "$work/search.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
+        curl -s "http://$HOST:$PORT/api/semantic?q=the&limit=3" > "$work/sem.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("mode")=="fts" and isinstance(d.get("results"),list) else 1)' "$work/sem.json" && ok 'api/semantic (fts)' || bad 'api/semantic (fts)'
     else
         bad 'found a session id for endpoint tests'
+    fi
+
+    if [ -f "$REPO/scripts/test-dashboard-ui.mjs" ]; then
+        if node "$REPO/scripts/test-dashboard-ui.mjs" "http://$HOST:$PORT" > "$work/ui.txt" 2>&1; then
+            ok 'headless UI: dashboard panes populate'
+        else
+            bad 'headless UI: dashboard panes populate'
+            cat "$work/ui.txt"
+        fi
+    else
+        bad 'test-dashboard-ui.mjs present'
     fi
 
     if [ -x "$REPO/scripts/cost-bottlenecks.sh" ]; then
@@ -165,6 +182,14 @@ PY
         if [ "$cb_rc" -eq 0 ] && has 'per_1k_in' "$work/cb.txt"; then ok 'cost-bottlenecks.sh runs'; else bad 'cost-bottlenecks.sh runs'; fi
     else
         bad 'cost-bottlenecks.sh present'
+    fi
+
+    if [ -x "$REPO/scripts/semantic-search.sh" ]; then
+        "$REPO/scripts/semantic-search.sh" --rebuild > "$work/idx.txt" 2>&1
+        local si_rc=$?
+        if [ "$si_rc" -eq 0 ] && has 'indexed' "$work/idx.txt"; then ok 'semantic-search.sh builds index'; else bad 'semantic-search.sh builds index'; fi
+    else
+        bad 'semantic-search.sh present'
     fi
 
     kill -TERM "$srv" || true

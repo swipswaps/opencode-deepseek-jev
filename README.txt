@@ -89,10 +89,21 @@ host. Predictive cost: ./scripts/cost.sh --estimate IN OUT [REASONING].
 The dashboard drills down. Click a session row to see its detail panel
 (cost, tokens, span, message count) and the ordered tool/reasoning/text
 parts. Each detail panel offers a per-session chat-history download as
-txt, md, or json (/api/export/session). The search box queries titles,
-message text, and tool commands across every session (/api/search).
+txt, md, or json (/api/export/session). The search box runs ranked
+full-text search across every session — text, reasoning, and tool
+commands — via an in-memory SQLite FTS5/bm25 index (/api/semantic).
 http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
 container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
+
+Search from the terminal
+------------------------
+    ./scripts/semantic-search.sh <query...>     # ranked, across sessions
+    ./scripts/semantic-search.sh --rebuild      # rebuild the on-disk index
+
+Builds a persistent FTS5 index at data/search/opencode-index.db (gitignored)
+and prints bm25-ranked hits with snippets. Same index the dashboard serves
+from memory; this on-disk copy is the substrate for a future Laya/Jev
+semantic reranker.
 
 Cost bottlenecks
 ----------------

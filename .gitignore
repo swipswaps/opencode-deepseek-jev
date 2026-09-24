@@ -7,6 +7,7 @@ __pycache__/
 .DS_Store
 staging.log
 data/opencode/
+data/search/
 logs/artifacts-*/dump-*/
 logs/artifacts-*/stall-*/
 .env.local.bak.*

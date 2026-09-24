@@ -26,8 +26,10 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
 | `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
-| `test-dashboard.sh` | gate for dashboard.mjs (served HTML + `/api/runbooks` + inline-JS parse + drill/search/export) |
+| `test-dashboard.sh` | gate for dashboard.mjs (both pages' inline-JS parse + `/api/*` + headless client execution via `test-dashboard-ui.mjs`) |
+| `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
+| `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
@@ -64,11 +66,15 @@ message text, and tool commands across all sessions.
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·
 B6 cleanup ✅ · C1 thinking ✅ · U1 dashboard ✅ · U2 verify-from-inside ✅.
 
-Open next steps (not done): semantic cross-session search over parts
-(embeddings via Jev/Laya or a local index) — keyword `/api/search` ships
-now, semantic is the next layer; wire LiteLLM budgets into agent routing
-(proxy runs, opencode.json still points at DeepSeek directly); optional
-Langfuse/Phoenix tracing.
+Open next steps (not done): embeddings-based semantic rerank over the
+FTS5 candidate set (Jev hosted or Laya self-hosted) with a mandatory
+redaction pass (`sk-`, `apikey_`, `OPENCODE_SERVER_PASSWORD`) and a hard
+request cap before any external call — local FTS5/bm25 ships now
+(`/api/semantic`, `semantic-search.sh`); wire LiteLLM budgets into agent
+routing (proxy runs, opencode.json still points at DeepSeek directly);
+verify the LiteLLM model id (`deepseek/deepseek-chat`) against the live
+API and opencode.json (`deepseek-flash`); optional Langfuse/Phoenix
+tracing.
 
 Security/ops notes: the LiteLLM runbook validates with
 `docker compose ... config --quiet` — plain `config` resolves `env_file`

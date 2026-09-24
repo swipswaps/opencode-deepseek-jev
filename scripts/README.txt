@@ -56,6 +56,13 @@ cost-bottlenecks.sh
     effective $/1k-input, the fixed overhead of tiny sessions, and a
     per-model breakdown. Read-only; host or container. --top N.
 
+semantic-search.sh
+    Ranked full-text search across every session (SQLite FTS5/bm25) over
+    text, reasoning, and tool commands. Persists an index at
+    data/search/opencode-index.db (gitignored); the dashboard builds the
+    same index in memory for /api/semantic. --rebuild rebuilds; --limit N
+    caps results. Host or container.
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the
@@ -66,10 +73,18 @@ runbook.sh
 
 test-dashboard.sh
     End-to-end gate for dashboard.mjs: starts it on a scratch port and
-    asserts the served HTML, the /api/runbooks payload, and that the
-    inline browser script parses (node --check). The parse gate catches
-    escape regressions a substring grep would miss. Exits non-zero on
-    any failed assert.
+    asserts the served HTML, the /api/* payloads, and that the inline
+    browser script on BOTH / and /runbooks parses (node --check). It then
+    runs test-dashboard-ui.mjs, which executes the page script in a minimal
+    DOM and asserts the panes populate. Together these catch escape
+    regressions and runtime client bugs that a substring grep misses.
+    Exits non-zero on any failed assert.
+
+test-dashboard-ui.mjs
+    Headless execution test: fetches the served / page, runs its inline
+    <script> in a minimal DOM shim against the live server, fires the
+    interval refreshers once, and asserts #session/#stats/#sessions/
+    #activity/#config populate. No browser required.
 
 thinking.sh
     Live view of what the agent is doing while "thinking". Tails the
