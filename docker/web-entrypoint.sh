@@ -55,7 +55,7 @@ fi
 DASH_MJS="/workspace/scripts/dashboard.mjs"
 if [ -f "$DASH_MJS" ]; then
     node --no-warnings --experimental-sqlite "$DASH_MJS" \
-        "$DATA_DIR/opencode.db" 5099 0.0.0.0 >/tmp/dashboard.log 2>&1 &
+        "$DATA_DIR/opencode.db" 5099 0.0.0.0 /workspace/scripts/audit-config.sh >/tmp/dashboard.log 2>&1 &
     printf '[web-entrypoint] dashboard listening on :5099 (log /tmp/dashboard.log)\n' >&2
 else
     printf '[web-entrypoint] dashboard.mjs not found; skipping dashboard\n' >&2

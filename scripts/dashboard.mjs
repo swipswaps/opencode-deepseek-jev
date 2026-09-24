@@ -17,6 +17,7 @@
 
 import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
+import { execFileSync } from "node:child_process";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -163,6 +164,21 @@ function apiExport() {
 }
 
 let balanceCache = { at: 0, data: { available: false } };
+let configCache = { at: 0, data: null };
+
+function apiConfig() {
+  const script = process.argv[5];
+  if (!script) return { findings: [], summary: { ok: 0, warn: 0, error: 0, fatal: 0, skip: 0 } };
+  if (configCache.data && Date.now() - configCache.at < 60000) return configCache.data;
+  try {
+    const out = execFileSync("bash", [script, "--json"], { timeout: 45000, encoding: "utf8" });
+    const j = JSON.parse(out.trim());
+    configCache = { at: Date.now(), data: j };
+    return j;
+  } catch {
+    return { error: "config audit failed to run" };
+  }
+}
 async function apiBalance() {
   const key = process.env.DEEPSEEK_API_KEY;
   if (!key) return { available: false };
@@ -211,6 +227,7 @@ const html = `<!doctype html>
 <h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a></h1>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
+<div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"></div></div>
 <div class="card"><h3>Sessions</h3><div id="sessions"></div></div>
 <div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"></div></div>
 <div class="card"><h3>Todos</h3><div id="todos"></div></div>
@@ -269,11 +286,24 @@ async function refreshBalance(){
   bal=await j('/api/balance');
   await refreshCost();
 }
+async function refreshConfig(){
+  var c=await j('/api/config');
+  var el=document.getElementById('config');
+  if(!c){el.innerHTML='(no config audit)';return;}
+  if(c.error){el.innerHTML='<span class="muted">'+esc(c.error)+'</span>';return;}
+  var s=c.summary||{};
+  var drift=(c.findings||[]).filter(function(f){return f.status!=='OK'&&f.status!=='SKIP';});
+  var h='<span class="muted">ok='+s.ok+' warn='+s.warn+' error='+s.error+' fatal='+s.fatal+' skip='+s.skip+'</span>';
+  if(drift.length){for(var i=0;i<drift.length;i++){var f=drift[i];h+='<div class="item"><span class="tag STEP">'+esc(f.status)+'</span>'+esc(f.key)+' — '+esc(f.actual)+' <span class="muted">→ '+esc(f.fix||'')+'</span></div>';}}
+  else{h+='<div class="item">all settings match expected</div>';}
+  el.innerHTML=h;
+}
 refreshBalance();
 setInterval(refreshCost,2000);
 setInterval(refreshActivity,2000);
 setInterval(refreshTodos,2000);
 setInterval(refreshBalance,30000);
+setInterval(refreshConfig,30000);
 </script></body></html>`;
 
 const vizHtml = `<!doctype html>
@@ -411,6 +441,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {
     send(res, 200, JSON.stringify(await apiBalance()), "application/json");
+  } else if (url === "/api/config") {
+    send(res, 200, JSON.stringify(apiConfig()), "application/json");
   } else if (url === "/api/activity") {
     send(res, 200, JSON.stringify(apiActivity()), "application/json");
   } else if (url === "/api/todos") {

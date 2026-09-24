@@ -68,7 +68,7 @@ main() {
     printf 'DB:      %s\n' "$db"
     printf 'Ctrl-C to stop\n\n'
 
-    exec node --no-warnings --experimental-sqlite "$REPO/scripts/dashboard.mjs" "$db" "$port" "$host"
+    exec node --no-warnings --experimental-sqlite "$REPO/scripts/dashboard.mjs" "$db" "$port" "$host" "$REPO/scripts/audit-config.sh"
 }
 
 main "$@"
