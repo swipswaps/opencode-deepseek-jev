@@ -41,4 +41,16 @@ else
     printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json not written\n' >&2
 fi
 
+# Start the read-only observability dashboard on :5099. Bind 0.0.0.0 so the
+# published port (127.0.0.1:5099 on the host) can reach it. The database is
+# the same file opencode uses; read-only access coexists with the writer.
+DASH_MJS="/workspace/scripts/dashboard.mjs"
+if [ -f "$DASH_MJS" ]; then
+    node --no-warnings --experimental-sqlite "$DASH_MJS" \
+        "$DATA_DIR/opencode.db" 5099 0.0.0.0 >/tmp/dashboard.log 2>&1 &
+    printf '[web-entrypoint] dashboard listening on :5099 (log /tmp/dashboard.log)\n' >&2
+else
+    printf '[web-entrypoint] dashboard.mjs not found; skipping dashboard\n' >&2
+fi
+
 exec opencode web --hostname 0.0.0.0 --port 4096

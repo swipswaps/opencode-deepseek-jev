@@ -130,22 +130,26 @@ const html = `<!doctype html>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
 <div class="card"><h3>Sessions</h3><div id="sessions"></div></div>
-<div class="card"><h3>Live activity <span class="muted">(hover for full text)</span></h3><div id="activity"></div></div>
+<div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"></div></div>
 <div class="card"><h3>Todos</h3><div id="todos"></div></div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
 function ts(t){return new Date(t).toISOString().slice(11,23);}
 async function j(u){try{var r=await fetch(u);return r.ok?r.json():null;}catch(e){return null;}}
+var expanded={};
 function item(x){
   var cls=String(x.type||'').toUpperCase();
   var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':cls;
-  var body='',full='';
-  if(x.type==='tool'){body=esc(x.tool)+' ['+esc(x.status)+'] '+esc((x.cmd||'').slice(0,90));full=esc(x.cmd||'');}
-  else if(x.type==='reasoning'||x.type==='text'){body=esc((x.text||'').slice(0,140));full=esc(x.text||'');}
-  else if(x.type==='patch'){body=esc(x.files||'');}
-  return '<div class="item" title="'+full+'"><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
+  var short='',full='';
+  if(x.type==='tool'){short=esc(x.tool)+' ['+esc(x.status)+'] '+esc((x.cmd||'').slice(0,90));full=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
+  else if(x.type==='reasoning'||x.type==='text'){short=esc((x.text||'').slice(0,140));full=esc(x.text||'');}
+  else if(x.type==='patch'){short=esc(x.files||'');full=short;}
+  var click=(full&&full!==short)?' style="cursor:pointer" onclick="tog('+x.ts+')" title="'+(expanded[x.ts]?'click to collapse':'click to expand')+'"':'';
+  var body=expanded[x.ts]?full:short;
+  return '<div class="item"'+click+'><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
 }
+function tog(ts){expanded[ts]=expanded[ts]?0:1;refreshActivity();}
 function sessRow(s){
   return '<tr><td>'+esc(s.title||'(untitled)')+'</td><td class="num">$'+(+s.cost).toFixed(4)+'</td><td class="num">'+fmt(s.tokens_input)+'</td><td class="num">'+fmt(s.tokens_output)+'</td><td class="num">'+fmt(s.tokens_reasoning)+'</td></tr>';
 }

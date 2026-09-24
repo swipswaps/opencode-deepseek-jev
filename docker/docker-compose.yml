@@ -53,6 +53,7 @@ services:
     entrypoint: ["/workspace/docker/web-entrypoint.sh"]
     ports:
       - "4096:4096"
+      - "127.0.0.1:5099:5099"
     volumes:
       - ..:/workspace
       - ../data/opencode:/home/node/.local/share/opencode
