@@ -3,10 +3,19 @@
 # To route the agent through it, point opencode.json's provider baseURL at
 # http://127.0.0.1:4000/v1 (and set the key to the LiteLLM master key).
 #
-#   cd docker && docker compose -f docker-compose.litellm.yml up -d
+#   docker compose -f docker/docker-compose.litellm.yml config --quiet
+#   docker compose -f docker/docker-compose.litellm.yml up -d
+#
+# `name: litellm` keeps this a separate compose project so it never treats
+# the agent containers as orphans (and never removes them by accident).
+#
+# Validate with `config --quiet`: plain `config` resolves env_file and
+# PRINTS every value from ../.env.local, including the agent secrets.
 #
 # Docs: https://docs.litellm.ai/docs/proxy/docker_quick_start
 #
+name: litellm
+
 services:
   litellm:
     image: ghcr.io/berriai/litellm:main-latest

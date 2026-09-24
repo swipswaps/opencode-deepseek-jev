@@ -26,11 +26,16 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
 | `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
-| `test-dashboard.sh` | gate for dashboard.mjs (served HTML + `/api/runbooks` + inline-JS parse) |
+| `test-dashboard.sh` | gate for dashboard.mjs (served HTML + `/api/runbooks` + inline-JS parse + drill/search/export) |
+| `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
 page and `runbook.sh`; edit it once to change either.
+
+The dashboard also drills down: click a session row for its detail panel
+and per-session chat download (txt/md/json); the search box queries titles,
+message text, and tool commands across all sessions.
 
 ## Architecture gotchas
 - **Host vs container.** `scripts/archive/one-shot/*` call `docker` (host only);
@@ -59,8 +64,17 @@ page and `runbook.sh`; edit it once to change either.
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·
 B6 cleanup ✅ · C1 thinking ✅ · U1 dashboard ✅ · U2 verify-from-inside ✅.
 
-Open next steps (not done): LiteLLM budgets for hard cost caps; optional
-Langfuse/Phoenix tracing; optional Laya self-host.
+Open next steps (not done): semantic cross-session search over parts
+(embeddings via Jev/Laya or a local index) — keyword `/api/search` ships
+now, semantic is the next layer; wire LiteLLM budgets into agent routing
+(proxy runs, opencode.json still points at DeepSeek directly); optional
+Langfuse/Phoenix tracing.
+
+Security/ops notes: the LiteLLM runbook validates with
+`docker compose ... config --quiet` — plain `config` resolves `env_file`
+and prints every `.env.local` value. `docker-compose.litellm.yml` sets
+`name: litellm` so the proxy is a separate compose project and never
+treats the agent containers as orphans.
 
 ## Jev vs Laya (decision to revisit)
 - **Jev** = hosted API (TypeSafe), zero-shot strong, leads on >20-option label

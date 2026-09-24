@@ -45,7 +45,16 @@ dashboard.sh
     (step/tool/reasoning/text), and todos on http://127.0.0.1:5099
     (DASH_PORT/DASH_HOST override). Reads the database read-only; no
     docker, no external deps. Runs on the host or in the container.
+    Sessions are clickable: /api/session?id= returns the detail + parts,
+    and /api/export/session?id=&format=txt|md|json downloads one session's
+    chat history. /api/search?q= searches titles, text, and commands.
     /runbooks renders the operational runbooks; /api/runbooks is the data.
+
+cost-bottlenecks.sh
+    Ranks where API cost goes: totals + effective $/1k-input, top sessions
+    by cost and by input tokens (context is the cost driver), worst
+    effective $/1k-input, the fixed overhead of tiny sessions, and a
+    per-model breakdown. Read-only; host or container. --top N.
 
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at

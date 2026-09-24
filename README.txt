@@ -86,6 +86,22 @@ the same data in a read-only browser view, with cost cards and the todo
 list. Both poll the database (2s) and run in the container and on the
 host. Predictive cost: ./scripts/cost.sh --estimate IN OUT [REASONING].
 
+The dashboard drills down. Click a session row to see its detail panel
+(cost, tokens, span, message count) and the ordered tool/reasoning/text
+parts. Each detail panel offers a per-session chat-history download as
+txt, md, or json (/api/export/session). The search box queries titles,
+message text, and tool commands across every session (/api/search).
+http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
+container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
+
+Cost bottlenecks
+----------------
+    ./scripts/cost-bottlenecks.sh [--top N]
+
+Ranks the cost drivers in the database: effective $/1k-input, top sessions
+by cost and by input tokens, worst effective $/1k-input, tiny-session
+overhead, and a per-model breakdown. Read-only; host or container.
+
 Jev functional proof
 --------------------
     ./scripts/test-jev-functional.sh

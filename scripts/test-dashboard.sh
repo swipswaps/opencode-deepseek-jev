@@ -142,6 +142,31 @@ PY
         bad 'runbook.sh present and executable'
     fi
 
+    has 'id="q"' "$work/home.html" && ok 'home search box' || bad 'home search box'
+    has 'id="drill"' "$work/home.html" && ok 'home drill panel' || bad 'home drill panel'
+
+    curl -s "http://$HOST:$PORT/api/sessions?limit=1" > "$work/s1.json"
+    local sid
+    sid=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d[0]["id"] if d else "")' "$work/s1.json")
+    if [ -n "$sid" ]; then
+        curl -s "http://$HOST:$PORT/api/session?id=$sid" > "$work/sd.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("session") and isinstance(d.get("parts"),list) else 1)' "$work/sd.json" && ok 'api/session detail' || bad 'api/session detail'
+        curl -s "http://$HOST:$PORT/api/export/session?id=$sid&format=md" > "$work/exp.md"
+        has '# ' "$work/exp.md" && ok 'api/export/session md' || bad 'api/export/session md'
+        curl -s "http://$HOST:$PORT/api/search?q=the&limit=3" > "$work/search.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
+    else
+        bad 'found a session id for endpoint tests'
+    fi
+
+    if [ -x "$REPO/scripts/cost-bottlenecks.sh" ]; then
+        "$REPO/scripts/cost-bottlenecks.sh" --top 3 > "$work/cb.txt" 2>&1
+        local cb_rc=$?
+        if [ "$cb_rc" -eq 0 ] && has 'per_1k_in' "$work/cb.txt"; then ok 'cost-bottlenecks.sh runs'; else bad 'cost-bottlenecks.sh runs'; fi
+    else
+        bad 'cost-bottlenecks.sh present'
+    fi
+
     kill -TERM "$srv" || true
     wait "$srv" || true
 

@@ -47,7 +47,10 @@ function apiCost() {
     "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
   )[0];
   const sessions = query(
-    "SELECT title, cost, tokens_input, tokens_output, tokens_reasoning, time_created, time_updated FROM session ORDER BY time_created DESC LIMIT 12"
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.time_created, s.time_updated, " +
+    "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
+    "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
+    "FROM session s ORDER BY s.time_created DESC LIMIT 12"
   );
   const latest = query("SELECT title FROM session ORDER BY time_created DESC LIMIT 1")[0];
   const lastPart = query("SELECT MAX(time_created) m FROM part")[0];
@@ -133,6 +136,86 @@ function apiParts(sessionId, limit) {
     items.push(it);
   }
   return items;
+}
+
+function sessionRow(id) {
+  return query(
+    "SELECT id, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, time_created, time_updated, model, agent FROM session WHERE id = ?",
+    id
+  )[0] || null;
+}
+
+function apiSessionDetail(id, limit) {
+  const s = sessionRow(id);
+  if (!s) return { error: "session not found" };
+  const mm = query("SELECT COUNT(*) n FROM message WHERE session_id = ?", id)[0];
+  return { session: s, messages: mm ? mm.n : 0, parts: apiParts(id, limit) };
+}
+
+function transcript(id) {
+  const rows = query(
+    "SELECT m.time_created mt, json_extract(m.data,'$.role') role, p.data pdata, p.time_created pt " +
+    "FROM message m JOIN part p ON p.message_id = m.id WHERE m.session_id = ? ORDER BY m.time_created, p.time_created",
+    id
+  );
+  const out = [];
+  for (const r of rows) {
+    let d;
+    try { d = JSON.parse(r.pdata); } catch { continue; }
+    const role = r.role || "?";
+    const ts = r.mt || r.pt;
+    if (d.type === "text") out.push({ role, ts, kind: "text", text: d.text || "" });
+    else if (d.type === "reasoning") out.push({ role, ts, kind: "reasoning", text: d.text || "" });
+    else if (d.type === "tool") {
+      const inp = d.state && d.state.input;
+      out.push({ role, ts, kind: "tool", tool: d.tool, cmd: (inp && (inp.command || inp.description)) || "" });
+    } else if (d.type === "patch") out.push({ role, ts, kind: "patch", files: d.files || [] });
+  }
+  return out;
+}
+
+function apiExportSession(id, format) {
+  const s = sessionRow(id);
+  if (!s) return null;
+  const turns = transcript(id);
+  const spanS = Math.max(0, Math.round((Number(s.time_updated || 0) - Number(s.time_created || 0)) / 1000));
+  if (format === "json") return JSON.stringify({ session: s, turns }, null, 2);
+  const head =
+    "# " + (s.title || "(untitled)") + "\n" +
+    "session: " + s.id + "\n" +
+    "cost: $" + (Number(s.cost) || 0).toFixed(4) + "\n" +
+    "tokens: in=" + s.tokens_input + " out=" + s.tokens_output + " reasoning=" + s.tokens_reasoning + "\n" +
+    "span: " + spanS + "s\n" +
+    "created: " + new Date(s.time_created).toISOString() + "\n\n";
+  let body = "";
+  for (const x of turns) {
+    if (x.kind === "text") body += "### " + x.role + "\n" + x.text + "\n\n";
+    else if (x.kind === "reasoning") body += "_(reasoning)_\n" + x.text + "\n\n";
+    else if (x.kind === "tool") body += "_[tool: " + x.tool + "]_ `" + String(x.cmd || "").replace(/`/g, "'") + "`\n\n";
+    else if (x.kind === "patch") body += "_[patch]_ " + (x.files || []).join(", ") + "\n\n";
+  }
+  if (format === "md") return head + body;
+  return head + body.replace(/^### /gm, "").replace(/^_\(reasoning\)_\n/gm, "[reasoning] ").replace(/^_\[/gm, "[");
+}
+
+function apiSearch(q, limit) {
+  const needle = String(q || "").replace(/[%_\\]/g, "");
+  const like = "%" + needle + "%";
+  if (!needle) return { q, sessions: [], hits: [] };
+  const sessions = query(
+    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
+    like, limit
+  );
+  const rows = query(
+    "SELECT p.session_id sid, s.title title, p.time_created ts, json_extract(p.data,'$.type') type, " +
+    "COALESCE(json_extract(p.data,'$.text'), json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.tool'), '') snippet " +
+    "FROM part p JOIN session s ON s.id = p.session_id " +
+    "WHERE json_extract(p.data,'$.text') LIKE ? OR json_extract(p.data,'$.state.input.command') LIKE ? " +
+    "ORDER BY p.time_created DESC LIMIT ?",
+    like, like, limit
+  );
+  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, snippet: String(h.snippet || "").slice(0, 200) }));
+  return { q: needle, sessions, hits };
 }
 
 const STOP = new Set(("the a an and or but if then else of to in on for with is are was were be been this that these those it its as at by from we you i he she they not no do does did can could will would should may might about into over under out up down so very just than what when where which who how all any more most other some only own same your our").split(" "));
@@ -225,6 +308,10 @@ const html = `<!doctype html>
  th,td{text-align:left;padding:3px 8px;border-bottom:1px solid #21262d}
  th{color:#8b949e;font-weight:600}
  .num{text-align:right;font-variant-numeric:tabular-nums}
+ .srow{cursor:pointer}
+ .srow:hover{background:#1f6feb22}
+ input#q{width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;box-sizing:border-box}
+ .card a{font-size:12px;margin-right:6px}
  .live{color:#3fb950}.idle{color:#8b949e}
  #session{font-size:13px;margin-bottom:4px}
 </style></head>
@@ -232,8 +319,10 @@ const html = `<!doctype html>
 <h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
+<div class="card"><h3>Search <span class="muted">(title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
 <div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"></div></div>
-<div class="card"><h3>Sessions</h3><div id="sessions"></div></div>
+<div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"></div></div>
+<div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
 <div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"></div></div>
 <div class="card"><h3>Todos</h3><div id="todos"></div></div>
 <script>
@@ -254,11 +343,17 @@ function item(x){
   return '<div class="item"'+click+'><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
 }
 function tog(ts){expanded[ts]=expanded[ts]?0:1;refreshActivity();}
-function dur(s){var d=Number(s.time_updated||0)-Number(s.time_created||0);return d>0?(d/1000).toFixed(0)+'s':'';}
+function dur(s){
+  var a=Number(s.p_start||0), b=Number(s.p_end||0);
+  if(b>a){return ((b-a)/1000).toFixed(0)+'s';}
+  var d=Number(s.time_updated||0)-Number(s.time_created||0);
+  return d>0?(d/1000).toFixed(0)+'s':'';
+}
 function sessRow(s){
   var c=+s.cost||0;
   var cls=c>=0.10?' class="num" style="color:#ff7b72"':' class="num"';
-  return '<tr><td title="'+esc(s.title||'')+'">'+esc(s.title||'(untitled)')+'</td>'
+  return '<tr class="srow" data-id="'+esc(s.id||'')+'" title="click to drill down">'
+    +'<td>'+esc(s.title||'(untitled)')+'</td>'
     +'<td'+cls+'>$'+c.toFixed(4)+'</td>'
     +'<td class="num">'+fmt(s.tokens_input)+'</td>'
     +'<td class="num">'+fmt(s.tokens_output)+'</td>'
@@ -282,8 +377,10 @@ async function refreshCost(){
       '<div class="stat"><b>'+fmt(t.r)+'</b><span>reasoning</span></div>';
     var sh='<table><tr><th>title</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
     for(var i=0;i<c.sessions.length;i++){sh+=sessRow(c.sessions[i]);}
-    sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10.</div>';
-    document.getElementById('sessions').innerHTML=sh;
+    sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10. click a row to drill down.</div>';
+    var sel=document.getElementById('sessions');
+    sel.innerHTML=sh;
+    if(drillId){var row=sel.querySelector('tr[data-id="'+drillId+'"]');if(row){row.style.background='#1f6feb33';}}
   }
 }
 async function refreshActivity(){
@@ -312,6 +409,58 @@ async function refreshConfig(){
   else{h+='<div class="item">all settings match expected</div>';}
   el.innerHTML=h;
 }
+var drillId=null;
+function drillItem(x){
+  var cls=String(x.type||'').toUpperCase();
+  var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':cls;
+  var body='';
+  if(x.type==='tool'){body=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
+  else if(x.type==='reasoning'||x.type==='text'){body=esc(String(x.text||'').slice(0,600));}
+  else if(x.type==='patch'){body=esc(x.files||'');}
+  return '<div class="item"><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
+}
+async function drill(id){
+  drillId=id;
+  var d=await j('/api/session?id='+encodeURIComponent(id));
+  var el=document.getElementById('drill');
+  if(!d||d.error){el.innerHTML='<span class="muted">'+esc((d&&d.error)||'no data')+'</span>';return;}
+  var s=d.session;
+  document.getElementById('drill-id').textContent=s.title||'';
+  var h='<div class="row">'
+    +'<div class="stat"><b>$'+(+s.cost).toFixed(4)+'</b><span>cost</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_input)+'</b><span>in</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_output)+'</b><span>out</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_reasoning)+'</b><span>reasoning</span></div>'
+    +'<div class="stat"><b>'+d.messages+'</b><span>messages</span></div>'
+    +'<div class="stat"><b>'+dur(s)+'</b><span>span</span></div>'
+    +'</div>';
+  h+='<div class="muted" style="font-size:12px;margin:6px 0">download: '
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=txt">[txt]</a>'
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=md">[md]</a>'
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=json">[json]</a></div>';
+  for(var i=0;i<d.parts.length;i++){h+=drillItem(d.parts[i]);}
+  el.innerHTML=h;
+}
+async function doSearch(){
+  var q=document.getElementById('q').value.trim();
+  var el=document.getElementById('searchres');
+  if(!q){el.innerHTML='';return;}
+  var r=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20');
+  if(!r){el.innerHTML='<span class="muted">search failed</span>';return;}
+  var h='';
+  if(r.sessions&&r.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
+    for(var i=0;i<r.sessions.length;i++){var s=r.sessions[i];
+      h+='<div class="item" style="cursor:pointer" onclick="drill(\''+s.id+'\')"><span class="tag STEP">session</span>'+esc(s.title)+' <span class="muted">$'+(+s.cost).toFixed(4)+'</span></div>';}}
+  if(r.hits&&r.hits.length){h+='<div class="muted" style="font-size:11px">matches</div>';
+    for(var k=0;k<r.hits.length;k++){var x=r.hits[k];
+      h+='<div class="item" style="cursor:pointer" onclick="drill(\''+x.session+'\')"><span class="tag STEP">'+esc(x.type)+'</span>'+esc(x.snippet)+'</div>';}}
+  el.innerHTML=h||'<span class="muted">no matches</span>';
+}
+document.getElementById('q').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch();}});
+document.getElementById('sessions').addEventListener('click',function(ev){
+  var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
+  if(tr){drill(tr.getAttribute('data-id'));}
+});
 refreshBalance();
 setInterval(refreshCost,2000);
 setInterval(refreshActivity,2000);
@@ -545,6 +694,21 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiSessions(Number(params.limit) || 200)), "application/json");
   } else if (url === "/api/parts") {
     send(res, 200, JSON.stringify(apiParts(params.session || null, Number(params.limit) || 600)), "application/json");
+  } else if (url === "/api/session") {
+    send(res, 200, JSON.stringify(apiSessionDetail(params.id, Number(params.limit) || 400)), "application/json");
+  } else if (url === "/api/search") {
+    send(res, 200, JSON.stringify(apiSearch(params.q, Number(params.limit) || 20)), "application/json");
+  } else if (url === "/api/export/session") {
+    const fmt = (params.format || "txt").toLowerCase();
+    const body = apiExportSession(params.id, fmt === "md" ? "md" : fmt === "json" ? "json" : "txt");
+    if (body == null) {
+      send(res, 404, "session not found\n", "text/plain");
+    } else {
+      const ct = fmt === "json" ? "application/json" : "text/plain; charset=utf-8";
+      const ext = fmt === "json" ? "json" : fmt === "md" ? "md" : "txt";
+      res.writeHead(200, { "Content-Type": ct, "Content-Disposition": "attachment; filename=session-" + (params.id || "export") + "." + ext });
+      res.end(body);
+    }
   } else if (url === "/api/words") {
     send(res, 200, JSON.stringify(apiWords(Number(params.limit) || 80)), "application/json");
   } else if (url === "/api/export") {

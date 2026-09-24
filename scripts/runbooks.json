@@ -18,8 +18,8 @@
     "purpose": "Run the LiteLLM proxy in front of DeepSeek to enforce max_budget and get a unified cost view.",
     "where": "host",
     "commands": [
-      "docker compose -f docker/docker-compose.litellm.yml config",
-      "cd docker && docker compose -f docker-compose.litellm.yml up -d"
+      "docker compose -f docker/docker-compose.litellm.yml config --quiet",
+      "docker compose -f docker/docker-compose.litellm.yml up -d"
     ],
     "note": "Proxy listens on http://127.0.0.1:4000. To route the agent through it, point opencode.json baseURL at http://127.0.0.1:4000/v1."
   },
