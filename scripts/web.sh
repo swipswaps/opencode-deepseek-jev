@@ -62,19 +62,24 @@ main() {
         return 1
     fi
 
-    # ---- Load keys from .env.local --------------------------------
+    # ---- Load keys + password from .env.local (single source of truth) ----
+    local shell_pass="${OPENCODE_SERVER_PASSWORD:-}"
     if [ -f "$ENV_FILE" ]; then
         while IFS='=' read -r k v; do
             case "$k" in
                 DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
                 JEV_API_KEY)      JEV_API_KEY="$v" ;;
+                OPENCODE_SERVER_PASSWORD) OPENCODE_SERVER_PASSWORD="$v" ;;
             esac
         done < "$ENV_FILE"
-        export DEEPSEEK_API_KEY
-        export JEV_API_KEY
+        export DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD
         printf 'loaded %s\n' "$ENV_FILE"
     else
         printf 'WARN: %s not found; container will lack keys\n' "$ENV_FILE"
+    fi
+
+    if [ -n "$shell_pass" ] && [ -n "$OPENCODE_SERVER_PASSWORD" ] && [ "$shell_pass" != "$OPENCODE_SERVER_PASSWORD" ]; then
+        printf 'WARN: shell $OPENCODE_SERVER_PASSWORD differs from %s; using the file value\n' "$ENV_FILE"
     fi
 
     if [ -z "$DEEPSEEK_API_KEY" ]; then
@@ -130,7 +135,7 @@ main() {
     printf 'HTTP:     %s\n' "$code"
     if [ -n "$OPENCODE_SERVER_PASSWORD" ]; then
         printf 'Username: %s\n' "${OPENCODE_SERVER_USERNAME:-opencode}"
-        printf 'Password: (the value you exported)\n'
+        printf 'Password: (the value in %s)\n' "$ENV_FILE"
     else
         printf 'Auth:     none\n'
     fi

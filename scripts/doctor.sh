@@ -170,15 +170,16 @@ tier2() {
 
     DEEPSEEK_API_KEY=""
     JEV_API_KEY=""
+    OPENCODE_SERVER_PASSWORD=""
     while IFS='=' read -r k v; do
         case "$k" in
             DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
             JEV_API_KEY)      JEV_API_KEY="$v" ;;
+            OPENCODE_SERVER_PASSWORD) OPENCODE_SERVER_PASSWORD="$v" ;;
         esac
     done < "$ENV_FILE"
 
-    export DEEPSEEK_API_KEY
-    export JEV_API_KEY
+    export DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD
 
     if [ -n "$DEEPSEEK_API_KEY" ]; then
         pass "DEEPSEEK_API_KEY set (len ${#DEEPSEEK_API_KEY})"
@@ -189,6 +190,12 @@ tier2() {
         pass "JEV_API_KEY set (len ${#JEV_API_KEY})"
     else
         fail "JEV_API_KEY empty"
+    fi
+    if [ -n "$OPENCODE_SERVER_PASSWORD" ]; then
+        pass "OPENCODE_SERVER_PASSWORD set (len ${#OPENCODE_SERVER_PASSWORD})"
+    else
+        warn "OPENCODE_SERVER_PASSWORD empty" \
+             "web UI (port 4096) would run unauthenticated; set it in $ENV_FILE"
     fi
 }
 
