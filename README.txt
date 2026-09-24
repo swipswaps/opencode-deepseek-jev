@@ -76,12 +76,15 @@ DeepSeek balance.
 
 Live activity ("thinking")
 --------------------------
-    ./scripts/thinking.sh
+    ./scripts/thinking.sh            (terminal)
+    ./scripts/dashboard.sh           (web: http://127.0.0.1:5099)
 
-Tails the opencode database and prints what the agent is doing in real
-time: step boundaries, tool calls (with running/completed/error state
-and the command), reasoning text, and answer text. Polls every 2s by
-default (THINKING_POLL=1 for 1s). Runs in the container and on the host.
+thinking.sh tails the opencode database and prints what the agent is doing
+in real time: step boundaries, tool calls (with running/completed/error
+state and the command), reasoning text, and answer text. dashboard.sh is
+the same data in a read-only browser view, with cost cards and the todo
+list. Both poll the database (2s) and run in the container and on the
+host. Predictive cost: ./scripts/cost.sh --estimate IN OUT [REASONING].
 
 Jev functional proof
 --------------------

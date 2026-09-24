@@ -8,6 +8,12 @@
 #   T2  provider balance — DeepSeek GET /user/balance via curl.
 #   T3  Jev usage — jev_review invocation count (TypeSafe billing is
 #       separate and has no public balance API).
+#   T4  pricing + estimate — your effective blended $/1M-token rate,
+#       plus a projected cost for a planned run.
+#
+# Usage:
+#   ./scripts/cost.sh
+#   ./scripts/cost.sh --estimate 50000 8000 3000    (in out reasoning)
 #
 # Reads DEEPSEEK_API_KEY from .env.local (mode 0600). The key is never
 # printed. Works on the host and inside the container (the database is
@@ -123,7 +129,54 @@ NODE_EOF
     return 0
 }
 
+t4_estimate() {
+    section "T4  pricing + estimate"
+    local db="$REPO/data/opencode/opencode.db"
+    if [ ! -f "$db" ]; then
+        printf 'SKIP: no database at %s\n' "$db"
+        return 0
+    fi
+    if ! have node; then
+        printf 'SKIP: node required to read the database\n'
+        return 0
+    fi
+    node --no-warnings --experimental-sqlite - "$db" "$1" "$2" "$3" <<'NODE_EOF'
+const { DatabaseSync } = require("node:sqlite");
+const db = new DatabaseSync(process.argv[2], { readOnly: true });
+const s = db.prepare("SELECT COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r FROM session").get();
+const totalTokens = Number(s.i) + Number(s.o) + Number(s.r);
+const blendedPerM = totalTokens > 0 ? Number(s.c) / totalTokens * 1e6 : 0;
+console.log("effective blended rate = $" + blendedPerM.toFixed(2) + " per 1M tokens");
+console.log("  (derived from your own usage: $" + Number(s.c).toFixed(4) + " over " + totalTokens + " tokens)");
+const eIn = Number(process.argv[3] || 0);
+const eOut = Number(process.argv[4] || 0);
+const eReas = Number(process.argv[5] || 0);
+if (eIn || eOut || eReas) {
+    const tok = eIn + eOut + eReas;
+    const proj = tok * blendedPerM / 1e6;
+    console.log("projected run: in=" + eIn + " out=" + eOut + " reasoning=" + eReas + " (" + tok + " tokens)");
+    console.log("  estimated cost = $" + proj.toFixed(6));
+}
+console.log("note: blended rate is your actual $/token; published per-token");
+console.log("      rates differ. For a finer model, override DEEPSEEK_*_RATE env.");
+NODE_EOF
+    return 0
+}
+
 main() {
+    local est_in="" est_out="" est_reas="0"
+    if [ "${1:-}" = "--estimate" ]; then
+        if [ $# -lt 3 ]; then
+            printf 'usage: %s [--estimate IN OUT [REASONING]]\n' "$0"
+            return 2
+        fi
+        est_in="$2"; est_out="$3"
+        [ -n "${4:-}" ] && est_reas="$4"
+    elif [ -n "${1:-}" ]; then
+        printf 'usage: %s [--estimate IN OUT [REASONING]]\n' "$0"
+        return 2
+    fi
+
     REPO=$(resolve_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")
     [ -z "$REPO" ] && REPO=$(resolve_repo "$PWD")
     if [ -z "$REPO" ]; then
@@ -137,6 +190,7 @@ main() {
     t1_accounting
     t2_balance
     t3_jev_usage
+    t4_estimate "$est_in" "$est_out" "$est_reas"
     return 0
 }
 

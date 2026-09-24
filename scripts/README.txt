@@ -37,6 +37,14 @@ cost.sh
     endpoint, and a Jev usage count (jev_review invocations; TypeSafe has
     no public balance API). Reads DEEPSEEK_API_KEY from .env.local; never
     prints it. Works on the host and in the container.
+    --estimate IN OUT [REASONING] projects the cost of a planned run
+    using your effective blended $/token rate.
+
+dashboard.sh
+    Thin read-only observability sidecar. Serves cost cards, live activity
+    (step/tool/reasoning/text), and todos on http://127.0.0.1:5099
+    (DASH_PORT/DASH_HOST override). Reads the database read-only; no
+    docker, no external deps. Runs on the host or in the container.
 
 thinking.sh
     Live view of what the agent is doing while "thinking". Tails the
