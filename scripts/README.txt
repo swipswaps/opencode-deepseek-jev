@@ -45,6 +45,22 @@ dashboard.sh
     (step/tool/reasoning/text), and todos on http://127.0.0.1:5099
     (DASH_PORT/DASH_HOST override). Reads the database read-only; no
     docker, no external deps. Runs on the host or in the container.
+    /runbooks renders the operational runbooks; /api/runbooks is the data.
+
+runbook.sh
+    Host-side multiple-choice runner for the runbooks shown at
+    /runbooks on the dashboard. Reads the same scripts/runbooks.json the
+    dashboard serves, so the two never drift. No args = interactive menu;
+    --list = id|where|title; run <id> = one runbook. Runbooks flagged
+    "manual" (browser steps, long-running servers, secrets edits) are
+    displayed but not executed.
+
+test-dashboard.sh
+    End-to-end gate for dashboard.mjs: starts it on a scratch port and
+    asserts the served HTML, the /api/runbooks payload, and that the
+    inline browser script parses (node --check). The parse gate catches
+    escape regressions a substring grep would miss. Exits non-zero on
+    any failed assert.
 
 thinking.sh
     Live view of what the agent is doing while "thinking". Tails the

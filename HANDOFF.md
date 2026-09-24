@@ -25,7 +25,12 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `verify-password-drift.sh` | 4-gate password consistency check |
 | `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
+| `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
+| `test-dashboard.sh` | gate for dashboard.mjs (served HTML + `/api/runbooks` + inline-JS parse) |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
+
+`scripts/runbooks.json` is the single source for the dashboard `/runbooks`
+page and `runbook.sh`; edit it once to change either.
 
 ## Architecture gotchas
 - **Host vs container.** `scripts/archive/one-shot/*` call `docker` (host only);

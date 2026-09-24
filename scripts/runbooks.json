@@ -1,0 +1,81 @@
+[
+  {
+    "id": "rotate-password",
+    "title": "Rotate server password",
+    "purpose": "Replace OPENCODE_SERVER_PASSWORD (its live value was echoed by docker compose config).",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "python3 -c 'import secrets; print(\"OPENCODE_SERVER_PASSWORD=\" + secrets.token_hex(24))'",
+      "./scripts/web.sh",
+      "./scripts/archive/one-shot/verify-password-drift.sh"
+    ],
+    "note": "Manual: paste the generated line over the OPENCODE_SERVER_PASSWORD line in .env.local (mode 0600), then reload and verify."
+  },
+  {
+    "id": "litellm",
+    "title": "Deploy LiteLLM (hard cost caps)",
+    "purpose": "Run the LiteLLM proxy in front of DeepSeek to enforce max_budget and get a unified cost view.",
+    "where": "host",
+    "commands": [
+      "docker compose -f docker/docker-compose.litellm.yml config",
+      "cd docker && docker compose -f docker-compose.litellm.yml up -d"
+    ],
+    "note": "Proxy listens on http://127.0.0.1:4000. To route the agent through it, point opencode.json baseURL at http://127.0.0.1:4000/v1."
+  },
+  {
+    "id": "laya",
+    "title": "Self-host Laya + A/B vs Jev",
+    "purpose": "Stand up the open-weights Jev-compatible server, then diff the same payload against TypeSafe Jev.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "pip install \"laya[serve]\"",
+      "laya-serve",
+      "./scripts/test-jev-laya-ab.sh"
+    ],
+    "note": "Manual: laya-serve is long-running; run it in its own terminal (POST /v1/systemone on http://127.0.0.1:8000), then run the A/B test."
+  },
+  {
+    "id": "rotate-api-keys",
+    "title": "Rotate API keys (DeepSeek + Jev)",
+    "purpose": "Guided browser rotation of DEEPSEEK_API_KEY and JEV_API_KEY, then recreate and smoke-test.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "./scripts/archive/one-shot/rotate-api-keys.sh",
+      "./scripts/archive/one-shot/verify-password-drift.sh"
+    ],
+    "note": "Manual: completes browser steps at platform.deepseek.com and console.typesafe.ai, then writes .env.local and recreates the container."
+  },
+  {
+    "id": "doctor",
+    "title": "Health check",
+    "purpose": "Full health gate; --full (Tier 9) runs the Jev functional proof.",
+    "where": "host",
+    "commands": [
+      "./scripts/doctor.sh --full"
+    ],
+    "note": ""
+  },
+  {
+    "id": "audit",
+    "title": "Config audit (actual vs expected)",
+    "purpose": "Diff live settings against expected; lists a remediation hint per drift.",
+    "where": "container",
+    "commands": [
+      "./scripts/audit-config.sh --json"
+    ],
+    "note": "Also runs server-side for the dashboard config card."
+  },
+  {
+    "id": "cost",
+    "title": "Cost / balance / Jev count",
+    "purpose": "DeepSeek balance + per-session cost from the DB + Jev invocation count.",
+    "where": "container",
+    "commands": [
+      "./scripts/cost.sh --estimate IN OUT REASONING"
+    ],
+    "note": "Input tokens (context) are the cost driver."
+  }
+]

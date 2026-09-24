@@ -18,10 +18,15 @@
 import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
 const host = process.argv[4] || "127.0.0.1";
+
+const RUNBOOKS = JSON.parse(
+  readFileSync(new URL("./runbooks.json", import.meta.url), "utf8")
+);
 
 if (!dbPath) {
   console.error("usage: node dashboard.mjs <db-path> [port] [host]");
@@ -224,7 +229,7 @@ const html = `<!doctype html>
  #session{font-size:13px;margin-bottom:4px}
 </style></head>
 <body>
-<h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a></h1>
+<h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
 <div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"></div></div>
@@ -326,7 +331,7 @@ const vizHtml = `<!doctype html>
  .tip{position:absolute;background:#21262d;border:1px solid #30363d;padding:6px 8px;border-radius:4px;font-size:12px;pointer-events:none;opacity:0;max-width:420px}
 </style></head>
 <body>
-<h1>opencode viz &nbsp;<a href="/">[dashboard]</a> <a href="/api/export">[export csv]</a></h1>
+<h1>opencode viz &nbsp;<a href="/">[dashboard]</a> <a href="/api/export">[export csv]</a> <a href="/runbooks">[runbooks]</a></h1>
 <h2>Sessions over time — bar color = cost</h2>
 <div class="chart" id="gantt"></div>
 <h2>Part timeline — <span id="tl-title">latest session</span> <a href="#" onclick="renderTimeline(null,null);return false;">[reset]</a></h2>
@@ -434,6 +439,82 @@ async function renderCloud(){
 renderGantt();renderTimeline();renderCloud();
 </script></body></html>`;
 
+const runbooksHtml = `<!doctype html>
+<html><head><meta charset="utf-8"><title>opencode runbooks</title>
+<style>
+ body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
+ h1{font-size:18px;margin:0 0 8px}
+ a{color:#58a6ff;text-decoration:none;font-size:13px}
+ .muted{color:#8b949e}
+ .bar{display:flex;align-items:center;gap:10px;margin:10px 0}
+ select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px}
+ .card{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;margin:10px 0}
+ .rb-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+ .rb-title{font-weight:600;font-size:14px}
+ .badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px}
+ .badge.HOST{background:#b6232433;color:#ff7b72}
+ .badge.CONTAINER{background:#2ea04333;color:#7ee787}
+ .rb-purpose{font-size:12px;color:#8b949e;margin-bottom:6px}
+ .cmd{display:flex;gap:8px;align-items:flex-start;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:6px 8px;margin:0 0 6px}
+ .cmd code{flex:1;white-space:pre-wrap;word-break:break-word;font-size:12px}
+ .badge.MANUAL{background:#9e6a0333;color:#e3b341}
+ .count{font-size:11px}
+ button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+ button:hover{background:#2f81f7}
+ .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
+</style></head>
+<body>
+<h1>opencode runbooks <a href="/">[dashboard]</a> <a href="/viz">[charts]</a> <a href="/api/export">[csv]</a></h1>
+<div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
+<div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option></select></div>
+<div id="count" class="muted count"></div>
+<div id="list"></div>
+<script>
+var RUNBOOKS=[];
+function render(){
+  var f=document.getElementById('f').value;
+  var el=document.getElementById('list');el.innerHTML='';
+  var shown=0;
+  for(var i=0;i<RUNBOOKS.length;i++){
+    var r=RUNBOOKS[i];
+    if(f!=='all'&&r.where!==f)continue;
+    shown++;
+    var card=document.createElement('div');card.className='card';
+    var head=document.createElement('div');head.className='rb-head';
+    var t=document.createElement('span');t.className='rb-title';t.textContent=r.title;
+    var b=document.createElement('span');b.className='badge '+(r.where==='host'?'HOST':'CONTAINER');b.textContent=r.where.toUpperCase();
+    head.appendChild(t);head.appendChild(b);
+    card.appendChild(head);
+    var p=document.createElement('div');p.className='rb-purpose';p.textContent=r.purpose;
+    card.appendChild(p);
+    if(r.manual){var mb=document.createElement('span');mb.className='badge MANUAL';mb.textContent='MANUAL';head.appendChild(mb);}
+    for(var j=0;j<r.commands.length;j++){
+      var row=document.createElement('div');row.className='cmd';
+      var code=document.createElement('code');code.textContent=r.commands[j];
+      var btn=document.createElement('button');btn.textContent='copy';btn.dataset.cmd=r.commands[j];btn.setAttribute('aria-label','copy command');
+      btn.addEventListener('click',function(){copy(this.dataset.cmd,this);});
+      row.appendChild(code);row.appendChild(btn);
+      card.appendChild(row);
+    }
+    if(r.note){var n=document.createElement('div');n.className='rb-note';n.textContent=r.note;card.appendChild(n);}
+    el.appendChild(card);
+  }
+  document.getElementById('count').textContent=shown+' of '+RUNBOOKS.length+' runbooks';
+}
+function copy(text,btn){
+  function done(){btn.textContent='copied';setTimeout(function(){btn.textContent='copy';},1200);}
+  function fallback(){
+    var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta);done();
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);}
+  else{fallback();}
+}
+document.getElementById('f').addEventListener('change',render);
+fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNBOOKS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(runbooks unavailable)</div>';});
+</script></body></html>`;
+
 function send(res, code, body, type) {
   res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" });
   res.end(body);
@@ -446,6 +527,10 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, html, "text/html; charset=utf-8");
   } else if (url === "/viz") {
     send(res, 200, vizHtml, "text/html; charset=utf-8");
+  } else if (url === "/runbooks") {
+    send(res, 200, runbooksHtml, "text/html; charset=utf-8");
+  } else if (url === "/api/runbooks") {
+    send(res, 200, JSON.stringify(RUNBOOKS), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {
