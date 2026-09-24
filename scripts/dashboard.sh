@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 #
 # dashboard.sh — thin read-only observability sidecar for the opencode
-# database. Serves cost, live activity, and todos on a local port.
+# database. Serves cost, balance, live activity, and todos on a local port.
 #
 # Usage:
 #   ./scripts/dashboard.sh              serves on http://127.0.0.1:5099
-#   DASH_PORT=6000 ./scripts/dashboard.sh
+#   DASH_PORT=8080 ./scripts/dashboard.sh
 #   DASH_HOST=0.0.0.0 ./scripts/dashboard.sh   (only if you know why)
+#
+# Port note: Firefox blocks a hard-coded list of non-web ports (6000-6010
+# X11, 6665-6669, 6697, 10080, etc.). The default 5099 is safe; if you
+# override DASH_PORT, avoid that list or use 8080/3000/etc.
 #
 # Read-only; no docker. Runs on the host or inside the container (the
 # database is mounted at data/opencode/opencode.db from either side).
@@ -50,6 +54,14 @@ main() {
 
     local port="${DASH_PORT:-5099}"
     local host="${DASH_HOST:-127.0.0.1}"
+
+    # Balance card: expose DEEPSEEK_API_KEY to the server if not already set.
+    if [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -f "$REPO/.env.local" ]; then
+        while IFS='=' read -r k v; do
+            [ "$k" = "DEEPSEEK_API_KEY" ] && DEEPSEEK_API_KEY="$v"
+        done < "$REPO/.env.local"
+        export DEEPSEEK_API_KEY
+    fi
 
     printf '=== dashboard.sh ===\n'
     printf 'Serving: http://%s:%s\n' "$host" "$port"
