@@ -11,10 +11,9 @@ Last updated: 2026-09-25
 - **Guard not loaded yet.** `data/observability/guard.log` stays empty until
   `opencode-web` restarts; the `/explore` guard panel says so. *Action:* restart
   the container once, then confirm a blocked `sed` and a fixed `2>/dev/null`.
-- **Model not pinned (user action).** Sessions still run `deepseek-v4-pro`
-  (2.9×). `opencode.json` says `deepseek-flash`; a global/UI selection overrides
-  it. *Action:* `/models` → `deepseek-flash`, or fix
-  `~/.config/opencode/opencode.jsonc`.
+- **Model pinning — resolved 2026-09-25.** `opencode.json` and the last
+  session both show `deepseek-flash`; balance topped up to $10.64. `preflight.sh`
+  now fails closed if a non-flash model reappears.
 - **Word cloud was orphaned** (`renderCloud`/`apiWords`/`/api/words` defined,
   never rendered). *Fixed this session;* hook is now in the charts tab.
 - **`session_context_epoch` (0 rows)** and account/credential tables have no
@@ -51,7 +50,8 @@ Last updated: 2026-09-25
 - [ ] prompt cache-hit report (`opencode stats --models`)
 
 ### G5 security / ops
-- [ ] Laya self-host (runbook exists)
+- [ ] Laya self-host (runbook exists) — a Laya→Jev cascade cuts Jev calls, but
+      Jev is only ~11 calls and Laya does NOT cut DeepSeek; pin flash first
 - [ ] embeddings rerank over FTS5 + redaction pass + hard request cap
 
 ### G6 quality
@@ -60,6 +60,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] `preflight.sh` — fail-closed spend gate (keys, last gate result, balance,
+      model); `harness.sh` records `data/observability/last-gate.json`
 - [x] audited unused capabilities: word-cloud restored to `/explore ▸ charts`;
       `data-od-id` review hooks on session rows
 - [x] `DESIGN.md` design tokens + Material-influenced theme (one accent, 8px

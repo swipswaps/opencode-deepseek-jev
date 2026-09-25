@@ -164,7 +164,30 @@ main() {
         bad 'DESIGN.md present'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt"
+    if [ -x "$REPO/scripts/preflight.sh" ]; then
+        "$REPO/scripts/preflight.sh" --json > "$work/pf.txt" 2>&1
+        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "ready" in d and "critical" in d' "$work/pf.txt"; then
+            ok 'preflight.sh --json valid'
+        else
+            bad 'preflight.sh --json valid'
+            cat "$work/pf.txt"
+        fi
+    else
+        bad 'preflight.sh present + executable'
+    fi
+
+    if [ -x "$REPO/scripts/learn-rules.py" ]; then
+        if "$REPO/scripts/learn-rules.py" --self-test > "$work/lr.txt" 2>&1; then
+            ok 'learn-rules: self-test'
+        else
+            bad 'learn-rules: self-test'
+            cat "$work/lr.txt"
+        fi
+    else
+        bad 'learn-rules.py present + executable'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

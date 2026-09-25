@@ -58,8 +58,10 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `issue-solutions.py` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call in the session), ranked with the log evidence — free, local, no model call |
+| `learn-rules.py [--since-days N] [--write]` | contrastive corpus learning: state (error) → action shape → outcome; emits advisory avoid/prefer/recovery rules to `data/observability/learned-rules.json` |
 | `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
 | `harness.sh [--fast] [--export]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a timestamped report. `--fast` skips the slow dashboard gate |
+| `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
@@ -195,6 +197,35 @@ n-grams)" candidate — no new capture needed.**
 - **Pinned supply chain:** base image digest, opencode `1.18.32`,
   `jev-guard@0.3.1`, jev-review commit `3fb6042e`.
 
+### Avoiding spend while a gate is red (fail closed)
+
+`harness.sh` records `data/observability/last-gate.json`; `preflight.sh`
+reads it and refuses (exit 1) unless every critical check passes: keys
+present, **last gate run passed**, balance ≥ `MIN_BALANCE` ($1.00 default),
+and the model is `deepseek-flash`. Run `preflight.sh` before any paid session
+— cheaper than discovering a red gate after spending. Best practice, in
+order: gate on a cheap local signal, fail closed, check the cheapest signal
+first, never retry blind (capture `logs.sh` output before retrying).
+
+### Laya before Jev — what it does and does not save
+
+"Laya before Jev" is a **cascade** (try self-hosted Laya first, escalate to
+hosted Jev on low confidence/error). It reduces **Jev/TypeSafe** calls, and
+Jev has no public balance API, so the saving is real but small here: only
+**11 jev-review invocations** exist in total. It does **not** reduce DeepSeek
+cost — Laya is a Jev-API-compatible *classifier*, not a chat model, so it
+never replaces the agent's completions. The two levers are independent:
+
+| lever | cuts | size in this repo |
+| ----- | ---- | ----------------- |
+| pin `deepseek-flash` | DeepSeek chat | large (v4-pro was 75% of $2.04) |
+| Laya-before-Jev cascade | Jev/TypeSafe | small (11 calls) |
+| LiteLLM `max_budget` | hard cap on DeepSeek | guardrail, not a cut |
+| prompt cache + fewer turns | DeepSeek input | already 226M cache-read |
+
+So: pin flash first; wire the LiteLLM cap; only then invest in the Laya
+cascade (its real payoff is on-prem / no-TypeSafe, not dollars).
+
 ### Context & cost optimization — tools to add
 
 Local tool-use that shrinks what is sent to the API (the actual lever once the
@@ -304,6 +335,44 @@ gate outputs, `git diff --stat`, the exact commands run.
 ## Out of scope
 <what not to touch>
 ```
+
+## Corpus learning — why, not just which
+
+Depth of learning, three tiers:
+
+1. **Which** (memoisation). `harness.sh` records
+   `data/observability/last-gate.json`; `preflight.sh` reads it instead of
+   re-running the gates. The rule is "don't re-derive what you already proved."
+   Generalised: content-address the *inputs* (repo tree hash + gate
+   definitions) → store the outcome → reuse when the hash matches → invalidate
+   when it changes. That is a **proof cache**, and it is what stops re-spending
+   API calls to re-learn an unchanged result.
+2. **Which, ranked** (descriptive). `test-patterns.sh` (n-grams) and
+   `audit-tool-calls.py` count recurring shapes. They say *what* recurs, not
+   *why*.
+3. **Why** (causal-ish). `learn-rules.py` builds contrastive triples from the
+   log — **(state, action, outcome)** — where state is the error signature that
+   just fired, action is the shape of the next call, outcome is whether that
+   call completed. Aggregated, a shape that recovers a state is a *prefer*
+   rule; a shape that fails is an *avoid* rule. Same-state/different-action
+   comparison is what separates "this failed" from "this fails, and *that*
+   works instead."
+
+**Deterministic circumvention is not a prompt.** You cannot make an LLM
+reliably obey a remembered rule. So the learned rule is pushed into the
+*harness*, not the context: `learn-rules.py` writes rules → the guard reads
+`learned-rules.json` and records `learned` advisories on avoid shapes →
+a human promotes a confirmed pattern into `RULES.md` / the fixed blacklist →
+the guard blocks it deterministically. The corpus supplies evidence; the
+harness supplies enforcement; the person supplies the decision. Recency
+(`--since-days`) keeps a stale pattern (e.g. a rotated key) from being enforced
+forever.
+
+Pointed at many chat logs paired with repo code, the same shape works, one
+layer down: extract the patch/command that accompanied each outcome, cluster by
+the pre-state, and rank. The scope that is *not* built here is the repo-code
+half (pairing diffs to outcomes); the tool-action half already runs. A visual
+builder (n8n / Blockly-style) would be the authoring surface over these rules.
 
 ## Local tool-use options (ranked by efficacy)
 

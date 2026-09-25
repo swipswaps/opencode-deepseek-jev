@@ -130,7 +130,25 @@ harness.sh
     headline and the TODO "in flight" list, and prints a summary. --fast
     skips the slow dashboard gate; --export writes logs/harness-<UTC>.md.
     Robust: a failing gate is reported and the run continues; a missing gate
-    is SKIP, not pass. Exits non-zero only if a gate failed.
+    is SKIP, not pass. Exits non-zero only if a gate failed. Records
+    data/observability/last-gate.json for preflight.sh.
+
+preflight.sh
+    Fail-closed spend gate. Refuses (exit 1) unless: the repo and database
+    exist, .env.local has all three keys, the last harness.sh gate run passed,
+    the DeepSeek balance is >= MIN_BALANCE ($1.00 default), and the model is
+    deepseek-flash (config and last session). --json for a wrapper/plugin;
+    --allow-pro skips the model checks. Run it before any paid session.
+
+learn-rules.py
+    Contrastive corpus learning. From the tool-call log it builds (state,
+    action, outcome) triples — the error signature, the shape of the next
+    call, and whether it completed — and emits advisory avoid / prefer /
+    recovery rules to data/observability/learned-rules.json. The guard reads
+    those and records 'learned' advisories; nothing is blocked until a human
+    promotes a confirmed pattern into RULES.md / the fixed blacklist.
+    --since-days N bounds the window (a rotated key must not be enforced
+    forever); --write persists; --self-test.
 
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs

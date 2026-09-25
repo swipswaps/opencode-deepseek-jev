@@ -32,7 +32,7 @@
 
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 
 const RULES = [
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
@@ -124,10 +124,50 @@ export const BlacklistGuard = async ({ client, directory }) => {
     }
   }
 
+  // Learned rules (scripts/learn-rules.py --write): shapes with a high
+  // historical failure rate. Advisory only — warn + record, never block. A
+  // human promotes a confirmed pattern into RULES.md / the fixed blacklist to
+  // make it deterministic. Disable with OPENCODE_LEARNED_GUARD=off.
+  const GUARD_LEARNED = (directory ? String(directory).replace(/\/+$/, "") : ".") + "/data/observability/learned-rules.json";
+  let learnedCache = { at: 0, set: new Set() };
+  function avoidShapes() {
+    if (Date.now() - learnedCache.at < 30000) return learnedCache.set;
+    const set = new Set();
+    try {
+      const j = JSON.parse(readFileSync(GUARD_LEARNED, "utf8"));
+      for (const x of (j.avoid || [])) if (x && x.shape) set.add(x.shape);
+    } catch {
+      // no rules yet / unreadable — no advisory
+    }
+    learnedCache = { at: Date.now(), set };
+    return set;
+  }
+  function commandShape(tool, command) {
+    if (tool === "bash" && command) {
+      for (const tok of String(command).trim().split(/\s+/)) {
+        if (tok.includes("=") && !tok.startsWith("-")) continue;
+        return tok;
+      }
+      return "bash";
+    }
+    return tool || "?";
+  }
+  async function learnedAdvisory(input, output) {
+    if (process.env.OPENCODE_LEARNED_GUARD === "off") return;
+    const set = avoidShapes();
+    if (!set.size) return;
+    const sh = commandShape(input.tool, output && output.args && output.args.command);
+    if (!set.has(sh)) return;
+    await log("warn", "learned-avoid shape (advisory)", { shape: sh });
+    record("learned", "advisory: shape has a high historical failure rate", { shape: sh });
+  }
+
   return {
     "tool.execute.before": async (input, output) => {
       const m = mode();
       if (m === "off") return;
+
+      try { await learnedAdvisory(input, output); } catch { /* advisory only */ }
 
       if (input.tool === "write" || input.tool === "edit") {
         // subprocess.run is Python source, so in bash it is always inside a

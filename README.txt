@@ -247,6 +247,14 @@ opencode.log), `system` (docker logs; host only), `packet` (the exact
 tcpdump command). Use it when a step is slow or output looks empty — the
 `ms=` telemetry names the slow check; `logs.sh` shows why.
 
+`learn-rules.py` goes a step further: it builds **(state, action, outcome)**
+triples from the log — the error signature, the shape of the next call, and
+whether it completed — and emits advisory *avoid* / *prefer* / *recovery*
+rules to data/observability/learned-rules.json. Run it with `--since-days` so
+a stale pattern expires. The guard reads the rules and records `learned`
+advisories; nothing is blocked until a confirmed pattern is promoted into
+RULES.md / the guard's fixed blacklist. Learn → review → codify → enforce.
+
 `TODO.md` is the running backlog: HANDOFF.md is the durable state, TODO.md is
 the queue. Update both at the end of a session.
 
@@ -275,6 +283,21 @@ live telemetry (guard actions + tool errors), the cost headline and the
 TODO "in flight" list, and prints a summary. `--fast` skips the slow dashboard
 gate; `--export` writes a timestamped report to logs/. Robust: a failing gate
 is reported and the run continues.
+
+Before spending on a session, run the fail-closed spend gate:
+
+    ./scripts/preflight.sh          # exit 1 = do NOT spend until resolved
+
+It checks keys, the last `harness.sh` gate result
+(data/observability/last-gate.json), the DeepSeek balance (`MIN_BALANCE`,
+default $1.00) and the model, and stops if any are wrong. Best practice for
+"avoid API spend while a gate is red": gate on a cheap local signal, fail
+closed, and capture `logs.sh` output before any retry so a retry is not blind.
+
+"Laya before Jev" (self-hosted Laya first, hosted Jev on escalation) cuts
+Jev/TypeSafe calls — small here (11 jev-review invocations total). It does not
+cut DeepSeek: Laya is a Jev-compatible classifier, not a chat model. The big
+lever is pinning `deepseek-flash` (v4-pro was 75% of spend).
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·

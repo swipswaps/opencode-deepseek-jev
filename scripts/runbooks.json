@@ -170,5 +170,17 @@
       "./scripts/harness.sh --export"
     ],
     "note": "Robust: a failing gate is reported and the run continues; a missing gate is SKIP. --fast skips the slow dashboard gate; --export writes logs/harness-<UTC>.md. test-dashboard.sh already runs lint.sh and test-hygiene.sh."
+  },
+  {
+    "id": "preflight",
+    "title": "Pre-flight: spend gate (fail closed)",
+    "purpose": "Cheap local check that must pass before any paid session: keys, last gate result, balance, model. Fails closed so API spend stops until resolved.",
+    "where": "container",
+    "commands": [
+      "./scripts/harness.sh",
+      "./scripts/preflight.sh",
+      "./scripts/preflight.sh --json"
+    ],
+    "note": "Run harness.sh first: it records data/observability/last-gate.json, which preflight reads. preflight also reads the DeepSeek balance (one free GET). MIN_BALANCE env overrides the $1.00 floor; --allow-pro skips the model checks."
   }
 ]

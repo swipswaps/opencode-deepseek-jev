@@ -102,6 +102,11 @@ main() {
         run_gate test-dashboard
     fi
 
+    if [ -x "$REPO/scripts/learn-rules.py" ]; then
+        section "learned rules (corpus -> data/observability/learned-rules.json)"
+        "$REPO/scripts/learn-rules.py" --since-days 30 --write 2>&1 | head -n 18
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         section "telemetry (signal: guard + errors)"
         "$REPO/scripts/logs.sh" --source signal --tail 8
@@ -116,6 +121,10 @@ main() {
         section "todo — in flight"
         grep -E '^- \[~\]' "$REPO/TODO.md" || printf '(none in flight)\n'
     fi
+
+    mkdir -p "$REPO/data/observability"
+    printf '{"ts":"%s","passed":%d,"failed":%d}\n' "$TS" "$PASS_GATES" "$FAILED_GATES" \
+        > "$REPO/data/observability/last-gate.json"
 
     section "summary"
     printf 'gates passed: %d   gates failed: %d\n' "$PASS_GATES" "$FAILED_GATES"

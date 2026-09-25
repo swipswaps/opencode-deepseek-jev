@@ -4,7 +4,7 @@
 // under test do not trip lint.sh's RULES grep over scripts/*.sh. The plugin
 // file is ESM (see .opencode/package.json {"type":"module"}).
 import { inspect, stripQuotes, remediate2devnull, BlacklistGuard } from "../.opencode/plugins/blacklist-guard.js";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 
 const has = (cmd, name) => inspect(cmd).some((h) => h.name === name);
 
@@ -55,6 +55,8 @@ for (const [name, ok] of rfix) {
 // End-to-end: the hook rewrites/throws AND records to guard.log (temp dir).
 const tmp = "/tmp/opencode/guardtest";
 try { rmSync(tmp, { recursive: true, force: true }); } catch {}
+mkdirSync(tmp + "/data/observability", { recursive: true });
+writeFileSync(tmp + "/data/observability/learned-rules.json", JSON.stringify({ avoid: [{ shape: "ls" }] }));
 const hooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp });
 const before = hooks["tool.execute.before"];
 const o1 = { args: { command: "ls /nope 2>/dev/null" } };
@@ -68,6 +70,7 @@ const hookChecks = [
   ["hook throws on sed", threw],
   ["guard.log records a fix", logText.includes('"verdict":"fix"')],
   ["guard.log records a block", logText.includes('"verdict":"block"')],
+  ["guard.log records a learned advisory", logText.includes('"verdict":"learned"')],
 ];
 for (const [name, ok] of hookChecks) {
   if (!ok) fail++;
