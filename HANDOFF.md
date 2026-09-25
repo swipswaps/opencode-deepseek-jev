@@ -61,7 +61,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
-| `issue-solutions.py` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call in the session), ranked with the log evidence — free, local, no model call |
+| `issue-solutions.py [--write]` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call); `--write` persists `data/observability/solutions.json` served at `/api/solutions` — free, local |
 | `learn-rules.py [--since-days N] [--write]` | contrastive corpus learning: state (error) → action shape → outcome; emits advisory avoid/prefer/recovery rules to `data/observability/learned-rules.json` |
 | `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
 | `harness.sh [--fast] [--export]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a timestamped report. `--fast` skips the slow dashboard gate |
@@ -102,7 +102,8 @@ sortable/filterable sessions table, a **duplicate-grouping** view
 panel (`/api/ab`), and the database map (`/api/schema`). **signals**: error
 tool calls, error signatures, rule mentions, patch churn (`/api/signals`) +
 the blacklist-guard panel (`/api/guard`). **patterns**: tool-sequence bigrams
-and error tools (`/api/patterns`; the view over `test-patterns.sh`'s data).
+and error tools (`/api/patterns`; the view over `test-patterns.sh`'s data)
+plus known fixes (`/api/solutions`, from `issue-solutions.py --write`).
 **ocr**: screenshot text (`/api/ocr`, also folded into `/api/semantic`, CSV
 at `/api/export/ocr`). **charts**: cost treemap, brushable burn-down (linked
 to treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey,

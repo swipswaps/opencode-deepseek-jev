@@ -33,9 +33,20 @@ Last updated: 2026-09-25
 
 ## In flight
 
-- [~] **G2 learning loop** — `issue-solutions.py` landed; next: persist a
-      solution library and show a "known fix" hint on `/explore`.
-- [~] **harness.sh** — next: wire `doctor.sh` (fast) and an optional `--json`.
+- [~] **harness.sh** — next: an optional `--json` output (see the segmented plan).
+
+## Segmented plan (do not balloon)
+
+- **Segment A — local, doable now (this lane):** learning loop closed
+  (`issue-solutions --write` + `/api/solutions`); patterns view; cache report.
+- **Segment B — doable, needs a host/test:** wire `doctor.sh --full` to run
+  `test-hygiene`/`test-patterns` (doctor is docker-coupled, so it cannot be
+  tested in-container); `harness.sh --json`.
+- **Segment C — doable code, larger:** fuzzy code search
+  (`semantic-search.sh` trigram/`difflib` rerank over the FTS5 candidates).
+- **Segment D — external / host / new deps (not doable in-container):**
+  perspective WASM, Plot/Vega-Lite libs, LiteLLM `max_budget` (proxy up),
+  Laya, embeddings rerank, Blockly, n8n. Each is its own session; do not batch.
 
 ## Queue (ranked, top first)
 
@@ -65,6 +76,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] solution library: `issue-solutions.py --write` → data/observability/solutions.json;
+      `/api/solutions` + a "known fixes" list on `/explore ▸ patterns`
 - [x] patterns view: `/api/patterns` + `/explore ▸ patterns` tab (bigrams +
       error tools), gated
 - [x] prompt cache-hit report in `cost-bottlenecks.sh` (99.0% overall)

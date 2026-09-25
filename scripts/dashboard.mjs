@@ -91,6 +91,14 @@ function apiModels() {
   }
 }
 
+function apiSolutions() {
+  try {
+    return JSON.parse(readFileSync(new URL("../data/observability/solutions.json", import.meta.url), "utf8"));
+  } catch {
+    return { available: false, issues: [] };
+  }
+}
+
 if (!dbPath) {
   console.error("usage: node dashboard.mjs <db-path> [port] [host]");
   process.exit(2);
@@ -1065,6 +1073,12 @@ async function renderPatterns(){
     for(var k=0;k<d.errorTools.length;k++){var e=d.errorTools[k];
       h+='<div class="item"><span class="tag">error</span>'+esc(e.tool)+' x'+e.n+'</div>';}
   }
+  var s=await j('/api/solutions');
+  if(s&&s.issues&&s.issues.length){
+    h+='<div class="muted" style="font-size:12px;margin-top:10px">known fixes — issue &rarr; next successful action</div>';
+    for(var z=0;z<Math.min(5,s.issues.length);z++){var it=s.issues[z];var fx=(it.fixes&&it.fixes[0])||{};
+      h+='<div class="item"><span class="tag">fix</span>'+esc(String(it.signature||'').slice(0,60))+' &rarr; '+esc(fx.tool||'?')+' '+esc(String(fx.command||'').slice(0,50))+'</div>';}
+  }
   el.html(h);
 }
 async function renderGuard(){
@@ -1541,6 +1555,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, modelsHtml, "text/html; charset=utf-8");
   } else if (url === "/api/models") {
     send(res, 200, JSON.stringify(apiModels()), "application/json");
+  } else if (url === "/api/solutions") {
+    send(res, 200, JSON.stringify(apiSolutions()), "application/json");
   } else if (url === "/api/doc") {
     const body = apiDoc(params.name);
     if (body == null) {

@@ -239,6 +239,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
         curl -s "http://$HOST:$PORT/api/patterns" > "$work/pat.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
+        curl -s "http://$HOST:$PORT/api/solutions" > "$work/sol.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("issues"),list) or d.get("available") is False else 1)' "$work/sol.json" && ok 'api/solutions' || bad 'api/solutions'
         curl -s "http://$HOST:$PORT/api/ocr" > "$work/ocr.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
         curl -s "http://$HOST:$PORT/api/duplicates" > "$work/dupes.json"

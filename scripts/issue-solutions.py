@@ -33,6 +33,7 @@ import re
 import sqlite3
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 NUMBER_RE = re.compile(r"\d+")
@@ -180,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--recent", type=int, default=None)
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--write", action="store_true",
+                    help="persist data/observability/solutions.json for the UI")
     ap.add_argument("--db", type=Path, default=None)
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
@@ -197,6 +200,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     result = mine(load_parts(db_path, args.recent))
+    result["ts"] = datetime.now(timezone.utc).isoformat()
+    if args.write:
+        out = repo / "data" / "observability" / "solutions.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2) + "\n")
+        print(f"wrote {out}")
     if args.json:
         print(json.dumps(result, indent=2))
     else:

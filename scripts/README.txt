@@ -113,7 +113,9 @@ issue-solutions.py
     with the next completed call in the same session, normalises the error
     into a signature, and ranks the (issue, fix) pairs. Free, local, no
     model call; read-only over data/opencode/opencode.db. --recent N,
-    --top N, --json, --self-test.
+    --top N, --json, --write (persists data/observability/solutions.json for
+    the /api/solutions endpoint and the "known fixes" list on /explore),
+    --self-test.
 
 logs.sh
     Aggregate actionable telemetry, local and read-only. Sources: guard

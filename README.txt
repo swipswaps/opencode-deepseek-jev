@@ -237,7 +237,9 @@ read-only and pairs each error tool call with the next completed call in the
 same session, then ranks the recurring (issue, fix) pairs with the log
 evidence. Example output: "JEV_API_KEY rejected" x8 -> the env/`.env.local`
 checks that fixed it; "Could not find oldString" x4 -> the grep that located
-the real text.
+the real text. Run it with `--write` to persist
+data/observability/solutions.json, served at /api/solutions and shown as
+"known fixes" on /explore ▸ patterns.
 
 `logs.sh` is the raw layer behind that: `--source guard` (every blacklist
 block/fix/warn the agent's own "Thinking" triggered, from
@@ -343,7 +345,8 @@ patterns · ocr) instead of one long page:
     keys (/api/schema).
   - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts.
   - Jev vs Laya A/B: persisted runs (/api/ab), latency + correctness.
-  - Patterns: tool-sequence bigrams and error tools (/api/patterns).
+  - Patterns: tool-sequence bigrams and error tools (/api/patterns), plus
+    known fixes (/api/solutions, from issue-solutions.py --write).
   - Signals: error tool calls, rule mentions, churn, and the guard panel.
   - Charts: cost treemap, brushable burn-down, latency×cost scatter,
     token-flow Sankey, part timeline, word cloud.
