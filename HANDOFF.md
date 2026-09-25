@@ -52,6 +52,21 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
 page and `runbook.sh`; edit it once to change either.
 
+### Built-in opencode tools (use these before writing new scripts)
+
+| Command | Gives |
+|---------|-------|
+| `opencode stats --models` | per-model + total cost/token breakdown (cost transparency) |
+| `opencode models [provider] --verbose` | per-model pricing (input/output/cache) + context limit |
+| `opencode db path` · `opencode db "SQL"` | the DB path · run SQL directly (no custom read layer needed) |
+| `opencode session list` / `export <id>` | session management · full session JSON |
+| `opencode run -m deepseek/deepseek-flash "…"` | pin the model for one run (cost routing) |
+
+2026-09-25 `opencode stats --models`: v4-pro **$1.69** vs flash **$0.65** vs
+`opencode/muse-spark-1.3-contributor-free` **$0.00** (29 msgs / 543.8K in).
+`opencode models deepseek --verbose`: v4-pro input **$0.435/1M** vs flash
+**$0.15/1M** (2.9×). Cache read is doing real work (226M tokens).
+
 The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
@@ -135,10 +150,18 @@ n-grams)" candidate — no new capture needed.**
   2026-09-25 `deepseek-v4-pro` ran just 3 "audit/handoff" sessions for
   **$2.15 = ~94%** of all spend, while `deepseek-flash` (the `opencode.json`
   default) ran 30 sessions for $0.14. If the balance drops fast, run
-  `cost-bottlenecks.sh` (new "model mix check") and switch the agent back to
-  `deepseek-flash` — a non-flash reasoning model re-prices the whole context
-  every turn. This session has been running on `deepseek-v4-pro`, which is
-  itself the cost leak.
+  `cost-bottlenecks.sh` (new "model mix check") or `opencode stats --models`
+  and switch the agent back to `deepseek-flash` — a non-flash reasoning model
+  re-prices the whole context every turn (v4-pro input $0.435/1M vs flash
+  $0.15/1M, 2.9×). This session ran on `deepseek-v4-pro`, which is itself the
+  cost leak.
+- **How to switch the model:** `/models` is a **TUI slash command** — run
+  `opencode` in a terminal, type `/models`, pick `deepseek-flash` (a picker,
+  not a chat "send"). The web UI (4096) has its own model picker. For one
+  non-interactive run: `opencode run -m deepseek/deepseek-flash "…"`.
+  `opencode models` only *lists* models. The project `opencode.json` already
+  sets flash, so a global/UI selection (`~/.config/opencode/opencode.jsonc`)
+  is what overrides it — check that file first.
 - Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
   (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
   that cost.
@@ -146,6 +169,31 @@ n-grams)" candidate — no new capture needed.**
   `main()` wrapper, no `set -e` (pipefail only). See `RULES.md`.
 - **Pinned supply chain:** base image digest, opencode `1.18.32`,
   `jev-guard@0.3.1`, jev-review commit `3fb6042e`.
+
+### Context & cost optimization — tools to add
+
+Local tool-use that shrinks what is sent to the API (the actual lever once the
+model is `deepseek-flash`):
+
+- **Exact tokenizer.** `cost.sh --estimate` uses a blended $/token; a real
+  DeepSeek tokenizer gives an exact per-message budget before sending.
+- **Retrieval, not replay.** `semantic-search.sh` / `/api/semantic` already
+  index every part (FTS5/bm25). Select only matching parts into context
+  instead of replaying whole history.
+- **Prompt-cache hygiene.** Keep a stable prompt prefix — `opencode stats`
+  shows 226M cache-read tokens at ~$0.003/1M (≪ input). Reordering the prefix
+  destroys the hit rate.
+- **Hard caps + routing.** `docker/litellm.config.yaml` (`max_budget`) is
+  scaffolded but not wired: `opencode.json` still points at DeepSeek directly.
+  Route `opencode` → LiteLLM (`127.0.0.1:4000/v1`) to enforce a hard cap.
+- **Bound replayed context.** `opencode --replay-limit N` / `--no-replay`
+  cap what a resumed session re-sends. The DB also tracks compaction
+  (`session.time_compacting`, `session_context_epoch`; 0 rows = never used).
+- **Visualization transparency (local, offline).** Already present: `/explore`
+  (d3 v7.9.0 + d3-sankey, DB map, signals, OCR) and `test-patterns.sh`.
+  To add: `finos/perspective` (WASM pivot), `Observable Plot` / `Vega-Lite`
+  (declarative charts) — vendor under `scripts/vendor/`, gate in
+  `test-dashboard.sh`. See "Next candidates".
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·
