@@ -61,6 +61,15 @@ main() {
         fi
     done
 
+    for f in "$REPO"/.opencode/plugins/*.js; do
+        [ -f "$f" ] || continue
+        if node --check "$f" >/dev/null 2>&1; then
+            ok "node --check .opencode/plugins/$(basename "$f")"
+        else
+            bad "node --check .opencode/plugins/$(basename "$f")"
+        fi
+    done
+
     if have python3; then
         for f in "$REPO"/scripts/*.py; do
             [ -f "$f" ] || continue

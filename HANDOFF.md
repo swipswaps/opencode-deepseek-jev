@@ -15,6 +15,9 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
   charts, patterns view) — see "Next candidates". `cost-bottlenecks.sh` now
   reports per-model cost share + a "model mix check" (flags non-`deepseek-flash`
   spend).
+- Hygiene is enforced in three layers (files · runtime detection · runtime
+  prevention): `.opencode/plugins/blacklist-guard.js` blocks blacklisted bash
+  commands at execution time. Restart opencode to load it.
 - Keys rotated. `.env.local` (mode 0600) is the **single source of truth** for
   `DEEPSEEK_API_KEY`, `JEV_API_KEY`, `OPENCODE_SERVER_PASSWORD`. Never `export`
   the password into a shell (a stale `$OPENCODE_SERVER_PASSWORD` caused drift).
@@ -49,6 +52,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
+| `.opencode/plugins/blacklist-guard.js` | execution-time blacklist guard: blocks `sed`/`2>/dev/null`/`subprocess.run`/`rm -rf` at `tool.execute.before`, warns `echo`; auto-loaded, kill switch `OPENCODE_BLACKLIST_GUARD=off` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
@@ -197,6 +201,71 @@ model is `deepseek-flash`):
   To add: `finos/perspective` (WASM pivot), `Observable Plot` / `Vega-Lite`
   (declarative charts) — vendor under `scripts/vendor/`, gate in
   `test-dashboard.sh`. See "Next candidates".
+
+## Hygiene enforcement (three layers)
+
+The rule set is enforced at three points — the gap was *detection only*:
+
+1. **Files** — `lint.sh` → `bash -n`, shellcheck, `node --check`,
+   `py_compile`, a `subprocess.run` grep, and `scan-constraints.py`
+   (code/string/comment classifier) over `scripts/*.sh`. Fails the build.
+2. **Runtime detection** — `scripts/audit-tool-calls.py` reads the DB and
+   reports the agent's **own** tool calls against the blacklist
+   (`sed` ×22, `2>/dev/null` ×141, `echo` ×289 as of 2026-09-25) with the
+   substitute per pattern; `--fail` to gate. `scripts/prompt-lint.py`
+   fuzzy-matches user prompts and flags recurring errors.
+3. **Runtime prevention** — `.opencode/plugins/blacklist-guard.js`
+   (auto-loaded from `.opencode/plugins/`; **no `opencode.json` entry**, adding
+   one would double-load). It hooks `tool.execute.before` and **throws** on a
+   blocked bash command, returning the substitute to the model so it retries
+   correctly. Quote-aware: `grep 'sed'` passes; `sed -n …` is blocked.
+
+Policy / operation (restart opencode after any change — config is not
+hot-reloaded):
+
+| `OPENCODE_BLACKLIST_GUARD` | Behaviour |
+| -------------------------- | --------- |
+| unset / `block` | block `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`; warn `echo` |
+| `warn` | log every match, block nothing |
+| `off` | disabled |
+
+Why `echo` is warn-only: RULES #38 is a *script* rule; ad-hoc exploration
+echoes are benign. Why `subprocess.run` is warned on *file content*: Python
+source is always inside a quoted heredoc/`-c` in bash, so quote-stripping
+cannot see it. Kill switch if the guard misbehaves:
+`export OPENCODE_BLACKLIST_GUARD=off` then restart. The matcher is unit-tested
+by `scripts/blacklist-guard-self-test.mjs` (run inside `test-hygiene.sh`).
+
+### Writing the next prompt (rigorous template)
+
+A prompt is an interface contract. State the falsifiable outcome, the
+constraints, and the evidence — then the work is checkable without re-reading
+the whole chat (which is also what keeps context cost down).
+
+```text
+## Objective
+<one sentence: the falsifiable outcome>
+
+## Context (read first)
+HANDOFF.md, RULES.md, README.txt; <specific files / endpoints>
+
+## Constraints (non-negotiable)
+RULES.md; the blacklist is enforced by .opencode/plugins/blacklist-guard.js;
+read-only over data/opencode/opencode.db; no new runtime deps unless vendored.
+
+## Deliverable
+<exact artifacts: files, endpoints, docs>
+
+## Acceptance criteria (each independently checkable)
+- [ ] `<command>` prints `<expected>`
+- [ ] `./scripts/<gate>.sh` exits 0
+
+## Evidence (paste back)
+gate outputs, `git diff --stat`, the exact commands run.
+
+## Out of scope
+<what not to touch>
+```
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·

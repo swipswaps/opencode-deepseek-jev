@@ -50,8 +50,62 @@ Linting
     ./scripts/lint.sh
 
 Static gate over the repo: `bash -n` on every script, `shellcheck` (baked
-into the image), `node --check` on the JS, and a RULES grep (no `sed`, no
-`2>/dev/null`). Run it before any push; `test-dashboard.sh` runs it too.
+into the image), `node --check` on the JS (including
+`.opencode/plugins/*.js`), `py_compile` on the Python, a `subprocess.run`
+check, a `scan-constraints.py` pass (code vs string/comment) over
+`scripts/*.sh`, and a RULES grep (no `sed`, no `2>/dev/null`). Run it
+before any push; `test-dashboard.sh` runs it too.
+
+Blacklist enforcement (three layers)
+------------------------------------
+The rule blacklist (`sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`,
+`echo`) is enforced at three points, because detection alone let it
+accumulate:
+
+    files      lint.sh + scan-constraints.py   fail the build
+    runtime    scripts/audit-tool-calls.py     report what the agent ran
+    runtime    .opencode/plugins/              block it before it runs
+               blacklist-guard.js
+
+`.opencode/plugins/blacklist-guard.js` is auto-loaded from the plugin
+directory (no opencode.json entry — adding one double-loads it). It hooks
+`tool.execute.before` and throws on a blocked bash command, handing the
+model the substitute from RULES.md. Matching is quote-aware: `grep 'sed'`
+passes, `sed -n …` is blocked. `echo` is warn-only (RULES #38 is a script
+rule); `subprocess.run` is warned only when written into file content.
+Policy via `OPENCODE_BLACKLIST_GUARD` = unset/`block` (default) | `warn` |
+`off`. Restart opencode after changing it; config is not hot-reloaded. If
+the guard ever misbehaves, set it to `off` and restart. The matcher is
+unit-tested by scripts/blacklist-guard-self-test.mjs (in test-hygiene.sh).
+
+Writing prompts
+---------------
+A prompt is an interface contract: state the falsifiable outcome, the
+constraints, and the evidence. This keeps the work checkable without
+re-reading the whole chat — which is also what keeps context (and cost)
+down. Template:
+
+    ## Objective
+    <one sentence: the falsifiable outcome>
+    ## Context (read first)
+    HANDOFF.md, RULES.md, README.txt; <specific files / endpoints>
+    ## Constraints (non-negotiable)
+    RULES.md; blacklist enforced by .opencode/plugins/blacklist-guard.js;
+    read-only over data/opencode/opencode.db.
+    ## Deliverable
+    <exact artifacts>
+    ## Acceptance criteria (each independently checkable)
+    - [ ] `<command>` prints `<expected>`
+    - [ ] `./scripts/<gate>.sh` exits 0
+    ## Evidence (paste back)
+    gate outputs, `git diff --stat`, exact commands.
+    ## Out of scope
+    <what not to touch>
+
+`./scripts/prompt-lint.py --prompt "..."` classifies a prompt, fuzzy-matches
+it against past prompts, surfaces recurring errors, and flags blacklist
+mentions / secrets / vagueness / missing acceptance criteria. Use it before
+sending a large request.
 
 To use a *different* vision model (e.g. Muse Spark via OpenCode Zen), on a
 host terminal with browser access run `opencode`, `/connect` → OpenCode Zen,

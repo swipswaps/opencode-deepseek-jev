@@ -1,29 +1,100 @@
 Handoff prompt — opencode-deepseek-jev
-======================================
+=======================================
 
 Open a fresh session (a large one re-sends its whole history every turn and
-spikes cost — see HANDOFF.md "Cost model") and paste the block below verbatim:
+spikes cost — see HANDOFF.md "Cost model"), then paste everything between the
+two RULE markers below. It is written as an interface contract: outcome,
+constraints, deliverables, checkable acceptance, evidence. Read HANDOFF.md,
+RULES.md and README.txt in-repo for the full context; do not re-derive it.
 
+RULE-OUTER-BEGIN
 --------------------------------------------------------------------------------
+Objective
+  Add the patterns view: a read-only /api/patterns endpoint over the opencode
+  database that counts n-grams of tool calls per session, plus a /explore
+  "patterns" tab that renders the top chains, so recurring and error-prone
+  tool sequences are visible. Falsifiable outcome: GET /api/patterns returns
+  { ngrams, sessions, errors } and the tab renders without a page error.
 
-Read HANDOFF.md, then work the "Next candidates (deferred, not started)"
-section in order 3 → 1 → 2. Start with the patterns view
-(tool-sequence n-grams): add a read-only /api/patterns endpoint to
-scripts/dashboard.mjs (mine part rows where json_extract(data,'$.type')='tool',
-ordered by time_created per session, count n-grams with a lead() window query)
-and a /explore "patterns" tab rendered with the existing vendored d3.
-Every served page's inline <script> must parse AND execute headlessly —
-extend scripts/test-dashboard.sh and scripts/test-dashboard-ui.mjs to cover
-the new tab before pushing. Keep scripts/test-patterns.sh green.
-Honour RULES.md (no sed, no 2>/dev/null, printf, main() wrapper, UTC
-timestamps) and run ./scripts/lint.sh before pushing. Read-only over
-data/opencode/opencode.db; never write to it. Update HANDOFF.md and README.txt
-with whatever you land. Do not commit or push — leave the tree clean and
-report the diff + the test results instead.
+Context (read first)
+  HANDOFF.md  — "Session database & tool-use methods", "Next candidates"
+  RULES.md    — #7/#8/#38 + "Substitutions for the blacklist" + #61
+  README.txt  — "Visual exploration", "Session database & tool-use methods"
+  scripts/dashboard.mjs       — servers /api/*, html + exploreHtml templates
+  scripts/test-dashboard.sh   — the gate to extend
+  scripts/test-dashboard-ui.mjs — headless page-script execution
+  scripts/test-patterns.sh    — the data-layer proof already written
 
+Constraints (non-negotiable)
+  - Honest RULES.md: no sed (#7), no 2>/dev/null (#8), printf not echo (#38),
+    main() wrapper, no set -e (pipefail only). The blacklist is enforced at
+    execution time by .opencode/plugins/blacklist-guard.js — commands that use
+    it will be blocked, so do not reach for them.
+  - RULES #61: never emit escape-dependent inline JS. In dashboard.mjs the
+    page script is a backtick template literal; use data-* attributes and
+    delegated listeners, never inline onclick, and never a raw \n or \' inside
+    the generated script.
+  - The database is read-only. Open data/opencode/opencode.db with
+    readOnly:true (node:sqlite) — never write to it.
+  - No new runtime dependencies unless vendored under scripts/vendor/ and
+    served from /vendor/* (whitelisted). Prefer the already-vendored d3 v7.
+
+Deliverable
+  1. scripts/dashboard.mjs: a query that returns per-session ordered tool
+     sequences and their n-gram counts (window function), exposed via
+     GET /api/patterns.
+  2. exploreHtml: a new tab button data-tab="patterns" and
+     <div class="pane" data-pane="patterns"> with a renderPatterns() that
+     draws the top chains (d3 bars or a list). Wire it into load().
+  3. scripts/test-dashboard.sh: assert the new tab markers and /api/patterns
+     JSON schema; scripts/test-dashboard-ui.mjs: assert the pane populates.
+  4. Update HANDOFF.md and README.txt to describe the tab and endpoint.
+
+Acceptance criteria (each independently checkable)
+  - [ ] curl -s localhost:5099/api/patterns | python3 -c 'import json,sys;
+        d=json.load(sys.stdin); assert d["ngrams"] and d["sessions"]'  # 0
+  - [ ] ./scripts/test-dashboard.sh exits 0 (inline script parses AND runs)
+  - [ ] ./scripts/test-hygiene.sh exits 0
+  - [ ] ./scripts/lint.sh exits 0
+  - [ ] git diff --stat touches dashboard.mjs, both tests, HANDOFF.md, README.txt
+
+Evidence (paste back)
+  The three gate outputs, the /api/patterns JSON head, and git diff --stat.
+
+Out of scope
+  finos/perspective and Plot/Vega-Lite (candidates 2 and 3 in HANDOFF.md).
+  Do not refactor the existing d3 charts. Do not add an npm dependency.
+
+Reference code (adapt, do not paste blindly)
+  -- n-gram query (SQLite window function), per session:
+     SELECT tool || '->' || next_tool AS bigram, COUNT(*) n
+     FROM (SELECT session_id, json_extract(data,'$.tool') tool,
+                  lead(json_extract(data,'$.tool'))
+                    OVER (PARTITION BY session_id ORDER BY time_created) next_tool
+           FROM part WHERE json_extract(data,'$.type')='tool')
+     WHERE next_tool IS NOT NULL GROUP BY bigram ORDER BY n DESC LIMIT 50;
+  -- endpoint shape (dashboard.mjs, beside the other api* functions):
+     function apiPatterns(limit) {
+       return { ngrams: query("..."), sessions: query("..."),
+                errors: query("... status='error' ...") };
+     }
+     // in the router:
+     } else if (url === "/api/patterns") {
+       send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 50)), "application/json");
+     }
+  -- delegated listener (RULES #61), NOT inline onclick:
+     document.getElementById("patterns").addEventListener("click", function (ev) {
+       var t = ev.target && ev.target.closest ? ev.target.closest("[data-go]") : null;
+       if (t) detail(t.getAttribute("data-go"));
+     });
+
+Finish
+  Do not commit or push. Leave the tree clean, report the diff and the gate
+  results, and stop.
 --------------------------------------------------------------------------------
+RULE-OUTER-END
 
-Why this file exists separately: an agent-directed "read this, then do X"
-block stored inside HANDOFF.md trips jev-guard's injection detector on every
-read (observed p=0.94). This file is read by the human operator, not by the
-agent, so it stays out of the agent's auto-loaded context.
+Why this file exists separately from HANDOFF.md: an agent-directed
+"read this, then do X" block stored inside HANDOFF.md trips jev-guard's
+injection detector on every read (observed p=0.94). This file is read by the
+human operator, not auto-loaded by the agent.
