@@ -137,6 +137,25 @@ function apiAb(limit) {
   };
 }
 
+function ocrRows(limit) {
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
+    const rows = db.prepare("SELECT id, ts, image, engine, lang, text FROM ocr_run ORDER BY id DESC LIMIT ?").all(limit || 2000);
+    db.close();
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+function apiOcr(limit) {
+  const runs = ocrRows(limit || 100);
+  return {
+    count: runs.length,
+    runs: runs.map((r) => ({ id: r.id, ts: r.ts, image: r.image, engine: r.engine, lang: r.lang, snippet: String(r.text || "").slice(0, 240), text: r.text })),
+  };
+}
+
 function apiSignals() {
   const errors = query(
     "SELECT s.id sid, s.title title, p.time_created ts, json_extract(p.data,'$.tool') tool, " +
@@ -356,6 +375,7 @@ function ensureFts() {
   const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
   db.exec("BEGIN");
   for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+  for (const o of ocrRows(2000)) ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
   db.exec("COMMIT");
   fts = { db, at: Date.now(), count: n, sourceMax: m };
   return db;
@@ -388,9 +408,18 @@ function apiSemantic(q, limit) {
     const ph = ids.map(() => "?").join(",");
     for (const t of query("SELECT id, title FROM session WHERE id IN (" + ph + ")", ...ids)) titles[t.id] = t.title;
   }
+  const ocrTitles = {};
+  for (const o of ocrRows(2000)) ocrTitles[o.id] = o.image;
   return {
     q: needle, mode: "fts", indexed: fts.count, sessions,
-    results: rows.map((r) => ({ session: r.session_id, title: titles[r.session_id] || "", type: r.type, snippet: r.snip, score: r.score, part: r.part_id }))
+    results: rows.map((r) => {
+      const isOcr = r.session_id === "OCR";
+      return {
+        session: isOcr ? "" : r.session_id,
+        title: isOcr ? (ocrTitles[Number(String(r.part_id).slice(3))] || "(screenshot)") : (titles[r.session_id] || ""),
+        type: r.type, snippet: r.snip, score: r.score, part: r.part_id, ocr: isOcr,
+      };
+    })
   };
 }
 
@@ -629,7 +658,7 @@ async function doSearch(){
         h+='<div class="item" data-go="'+esc(s.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(s.title)+' <span class="muted">$'+(+s.cost).toFixed(4)+'</span></div>';}}
     if(r.results&&r.results.length){h+='<div class="muted" style="font-size:11px">ranked matches</div>';
       for(var k=0;k<r.results.length;k++){var x=r.results[k];
-        h+='<div class="item" data-go="'+esc(x.session)+'" style="cursor:pointer"><span class="tag STEP">'+esc(x.type||'part')+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
+        h+='<div class="item"'+(x.ocr?'':' data-go="'+esc(x.session)+'" style="cursor:pointer"')+'><span class="tag STEP">'+esc(x.ocr?'screenshot':(x.type||'part'))+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
   } else {
     var f=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20');
     if(f&&f.sessions){for(var a=0;a<f.sessions.length;a++){var ss=f.sessions[a];
@@ -697,6 +726,8 @@ const exploreHtml = `<!doctype html>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
 <h2>Signals — mistakes, rule mentions, churn</h2>
 <div class="chart" id="signals"></div>
+<h2>OCR — screenshot text (searchable)</h2>
+<div class="chart" id="ocr"></div>
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
 <div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
@@ -838,7 +869,7 @@ async function doSearch2(){
   var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=15');
   var h='';
   if(r&&r.results){for(var i=0;i<r.results.length;i++){var x=r.results[i];
-    h+='<div class="item" data-go="'+esc(x.session)+'"><span class="tag">'+esc(x.type||'part')+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
+    h+='<div class="item"'+(x.ocr?'':' data-go="'+esc(x.session)+'"')+'><span class="tag">'+esc(x.ocr?'screenshot':(x.type||'part'))+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
   el.innerHTML=h||'<span class="muted">no matches</span>';
 }
 document.getElementById('q2').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch2();}});
@@ -884,6 +915,15 @@ async function renderSignals(){
 document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();});
 document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+async function renderOcr(){
+  var el=d3.select('#ocr');el.selectAll('*').remove();
+  var d=await j('/api/ocr?limit=20');
+  if(!d||!d.runs||!d.runs.length){el.text('no OCR yet — run ./scripts/ocr-image.sh <image> to read a screenshot locally');return;}
+  var h='<div class="muted" style="font-size:12px">'+d.count+' OCR runs · also searchable from the search box</div>';
+  for(var i=0;i<d.runs.length;i++){var r=d.runs[i];
+    h+='<div class="item"><span class="tag">'+esc(r.engine)+'</span>'+esc(r.image)+' <span class="muted">'+esc(r.ts||'')+'</span><div class="muted" style="white-space:pre-wrap;font-size:11px">'+esc(r.snippet)+'</div></div>';}
+  el.html(h);
+}
 async function load(){
   if(typeof d3==='undefined'){var el=document.getElementById('treemap');if(el){el.textContent='d3 failed to load (/vendor/d3.min.js)';}return;}
   var o=await j('/api/overview?limit=500');
@@ -892,7 +932,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderSignals();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();
 }
 
@@ -1250,6 +1290,16 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiIntegrations()), "application/json");
   } else if (url === "/api/ab") {
     send(res, 200, JSON.stringify(apiAb(Number(params.limit) || 200)), "application/json");
+  } else if (url === "/api/ocr") {
+    send(res, 200, JSON.stringify(apiOcr(Number(params.limit) || 100)), "application/json");
+  } else if (url === "/api/export/ocr") {
+    const rows = ocrRows(2000);
+    let body = "id,ts,image,engine,lang,text\n";
+    for (const r of rows) {
+      body += '"' + r.id + '","' + String(r.ts || "") + '","' + String(r.image || "").replace(/"/g, '""') + '","' + String(r.engine || "") + '","' + String(r.lang || "") + '","' + String(r.text || "").replace(/"/g, '""') + '"\n';
+    }
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-ocr.csv" });
+    res.end(body);
   } else if (url === "/api/signals") {
     send(res, 200, JSON.stringify(apiSignals()), "application/json");
   } else if (url === "/api/cost") {

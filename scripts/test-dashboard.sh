@@ -95,6 +95,7 @@ main() {
     has 'id="stable"' "$work/explore.html" && ok 'explore sessions table' || bad 'explore sessions table'
     has 'id="integrations"' "$work/explore.html" && ok 'explore integrations' || bad 'explore integrations'
     has 'id="dmap"' "$work/explore.html" && ok 'explore db map' || bad 'explore db map'
+    has 'id="ocr"' "$work/explore.html" && ok 'explore ocr section' || bad 'explore ocr section'
     has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
     has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
@@ -190,6 +191,10 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "jev" in d and "laya" in d else 1)' "$work/integ.json" && ok 'api/integrations' || bad 'api/integrations'
         curl -s "http://$HOST:$PORT/api/ab" > "$work/ab.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and isinstance(d.get("summary"),dict) else 1)' "$work/ab.json" && ok 'api/ab' || bad 'api/ab'
+        curl -s "http://$HOST:$PORT/api/ocr" > "$work/ocr.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
+        curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
+        has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
     else
         bad 'found a session id for endpoint tests'
     fi
@@ -225,6 +230,14 @@ PY
         if [ "$si_rc" -eq 0 ] && has 'indexed' "$work/idx.txt"; then ok 'semantic-search.sh builds index'; else bad 'semantic-search.sh builds index'; fi
     else
         bad 'semantic-search.sh present'
+    fi
+
+    if [ -x "$REPO/scripts/lint.sh" ]; then
+        "$REPO/scripts/lint.sh" > "$work/lint.txt" 2>&1
+        local lint_rc=$?
+        if [ "$lint_rc" -eq 0 ]; then ok 'lint.sh passes'; else bad 'lint.sh passes'; tail -6 "$work/lint.txt"; fi
+    else
+        bad 'lint.sh present'
     fi
 
     kill -TERM "$srv" || true

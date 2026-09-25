@@ -1,0 +1,8 @@
+{
+  "name": "opencode-deepseek-jev",
+  "private": true,
+  "description": "Local OCR fallback (tesseract.js) for reading screenshots when API models fail.",
+  "dependencies": {
+    "tesseract.js": "7.0.0"
+  }
+}

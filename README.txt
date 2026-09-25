@@ -30,13 +30,26 @@ provider entry without that declaration is treated as text-only.)
 
 If a model rejects an image anyway, read it locally instead:
 
-    ./scripts/ocr-image.sh <image.png>      # tesseract (apt) or PaddleOCR (pip)
+    ./scripts/ocr-image.sh <image.png>      # tesseract CLI, tesseract.js, or PaddleOCR
     ./scripts/ocr-image.sh --check          # report which engine is available
 
-The local engines match github.com/swipswaps/receipts-ocr: tesseract.js in
-the browser and PaddleOCR in backend/app.py. Install tesseract with
-`apt-get install -y tesseract-ocr` (already in the image), or PaddleOCR with
-`pip install paddleocr paddlepaddle`.
+Each run is persisted to data/observability/ocr_run and surfaced in the
+dashboard: /api/ocr lists runs, /api/export/ocr downloads CSV, and the OCR
+text is folded into /api/semantic so the search box finds screenshots too.
+
+The engines match github.com/swipswaps/receipts-ocr: tesseract.js (browser)
+and PaddleOCR (backend/app.py). **tesseract.js is pinned in package.json** and
+installed via `npm install`, so it reads screenshots out of the box with no
+apt/pip and no API model; `tesseract-ocr` is also baked into the image.
+PaddleOCR is available with `pip install paddleocr paddlepaddle`.
+
+Linting
+-------
+    ./scripts/lint.sh
+
+Static gate over the repo: `bash -n` on every script, `shellcheck` (if
+installed), `node --check` on the JS, and a RULES grep (no `sed`, no
+`2>/dev/null`). Run it before any push; `test-dashboard.sh` runs it too.
 
 To use a *different* vision model (e.g. Muse Spark via OpenCode Zen), on a
 host terminal with browser access run `opencode`, `/connect` → OpenCode Zen,

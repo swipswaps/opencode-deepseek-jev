@@ -67,6 +67,20 @@ semantic-search.sh
     same index in memory for /api/semantic. --rebuild rebuilds; --limit N
     caps results. Host or container.
 
+ocr-image.sh
+    Local OCR fallback for reading screenshots/scans when API models can't
+    ingest images. Tries tesseract CLI (apt, in the image), then
+    tesseract.js (npm, pinned in package.json), then PaddleOCR (pip).
+    Persists each run to data/observability/ocr_run (surfaced at /api/ocr,
+    /api/export/ocr, and searchable via /api/semantic).
+    Usage: ./scripts/ocr-image.sh <image> [lang] | --check. Host or
+    container; no API model required.
+
+lint.sh
+    Static gate: bash -n on every script, shellcheck (optional), node
+    --check on JS, and a RULES grep (no sed, no 2>/dev/null). Exits
+    non-zero on any failure; also run by test-dashboard.sh.
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the

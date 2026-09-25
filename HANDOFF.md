@@ -14,8 +14,9 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 - Vision: `opencode.json` declares `deepseek-flash` as image-capable
   (`attachment: true` + `modalities.input: ["text","image"]`), so images go
   straight to DeepSeek — no Zen required. Local fallback is
-  `scripts/ocr-image.sh` (tesseract in-image, or PaddleOCR like
-  receipts-ocr); `web-entrypoint.sh` merges (never wipes) `auth.json`.
+  `scripts/ocr-image.sh` (tesseract CLI in-image, **tesseract.js pinned in
+  `package.json`**, or PaddleOCR like receipts-ocr); `web-entrypoint.sh`
+  merges (never wipes) `auth.json`.
 
 ## Command surface (scripts/)
 | Script | Purpose |
@@ -35,6 +36,8 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
 | `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
+| `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
+| `lint.sh` | static gate: `bash -n` + `shellcheck` (optional) + `node --check` + RULES grep (no `sed`/`2>/dev/null`) |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
@@ -49,8 +52,11 @@ a ranked **search** box (`/api/semantic`), a **sortable/filterable sessions
 table** (click a row to open the transcript), a **database map** (tables as
 nodes sized by row count, edges = foreign keys via `/api/schema`), an
 **integrations** panel (Jev vs Laya invocation counts via
-`/api/integrations`; Jev = 11 from `tool` parts, Laya = 0), a **Jev vs Laya
-A/B** panel (`/api/ab`), plus the charts:
+`/api/integrations`; Jev = 11 from `tool` parts, Laya = 0), a **Jev vs Laya A/B** panel (`/api/ab`), a **Signals** panel (error tool
+calls, error signatures, rule mentions, patch churn via `/api/signals`), an
+**OCR** panel (screenshot text via `/api/ocr`, also folded into `/api/semantic`
+so the search box finds screenshots, and downloadable at `/api/export/ocr`),
+plus the charts:
 cost treemap, brushable cumulative-spend-vs-budget burn-down (linked to
 treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey, and
 the part timeline. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at

@@ -111,6 +111,6 @@
       "./scripts/ocr-image.sh --check",
       "./scripts/ocr-image.sh <image.png>"
     ],
-    "note": "Fallback when image input is unavailable or a model rejects it. Install with: apt-get install -y tesseract-ocr (or pip install paddleocr paddlepaddle)."
+    "note": "Fallback when image input is unavailable or a model rejects it. tesseract.js (npm, pinned in package.json) works out of the box; tesseract CLI (apt, in image) and PaddleOCR (pip) also supported."
   }
 ]
