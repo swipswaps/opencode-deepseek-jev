@@ -211,6 +211,24 @@ full-text search across every session — text, reasoning, and tool
 commands — via an in-memory SQLite FTS5/bm25 index (/api/semantic).
 http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
 container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
+scripts/runbooks.json is the single source for both — add entries there, not
+in dashboard.mjs. Entries include the blacklist guard (pause/resume), balance
+top-up, and the log miner below. Note the dashboard on :5099 runs inside the
+opencode-web container (web-entrypoint.sh starts it), so restarting that
+container takes :5099 down for a few seconds.
+
+Learning from the logs
+----------------------
+    ./scripts/issue-solutions.py [--top N]        # issues -> proven fixes
+
+Free, local, no model call. Reads the chat database read-only and pairs each
+error tool call with the next completed call in the same session, then ranks
+the recurring (issue, fix) pairs with the log evidence. Example output:
+"JEV_API_KEY rejected" x8 -> the env/`.env.local` checks that fixed it;
+"Could not find oldString" x4 -> the grep that located the real text. This is
+the "prove the solution from the logs" loop; the same data feeds the planned
+solution library and the recurring-error gate (HANDOFF.md "Local tool-use
+options").
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·

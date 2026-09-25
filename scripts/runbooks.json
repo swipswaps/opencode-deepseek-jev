@@ -112,5 +112,38 @@
       "./scripts/ocr-image.sh <image.png>"
     ],
     "note": "Fallback when image input is unavailable or a model rejects it. tesseract.js (npm, pinned in package.json) works out of the box; tesseract CLI (apt, in image) and PaddleOCR (pip) also supported."
+  },
+  {
+    "id": "guard",
+    "title": "Blacklist guard: pause or resume",
+    "purpose": "The execution-time guard blocks sed / rm -rf / subprocess.run and strips 2>/dev/null from the agent's own bash calls so stderr (the proof) is visible. Pause it if it misbehaves.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "docker compose -f docker/docker-compose.yml restart opencode-web"
+    ],
+    "note": "Manual: set OPENCODE_BLACKLIST_GUARD in .env.local (mode 0600) to block (default) | warn | off, then restart opencode-web. warn logs every match without blocking; off disables the guard. Restarting opencode-web also blips the dashboard on :5099 for a few seconds and ends the current agent session."
+  },
+  {
+    "id": "top-up",
+    "title": "Top up the DeepSeek balance",
+    "purpose": "The provider balance funds the agent. Check it before the account runs dry, then add credit.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "./scripts/cost.sh"
+    ],
+    "note": "Manual: cost.sh prints the DeepSeek balance (section T2) from https://api.deepseek.com/user/balance. Add credit at https://platform.deepseek.com, then re-run cost.sh to confirm. Keep the agent on deepseek-flash to slow the drain (see HANDOFF.md \"Cost model\")."
+  },
+  {
+    "id": "learn-from-logs",
+    "title": "Learn from the logs (issues -> proven fixes)",
+    "purpose": "Mine the chat database for recurring errors and the command that fixed each, proven by the tool logs.",
+    "where": "container",
+    "commands": [
+      "./scripts/issue-solutions.py --top 15",
+      "./scripts/issue-solutions.py --json"
+    ],
+    "note": "Read-only, local, no model call. Pairs each error tool call with the next completed call in the same session and ranks the recurring (issue, fix) pairs."
   }
 ]

@@ -100,6 +100,13 @@ main() {
         cat "$work/pl_st.txt"
     fi
 
+    if python3 "$REPO/scripts/issue-solutions.py" --self-test > "$work/is_st.txt" 2>&1; then
+        ok 'issue-solutions: self-test'
+    else
+        bad 'issue-solutions: self-test'
+        cat "$work/is_st.txt"
+    fi
+
     if have node && [ -f "$REPO/scripts/blacklist-guard-self-test.mjs" ]; then
         if node "$REPO/scripts/blacklist-guard-self-test.mjs" > "$work/bg_st.txt" 2>&1; then
             ok 'blacklist-guard: self-test'
@@ -111,7 +118,7 @@ main() {
         bad 'blacklist-guard-self-test.mjs present + node'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/bg_st.txt"
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt"
     rmdir "$work"
 
     printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"

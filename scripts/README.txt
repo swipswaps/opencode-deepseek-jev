@@ -107,6 +107,14 @@ prompt-lint.py
     leaked secrets, underspecified asks and missing acceptance criteria.
     Advisory; --last lints the latest prompt in the DB, --fail gates.
 
+issue-solutions.py
+    Mine the chat database for recurring errors and the command that fixed
+    each, proven by the logs. Pairs an error tool call (state.status='error')
+    with the next completed call in the same session, normalises the error
+    into a signature, and ranks the (issue, fix) pairs. Free, local, no
+    model call; read-only over data/opencode/opencode.db. --recent N,
+    --top N, --json, --self-test.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a

@@ -51,6 +51,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
+| `issue-solutions.py` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call in the session), ranked with the log evidence — free, local, no model call |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
@@ -105,6 +106,15 @@ headlessly via `test-dashboard-ui.mjs`.
 - **Ports:** 4096 (opencode web, auth required), 5099 (dashboard, localhost-only),
   5001 (Dockge), 4000 (optional LiteLLM proxy). Firefox blocks 6000–6010 (X11)
   — use 5099/8080/3000.
+- **5099 lives inside `opencode-web`.** `web-entrypoint.sh` starts
+  `dashboard.mjs` on :5099 and then `opencode web`; compose publishes
+  `127.0.0.1:5099`. So `./scripts/web-stop.sh` (or any `restart opencode-web`)
+  **takes the dashboard down** until the container's entrypoint reruns — it
+  comes back in a few seconds. The dashboard is not a separate service.
+- **Runbooks are data, not code.** `scripts/runbooks.json` is the single
+  source for the dashboard `/runbooks` page and `runbook.sh`; add an entry
+  there (never hardcode in `dashboard.mjs`) and bump the `count=N` assertion
+  in `test-dashboard.sh`.
 
 ## Session database & tool-use methods
 
@@ -247,9 +257,13 @@ just the web service, not the whole stack:
     # or: Dockge UI (http://localhost:5001) -> restart the opencode stack
 
 `opencode-web` runs `opencode web` with `working_dir: /workspace`, so the
-repo's `.opencode/plugins/` is found automatically. Kill switch if the guard
-misbehaves: `OPENCODE_BLACKLIST_GUARD=off` (via `.env.local`/compose env) then
-restart. The matcher and the `2>/dev/null` rewriter are unit-tested by
+repo's `.opencode/plugins/` is found automatically. The plugin is ESM;
+`.opencode/package.json` (`"type": "module"`) makes that explicit, and
+opencode auto-pins `@opencode-ai/plugin` into it on startup. opencode also
+generates `.opencode/.gitignore` (node_modules, package-lock, bun.lock) —
+those stay uncommitted. Kill switch if the guard misbehaves:
+`OPENCODE_BLACKLIST_GUARD=off` (via `.env.local`/compose env) then restart. The
+matcher and the `2>/dev/null` rewriter are unit-tested by
 `scripts/blacklist-guard-self-test.mjs` (in `test-hygiene.sh`).
 
 ### Writing the next prompt (rigorous template)
@@ -282,6 +296,36 @@ gate outputs, `git diff --stat`, the exact commands run.
 ## Out of scope
 <what not to touch>
 ```
+
+## Local tool-use options (ranked by efficacy)
+
+Free, local, read-only over the chat DB or the repo. Ranked by value/effort.
+Built ones are marked; the rest are the backlog.
+
+1. **Issue → proven fix miner** (built: `issue-solutions.py`). Pairs each
+   error tool call with the next `completed` call and ranks the recurring
+   pairs. Evidence: `JEV_API_KEY` rejected ×8, permission rejections ×8,
+   `oldString` mismatches ×4 — each with the command that resolved it.
+2. **Prompt linter / dedupe** (built: `prompt-lint.py`). Stops re-asking and
+   flags underspecified prompts before they cost a session.
+3. **Recurring-error gate** (built: `audit-tool-calls.py --fail`,
+   `/api/signals`). Fail a push if the same error signature recurs.
+4. **Tool-sequence n-grams** (data layer built: `test-patterns.sh`;
+   the view is "Next candidates" #1).
+5. **Topic/trend timeline** (not built). Classify each session with the
+   `prompt-lint.py` categories, plot topic share and cost per topic over time.
+   Reuse the `/explore` charts.
+6. **Solution library** (not built). Persist `issue-solutions.py` output to
+   `data/observability/` so a known fix is proposed at the moment of failure.
+7. **Fuzzy code search** (partial: FTS5 in `semantic-search.sh`). Add a
+   trigram/`difflib` rerank for typo-tolerant lookup across commands and code.
+8. **Prompt cache-hit report** (not built). `opencode stats` shows 226M
+   cache-read tokens; a per-session hit-rate view would show whether prefix
+   churn is burning money.
+
+A new tool's convention: read-only, `--json`, `--self-test`, no model call,
+wire its `--self-test` into `test-hygiene.sh`, document it in the command
+table and `scripts/README.txt`.
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·

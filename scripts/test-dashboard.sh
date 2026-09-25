@@ -155,7 +155,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=10' "$work/rbcheck.txt" && ok 'runbooks count=10' || bad 'runbooks count=10'
+    has 'count=13' "$work/rbcheck.txt" && ok 'runbooks count=13' || bad 'runbooks count=13'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"
