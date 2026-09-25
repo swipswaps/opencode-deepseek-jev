@@ -69,14 +69,31 @@ accumulate:
 
 `.opencode/plugins/blacklist-guard.js` is auto-loaded from the plugin
 directory (no opencode.json entry — adding one double-loads it). It hooks
-`tool.execute.before` and throws on a blocked bash command, handing the
-model the substitute from RULES.md. Matching is quote-aware: `grep 'sed'`
-passes, `sed -n …` is blocked. `echo` is warn-only (RULES #38 is a script
-rule); `subprocess.run` is warned only when written into file content.
-Policy via `OPENCODE_BLACKLIST_GUARD` = unset/`block` (default) | `warn` |
-`off`. Restart opencode after changing it; config is not hot-reloaded. If
-the guard ever misbehaves, set it to `off` and restart. The matcher is
-unit-tested by scripts/blacklist-guard-self-test.mjs (in test-hygiene.sh).
+`tool.execute.before`, so it acts on the agent's own bash commands during
+"Thinking" before they run. Three verdicts:
+
+    block   sed, rm -rf, subprocess.run   throw; return the substitute
+    fix     2>/dev/null                   remove the redirect so stderr
+                                          (the proof) reaches the result
+    warn    echo                          log only
+
+The `fix` verdict is deliberate: `2>/dev/null` fails silently and the
+suppressed stderr is the evidence needed to fix the problem, so removing
+the redirect preserves proof instead of hiding it. Matching is quote-aware:
+`grep 'sed'` passes, `sed -n …` is acted on. `subprocess.run` is warned only
+when written into file content (it is always quoted Python, invisible to
+bash). Policy via `OPENCODE_BLACKLIST_GUARD` = unset/`block` (default) |
+`warn` | `off`.
+
+Reload (config is read at startup, not hot-reloaded) — restart just the web
+service:
+
+    docker compose -f docker/docker-compose.yml restart opencode-web
+    # or: ./scripts/web-stop.sh && ./scripts/web.sh
+
+The matcher/rewriter is unit-tested by scripts/blacklist-guard-self-test.mjs
+(in test-hygiene.sh). If the guard ever misbehaves, set
+`OPENCODE_BLACKLIST_GUARD=off` and restart.
 
 Writing prompts
 ---------------

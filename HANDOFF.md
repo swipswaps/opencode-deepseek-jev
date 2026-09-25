@@ -52,7 +52,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
-| `.opencode/plugins/blacklist-guard.js` | execution-time blacklist guard: blocks `sed`/`2>/dev/null`/`subprocess.run`/`rm -rf` at `tool.execute.before`, warns `echo`; auto-loaded, kill switch `OPENCODE_BLACKLIST_GUARD=off` |
+| `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
@@ -216,25 +216,41 @@ The rule set is enforced at three points — the gap was *detection only*:
    fuzzy-matches user prompts and flags recurring errors.
 3. **Runtime prevention** — `.opencode/plugins/blacklist-guard.js`
    (auto-loaded from `.opencode/plugins/`; **no `opencode.json` entry**, adding
-   one would double-load). It hooks `tool.execute.before` and **throws** on a
-   blocked bash command, returning the substitute to the model so it retries
-   correctly. Quote-aware: `grep 'sed'` passes; `sed -n …` is blocked.
+   one would double-load). It hooks `tool.execute.before` and acts on the
+   agent's own bash commands *before they execute*. Quote-aware: `grep 'sed'`
+   passes; `sed -n …` is acted on. Three verdicts, because the failure modes
+   differ:
 
-Policy / operation (restart opencode after any change — config is not
-hot-reloaded):
+   | verdict | patterns | action |
+   | ------- | -------- | ------ |
+   | **block** | `sed`, `rm -rf`, `subprocess.run` | throw; return the substitute so the model retries correctly |
+   | **fix** | `2>/dev/null` | **remove the redirect** so stderr — the proof of what went wrong — reaches the tool result |
+   | **warn** | `echo` | log only |
+
+   The `fix` verdict is the point: these constructs fail opaquely and the
+   suppressed stderr is the evidence needed to fix them. Blocking `2>/dev/null`
+   would just make the agent skip the step; *removing* it keeps the proof.
+
+Policy / operation:
 
 | `OPENCODE_BLACKLIST_GUARD` | Behaviour |
 | -------------------------- | --------- |
-| unset / `block` | block `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`; warn `echo` |
-| `warn` | log every match, block nothing |
+| unset / `block` | block destructive, fix `2>/dev/null`, warn `echo` |
+| `warn` | log every match; never block or rewrite |
 | `off` | disabled |
 
-Why `echo` is warn-only: RULES #38 is a *script* rule; ad-hoc exploration
-echoes are benign. Why `subprocess.run` is warned on *file content*: Python
-source is always inside a quoted heredoc/`-c` in bash, so quote-stripping
-cannot see it. Kill switch if the guard misbehaves:
-`export OPENCODE_BLACKLIST_GUARD=off` then restart. The matcher is unit-tested
-by `scripts/blacklist-guard-self-test.mjs` (run inside `test-hygiene.sh`).
+**Reloading** (config is read once at startup, not hot-reloaded) — restart
+just the web service, not the whole stack:
+
+    docker compose -f docker/docker-compose.yml restart opencode-web
+    # or: ./scripts/web-stop.sh && ./scripts/web.sh
+    # or: Dockge UI (http://localhost:5001) -> restart the opencode stack
+
+`opencode-web` runs `opencode web` with `working_dir: /workspace`, so the
+repo's `.opencode/plugins/` is found automatically. Kill switch if the guard
+misbehaves: `OPENCODE_BLACKLIST_GUARD=off` (via `.env.local`/compose env) then
+restart. The matcher and the `2>/dev/null` rewriter are unit-tested by
+`scripts/blacklist-guard-self-test.mjs` (in `test-hygiene.sh`).
 
 ### Writing the next prompt (rigorous template)
 

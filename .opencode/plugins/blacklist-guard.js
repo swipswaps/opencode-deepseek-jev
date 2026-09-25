@@ -1,27 +1,34 @@
 // blacklist-guard.js — execution-time enforcement of RULES.md "Substitutions
-// for the blacklist".
+// for the blacklist", aimed at the agent's OWN tool calls during "Thinking".
 //
 // Detection is not prevention: `lint.sh`/`scan-constraints.py` police the
 // files and `scripts/audit-tool-calls.py` reports what the agent already ran.
-// This plugin is the missing third layer — it runs inside opencode and blocks
-// a blacklisted command BEFORE it executes, returning the sanctioned
-// substitute to the model so it can retry correctly.
+// This plugin is the missing third layer — it runs inside opencode and acts on
+// a blacklisted command BEFORE it executes.
+//
+// Three verdicts, because the failure modes differ:
+//   block  destructive/opaque (`sed`, `rm -rf`, `subprocess.run`): throw and
+//          hand the model the substitute so it retries correctly.
+//   fix    `2>/dev/null`: *remove the redirect* so stderr — the proof of what
+//          went wrong — flows into the tool result. Failing silently is the
+//          bug; hiding the failure is what blocks access to the solution.
+//   warn   `echo`: log only (RULES #38 is a script rule; ad-hoc echoes are
+//          benign).
 //
 // Registered automatically: any *.js in .opencode/plugins/ is loaded at
-// startup. No opencode.json entry needed (and adding one would double-load).
+// startup. No opencode.json entry needed (adding one would double-load).
+// opencode-web runs with working_dir /workspace, so the repo's .opencode/ is
+// discovered. Config is read once — restart the container to reload.
 //
 // Policy (mode = process.env.OPENCODE_BLACKLIST_GUARD):
-//   unset | "block"  block sed / 2>/dev/null / subprocess.run / rm -rf; warn echo
-//   "warn"           never block; log every match
+//   unset | "block"  block destructive, fix `2>/dev/null`, warn echo
+//   "warn"           never block or rewrite; log every match
 //   "off"            disabled
 //
-// Matching is quote-aware: a pattern that is merely *named* (grep 'sed') is
-// not a violation; only command-position uses and redirects count. The
-// inspect() function is exported so scripts/blacklist-guard-self-test.mjs can
-// assert the discrimination without opencode.
-//
-// Constraints mirror the repo: no dependencies, fail-open (a bug in the
-// guard must never block a tool call).
+// Matching is quote-aware: `grep 'sed'` is not `sed`. inspect() and
+// remediate2devnull() are exported so scripts/blacklist-guard-self-test.mjs
+// can assert the discrimination without opencode. Fail-open: a bug in the
+// guard must never block a tool call.
 
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
@@ -32,15 +39,18 @@ const RULES = [
     fix: "rm -f on named paths", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",
     fix: "subprocess.Popen(..., stdout=PIPE, stderr=PIPE) + communicate()", rule: "convention" },
-  { name: "2>/dev/null", pattern: "2>/dev/null", sev: "block",
-    fix: "let stderr flow and branch on the failure", rule: "#8" },
+  { name: "2>/dev/null", pattern: "2>\\s*/dev/null", sev: "fix",
+    fix: "redirect removed so stderr (the proof) reaches the tool result", rule: "#8" },
   { name: "echo", pattern: "(?:^|[;&|()]\\s*)echo\\s", sev: "warn",
     fix: "printf '%s\\n'", rule: "#38" },
 ];
 
 for (const r of RULES) r.re = new RegExp(r.pattern);
 
+const REDIRECT_RE = /2>\s*\/dev\/null/g;
+
 // Blank single/double-quoted regions so `grep 'sed'` is not treated as `sed`.
+// Preserves string length, so match indices map back onto the original.
 export function stripQuotes(cmd) {
   let out = "", quote = null;
   for (const ch of String(cmd || "")) {
@@ -57,12 +67,32 @@ export function stripQuotes(cmd) {
   return out;
 }
 
-// Return the rules matched by a command string.
+// Return the rules matched by a command string (quote-aware).
 export function inspect(command) {
   const bare = stripQuotes(command);
   const hits = [];
   for (const r of RULES) if (r.re.test(bare)) hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
   return hits;
+}
+
+// Remove unquoted `2>/dev/null` redirects so stderr is no longer suppressed.
+// Returns { cmd, count }. Quoted occurrences are left intact.
+export function remediate2devnull(command) {
+  const src = String(command || "");
+  const bare = stripQuotes(src);
+  const spans = [];
+  let m;
+  REDIRECT_RE.lastIndex = 0;
+  while ((m = REDIRECT_RE.exec(bare)) !== null) spans.push([m.index, m.index + m[0].length]);
+  if (!spans.length) return { cmd: src, count: 0 };
+  let last = 0;
+  const parts = [];
+  for (const [s, e] of spans) {
+    parts.push(src.slice(last, s));
+    last = e;
+  }
+  parts.push(src.slice(last));
+  return { cmd: parts.join(" "), count: spans.length };
 }
 
 function mode() {
@@ -108,15 +138,8 @@ export const BlacklistGuard = async ({ client }) => {
       }
       if (!hits.length) return;
 
-      const warners = hits.filter((h) => h.sev === "warn");
       const blockers = m === "block" ? hits.filter((h) => h.sev === "block") : [];
-
-      if (warners.length) {
-        await log("warn", "blacklist warning (not blocked)", {
-          patterns: warners.map((h) => h.name),
-          command: command.slice(0, 200),
-        });
-      }
+      const warners = hits.filter((h) => h.sev === "warn");
 
       if (blockers.length) {
         await log("error", "blacklist blocked", {
@@ -126,9 +149,28 @@ export const BlacklistGuard = async ({ client }) => {
         const detail = blockers.map((h) => "- " + h.name + " (rule " + h.rule + "): use " + h.fix).join("\n");
         throw new Error(
           "blacklist-guard blocked this command:\n" + detail +
-          "\nSee RULES.md \"Substitutions for the blacklist\". " +
+          "\nThese constructs fail opaquely and hide the evidence needed to fix them. " +
+          "See RULES.md \"Substitutions for the blacklist\". " +
           "Set OPENCODE_BLACKLIST_GUARD=warn to downgrade, or =off to disable."
         );
+      }
+
+      if (m === "block" && hits.some((h) => h.sev === "fix")) {
+        const r = remediate2devnull(output.args.command);
+        if (r.count) {
+          output.args.command = r.cmd;
+          await log("warn", "removed 2>/dev/null so stderr (the proof) is visible", {
+            removed: r.count,
+            command: r.cmd.slice(0, 200),
+          });
+        }
+      }
+
+      if (warners.length) {
+        await log("warn", "blacklist warning (not blocked)", {
+          patterns: warners.map((h) => h.name),
+          command: command.slice(0, 200),
+        });
       }
     },
   };
