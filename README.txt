@@ -284,8 +284,9 @@ Runs every gate (lint, test-hygiene, test-patterns, test-dashboard), then the
 live telemetry (guard actions + tool errors), the cost headline, the learned
 rules, the model catalog, the doc budget and the TODO "in flight" list, and
 prints a summary. `--fast` skips the slow dashboard gate; `--export` writes a
-timestamped report to logs/. Robust: a failing gate is reported and the run
-continues.
+timestamped report to logs/; `--json` emits only
+`{ts,rev,passed,failed,gates[]}` for a wrapper. Robust: a failing gate is
+reported and the run continues.
 
 The doc corpus that a session reads first (RULES/HANDOFF/README/TODO/DESIGN/
 skills) is itself context cost:

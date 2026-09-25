@@ -33,15 +33,15 @@ Last updated: 2026-09-25
 
 ## In flight
 
-- [~] **harness.sh** — next: an optional `--json` output (see the segmented plan).
+- (none — the locally-doable queue is drained; everything left is B/C/D below)
 
 ## Segmented plan (do not balloon)
 
-- **Segment A — local, doable now (this lane):** learning loop closed
-  (`issue-solutions --write` + `/api/solutions`); patterns view; cache report.
-- **Segment B — doable, needs a host/test:** wire `doctor.sh --full` to run
-  `test-hygiene`/`test-patterns` (doctor is docker-coupled, so it cannot be
-  tested in-container); `harness.sh --json`.
+- **Segment A — local, doable now:** **drained.** Learning loop closed,
+  patterns view, cache report, `harness --json`, `/status` command.
+- **Segment B — needs a host/test this container cannot run:** wire
+  `doctor.sh --full` to run `test-hygiene`/`test-patterns` (doctor is
+  docker-coupled, so it must be validated on the host).
 - **Segment C — doable code, larger:** fuzzy code search
   (`semantic-search.sh` trigram/`difflib` rerank over the FTS5 candidates).
 - **Segment D — external / host / new deps (not doable in-container):**
@@ -76,6 +76,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] `harness.sh --json` — pure `{ts,rev,passed,failed,gates[]}` for wrappers
+      (closes the last in-flight item)
 - [x] the recurring status prompt is now an artifact: `/status`
       (`.opencode/command/status.md`) — both-senses issues, A–D bounding,
       one doable segment, gate, output contract. Stop re-pasting it.

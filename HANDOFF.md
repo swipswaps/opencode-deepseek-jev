@@ -68,7 +68,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `issue-solutions.py [--write]` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call); `--write` persists `data/observability/solutions.json` served at `/api/solutions` — free, local |
 | `learn-rules.py [--since-days N] [--write]` | contrastive corpus learning: state (error) → action shape → outcome; emits advisory avoid/prefer/recovery rules to `data/observability/learned-rules.json` |
 | `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
-| `harness.sh [--fast] [--export]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a timestamped report. `--fast` skips the slow dashboard gate |
+| `harness.sh [--fast] [--export] [--json]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a report, `--json` emits only `{ts,rev,passed,failed,gates[]}`; `--fast` skips the slow dashboard gate |
 | `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
 | `models.sh [--write] [--json]` / `models.py` | model catalog + cost policy from `opencode models --verbose`; verdict ALLOW / ASK / BLOCK; surfaced at `/models` |
 | `doc-budget.sh [--json] [--fail]` | token size + content-hash of the read-first doc corpus (RULES/HANDOFF/README/TODO/DESIGN/skills); budget `DOC_BUDGET_TOKENS`; unchanged hash = nothing new to re-learn |
