@@ -4,7 +4,7 @@
 # rule set and the recurring failure classes from the session log.
 #
 #   bash -n         shell syntax (scripts/*.sh, docker/*.sh, one-shots)
-#   shellcheck      shell static analysis (if installed)
+#   SC (shellcheck) shell static analysis (if installed)
 #   node --check    JS syntax (dashboard.mjs, helpers, page scripts)
 #   RULES grep      no `sed`, no `2>/dev/null` in operating scripts (non-comment)
 #

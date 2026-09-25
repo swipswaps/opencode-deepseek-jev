@@ -42,13 +42,13 @@ main() {
         return 2
     fi
 
-    if ! grep -qE "[[:space:]]$MOUNT_POINT[[:space:]]" "$FSTAB"; then
+    if ! grep -qE "[[:space:]]${MOUNT_POINT}[[:space:]]" "$FSTAB"; then
         printf 'no entry for %s in %s\n' "$MOUNT_POINT" "$FSTAB"
         return 1
     fi
 
     local line
-    line=$(grep -E "[[:space:]]$MOUNT_POINT[[:space:]]" "$FSTAB")
+    line=$(grep -E "[[:space:]]${MOUNT_POINT}[[:space:]]" "$FSTAB")
     printf 'current line:\n  %s\n\n' "$line"
 
     # Evaluate what is present and what is missing.
@@ -122,7 +122,7 @@ print("fstab updated")
 PY_EOF
 
     printf '\nnew line:\n'
-    grep -E "[[:space:]]$MOUNT_POINT[[:space:]]" "$FSTAB" | while IFS= read -r l; do
+    grep -E "[[:space:]]${MOUNT_POINT}[[:space:]]" "$FSTAB" | while IFS= read -r l; do
         printf '  %s\n' "$l"
     done
 
