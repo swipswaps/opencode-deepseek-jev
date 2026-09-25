@@ -208,6 +208,21 @@ main() {
         bad 'models.policy.json present'
     fi
 
+    if [ -f "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
+        if python3 -c '
+import sys, re
+h = open(sys.argv[1]).read()
+m = re.match(r"^---\n(.*?)\n---", h, re.S)
+sys.exit(0 if (m and "name:" in m.group(1) and "description:" in m.group(1)) else 1)
+' "$REPO/.opencode/skills/jev-harness/SKILL.md"; then
+            ok 'project skill frontmatter valid'
+        else
+            bad 'project skill frontmatter valid'
+        fi
+    else
+        bad 'project skill present (.opencode/skills/jev-harness/SKILL.md)'
+    fi
+
     rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt"
     rmdir "$work"
 

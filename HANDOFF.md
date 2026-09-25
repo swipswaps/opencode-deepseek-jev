@@ -5,6 +5,9 @@
 >
 > **UI design system:** `DESIGN.md` (tokens: one accent, 8px grid, Material
 > elevation) injected on every page via `scripts/dashboard.mjs` `THEME_CSS`.
+>
+> **Working process:** `.opencode/skills/jev-harness/SKILL.md` (auto-loaded by
+> opencode) — search-first → gate → guard → learn → document. Adapted from ECC.
 
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
@@ -477,6 +480,30 @@ pre-rotation; `verify-api-keys.sh` now shows jev-review connected).
 **G6 — Test / quality.** Built: strict-id headless UI test (catches the
 missing-`id` class). Next: (a) fuzzy code search (FTS5 + trigram/difflib
 rerank), (b) run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`.
+
+## ECC skills (audit — what to borrow)
+
+Reviewed `github.com/affaan-m/ECC` (292 skills, hooks, "instincts",
+AgentShield). Most of what ECC offers this repo already has locally; map:
+
+| ECC skill | this repo's equivalent |
+| --------- | ---------------------- |
+| search-first | read HANDOFF/RULES/TODO before coding (the `jev-harness` skill) |
+| cost-aware-llm-pipeline / cost-tracking / token-budget-advisor | `models.policy.json`, `models.sh`, `preflight.sh`, `cost-bottlenecks.sh` |
+| context-budget / strategic-compact | HANDOFF "Cost model"; `--replay-limit`, fresh sessions |
+| continuous-learning / unified-memory / knowledge-ops | `learn-rules.py`, `issue-solutions.py`, `audit-tool-calls.py` |
+| verification-loop / delivery-gate / gateguard | `harness.sh`, `test-*.sh`, `lint.sh` |
+| security-review / security-scan / safety-guard / AgentShield | `blacklist-guard.js`, `scan-constraints.py`, `prompt-lint.py` secrets |
+| content-hash-cache-pattern | `last-gate.json` proof cache |
+| dashboard-builder / design-system / make-interfaces-feel-better | `dashboard.mjs`, `DESIGN.md` |
+| docker-patterns / agent-harness-construction / eval-harness | `docker/`, `harness.sh`, `test-dashboard.sh` |
+| repo-scan / workspace-surface-audit / codebase-onboarding | `audit-tool-calls.py`, the unused-capability audit |
+| hookify-rules / rules-distill | `RULES.md`, the substitution table |
+
+Do **not** stack a full ECC install here (292 skills + hooks would duplicate
+the guard). Borrow patterns; install ECC only if a lane genuinely needs a skill
+this repo lacks. The repo's own skill is
+`.opencode/skills/jev-harness/SKILL.md`.
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·

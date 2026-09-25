@@ -66,6 +66,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] ECC audit + project skill `.opencode/skills/jev-harness/SKILL.md`
+      (search-first → gate → guard → learn → document; don't stack a full ECC install)
 - [x] model cost policy: `models.policy.json` + `models.py`/`models.sh` +
       `/models` UI page; verdict ALLOW/ASK/BLOCK replaces "flash or STOP"
       (7 free Zen models surfaced)
