@@ -5,9 +5,13 @@ Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
 (`deepseek-flash`) + **Jev** (`jev-guard` plugin + `jev-review` MCP).
 Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode-deepseek-jev`.
 
-## Current state (2026-09-24)
+## Current state (2026-09-25)
 - All audits green: `scripts/audit-config.sh` → 18/18 OK; DeepSeek balance ~$4.72.
 - Everything is committed and pushed (`main`).
+- Added `scripts/test-patterns.sh`: read-only gate proving the tool-sequence
+  n-gram substrate (the data layer behind the deferred "patterns view").
+  Scoped the three deferred candidates (perspective pivot grid, Plot/Vega-Lite
+  charts, patterns view) — see "Next candidates".
 - Keys rotated. `.env.local` (mode 0600) is the **single source of truth** for
   `DEEPSEEK_API_KEY`, `JEV_API_KEY`, `OPENCODE_SERVER_PASSWORD`. Never `export`
   the password into a shell (a stale `$OPENCODE_SERVER_PASSWORD` caused drift).
@@ -38,6 +42,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
 | `lint.sh` | static gate: `bash -n` + `shellcheck` (baked into image) + `node --check` + RULES grep (no `sed`/`2>/dev/null`) |
+| `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
@@ -76,6 +81,46 @@ headlessly via `test-dashboard-ui.mjs`.
   5001 (Dockge), 4000 (optional LiteLLM proxy). Firefox blocks 6000–6010 (X11)
   — use 5099/8080/3000.
 
+## Session database & tool-use methods
+
+The agent's entire history — **including every tool call** — is one SQLite
+database at `data/opencode/opencode.db` (mounted read-only by the dashboard;
+node reads it via `node:sqlite` / `--experimental-sqlite`). This is the
+substrate for *database-driven session management*: nothing extra has to be
+captured to answer "what did the agent do, in what order, for how much".
+
+| Table | Holds | Key columns (JSON is in `data`) |
+|-------|-------|---------------------------------|
+| `session` | one row per session | `id`, `parent_id`, `title`, `directory`, `cost`, `tokens_input/output/reasoning/cache_read/write`, `model`, `agent`, `time_created/updated`, `time_compacting/archived` |
+| `message` | one row per turn | `id`, `session_id`, `data.role` |
+| `part` | one row per message part — the granular event log | `message_id`, `session_id`, `time_created`, `data` |
+| `todo` | the live plan | `session_id`, `content`, `status`, `priority`, `position` |
+
+**Tool calls are `part` rows.** A tool part's `data` JSON looks like:
+
+```json
+{"type":"tool","tool":"bash","callID":"call_…",
+ "state":{"status":"running|completed|error",
+          "input":{"command":"…","filePath":"…"}}}
+```
+
+So the *ordered tool sequence for a session* is:
+
+```sql
+SELECT json_extract(data,'$.tool') FROM part
+WHERE session_id=? AND json_extract(data,'$.type')='tool'
+ORDER BY time_created;
+```
+
+and a corpus-wide **n-gram (bigram) count** over tool sequences is a single
+window query (`lead` over `PARTITION BY session_id ORDER BY time_created`).
+Observed distribution (988 tool parts / 11 tools): `bash->bash` 273,
+`edit->edit` 168, `read->read` 111, `edit->bash` 74, `bash->read` 74 …
+`error` status accounts for 22 parts. `scripts/test-patterns.sh` gates this
+exactly (read-only, non-zero unless tool parts + distinct tools + >=1 bigram
+exist). **This is the data substrate for the "patterns view (tool-sequence
+n-grams)" candidate — no new capture needed.**
+
 ## Cost model
 - `session.cost` (USD) and `tokens_input/output/reasoning` live in
   `data/opencode/opencode.db`. **Input tokens (context) are the cost driver** —
@@ -105,6 +150,31 @@ verify the LiteLLM model id (`deepseek/deepseek-chat`) against the live
 API and opencode.json (`deepseek-flash`); optional Langfuse/Phoenix
 tracing.
 
+## Next candidates (deferred, not started)
+
+These are the visualisation layer's next batch. Each has a data substrate
+that already exists; none is wired yet.
+
+1. **finos/perspective pivot grid** — WASM pivot table as a new `/explore`
+   tab. Vendor the esm bundle like d3 (`scripts/vendor/` + `/vendor/*`
+   whitelist), feed it `/api/schema` columns + `/api/sessions` rows. Offline,
+   no build step. Gate under `test-dashboard.sh` (inline-script parse +
+   headless execution, RULES #61).
+2. **Observable Plot / Vega-Lite declarative charts** — replace or augment
+   the hand-rolled d3 charts (treemap/burn/scatter/sankey/gantt) with
+   declarative specs. Still vendored + offline, still served at `/vendor/*`,
+   still gated by `test-dashboard.sh` + `test-dashboard-ui.mjs`.
+3. **Patterns view (tool-sequence n-grams)** — mine `part` tool sequences
+   (see "Session database & tool-use methods") into a `/api/patterns`
+   endpoint + a `/explore` tab: recurring tool chains (`bash->read->edit->bash`)
+   and error-prone chains (tool parts with `state.status='error'`). The
+   read-only extraction is already proven by `scripts/test-patterns.sh`.
+
+Order of attack: 3 → 1 → 2. Patterns (3) is smallest and unblocks the
+n-gram substrate for the other two; the pivot grid (1) is the highest
+leverage for the sessions table; declarative charts (2) are the largest
+refactor and should land last.
+
 Security/ops notes: the LiteLLM runbook validates with
 `docker compose ... config --quiet` — plain `config` resolves `env_file`
 and prints every `.env.local` value. `docker-compose.litellm.yml` sets
@@ -119,3 +189,10 @@ treats the agent containers as orphans.
   **Jev-API-compatible** self-hosted server (`POST /v1/systemone`) — a drop-in
   base-URL swap. Weak zero-shot (0.362) but 0.766 fine-tuned; ~$0 self-hosted.
 - Net: keep Jev now; consider Laya self-host to cut TypeSafe cost / go on-prem.
+
+Next-session handoff prompt: see `HANDOFF-PROMPT.txt` (paste verbatim into a
+fresh session). It is kept out of this file deliberately — an agent-directed
+"read this, then do X" block inside HANDOFF.md trips `jev-guard`'s injection
+detector on every read (observed p=0.94).
+
+

@@ -1,0 +1,29 @@
+Handoff prompt — opencode-deepseek-jev
+======================================
+
+Open a fresh session (a large one re-sends its whole history every turn and
+spikes cost — see HANDOFF.md "Cost model") and paste the block below verbatim:
+
+--------------------------------------------------------------------------------
+
+Read HANDOFF.md, then work the "Next candidates (deferred, not started)"
+section in order 3 → 1 → 2. Start with the patterns view
+(tool-sequence n-grams): add a read-only /api/patterns endpoint to
+scripts/dashboard.mjs (mine part rows where json_extract(data,'$.type')='tool',
+ordered by time_created per session, count n-grams with a lead() window query)
+and a /explore "patterns" tab rendered with the existing vendored d3.
+Every served page's inline <script> must parse AND execute headlessly —
+extend scripts/test-dashboard.sh and scripts/test-dashboard-ui.mjs to cover
+the new tab before pushing. Keep scripts/test-patterns.sh green.
+Honour RULES.md (no sed, no 2>/dev/null, printf, main() wrapper, UTC
+timestamps) and run ./scripts/lint.sh before pushing. Read-only over
+data/opencode/opencode.db; never write to it. Update HANDOFF.md and README.txt
+with whatever you land. Do not commit or push — leave the tree clean and
+report the diff + the test results instead.
+
+--------------------------------------------------------------------------------
+
+Why this file exists separately: an agent-directed "read this, then do X"
+block stored inside HANDOFF.md trips jev-guard's injection detector on every
+read (observed p=0.94). This file is read by the human operator, not by the
+agent, so it stays out of the agent's auto-loaded context.

@@ -172,6 +172,46 @@ Ranks the cost drivers in the database: effective $/1k-input, top sessions
 by cost and by input tokens, worst effective $/1k-input, tiny-session
 overhead, and a per-model breakdown. Read-only; host or container.
 
+Session database & tool-use methods
+-----------------------------------
+Everything the agent does — including every tool call — is one SQLite
+database at data/opencode/opencode.db. The dashboard and scripts read it
+read-only (node:sqlite / --experimental-sqlite); nothing is ever written
+back. Tables that matter:
+
+    session    one row per session (title, cost, tokens_*, model, times)
+    message    one row per turn (data.role)
+    part       one row per message part — the granular event log
+    todo       the live plan (content, status, priority, position)
+
+A tool call is a `part` row whose `data` is JSON:
+
+    {"type":"tool","tool":"bash",
+     "state":{"status":"running|completed|error",
+              "input":{"command":"...","filePath":"..."}}}
+
+so the ordered tool sequence for a session is
+
+    SELECT json_extract(data,'$.tool') FROM part
+    WHERE session_id=? AND json_extract(data,'$.type')='tool'
+    ORDER BY time_created;
+
+and a corpus-wide n-gram count is a single window query (lead() over
+PARTITION BY session_id). ./scripts/test-patterns.sh proves this substrate
+read-only (tool parts, distinct tools, bigrams, error chains) and gates the
+deferred "patterns view" candidate.
+
+Next candidates (deferred, not started)
+---------------------------------------
+   1. finos/perspective pivot grid    new /explore tab (vendored like d3)
+   2. Observable Plot / Vega-Lite     declarative charts (largest refactor)
+   3. Patterns view (tool-sequence    /api/patterns + /explore tab, mined
+      n-grams)                        from `part` tool sequences
+
+Attack order: 3 → 1 → 2. See HANDOFF.md "Next candidates" for the scope,
+and HANDOFF-PROMPT.txt for the verbatim prompt to paste into the next
+session.
+
 Jev functional proof
 --------------------
     ./scripts/test-jev-functional.sh

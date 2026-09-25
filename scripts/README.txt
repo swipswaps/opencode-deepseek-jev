@@ -116,6 +116,15 @@ thinking.sh
     and command), reasoning text, and answer text as they are written.
     Polls every 2s by default (THINKING_POLL=1 for 1s).
 
+test-patterns.sh
+    Read-only proof of the tool-sequence substrate behind the "patterns
+    view (tool-sequence n-grams)" candidate. Opens the opencode database
+    read-only and asserts that tool calls are recoverable as ordered
+    per-session sequences and countable as n-grams (lead() window query):
+    tool parts, distinct tools, >=1 bigram, and the error-tool share.
+    Exits non-zero unless the tool-use method is real. Host or container;
+    no writes to the database.
+
 test-jev-functional.sh
     Behavioral Jev proof: invokes the jev-review MCP tool and fails
     (non-zero) unless it fires and returns an applicable metric with a
