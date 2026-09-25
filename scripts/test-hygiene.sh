@@ -187,7 +187,28 @@ main() {
         bad 'learn-rules.py present + executable'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt"
+    if [ -f "$REPO/scripts/models.py" ]; then
+        if python3 "$REPO/scripts/models.py" --self-test > "$work/mo.txt" 2>&1; then
+            ok 'models.py: self-test'
+        else
+            bad 'models.py: self-test'
+            cat "$work/mo.txt"
+        fi
+    else
+        bad 'models.py present'
+    fi
+
+    if [ -f "$REPO/models.policy.json" ]; then
+        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "max_input_per_m_usd" in d' "$REPO/models.policy.json"; then
+            ok 'models.policy.json valid'
+        else
+            bad 'models.policy.json valid'
+        fi
+    else
+        bad 'models.policy.json present'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

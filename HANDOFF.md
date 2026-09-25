@@ -62,6 +62,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
 | `harness.sh [--fast] [--export]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a timestamped report. `--fast` skips the slow dashboard gate |
 | `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
+| `models.sh [--write] [--json]` / `models.py` | model catalog + cost policy from `opencode models --verbose`; verdict ALLOW / ASK / BLOCK; surfaced at `/models` |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
@@ -225,6 +226,42 @@ never replaces the agent's completions. The two levers are independent:
 
 So: pin flash first; wire the LiteLLM cap; only then invest in the Laya
 cascade (its real payoff is on-prem / no-TypeSafe, not dollars).
+
+### Model choice is a policy, not a hard-code
+
+The catalog (`opencode models --verbose`, 2026-09-25) has **7 free Zen models**
+(several tool-capable; `mimo-v2.6-flash-free`, `space-bunny-free`,
+`muse-spark-1.3-contributor-free` are image-capable) plus `deepseek-flash`
+($0.15) and `deepseek-v4-pro` ($0.435). `models.policy.json` sets the ceiling,
+allow-list and deny-list; `models.py` returns **ALLOW / ASK / BLOCK**; `preflight`
+fails closed on ASK/BLOCK. The UI `/models` page shows the catalog, the current
+model, the recommended alternative and the policy — the interactive chooser.
+So a non-flash model is not a blind STOP: it is an alert with options.
+
+## Drag-and-drop, database-driven tooling (options)
+
+The repo is already a database-driven tool layer: `dashboard.mjs` reads SQLite
+and serves JSON; the config surfaces are data (`runbooks.json`,
+`models.policy.json`, `learned-rules.json`). A visual builder would be an
+*authoring surface* over those files, not a new runtime. Options, ranked:
+
+1. **Blockly** (vendored, offline) — generates code from blocks; best fit to
+   author the guard rules / runbook commands visually and emit the same JSON.
+   No server, matches the vendored-d3 precedent, gateable by `test-dashboard`.
+2. **n8n** / **Node-RED** — flow automation with DB + HTTP nodes; good for
+   scheduled learning jobs (`harness.sh`, `learn-rules.py`) and alerts. Heavier
+   (a Node service), needs a port and auth, so it lives on the host like Dockge.
+3. **Retool / Appsmith / Budibase / ToolJet** — internal-tool builders over
+   SQL; fast CRUD UIs, but they want DB credentials with write access, which
+   violates the read-only rule here (RULES: never write `opencode.db`).
+4. **LangFlow / Flowise** — visual LLM chains; redundant with the local-first
+   posture (they add a model hop) and not needed for the deterministic layer.
+
+Recommendation: start with **Blockly** for rule/runbook authoring (offline,
+vendored, one gate) and **n8n on the host** for scheduled jobs; keep every
+builder's output as JSON consumed by `dashboard.mjs` and the guard. The
+machine interface stays stable: `{shape, rate, total}` rules, `{id, title,
+commands}` runbooks, `{max_input_per_m_usd, allow, deny}` policy.
 
 ### Context & cost optimization — tools to add
 

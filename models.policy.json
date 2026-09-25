@@ -1,0 +1,8 @@
+{
+  "$comment": "Model cost policy. max_input_per_m_usd is the ceiling for a model that is not explicitly allow-listed. Free models always pass. deny always fails closed.",
+  "max_input_per_m_usd": 0.2,
+  "require_toolcall": true,
+  "require_attachment": false,
+  "allow": ["deepseek-flash"],
+  "deny": ["deepseek-v4-pro"]
+}

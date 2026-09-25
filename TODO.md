@@ -45,9 +45,15 @@ Last updated: 2026-09-25
 - [ ] Observable Plot / Vega-Lite declarative charts
 
 ### G4 cost
-- [ ] pin `deepseek-flash` (user action; `v4-pro` is 2.9×)
+- [ ] pin `deepseek-flash` (user action; `v4-pro` is 2.9×) — now policy-driven
+      (models.policy.json), plus a `/models` interactive chooser
 - [ ] wire `docker/litellm.config.yaml` `max_budget` into routing
 - [ ] prompt cache-hit report (`opencode stats --models`)
+
+### G7 visual tooling (authoring surface over the JSON config)
+- [ ] Blockly (vendored, offline) to author guard rules / runbooks -> emit the
+      same JSON the guard and dashboard already read
+- [ ] n8n on the host for scheduled jobs (harness, learn-rules) + alerts
 
 ### G5 security / ops
 - [ ] Laya self-host (runbook exists) — a Laya→Jev cascade cuts Jev calls, but
@@ -60,6 +66,10 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] model cost policy: `models.policy.json` + `models.py`/`models.sh` +
+      `/models` UI page; verdict ALLOW/ASK/BLOCK replaces "flash or STOP"
+      (7 free Zen models surfaced)
+- [x] `learn-rules.py` contrastive corpus rules + guard advisory
 - [x] `preflight.sh` — fail-closed spend gate (keys, last gate result, balance,
       model); `harness.sh` records `data/observability/last-gate.json`
 - [x] audited unused capabilities: word-cloud restored to `/explore ▸ charts`;

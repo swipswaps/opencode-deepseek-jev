@@ -60,6 +60,23 @@ pattern) is not a violation. `scan-constraints.py` classifies file matches as
 code / string / comment and only fails on code; `audit-tool-calls.py` strips
 quoted regions before matching so `grep 'sed'` is not counted as `sed`.
 
+## Model cost policy
+
+Model choice is a rule, not a preference. `models.policy.json` sets the
+ceiling (`max_input_per_m_usd`), the `allow` list and the `deny` list; free
+models always pass. `scripts/models.py` applies the policy to the catalog from
+`opencode models --verbose` and returns one of:
+
+- **ALLOW** — within policy (free, allow-listed, or ≤ the ceiling).
+- **ASK** — over policy but cheaper/qualified alternatives exist: alert the
+  user and let them choose (interactive; `/models` in the UI).
+- **BLOCK** — deny-listed, or no model satisfies the policy.
+
+`preflight.sh` fails closed on ASK/BLOCK (override with `--allow-pro`). Do not
+hard-code a single model: the cheapest sufficient model wins, and the choice
+stays reviewable at `/models`. This replaces a blunt "flash or STOP" — there
+are free and specialty models the operator may prefer.
+
 ## Generated code and escapes (rule #61)
 
 The recurring "backtick" defect class. A page's inline `<script>` is

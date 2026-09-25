@@ -107,6 +107,11 @@ main() {
         "$REPO/scripts/learn-rules.py" --since-days 30 --write 2>&1 | head -n 18
     fi
 
+    if [ -x "$REPO/scripts/models.sh" ]; then
+        section "model catalog (-> data/observability/models.json)"
+        "$REPO/scripts/models.sh" --write 2>&1 | head -n 22
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         section "telemetry (signal: guard + errors)"
         "$REPO/scripts/logs.sh" --source signal --tail 8

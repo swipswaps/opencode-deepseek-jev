@@ -150,6 +150,15 @@ learn-rules.py
     --since-days N bounds the window (a rotated key must not be enforced
     forever); --write persists; --self-test.
 
+models.sh / models.py
+    Model catalog + cost policy. models.sh wraps `opencode models --verbose`
+    and pipes it to models.py, which applies models.policy.json
+    (max_input_per_m_usd, allow, deny; free models always pass) and returns
+    ALLOW / ASK / BLOCK for the current model, with a recommendation and the
+    cheaper alternatives. --json machine output; --write persists
+    data/observability/models.json for the /models UI page. preflight.sh uses
+    the verdict; nothing hard-codes a single model name.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a

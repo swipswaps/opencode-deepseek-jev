@@ -299,6 +299,20 @@ Jev/TypeSafe calls — small here (11 jev-review invocations total). It does not
 cut DeepSeek: Laya is a Jev-compatible classifier, not a chat model. The big
 lever is pinning `deepseek-flash` (v4-pro was 75% of spend).
 
+Choosing a model
+----------------
+    ./scripts/models.sh              # catalog + cost policy verdict
+    ./scripts/models.sh --write      # persist data/observability/models.json
+
+Model choice is a policy, not a hard-coded name. models.policy.json sets the
+ceiling (max_input_per_m_usd), the allow and deny lists; free models always
+pass. The catalog (from `opencode models --verbose`) currently has 7 free Zen
+models plus deepseek-flash and v4-pro. The verdict is ALLOW / ASK / BLOCK:
+ASK means over policy but cheaper/qualified alternatives exist, so alert the
+user rather than silently stop. The interactive chooser is the /models page in
+the observer UI (dashboard · explore · models · runbooks · docs · csv); switch
+from the TUI with /models or `opencode run -m <id>`.
+
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
 ocr) instead of one long page:

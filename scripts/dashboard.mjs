@@ -41,8 +41,8 @@ const NAV_CSS =
   "color:#8b949e;text-decoration:none}" +
   ".nav a:hover{border-color:#58a6ff;color:#58a6ff}" +
   ".nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}";
-const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/runbooks", "runbooks"],
-                   ["/docs", "docs"], ["/api/export", "csv"]];
+const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/models", "models"],
+                   ["/runbooks", "runbooks"], ["/docs", "docs"], ["/api/export", "csv"]];
 
 // Design tokens (DESIGN.md): one accent, 8px grid, Material elevation. Injected
 // on every page via nav(); overrides page CSS on equal specificity because it
@@ -80,6 +80,14 @@ function apiDoc(name) {
     return readFileSync(new URL("../" + name, import.meta.url), "utf8");
   } catch {
     return null;
+  }
+}
+
+function apiModels() {
+  try {
+    return JSON.parse(readFileSync(new URL("../data/observability/models.json", import.meta.url), "utf8"));
+  } catch {
+    return { available: false, models: [] };
   }
 }
 
@@ -1421,6 +1429,43 @@ sel.addEventListener('change',function(){loadDoc(sel.value);});
 loadDoc(DOCS[0]);
 </script></body></html>`;
 
+const modelsHtml = `<!doctype html>
+<html><head><meta charset="utf-8"><title>opencode models</title>
+<style>
+ body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
+ table{border-collapse:collapse;width:100%;font-size:12px}
+ th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #21262d}
+ .num{text-align:right;font-variant-numeric:tabular-nums}
+ .ok{color:#3fb950}.no{color:#8b949e}
+ .muted{color:#8b949e;font-size:12px}
+ .banner{padding:10px 14px;border-radius:8px;margin:8px 0;border:1px solid #30363d}
+ .banner.ok{border-color:#2ea043}.banner.ask{border-color:#d29922}.banner.block{border-color:#ff7b72}
+</style></head>
+<body>
+${nav("models")}
+<div id="banner" class="banner"></div>
+<div class="muted" id="policy"></div>
+<h2>Catalog</h2><div id="cat"></div>
+<div class="muted">This is the cost policy, not a guarantee. Switch with /models (TUI) or opencode run -m &lt;id&gt;.</div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+async function load(){
+  var r=await fetch('/api/models'); var d=await r.json();
+  var b=document.getElementById('banner');
+  if(!d||d.available===false||!d.models||!d.models.length){b.textContent='no catalog yet - run ./scripts/models.sh --write (or ./scripts/harness.sh)';return;}
+  var v=d.verdict||'?';
+  b.className='banner '+(v==='ALLOW'?'ok':(v==='ASK'?'ask':'block'));
+  b.innerHTML='<b>'+esc(v)+'</b> - '+esc(d.reason||'')+'<br>current: <b>'+esc(d.current||'?')+'</b> - recommended: <b>'+esc((d.recommended&&d.recommended.id)||'?')+'</b>';
+  document.getElementById('policy').textContent='policy: max_input=$'+(d.policy&&d.policy.max_input_per_m_usd)+'/1M  allow='+JSON.stringify((d.policy&&d.policy.allow)||[])+'  deny='+JSON.stringify((d.policy&&d.policy.deny)||[]);
+  var allow={};(d.allowed||[]).forEach(function(x){allow[x]=1;});
+  var h='<table><tr><th></th><th>model</th><th class="num">in $/1M</th><th class="num">out</th><th class="num">ctx</th><th>img</th><th>tool</th></tr>';
+  for(var i=0;i<d.models.length;i++){var m=d.models[i];var ok=allow[m.id];
+    h+='<tr><td class="'+(ok?'ok':'no')+'">'+(ok?'ok':'no')+'</td><td>'+esc(m.id)+'</td><td class="num">'+m.input+'</td><td class="num">'+m.output+'</td><td class="num">'+m.context+'</td><td>'+(m.attachment?'yes':'')+'</td><td>'+(m.toolcall?'yes':'')+'</td></tr>';}
+  document.getElementById('cat').innerHTML=h+'</table>';
+}
+load();
+</script></body></html>`;
+
 function send(res, code, body, type) {
   res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" });
   res.end(body);
@@ -1453,6 +1498,10 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, runbooksHtml, "text/html; charset=utf-8");
   } else if (url === "/docs") {
     send(res, 200, docsHtml, "text/html; charset=utf-8");
+  } else if (url === "/models") {
+    send(res, 200, modelsHtml, "text/html; charset=utf-8");
+  } else if (url === "/api/models") {
+    send(res, 200, JSON.stringify(apiModels()), "application/json");
   } else if (url === "/api/doc") {
     const body = apiDoc(params.name);
     if (body == null) {

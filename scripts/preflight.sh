@@ -46,6 +46,42 @@ resolve_repo() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Model policy verdict for a model id: ALLOW | ASK | BLOCK | SKIP | UNKNOWN.
+# Uses the written catalog (data/observability/models.json) when present,
+# else falls back to the policy's allow/deny lists by name.
+model_verdict() {
+    local m="$1" cat="$REPO/data/observability/models.json"
+    [ -z "$m" ] && { printf 'SKIP'; return; }
+    if [ -f "$REPO/scripts/models.py" ] && [ -f "$cat" ]; then
+        python3 "$REPO/scripts/models.py" --catalog "$cat" --current "$m" --json 2>&1 \
+            | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin)["verdict"])
+except Exception:
+    print("UNKNOWN")'
+        return
+    fi
+    python3 - "$REPO/models.policy.json" "$m" <<'POLICY_EOF' 2>&1
+import json, sys
+try:
+    p = json.load(open(sys.argv[1]))
+except Exception:
+    print("UNKNOWN"); raise SystemExit
+if not isinstance(p, dict):
+    p = {}
+m = sys.argv[2]
+s = m.split("/")[-1]
+deny = p.get("deny", [])
+allow = p.get("allow", [])
+if m in deny or s in deny:
+    print("BLOCK")
+elif m in allow or s in allow:
+    print("ALLOW")
+else:
+    print("UNKNOWN")
+POLICY_EOF
+}
+
 crit() { CRIT=$((CRIT+1)); [ "$JSON" -eq 1 ] || printf '  [STOP] %s\n' "$1"; }
 warn() { WARN=$((WARN+1)); [ "$JSON" -eq 1 ] || printf '  [warn] %s\n' "$1"; }
 good() { [ "$JSON" -eq 1 ] || printf '  [ ok ] %s\n' "$1"; }
@@ -123,19 +159,28 @@ except Exception:
     fi
 
     if [ "$ALLOW_PRO" -eq 0 ]; then
-        local cfgmodel
+        local cfgmodel lastmodel cv lv
         cfgmodel=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("model",""))' "$REPO/opencode.json" 2>&1)
-        case "$cfgmodel" in
-            *flash*) good "deterministic for non-flash leak: opencode.json model=$cfgmodel" ;;
-            *) crit "opencode.json model=$cfgmodel is not deepseek-flash (cost leak)" ;;
+        cv=$(model_verdict "$cfgmodel")
+        case "$cv" in
+            ALLOW) good "opencode.json model=$cfgmodel within policy" ;;
+            ASK)   crit "opencode.json model=$cfgmodel is over policy — cheaper options exist (see ./scripts/models.sh)" ;;
+            BLOCK) crit "opencode.json model=$cfgmodel is deny-listed" ;;
+            *)     warn "cannot evaluate opencode.json model=$cfgmodel (no catalog; run ./scripts/models.sh --write)" ;;
         esac
         if [ -f "$db" ]; then
-            local lastmodel
             lastmodel=$(sqlite3 "$db" "SELECT COALESCE(json_extract(model,'\$.id'),'') FROM session ORDER BY time_created DESC LIMIT 1;" 2>&1)
-            case "$lastmodel" in
-                *flash*|"") [ -z "$lastmodel" ] && warn "no last-session model" || good "last session model=$lastmodel" ;;
-                *) crit "last session ran model=$lastmodel (non-flash; 2.9x) — pin deepseek-flash" ;;
-            esac
+            if [ -z "$lastmodel" ]; then
+                warn "no last-session model"
+            else
+                lv=$(model_verdict "$lastmodel")
+                case "$lv" in
+                    ALLOW) good "last session model=$lastmodel within policy" ;;
+                    ASK)   crit "last session model=$lastmodel is over policy — switch before the next turn" ;;
+                    BLOCK) crit "last session model=$lastmodel is deny-listed" ;;
+                    *)     warn "cannot evaluate last session model=$lastmodel" ;;
+                esac
+            fi
         fi
     else
         warn "--allow-pro: skipping model checks"

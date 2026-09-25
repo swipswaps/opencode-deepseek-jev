@@ -131,6 +131,12 @@ main() {
     has 'Substitutions for the blacklist' "$work/doc.txt" && ok 'api/doc serves RULES.md' || bad 'api/doc serves RULES.md'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/api/doc?name=../../etc/passwd" > "$work/doc404.txt"
     has '404' "$work/doc404.txt" && ok 'api/doc rejects non-whitelisted path' || bad 'api/doc rejects non-whitelisted path'
+    has 'href="/models"' "$work/home.html" && ok 'home nav models' || bad 'home nav models'
+    curl -s "http://$HOST:$PORT/models" > "$work/models.html"
+    has '<title>opencode models</title>' "$work/models.html" && ok 'models title' || bad 'models title'
+    has 'id="banner"' "$work/models.html" && ok 'models banner' || bad 'models banner'
+    curl -s "http://$HOST:$PORT/api/models" > "$work/models.json"
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "models" in d or d.get("available") is False else 1)' "$work/models.json" && ok 'api/models' || bad 'api/models'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
     has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3.min.js" > "$work/d3code.txt"
@@ -146,7 +152,7 @@ main() {
     has 'id="count"' "$work/runbooks.html" && ok 'runbooks count element' || bad 'runbooks count element'
 
     local page pname
-    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html"; do
+    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html"; do
         pname=$(basename "$page")
         python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
