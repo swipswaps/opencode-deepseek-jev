@@ -43,8 +43,29 @@ const NAV_CSS =
   ".nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}";
 const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/runbooks", "runbooks"],
                    ["/docs", "docs"], ["/api/export", "csv"]];
+
+// Design tokens (DESIGN.md): one accent, 8px grid, Material elevation. Injected
+// on every page via nav(); overrides page CSS on equal specificity because it
+// comes later in document order (the <style> is in <body>).
+const THEME_CSS =
+  ":root{--bg:#0d1117;--surface:#161b22;--fg:#e6edf3;--muted:#8b949e;" +
+  "--border:#30363d;--accent:#2ea043;--danger:#ff7b72;--radius:8px;" +
+  "--pill:999px;--space:8px;--e1:0 1px 3px rgba(0,0,0,.35);--e2:0 4px 10px rgba(0,0,0,.45)}" +
+  "body{background:var(--bg);color:var(--fg)}" +
+  ".card,.chart{background:var(--surface);border:1px solid var(--border);" +
+  "border-radius:var(--radius);box-shadow:var(--e1)}" +
+  ".card:hover,.chart:hover{box-shadow:var(--e2)}" +
+  "h1{font-size:18px}h2{font-size:13px;letter-spacing:.02em}" +
+  "th{color:var(--muted)}th,td{border-bottom:1px solid var(--border)}" +
+  "input,select{background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius)}" +
+  "button{border-radius:var(--pill)}" +
+  ".tab,.tag,.badge{border-radius:var(--pill)}" +
+  ".tab.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
+  ".nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
+  ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}";
+
 function nav(active) {
-  let h = "<style>" + NAV_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
+  let h = "<style>" + NAV_CSS + THEME_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\"" : "") + ">" + it[1] + "</a>";
   }
@@ -824,6 +845,8 @@ ${nav("explore")}
 <div class="chart" id="gantt"></div>
 <h2>Part timeline — <span id="tl-title">latest session</span> <button id="tl-reset">reset</button></h2>
 <div class="chart" id="timeline"></div>
+<h2>Word cloud — recurring terms in reasoning &amp; text</h2>
+<div class="chart" id="cloud"></div>
 </div>
 <div class="pane" data-pane="signals" style="display:none">
 <h2>Signals — mistakes, rule mentions, churn</h2>
@@ -938,6 +961,7 @@ function renderTable(){
     .style('text-decoration',function(d){return d[0]===SORT.col?'underline':'none';})
     .on('click',function(ev,d){if(SORT.col===d[0])SORT.dir=-SORT.dir;else{SORT.col=d[0];SORT.dir=-1;}renderTable();});
   var tr=table.selectAll('tr.row').data(rows).enter().append('tr').attr('class','row')
+    .attr('data-od-id',function(d){return 'session:'+d.id;})
     .on('click',function(ev,d){detail(d.id);});
   tr.append('td').text(function(d){return d.title||'(untitled)';});
   tr.append('td').text(function(d){return modelId(d.model);});
@@ -1053,7 +1077,7 @@ async function load(){
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
   renderTable();renderDupes();renderSignals();renderGuard();renderOcr();renderIntegrations();renderAb();renderSchema();
-  renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();
+  renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
 async function renderTreemap(){

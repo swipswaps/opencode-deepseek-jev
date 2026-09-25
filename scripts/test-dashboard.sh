@@ -110,6 +110,7 @@ main() {
     has 'id="burn"' "$work/explore.html" && ok 'explore burn section' || bad 'explore burn section'
     has 'id="scatter"' "$work/explore.html" && ok 'explore scatter section' || bad 'explore scatter section'
     has 'id="sankey"' "$work/explore.html" && ok 'explore sankey section' || bad 'explore sankey section'
+    has 'id="cloud"' "$work/explore.html" && ok 'explore word-cloud section (restored)' || bad 'explore word-cloud section (restored)'
     has 'id="q2"' "$work/explore.html" && ok 'explore search box' || bad 'explore search box'
     has 'id="stable"' "$work/explore.html" && ok 'explore sessions table' || bad 'explore sessions table'
     has 'id="integrations"' "$work/explore.html" && ok 'explore integrations' || bad 'explore integrations'
@@ -186,7 +187,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=14' "$work/rbcheck.txt" && ok 'runbooks count=14' || bad 'runbooks count=14'
+    has 'count=15' "$work/rbcheck.txt" && ok 'runbooks count=15' || bad 'runbooks count=15'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"

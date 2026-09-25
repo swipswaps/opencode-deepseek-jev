@@ -158,5 +158,17 @@
       "./scripts/logs.sh --source packet"
     ],
     "note": "Read-only. 'system' and 'packet' need the host (no docker in the container). Guard actions appear after opencode-web restarts to load the plugin; they are also shown on /explore > signals."
+  },
+  {
+    "id": "harness",
+    "title": "Harness: whole-state check",
+    "purpose": "One command for every gate + live telemetry + cost headline + the TODO in-flight list, with an optional timestamped report.",
+    "where": "container",
+    "commands": [
+      "./scripts/harness.sh --fast",
+      "./scripts/harness.sh",
+      "./scripts/harness.sh --export"
+    ],
+    "note": "Robust: a failing gate is reported and the run continues; a missing gate is SKIP. --fast skips the slow dashboard gate; --export writes logs/harness-<UTC>.md. test-dashboard.sh already runs lint.sh and test-hygiene.sh."
   }
 ]

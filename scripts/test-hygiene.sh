@@ -147,7 +147,24 @@ main() {
         bad 'logs.sh present + executable'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt"
+    if [ -x "$REPO/scripts/harness.sh" ]; then
+        if "$REPO/scripts/harness.sh" --help > "$work/harness.txt" 2>&1; then
+            ok 'harness.sh runs (--help)'
+        else
+            bad 'harness.sh runs (--help)'
+            tail -4 "$work/harness.txt"
+        fi
+    else
+        bad 'harness.sh present + executable'
+    fi
+
+    if [ -f "$REPO/DESIGN.md" ]; then
+        ok 'DESIGN.md present'
+    else
+        bad 'DESIGN.md present'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

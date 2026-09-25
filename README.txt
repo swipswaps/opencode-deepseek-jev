@@ -261,6 +261,21 @@ RULES.md, README.txt, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
 (read-only, whitelisted names via /api/doc), so the rules are reachable
 without leaving the browser.
 
+The UI follows DESIGN.md: one accent (#2ea043), an 8px grid, Material
+elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on
+surfaces and 999px pills. The tokens + overrides live in `THEME_CSS` in
+scripts/dashboard.mjs and are injected on every page.
+
+One command for the whole state
+-------------------------------
+    ./scripts/harness.sh [--fast] [--export]
+
+Runs every gate (lint, test-hygiene, test-patterns, test-dashboard), then the
+live telemetry (guard actions + tool errors), the cost headline and the
+TODO "in flight" list, and prints a summary. `--fast` skips the slow dashboard
+gate; `--export` writes a timestamped report to logs/. Robust: a failing gate
+is reported and the run continues.
+
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
 ocr) instead of one long page:

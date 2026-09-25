@@ -124,6 +124,14 @@ logs.sh
     only), packet (the exact tcpdump command; not run). --source S,
     --since MIN, --tail N, --grep RE.
 
+harness.sh
+    One command for the whole state. Runs every gate (lint, test-hygiene,
+    test-patterns, test-dashboard), then the live telemetry, the cost
+    headline and the TODO "in flight" list, and prints a summary. --fast
+    skips the slow dashboard gate; --export writes logs/harness-<UTC>.md.
+    Robust: a failing gate is reported and the run continues; a missing gate
+    is SKIP, not pass. Exits non-zero only if a gate failed.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a
