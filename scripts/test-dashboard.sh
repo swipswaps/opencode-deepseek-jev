@@ -83,6 +83,25 @@ main() {
 
     curl -s "http://$HOST:$PORT/" > "$work/home.html"
     has '[runbooks]' "$work/home.html" && ok 'home nav [runbooks]' || bad 'home nav [runbooks]'
+    has '[explore]' "$work/home.html" && ok 'home nav [explore]' || bad 'home nav [explore]'
+
+    curl -s "http://$HOST:$PORT/explore" > "$work/explore.html"
+    has '<title>opencode explore</title>' "$work/explore.html" && ok 'explore title' || bad 'explore title'
+    has 'id="treemap"' "$work/explore.html" && ok 'explore treemap section' || bad 'explore treemap section'
+    has 'id="burn"' "$work/explore.html" && ok 'explore burn section' || bad 'explore burn section'
+    has 'id="scatter"' "$work/explore.html" && ok 'explore scatter section' || bad 'explore scatter section'
+    has 'id="sankey"' "$work/explore.html" && ok 'explore sankey section' || bad 'explore sankey section'
+    has 'id="q2"' "$work/explore.html" && ok 'explore search box' || bad 'explore search box'
+    has 'id="stable"' "$work/explore.html" && ok 'explore sessions table' || bad 'explore sessions table'
+    has 'id="integrations"' "$work/explore.html" && ok 'explore integrations' || bad 'explore integrations'
+    has 'id="dmap"' "$work/explore.html" && ok 'explore db map' || bad 'explore db map'
+    has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
+    has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3.min.js" > "$work/d3code.txt"
+    has '200' "$work/d3code.txt" && ok 'vendored d3 served' || bad 'vendored d3 served'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3-sankey.min.js" > "$work/skcode.txt"
+    has '200' "$work/skcode.txt" && ok 'vendored d3-sankey served' || bad 'vendored d3-sankey served'
 
     curl -s "http://$HOST:$PORT/runbooks" > "$work/runbooks.html"
     has '<title>opencode runbooks</title>' "$work/runbooks.html" && ok 'runbooks title' || bad 'runbooks title'
@@ -92,7 +111,7 @@ main() {
     has 'id="count"' "$work/runbooks.html" && ok 'runbooks count element' || bad 'runbooks count element'
 
     local page pname
-    for page in "$work/home.html" "$work/runbooks.html"; do
+    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html"; do
         pname=$(basename "$page")
         python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
@@ -133,7 +152,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=8' "$work/rbcheck.txt" && ok 'runbooks count=8' || bad 'runbooks count=8'
+    has 'count=10' "$work/rbcheck.txt" && ok 'runbooks count=10' || bad 'runbooks count=10'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"
@@ -142,6 +161,8 @@ PY
         has 'rotate-password|host' "$work/rblist.txt" && ok 'runbook.sh lists rotate-password' || bad 'runbook.sh lists rotate-password'
         has 'litellm|host' "$work/rblist.txt" && ok 'runbook.sh lists litellm' || bad 'runbook.sh lists litellm'
         has 'laya|host' "$work/rblist.txt" && ok 'runbook.sh lists laya' || bad 'runbook.sh lists laya'
+        has 'connect-vision|host' "$work/rblist.txt" && ok 'runbook.sh lists connect-vision' || bad 'runbook.sh lists connect-vision'
+        has 'ocr-image|container' "$work/rblist.txt" && ok 'runbook.sh lists ocr-image' || bad 'runbook.sh lists ocr-image'
     else
         bad 'runbook.sh present and executable'
     fi
@@ -161,6 +182,14 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
         curl -s "http://$HOST:$PORT/api/semantic?q=the&limit=3" > "$work/sem.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("mode")=="fts" and isinstance(d.get("results"),list) else 1)' "$work/sem.json" && ok 'api/semantic (fts)' || bad 'api/semantic (fts)'
+        curl -s "http://$HOST:$PORT/api/overview?limit=5" > "$work/ov.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and "budget" in d else 1)' "$work/ov.json" && ok 'api/overview' || bad 'api/overview'
+        curl -s "http://$HOST:$PORT/api/schema" > "$work/schema.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("tables") and isinstance(d.get("edges"),list) else 1)' "$work/schema.json" && ok 'api/schema' || bad 'api/schema'
+        curl -s "http://$HOST:$PORT/api/integrations" > "$work/integ.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "jev" in d and "laya" in d else 1)' "$work/integ.json" && ok 'api/integrations' || bad 'api/integrations'
+        curl -s "http://$HOST:$PORT/api/ab" > "$work/ab.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and isinstance(d.get("summary"),dict) else 1)' "$work/ab.json" && ok 'api/ab' || bad 'api/ab'
     else
         bad 'found a session id for endpoint tests'
     fi
@@ -171,6 +200,12 @@ PY
         else
             bad 'headless UI: dashboard panes populate'
             cat "$work/ui.txt"
+        fi
+        if node "$REPO/scripts/test-dashboard-ui.mjs" "http://$HOST:$PORT" explore > "$work/ui-x.txt" 2>&1; then
+            ok 'headless UI: explore script executes'
+        else
+            bad 'headless UI: explore script executes'
+            cat "$work/ui-x.txt"
         fi
     else
         bad 'test-dashboard-ui.mjs present'

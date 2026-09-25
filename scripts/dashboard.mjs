@@ -19,6 +19,7 @@ import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -56,6 +57,112 @@ function apiCost() {
   const lastPart = query("SELECT MAX(time_created) m FROM part")[0];
   const active = !!(lastPart && lastPart.m && Date.now() - Number(lastPart.m) < 30000);
   return { totals, sessions, latest: latest ? latest.title : null, active };
+}
+
+let budgetCache = { at: 0, usd: null };
+function budgetUsd() {
+  if (budgetCache.usd != null && Date.now() - budgetCache.at < 60000) return budgetCache.usd;
+  let usd = 5.0;
+  try {
+    const yml = readFileSync(new URL("../docker/litellm.config.yaml", import.meta.url), "utf8");
+    const m = yml.match(/max_budget:\s*([0-9.]+)/);
+    if (m) usd = Number(m[1]);
+  } catch {}
+  budgetCache = { at: Date.now(), usd };
+  return usd;
+}
+
+function apiOverview(limit) {
+  return { budget: budgetUsd(), sessions: apiSessions(limit) };
+}
+
+function apiSchema() {
+  const tnames = query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+  const tables = [];
+  for (const t of tnames) {
+    const n = query('SELECT COUNT(*) c FROM "' + t.name + '"')[0].c;
+    const cols = query('PRAGMA table_info("' + t.name + '")');
+    tables.push({ name: t.name, rows: n, cols: cols.map((c) => c.name) });
+  }
+  const edges = query(
+    "SELECT m.name AS src, fk.\"table\" AS dst, fk.\"from\" AS col " +
+    "FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) fk " +
+    "WHERE m.type='table' AND fk.\"table\" IS NOT NULL"
+  );
+  return { tables, edges };
+}
+
+function apiIntegrations() {
+  const tools = query(
+    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='tool' GROUP BY tool ORDER BY n DESC"
+  );
+  const sum = (re) => tools.filter((t) => re.test(t.tool || '')).reduce((a, t) => a + t.n, 0);
+  return { jev: sum(/jev/i), laya: sum(/laya/i), tools };
+}
+
+function apiAb(limit) {
+  let rows = [];
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
+    const cols = "ts, model, jev_status, jev_latency, jev_ok, laya_status, laya_latency, laya_ok, same, jev_correctness, jev_safe, jev_confidence, laya_correctness, laya_safe, laya_confidence, jev_model, laya_model";
+    try {
+      rows = db.prepare("SELECT " + cols + " FROM ab_run ORDER BY id DESC LIMIT ?").all(limit);
+    } catch {
+      rows = db.prepare("SELECT ts, model, jev_status, jev_latency, jev_ok, laya_status, laya_latency, laya_ok, same FROM ab_run ORDER BY id DESC LIMIT ?").all(limit);
+    }
+    db.close();
+  } catch {
+    rows = [];
+  }
+  const n = rows.length;
+  const avg = (k) => (n ? rows.reduce((a, r) => a + (Number(r[k]) || 0), 0) / n : 0);
+  const avgScore = (k) => {
+    const vals = rows.map((r) => r[k]).filter((v) => v != null).map((v) => Number(v)).filter((v) => !isNaN(v));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  return {
+    runs: rows,
+    summary: {
+      n,
+      jevOk: rows.filter((r) => r.jev_ok).length,
+      layaOk: rows.filter((r) => r.laya_ok).length,
+      same: rows.filter((r) => r.same === 1).length,
+      differ: rows.filter((r) => r.same === 0).length,
+      jevLatency: avg("jev_latency"),
+      layaLatency: avg("laya_latency"),
+      jevCorrectness: avgScore("jev_correctness"),
+      layaCorrectness: avgScore("laya_correctness"),
+      comparable: rows.filter((r) => Number(r.jev_correctness) != null || Number(r.laya_correctness) != null).length,
+    },
+  };
+}
+
+function apiSignals() {
+  const errors = query(
+    "SELECT s.id sid, s.title title, p.time_created ts, json_extract(p.data,'$.tool') tool, " +
+    "COALESCE(json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.state.input.filePath'), json_extract(p.data,'$.tool'), '') detail " +
+    "FROM part p JOIN session s ON s.id=p.session_id " +
+    "WHERE json_extract(p.data,'$.type')='tool' AND json_extract(p.data,'$.state.status')='error' " +
+    "ORDER BY p.time_created DESC LIMIT 40"
+  );
+  const signatures = {};
+  for (const sig of ["SyntaxError", "Unexpected token", "EADDRINUSE", "FAIL:", "ReferenceError", "Traceback"]) {
+    signatures[sig] = query(
+      "SELECT COUNT(*) c FROM part WHERE json_extract(data,'$.text') LIKE ? OR json_extract(data,'$.state.input.command') LIKE ?",
+      "%" + sig + "%", "%" + sig + "%"
+    )[0].c;
+  }
+  const ruleMentions = {};
+  for (const r of ["sed ", "2>/dev/null", "echo ", "rm -rf"]) {
+    ruleMentions[r] = query(
+      "SELECT COUNT(*) c FROM part WHERE json_extract(data,'$.state.input.command') LIKE ? OR json_extract(data,'$.text') LIKE ?",
+      "%" + r + "%", "%" + r + "%"
+    )[0].c;
+  }
+  const patches = query(
+    "SELECT json_extract(data,'$.files') files, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='patch' GROUP BY files ORDER BY n DESC LIMIT 20"
+  );
+  return { errorCount: errors.length, errors, signatures, ruleMentions, patches };
 }
 
 function apiActivity() {
@@ -103,7 +210,10 @@ function qs(req) {
 
 function apiSessions(limit) {
   return query(
-    "SELECT id, title, cost, tokens_input, tokens_output, tokens_reasoning, time_created, time_updated FROM session ORDER BY time_created DESC LIMIT ?",
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.time_created, s.time_updated, " +
+    "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
+    "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
+    "FROM session s ORDER BY s.time_created DESC LIMIT ?",
     limit
   );
 }
@@ -382,7 +492,7 @@ const html = `<!doctype html>
  #session{font-size:13px;margin-bottom:4px}
 </style></head>
 <body>
-<h1>opencode observability <a href="/viz" style="color:#58a6ff;font-size:13px;text-decoration:none">[charts]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
+<h1>opencode observability <a href="/explore" style="color:#58a6ff;font-size:13px;text-decoration:none">[explore]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
 <div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
@@ -538,6 +648,8 @@ document.getElementById('sessions').addEventListener('click',function(ev){
   var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
   if(tr){drill(tr.getAttribute('data-id'));}
 });
+var want=new URLSearchParams(location.search).get('session');
+if(want){drill(want);}
 refreshBalance();
 setInterval(refreshCost,2000);
 setInterval(refreshActivity,2000);
@@ -546,24 +658,66 @@ setInterval(refreshBalance,30000);
 setInterval(refreshConfig,30000);
 </script></body></html>`;
 
-const vizHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode viz</title>
-<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+const exploreHtml = `<!doctype html>
+<html><head><meta charset="utf-8"><title>opencode explore</title>
+<script src="/vendor/d3.min.js"></script>
+<script src="/vendor/d3-sankey.min.js"></script>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 4px} h2{font-size:13px;color:#8b949e;margin:16px 0 6px}
  a{color:#58a6ff;text-decoration:none;font-size:13px}
  .chart{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin:6px 0;overflow-x:auto}
- .tip{position:absolute;background:#21262d;border:1px solid #30363d;padding:6px 8px;border-radius:4px;font-size:12px;pointer-events:none;opacity:0;max-width:420px}
+ .tip{position:absolute;background:#21262d;border:1px solid #30363d;padding:6px 8px;border-radius:4px;font-size:12px;pointer-events:none;opacity:0;max-width:420px;z-index:10}
+ .muted{color:#8b949e;font-size:12px}
+ button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
+ svg text{font-family:system-ui,monospace}
+ .axis path,.axis line{stroke:#30363d}
+ .grid line{stroke:#21262d;stroke-dasharray:2 3}
+ .grid path{display:none}
+ .lbl{font-size:11px;fill:#8b949e}
+ .card{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;margin:8px 0}
+ input{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;width:100%;box-sizing:border-box}
+ table{border-collapse:collapse;width:100%;font-size:12px}
+ th,td{text-align:left;padding:3px 8px;border-bottom:1px solid #21262d;white-space:nowrap}
+ th{color:#8b949e;font-weight:600;cursor:pointer;user-select:none}
+ .num{text-align:right;font-variant-numeric:tabular-nums}
+ tr.row{cursor:pointer}
+ tr.row:hover{background:#1f6feb22}
+ .item{padding:4px 0;border-bottom:1px solid #21262d;font-size:12px;cursor:pointer}
+ .item:hover{background:#1f6feb22}
+ .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:6px;background:#30363d;color:#8b949e}
+ .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
+ .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
+ .stat b{display:block;font-size:16px}
+ .stat span{color:#8b949e;font-size:11px}
 </style></head>
 <body>
-<h1>opencode viz &nbsp;<a href="/">[dashboard]</a> <a href="/api/export">[export csv]</a> <a href="/runbooks">[runbooks]</a></h1>
-<h2>Sessions over time — bar color = cost</h2>
+<h1>opencode explore &nbsp;<a href="/">[dashboard]</a> <a href="/runbooks">[runbooks]</a> <a href="/api/export">[csv]</a></h1>
+<div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
+<div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
+<h2>Signals — mistakes, rule mentions, churn</h2>
+<div class="chart" id="signals"></div>
+<div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
+<h2>Sessions — sortable, filterable, click to open</h2>
+<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
+<h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>
+<div class="chart" id="integrations"></div>
+<h2>Jev vs Laya — A/B runs (persisted)</h2>
+<div class="chart" id="ab"></div>
+<h2>Database map — tables sized by rows, edges = foreign keys</h2>
+<div class="chart" id="dmap"></div>
+<h2>Where the money goes — sessions sized by cost, grouped by model</h2>
+<div class="chart" id="treemap"></div>
+<h2>Cumulative spend vs budget — drag to filter the views below</h2>
+<div class="chart" id="burn"></div>
+<h2>Latency x cost — radius = tokens, colour = model (outliers are bottlenecks)</h2>
+<div class="chart" id="scatter"></div>
+<h2>Token flow — where the tokens go, by model</h2>
+<div class="chart" id="sankey"></div>
+<h2>Sessions over time — bar colour = cost (click to load the part timeline)</h2>
 <div class="chart" id="gantt"></div>
-<h2>Part timeline — <span id="tl-title">latest session</span> <a href="#" onclick="renderTimeline(null,null);return false;">[reset]</a></h2>
+<h2>Part timeline — <span id="tl-title">latest session</span> <button id="tl-reset">reset</button></h2>
 <div class="chart" id="timeline"></div>
-<h2>Term frequency — reasoning + answer text</h2>
-<div class="chart" id="cloud"></div>
 <div class="tip" id="tip"></div>
 <script>
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
@@ -572,31 +726,345 @@ var colors={tool:'#58a6ff',reasoning:'#d2a8ff',text:'#7ee787','step-start':'#8b9
 function tip(html){var t=d3.select('#tip');if(html==null){t.style('opacity',0);return;}t.html(html).style('opacity',1);}
 function moveTip(ev){d3.select('#tip').style('left',(ev.clientX+14)+'px').style('top',(ev.clientY+14)+'px');}
 function timeFmt(d){var x=new Date(d);return x.toISOString().slice(11,16);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function modelId(m){if(!m)return '(none)';try{var o=JSON.parse(m);return o.id||o.modelID||m;}catch(e){return String(m);}}
+function span(d){var a=Number(d.p_start||0),b=Number(d.p_end||0);if(b>a)return b-a;return Math.max(0,Number(d.time_updated||0)-Number(d.time_created||0));}
+var MODEL_COLOR=null,COST=null;
+var DATA=[],BUDGET=0,FILTER=[0,Infinity];
+function inFilter(d){var t=d.time_created;return t>=FILTER[0]&&t<=FILTER[1];}
+function setFilterText(){
+  var el=document.getElementById('filter');
+  if(!el)return;
+  el.textContent=(FILTER[1]===Infinity)?'filter: all time':('filter: '+new Date(FILTER[0]).toISOString().slice(0,16)+' to '+new Date(FILTER[1]).toISOString().slice(0,16));
+}
+var SORT={col:'cost',dir:-1},TFILTER='';
+async function renderIntegrations(){
+  var el=d3.select('#integrations');el.selectAll('*').remove();
+  var d=await j('/api/integrations');
+  if(!d){el.text('(no data)');return;}
+  var max=Math.max(1,d.jev,d.laya);
+  var W=1000,H=132;
+  var x=d3.scaleLinear().domain([0,max]).range([0,600]);
+  var rows=[['Jev (hosted)',d.jev,'#d2a8ff'],['Laya (self-hosted)',d.laya,'#7ee787']];
+  var svg=el.append('svg').attr('width',W).attr('height',H);
+  var g=svg.selectAll('g').data(rows).enter().append('g').attr('transform',function(d,i){return 'translate(140,'+(28+i*32)+')';});
+  g.append('text').attr('x',-12).attr('text-anchor','end').attr('dy','0.35em').attr('class','lbl').text(function(d){return d[0];});
+  g.append('rect').attr('height',16).attr('rx',2).attr('width',function(d){return Math.max(1,x(d[1]));}).attr('fill',function(d){return d[2];}).attr('fill-opacity',0.7);
+  g.append('text').attr('x',function(d){return x(d[1])+6;}).attr('dy','0.35em').attr('class','lbl').text(function(d){return d[1]+' calls';});
+  if(d.laya===0){svg.append('text').attr('x',140).attr('y',H-8).attr('class','lbl').text('Laya self-host not configured yet — run the "laya" runbook to enable the A/B comparison.');}
+}
+async function renderAb(){
+  var el=d3.select('#ab');el.selectAll('*').remove();
+  var d=await j('/api/ab?limit=200');
+  if(!d||!d.runs||!d.runs.length){el.text('no A/B runs yet — run ./scripts/test-jev-laya-ab.sh to populate');return;}
+  var s=d.summary;
+  var rows=d.runs.slice().reverse();
+  var H=Math.max(150,70+rows.length*18);
+  var W=1000;
+  var y=d3.scaleBand().domain(rows.map(function(r){return r.ts;})).range([24,H-6]).padding(0.25);
+  var max=Math.max(0.001,d3.max(rows,function(r){return Math.max(Number(r.jev_latency)||0,Number(r.laya_latency)||0);})||0.001);
+  var x=d3.scaleLinear().domain([0,max]).range([0,660]);
+  var svg=el.append('svg').attr('width',W).attr('height',H);
+  svg.append('text').attr('x',0).attr('y',12).attr('class','lbl').text('runs '+s.n+' · jev ok '+s.jevOk+' · laya ok '+s.layaOk+' · identical '+s.same+' / differ '+s.differ+' · avg latency jev '+s.jevLatency.toFixed(2)+'s / laya '+s.layaLatency.toFixed(2)+'s · correctness jev '+(s.jevCorrectness==null?'—':s.jevCorrectness.toFixed(2))+' / laya '+(s.layaCorrectness==null?'—':s.layaCorrectness.toFixed(2))+' (n='+s.comparable+')');
+  var g=svg.selectAll('g.run').data(rows).enter().append('g').attr('transform',function(r){return 'translate(300,'+y(r.ts)+')';});
+  g.append('text').attr('x',-8).attr('text-anchor','end').attr('class','lbl').text(function(r){return String(r.ts).slice(5,19);});
+  g.append('rect').attr('height',6).attr('rx',1).attr('width',function(r){return Math.max(1,x(Number(r.jev_latency)||0));}).attr('fill','#d2a8ff').attr('fill-opacity',0.85);
+  g.append('rect').attr('y',8).attr('height',6).attr('rx',1).attr('width',function(r){return Math.max(1,x(Number(r.laya_latency)||0));}).attr('fill','#7ee787').attr('fill-opacity',0.85);
+  g.append('text').attr('x',function(r){return x(Math.max(Number(r.jev_latency)||0,Number(r.laya_latency)||0))+8;}).attr('y',8).attr('class','lbl').text(function(r){var c=function(v){return v==null?'—':(+v).toFixed(2);};return (r.same===1?'identical':(r.same===0?'differ':'n/a'))+' · jev '+c(r.jev_correctness)+' / laya '+c(r.laya_correctness);});
+}
+async function renderSchema(){
+  var el=d3.select('#dmap');el.selectAll('*').remove();
+  var s=await j('/api/schema');
+  if(!s||!s.tables||!s.tables.length){el.text('(no schema)');return;}
+  var W=1000,H=420;
+  var nodes=s.tables.map(function(t){return {id:t.name,rows:t.rows,r:4+Math.sqrt(t.rows+1)};});
+  var idx={};nodes.forEach(function(n,i){idx[n.id]=i;});
+  var links=s.edges.filter(function(e){return idx[e.src]!=null&&idx[e.dst]!=null;}).map(function(e){return {source:idx[e.src],target:idx[e.dst]};});
+  var svg=el.append('svg').attr('width',W).attr('height',H);
+  var link=svg.append('g').selectAll('line').data(links).enter().append('line').attr('stroke','#30363d');
+  var node=svg.append('g').selectAll('g').data(nodes).enter().append('g');
+  node.append('circle').attr('r',function(d){return d.r;}).attr('fill','#1f6feb').attr('fill-opacity',0.45).attr('stroke','#79c0ff');
+  node.append('text').attr('x',function(d){return d.r+3;}).attr('dy','0.35em').attr('class','lbl').text(function(d){return d.id+'  '+d.rows;});
+  var sim=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(links).distance(72).strength(0.6))
+    .force('charge',d3.forceManyBody().strength(-260))
+    .force('center',d3.forceCenter(W/2,H/2))
+    .force('collide',d3.forceCollide().radius(function(d){return d.r+24;}))
+    .on('tick',function(){
+      link.attr('x1',function(d){return d.source.x;}).attr('y1',function(d){return d.source.y;}).attr('x2',function(d){return d.target.x;}).attr('y2',function(d){return d.target.y;});
+      node.attr('transform',function(d){return 'translate('+d.x+','+d.y+')';});
+    });
+  sim.alpha(1).restart();
+}
+function tableRows(){
+  var rows=DATA.filter(inFilter);
+  if(TFILTER){var q=TFILTER.toLowerCase();rows=rows.filter(function(d){return String(d.title||'').toLowerCase().indexOf(q)>=0||modelId(d.model).toLowerCase().indexOf(q)>=0;});}
+  var col=SORT.col,dir=SORT.dir;
+  rows.sort(function(a,b){
+    var x,y;
+    if(col==='model'){x=modelId(a.model);y=modelId(b.model);}
+    else{x=a[col];y=b[col];}
+    if(typeof x==='number'||typeof y==='number'){x=+x||0;y=+y||0;}
+    else{x=String(x||'').toLowerCase();y=String(y||'').toLowerCase();}
+    return (x>y?1:x<y?-1:0)*dir;
+  });
+  return rows;
+}
+function renderTable(){
+  var el=d3.select('#stable');el.selectAll('*').remove();
+  var rows=tableRows();
+  var tc=document.getElementById('tcount');if(tc)tc.textContent=rows.length+' of '+DATA.length+' sessions';
+  var cols=[['title','title'],['model','model'],['cost','cost $'],['tokens_input','in'],['tokens_output','out'],['tokens_reasoning','reason'],['tokens_cache_read','cache'],['_span','span']];
+  var table=el.append('table');
+  table.append('tr').selectAll('th').data(cols).enter().append('th')
+    .text(function(d){return (d[0]===SORT.col?'▾ ':'')+d[1];})
+    .style('text-decoration',function(d){return d[0]===SORT.col?'underline':'none';})
+    .on('click',function(ev,d){if(SORT.col===d[0])SORT.dir=-SORT.dir;else{SORT.col=d[0];SORT.dir=-1;}renderTable();});
+  var tr=table.selectAll('tr.row').data(rows).enter().append('tr').attr('class','row')
+    .on('click',function(ev,d){detail(d.id);});
+  tr.append('td').text(function(d){return d.title||'(untitled)';});
+  tr.append('td').text(function(d){return modelId(d.model);});
+  tr.append('td').attr('class','num').text(function(d){return '$'+(+d.cost).toFixed(4);});
+  tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_input);});
+  tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_output);});
+  tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_reasoning);});
+  tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_cache_read);});
+  tr.append('td').attr('class','num').text(function(d){return (d._span/1000).toFixed(0)+'s';});
+}
+async function doSearch2(){
+  var q=(document.getElementById('q2').value||'').trim();
+  var el=document.getElementById('sres');
+  if(!q){el.innerHTML='';return;}
+  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=15');
+  var h='';
+  if(r&&r.results){for(var i=0;i<r.results.length;i++){var x=r.results[i];
+    h+='<div class="item" data-go="'+esc(x.session)+'"><span class="tag">'+esc(x.type||'part')+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
+  el.innerHTML=h||'<span class="muted">no matches</span>';
+}
+document.getElementById('q2').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch2();}});
+document.getElementById('sres').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+document.getElementById('tfilter').addEventListener('input',function(){TFILTER=this.value;renderTable();});
+async function detail(id){
+  var el=document.getElementById('detail');
+  el.innerHTML='<span class="muted">loading...</span>';
+  var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=300');
+  if(!d||d.error){el.innerHTML='<span class="muted">'+esc((d&&d.error)||'no data')+'</span>';return;}
+  var s=d.session;
+  var h='<div class="row">'
+    +'<div class="stat"><b>$'+(+s.cost).toFixed(4)+'</b><span>cost</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_input)+'</b><span>in</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_output)+'</b><span>out</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_reasoning)+'</b><span>reasoning</span></div>'
+    +'<div class="stat"><b>'+d.messages+'</b><span>messages</span></div>'
+    +'<div class="stat"><b>'+esc(modelId(s.model))+'</b><span>model</span></div>'
+    +'</div>';
+  h+='<div class="muted" style="font-size:12px;margin:6px 0">'+esc(s.title||'')
+    +' · <a href="/?session='+encodeURIComponent(id)+'">full transcript</a>'
+    +' · <a href="/api/export/session?id='+encodeURIComponent(id)+'&format=md">download md</a></div>';
+  h+='<div style="max-height:340px;overflow:auto">';
+  for(var i=0;i<d.parts.length;i++){var x=d.parts[i];
+    var body=x.type==='tool'?(esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'')):((x.type==='reasoning'||x.type==='text')?esc(String(x.text||'').slice(0,300)):esc(x.files||''));
+    h+='<div class="item"><span class="tag">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';}
+  h+='</div>';
+  el.innerHTML=h;
+}
+async function renderSignals(){
+  var el=d3.select('#signals');el.selectAll('*').remove();
+  var d=await j('/api/signals');
+  if(!d){el.text('(no data)');return;}
+  var sig=Object.keys(d.signatures).map(function(k){return esc(k)+'='+d.signatures[k];}).join(', ');
+  var rules=Object.keys(d.ruleMentions).map(function(k){return esc(k)+'='+d.ruleMentions[k];}).join(', ');
+  var h='<div class="muted" style="font-size:12px">'+d.errorCount+' error tool calls · signatures: '+sig+'</div>';
+  h+='<div class="muted" style="font-size:12px">rule mentions: '+rules+'</div>';
+  if(d.patches&&d.patches.length){h+='<div class="muted" style="font-size:12px">churn (patch files): '+d.patches.slice(0,6).map(function(p){return esc(String(p.files||'').slice(0,70))+' x'+p.n;}).join(' · ')+'</div>';}
+  for(var i=0;i<d.errors.length;i++){var e=d.errors[i];
+    h+='<div class="item" data-go="'+esc(e.sid)+'"><span class="tag">error</span>'+esc(e.tool||'')+' '+esc(String(e.detail||'').slice(0,110))+' <span class="muted">'+esc(e.title||'')+'</span></div>';}
+  el.html(h);
+}
+document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();});
+document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';});
+document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+async function load(){
+  if(typeof d3==='undefined'){var el=document.getElementById('treemap');if(el){el.textContent='d3 failed to load (/vendor/d3.min.js)';}return;}
+  var o=await j('/api/overview?limit=500');
+  if(!o||!o.sessions){d3.select('#treemap').text('(no data)');return;}
+  BUDGET=o.budget;DATA=o.sessions;setFilterText();
+  DATA.forEach(function(d){d._span=span(d);});
+  MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
+  COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
+  renderTable();renderIntegrations();renderAb();renderSchema();
+  renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();
+}
+
+async function renderTreemap(){
+  var data=DATA.filter(inFilter);
+  var el=d3.select('#treemap');el.selectAll('*').remove();
+  if(!data.length){el.text('(no sessions in range)');return;}
+  var grouped=d3.rollup(data,function(v){return v;},function(d){return modelId(d.model);});
+  var groups=Array.from(grouped,function(e){return {model:e[0],children:e[1]};});
+  groups.sort(function(a,b){return d3.sum(b.children,function(d){return +d.cost||0;})-d3.sum(a.children,function(d){return +d.cost||0;});});
+  var root=d3.hierarchy({children:groups}).sum(function(d){return +d.cost||0;});
+  var W=1000,H=Math.max(240,Math.min(560,root.leaves().length*12));
+  d3.treemapResquarify().size([W,H]).paddingInner(2).paddingTop(18).paddingOuter(2).round(true)(root);
+  var svg=el.append('svg').attr('width',W).attr('height',H);
+  var defs=svg.append('defs');
+  root.children.forEach(function(g,i){
+    defs.append('clipPath').attr('id','gc'+i).append('rect').attr('x',g.x0).attr('y',g.y0).attr('width',Math.max(0,g.x1-g.x0)).attr('height',16);
+  });
+  var maxCost=COST.domain()[1]||1;
+  var leaf=svg.selectAll('g.leaf').data(root.leaves()).enter().append('g')
+    .attr('transform',function(d){return 'translate('+d.x0+','+d.y0+')';});
+  leaf.append('rect')
+    .attr('width',function(d){return Math.max(0,d.x1-d.x0);})
+    .attr('height',function(d){return Math.max(0,d.y1-d.y0);})
+    .attr('fill',function(d){return MODEL_COLOR(modelId(d.data.model));})
+    .attr('fill-opacity',function(d){return 0.30+0.6*Math.min(1,(+d.data.cost||0)/maxCost);})
+    .attr('stroke','#0d1117')
+    .style('cursor','pointer')
+    .on('click',function(ev,d){location.href='/?session='+encodeURIComponent(d.data.id);})
+    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.data.title)+'<br>$'+(+d.data.cost).toFixed(4)+' · in '+fmt(d.data.tokens_input)+' · '+esc(modelId(d.data.model))+'<br>click to open transcript');})
+    .on('mouseleave',function(){tip(null);});
+  leaf.append('text').attr('x',5).attr('y',14).style('font-size','10px').style('fill','#e6edf3').style('pointer-events','none')
+    .text(function(d){return ((d.x1-d.x0)>64&&(d.y1-d.y0)>16)?String(d.data.title||'').slice(0,Math.floor((d.x1-d.x0)/6)):'';});
+  svg.selectAll('g.grp').data(root.children).enter().append('g').append('text')
+    .attr('x',function(d){return d.x0+2;}).attr('y',function(d){return d.y0+12;})
+    .attr('clip-path',function(d,i){return 'url(#gc'+i+')';})
+    .style('font-size','11px').style('font-weight','600').style('fill','#8b949e')
+    .text(function(d){return d.data.model+' · $'+(+d.value).toFixed(2);});
+}
+
+async function renderBurn(){
+  var el=d3.select('#burn');el.selectAll('*').remove();
+  if(!DATA.length){el.text('(no data)');return;}
+  var data=DATA.slice().sort(function(a,b){return a.time_created-b.time_created;});
+  var cum=0,pts=data.map(function(d){cum+=(+d.cost||0);return {t:d.time_updated||d.time_created,v:cum};});
+  var total=cum;
+  var margin={top:12,right:16,bottom:26,left:64};
+  var W=1000,H=220,w=W-margin.left-margin.right,h=H-margin.top-margin.bottom;
+  var t0=data[0].time_created,t1=Math.max(data[data.length-1].time_updated||data[data.length-1].time_created,t0+1);
+  var x=d3.scaleTime().domain([t0,t1]).range([0,w]);
+  var y=d3.scaleLinear().domain([0,Math.max(BUDGET,total||0)*1.08]).nice().range([h,0]);
+  var svg=el.append('svg').attr('width',W).attr('height',H).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
+  svg.append('g').attr('class','grid').call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+  var area=d3.area().x(function(d){return x(d.t);}).y0(h).y1(function(d){return y(d.v);}).curve(d3.curveStepAfter);
+  var line=d3.line().x(function(d){return x(d.t);}).y(function(d){return y(d.v);}).curve(d3.curveStepAfter);
+  svg.append('path').datum(pts).attr('fill','#1f6feb22').attr('d',area);
+  svg.append('path').datum(pts).attr('fill','none').attr('stroke','#58a6ff').attr('stroke-width',1.5).attr('d',line);
+  svg.append('line').attr('x1',0).attr('x2',w).attr('y1',y(BUDGET)).attr('y2',y(BUDGET)).attr('stroke','#ff7b72').attr('stroke-dasharray','4 3');
+  svg.append('text').attr('x',w).attr('y',y(BUDGET)-4).attr('text-anchor','end').attr('class','lbl').text('budget $'+BUDGET);
+  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%b %d %H:%M')));
+  svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(function(v){return '$'+v;}));
+  var brush=d3.brushX().extent([[0,0],[w,h]]).on('brush end',function(ev){
+    if(!ev.selection){FILTER=[0,Infinity];}
+    else{FILTER=[+x.invert(ev.selection[0]),+x.invert(ev.selection[1])];}
+    setFilterText();renderTreemap();renderScatter();renderSankey();renderGantt();
+  });
+  svg.append('g').call(brush);
+}
+
+async function renderScatter(){
+  var data=DATA.filter(inFilter);
+  var el=d3.select('#scatter');el.selectAll('*').remove();
+  if(!data.length){el.text('(no sessions in range)');return;}
+  var margin={top:12,right:18,bottom:34,left:70};
+  var W=1000,H=300,w=W-margin.left-margin.right,h=H-margin.top-margin.bottom;
+  var xmin=Math.max(1000,d3.min(data,function(d){return span(d);})/2);
+  var xmax=Math.max(xmin*2,d3.max(data,function(d){return span(d);})*1.5);
+  var ymax=Math.max(0.0002,d3.max(data,function(d){return +d.cost||0;})*1.5);
+  var x=d3.scaleLog().domain([xmin,xmax]).range([0,w]);
+  var y=d3.scaleLog().domain([0.0001,ymax]).range([h,0]);
+  var r=d3.scaleSqrt().domain([0,d3.max(data,function(d){return (+d.tokens_input||0)+(+d.tokens_output||0);})||1]).range([1.5,13]);
+  var svg=el.append('svg').attr('width',W).attr('height',H).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
+  var xticks=[1000,10000,60000,600000,3600000,86400000].filter(function(v){return v>=x.domain()[0]&&v<=x.domain()[1];});
+  var yticks=[0.0001,0.001,0.01,0.1,1,10].filter(function(v){return v>=y.domain()[0]&&v<=y.domain()[1];});
+  var fmtSpan=function(v){var s=v/1000;return s<60?(s+'s'):(s<3600?(Math.round(s/60)+'m'):(Math.round(s/3600)+'h'));};
+  svg.append('g').attr('class','grid').call(d3.axisLeft(y).tickValues(yticks).tickSize(-w).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).tickValues(xticks).tickFormat(fmtSpan));
+  svg.append('g').attr('class','axis').call(d3.axisLeft(y).tickValues(yticks).tickFormat(function(v){return '$'+(+v).toPrecision(2);}));
+  svg.append('text').attr('class','lbl').attr('x',w).attr('y',h+30).attr('text-anchor','end').text('span (log)');
+  svg.append('text').attr('class','lbl').attr('transform','rotate(-90)').attr('x',-h).attr('y',-54).attr('text-anchor','end').text('cost (log)');
+  svg.selectAll('circle').data(data).enter().append('circle')
+    .attr('cx',function(d){return x(Math.max(xmin,span(d)));})
+    .attr('cy',function(d){return y(Math.max(0.0001,+d.cost||0.0001));})
+    .attr('r',function(d){return r((+d.tokens_input||0)+(+d.tokens_output||0));})
+    .attr('fill',function(d){return MODEL_COLOR(modelId(d.model));})
+    .attr('fill-opacity',0.45)
+    .style('cursor','pointer')
+    .on('click',function(ev,d){location.href='/?session='+encodeURIComponent(d.id);})
+    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.title)+'<br>$'+(+d.cost).toFixed(4)+' · '+(span(d)/1000).toFixed(0)+'s · in '+fmt(d.tokens_input)+' · '+esc(modelId(d.model)));})
+    .on('mouseleave',function(){tip(null);});
+}
+
+async function renderSankey(){
+  var el=d3.select('#sankey');el.selectAll('*').remove();
+  if(typeof d3.sankey!=='function'){el.text('(d3-sankey not loaded)');return;}
+  var data=DATA.filter(inFilter);
+  if(!data.length){el.text('(no sessions in range)');return;}
+  var cats=['cache read','reasoning','output'];
+  var models=Array.from(new Set(data.map(function(d){return modelId(d.model);})));
+  var nodes=models.map(function(m){return {name:m,kind:'model'};}).concat(cats.map(function(c){return {name:c,kind:'cat'};}));
+  var idx={};nodes.forEach(function(n,i){idx[n.kind+'|'+n.name]=i;});
+  var agg={};
+  data.forEach(function(d){
+    var m=modelId(d.model);
+    agg['cache read|'+m]=(agg['cache read|'+m]||0)+(+d.tokens_cache_read||0);
+    agg['reasoning|'+m]=(agg['reasoning|'+m]||0)+(+d.tokens_reasoning||0);
+    agg['output|'+m]=(agg['output|'+m]||0)+(+d.tokens_output||0);
+  });
+  var links=[];
+  models.forEach(function(m){cats.forEach(function(c){var v=agg[c+'|'+m]||0;if(v>0)links.push({source:idx['model|'+m],target:idx['cat|'+c],value:v});});});
+  if(!links.length){el.text('(no token data)');return;}
+  var W=1000,H=Math.max(200,models.length*80);
+  var layout=d3.sankey().nodeWidth(12).nodePadding(16).nodeAlign(d3.sankeyJustify).extent([[2,14],[W-160,H-14]]);
+  var graph=layout({nodes:nodes.map(function(n){return {name:n.name,kind:n.kind};}),links:links.map(function(l){return {source:l.source,target:l.target,value:l.value};})});
+  var catColor={'cache read':'#8b949e','reasoning':'#d2a8ff','output':'#7ee787'};
+  var svg=el.append('svg').attr('width',W).attr('height',H).append('g');
+  svg.append('g').selectAll('path').data(graph.links).enter().append('path')
+    .attr('d',d3.sankeyLinkHorizontal())
+    .attr('fill','none')
+    .attr('stroke',function(d){return catColor[d.target.name]||'#30363d';})
+    .attr('stroke-opacity',0.30)
+    .attr('stroke-width',function(d){return Math.max(1,d.width);})
+    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.source.name)+' → '+esc(d.target.name)+'<br>'+fmt(d.value)+' tokens');})
+    .on('mouseleave',function(){tip(null);});
+  var node=svg.append('g').selectAll('g').data(graph.nodes).enter().append('g');
+  node.append('rect')
+    .attr('x',function(d){return d.x0;}).attr('y',function(d){return d.y0;})
+    .attr('width',function(d){return d.x1-d.x0;}).attr('height',function(d){return Math.max(1,d.y1-d.y0);})
+    .attr('rx',2)
+    .attr('fill',function(d){return d.kind==='model'?MODEL_COLOR(d.name):(catColor[d.name]||'#8b949e');})
+    .attr('fill-opacity',0.9);
+  node.append('text')
+    .attr('x',function(d){return d.x0<W/2?d.x1+6:d.x0-6;})
+    .attr('y',function(d){return (d.y0+d.y1)/2;})
+    .attr('dy','0.35em')
+    .attr('text-anchor',function(d){return d.x0<W/2?'start':'end';})
+    .attr('class','lbl')
+    .text(function(d){return d.name+'  '+fmt(d.value);});
+}
 
 async function renderGantt(){
-  var data=await j('/api/sessions?limit=200');
-  var el=d3.select('#gantt');
-  if(!data||!data.length){el.text('(no sessions)');return;}
+  var data=DATA.filter(inFilter);
+  var el=d3.select('#gantt');el.selectAll('*').remove();
+  if(!data.length){el.text('(no sessions in range)');return;}
   var margin={top:8,right:16,bottom:24,left:8};
-  var w=1000-margin.left-margin.right, h=Math.max(220,data.length*7);
+  var W=1000,w=W-margin.left-margin.right,h=Math.max(160,data.length*7);
   var minT=d3.min(data,function(d){return d.time_created;});
   var maxT=d3.max(data,function(d){return d.time_updated||d.time_created;});
   if(maxT<=minT)maxT=minT+1000;
   var x=d3.scaleLinear().domain([minT,maxT]).range([0,w]);
-  var c=d3.scaleSequential(d3.interpolateViridis).domain([0,d3.max(data,function(d){return +d.cost;})||1]);
-  el.selectAll('*').remove();
-  var svg=el.append('svg').attr('width',1000).attr('height',h+margin.top+margin.bottom).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
+  var svg=el.append('svg').attr('width',W).attr('height',h+margin.top+margin.bottom).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
   svg.selectAll('rect').data(data).enter().append('rect')
     .attr('x',function(d){return x(d.time_created);})
     .attr('y',function(d,i){return i*7;})
     .attr('width',function(d){return Math.max(2,x(d.time_updated||d.time_created)-x(d.time_created));})
-    .attr('height',6)
-    .attr('fill',function(d){return c(d.cost);})
+    .attr('height',5).attr('rx',1)
+    .attr('fill',function(d){return COST(+d.cost||0);})
     .style('cursor','pointer')
     .on('click',function(ev,d){renderTimeline(d.id,d.title);})
-    .on('mousemove',function(ev,d){moveTip(ev);tip(d.title+'<br>$'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning)+' (click to drill down)');})
+    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.title)+'<br>$'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning));})
     .on('mouseleave',function(){tip(null);});
-  svg.append('g').attr('transform','translate(0,'+(data.length*7)+')').call(d3.axisBottom(x).ticks(6).tickFormat(timeFmt));
+  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(6).tickFormat(timeFmt));
 }
 
 async function renderTimeline(id,title){
@@ -662,7 +1130,8 @@ async function renderCloud(){
     .text(function(d){return d.text;});
 }
 
-renderGantt();renderTimeline();renderCloud();
+document.getElementById('tl-reset').addEventListener('click',function(){renderTimeline(null,null);});
+load();
 </script></body></html>`;
 
 const runbooksHtml = `<!doctype html>
@@ -690,7 +1159,7 @@ const runbooksHtml = `<!doctype html>
  .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
 </style></head>
 <body>
-<h1>opencode runbooks <a href="/">[dashboard]</a> <a href="/viz">[charts]</a> <a href="/api/export">[csv]</a></h1>
+<h1>opencode runbooks <a href="/">[dashboard]</a> <a href="/explore">[explore]</a> <a href="/api/export">[csv]</a></h1>
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option></select></div>
 <div id="count" class="muted count"></div>
@@ -751,12 +1220,38 @@ const server = http.createServer(async (req, res) => {
   const params = qs(req);
   if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
+  } else if (url === "/explore") {
+    send(res, 200, exploreHtml, "text/html; charset=utf-8");
   } else if (url === "/viz") {
-    send(res, 200, vizHtml, "text/html; charset=utf-8");
+    res.writeHead(302, { "Location": "/explore", "Cache-Control": "no-store" });
+    res.end();
+  } else if (url.indexOf("/vendor/") === 0) {
+    const name = url.slice("/vendor/".length);
+    if (name === "d3.min.js" || name === "d3-sankey.min.js") {
+      try {
+        const body = readFileSync(new URL("./vendor/" + name, import.meta.url));
+        res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "max-age=86400" });
+        res.end(body);
+      } catch {
+        send(res, 404, "not found\n", "text/plain");
+      }
+    } else {
+      send(res, 404, "not found\n", "text/plain");
+    }
   } else if (url === "/runbooks") {
     send(res, 200, runbooksHtml, "text/html; charset=utf-8");
   } else if (url === "/api/runbooks") {
     send(res, 200, JSON.stringify(RUNBOOKS), "application/json");
+  } else if (url === "/api/overview") {
+    send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500)), "application/json");
+  } else if (url === "/api/schema") {
+    send(res, 200, JSON.stringify(apiSchema()), "application/json");
+  } else if (url === "/api/integrations") {
+    send(res, 200, JSON.stringify(apiIntegrations()), "application/json");
+  } else if (url === "/api/ab") {
+    send(res, 200, JSON.stringify(apiAb(Number(params.limit) || 200)), "application/json");
+  } else if (url === "/api/signals") {
+    send(res, 200, JSON.stringify(apiSignals()), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {

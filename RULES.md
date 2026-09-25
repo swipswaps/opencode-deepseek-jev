@@ -34,6 +34,35 @@ number and a constraint overlap, both are listed.
 | #54 | Evidence completeness gate. A linked artifact must exist, be non-empty, and carry a structural marker. | `push_notes_v18.sh` link block |
 | #55 | Raw-link HTTP-200 validation with backoff. | `push_notes_v18.sh` link block |
 | #57 | End sentinel. The script ends with a sentinel line so truncation in transit is detected. | `push_notes_v18.sh` line 20 |
+| #61 | No escape-dependent generated code. When JS/HTML is produced from a JS template literal, `\n`, `\'`, `\"`, `\\` are evaluated by the generator, not the consumer. Never emit inline handlers or escaped quotes; use `data-*` attributes plus delegated listeners. Every served page's inline script must be syntax-parsed AND executed headlessly. | `dashboard.mjs` (`html`, `exploreHtml`); `test-dashboard.sh`; `test-dashboard-ui.mjs` |
+
+## Generated code and escapes (rule #61)
+
+The recurring "backtick" defect class. A page's inline `<script>` is
+authored inside a backtick template literal in `dashboard.mjs`, then
+served to the browser. Escape sequences in that literal are consumed by
+the **generator** (Node), not the browser, so what looks right in source
+is frequently broken in the served artifact.
+
+Two incidents, same mechanism:
+
+- `r.commands.join('\n')` — `\n` collapsed to a real newline, producing an
+  unterminated JS string → the whole `<script>` failed to parse.
+- `onclick="drill(\''+id+'\')"` — `\'` collapsed to `'`, producing two
+  adjacent string literals (`...drill(''+id+'')"><span...`) → `SyntaxError:
+  Unexpected string`.
+
+Rules that follow:
+
+- Do **not** put `\` before whitespace, quotes, or a line break inside a
+  generated-code template. If the *consumer* must see a literal backslash,
+  write `\\`.
+- Do **not** emit inline event handlers (`onclick=…`) or escape quotes into
+  generated JS. Emit `data-*` attributes and attach one delegated listener
+  on a stable ancestor (`addEventListener`).
+- Every served page's inline script must pass BOTH gates: a syntax parse
+  (`node --check` on the extracted script) **and** a headless execution
+  (`scripts/test-dashboard-ui.mjs`). A substring grep is not a gate.
 
 ## General scripting conventions
 

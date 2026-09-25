@@ -12,7 +12,9 @@
         "deepseek-flash": {
           "id": "deepseek-flash",
           "name": "DeepSeek V4.1 Flash",
-          "limit": { "context": 1000000, "output": 384000 }
+          "limit": { "context": 1000000, "output": 384000 },
+          "attachment": true,
+          "modalities": { "input": ["text", "image"], "output": ["text"] }
         }
       }
     }

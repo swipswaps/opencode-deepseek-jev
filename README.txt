@@ -20,6 +20,28 @@ cd docker
 
 Keys are cached in ../.env.local (mode 0600, gitignored).
 
+Vision / image input
+--------------------
+DeepSeek V4.1 Flash natively ingests images. `opencode.json` declares this
+(`attachment: true` + `modalities.input: ["text","image"]`), so OpenCode
+sends screenshots to DeepSeek directly — no separate provider needed.
+(OpenCode gates image input on the model's declared `modalities`; a custom
+provider entry without that declaration is treated as text-only.)
+
+If a model rejects an image anyway, read it locally instead:
+
+    ./scripts/ocr-image.sh <image.png>      # tesseract (apt) or PaddleOCR (pip)
+    ./scripts/ocr-image.sh --check          # report which engine is available
+
+The local engines match github.com/swipswaps/receipts-ocr: tesseract.js in
+the browser and PaddleOCR in backend/app.py. Install tesseract with
+`apt-get install -y tesseract-ocr` (already in the image), or PaddleOCR with
+`pip install paddleocr paddlepaddle`.
+
+To use a *different* vision model (e.g. Muse Spark via OpenCode Zen), on a
+host terminal with browser access run `opencode`, `/connect` → OpenCode Zen,
+`/models`. Avoid pasting secret-bearing screenshots to Free-tier models.
+
 Telemetry policy
 ----------------
 Smoke tests stream stdout and stderr live via process substitution
@@ -94,6 +116,30 @@ full-text search across every session — text, reasoning, and tool
 commands — via an in-memory SQLite FTS5/bm25 index (/api/semantic).
 http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
 container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
+
+Visual exploration lives at /explore (/viz now 302-redirects there). It is
+built as a database tool, not just charts:
+  - Search everything: ranked FTS over titles, message text, and tool
+    commands (same /api/semantic index as the dashboard).
+  - Sessions table: columns sort on click, a text filter narrows rows,
+    clicking a row opens its transcript.
+  - Database map: 20 tables as nodes sized by row count, edges = foreign
+    keys (/api/schema).
+  - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts
+    (/api/integrations; Jev calls counted from tool parts — currently 11
+    Jev, 0 Laya).
+  - Jev vs Laya A/B: ./scripts/test-jev-laya-ab.sh persists every run to
+    data/observability/observability.db (gitignored); /explore renders
+    /api/ab — per-run latency, correctness/safe_to_merge scores, and an
+    identical/differ summary.
+  - Charts: cost treemap (d3.treemapResquarify), a brushable cumulative
+    spend-vs-budget burn-down whose selection filters the treemap, scatter,
+    sankey, and Gantt (linked views; d3.curveStepAfter), a latency×cost
+    scatter with explicit log ticks, a token-flow Sankey by model, and the
+    part timeline.
+d3 v7.9.0 and d3-sankey v0.12.3 are vendored under scripts/vendor/ and
+served at /vendor/*.js, so everything works offline with pinned versions.
+Model labels are parsed from the JSON `session.model` column.
 
 Search from the terminal
 ------------------------

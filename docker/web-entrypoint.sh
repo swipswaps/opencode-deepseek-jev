@@ -1,7 +1,8 @@
 #!/bin/sh
 #
-# web-entrypoint.sh — write ~/.local/share/opencode/auth.json from
-# DEEPSEEK_API_KEY, then exec opencode web.
+# web-entrypoint.sh — merge DEEPSEEK_API_KEY into
+# ~/.local/share/opencode/auth.json (preserving any other providers the
+# user connected, e.g. OpenCode Zen for vision), then exec opencode web.
 #
 # Uses node for JSON serialisation because node is installed in the
 # image; no sed, no shell escaping pitfalls.
@@ -33,12 +34,17 @@ if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
         const file = process.argv[1];
         const key = process.argv[2];
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        const data = { deepseek: { type: "api", key: key } };
+        let data = {};
+        try {
+            const raw = fs.readFileSync(file, "utf8");
+            if (raw.trim() !== "") { data = JSON.parse(raw); }
+        } catch (e) { data = {}; }
+        data.deepseek = { type: "api", key: key };
         fs.writeFileSync(file, JSON.stringify(data) + "\n");
-        console.error("[web-entrypoint] wrote " + file + " (" + fs.statSync(file).size + " bytes)");
+        console.error("[web-entrypoint] merged deepseek into " + file + " (" + fs.statSync(file).size + " bytes)");
     ' "$AUTH_FILE" "$DEEPSEEK_API_KEY"
 else
-    printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json not written\n' >&2
+    printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json left untouched\n' >&2
 fi
 
 # Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;

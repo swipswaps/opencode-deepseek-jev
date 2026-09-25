@@ -1,15 +1,18 @@
 // test-dashboard-ui.mjs — headless execution test for the dashboard's
-// inline browser script. Fetches the served "/" page, runs its <script> in
-// a minimal DOM shim against the live server, fires the interval refreshers
-// once, and asserts the panes actually populate. This catches runtime
-// client bugs (and template-literal escape errors) that a syntax-only check
-// and a substring grep both miss. No browser required.
+// inline browser scripts. Fetches a served page, runs its <script> in a
+// minimal DOM shim against the live server, and asserts behaviour. This
+// catches runtime client bugs and template-literal escape errors that a
+// syntax-only check and a substring grep both miss. No browser required.
 //
-// Usage: node scripts/test-dashboard-ui.mjs <base-url>   (default :5099)
+// Usage:
+//   node scripts/test-dashboard-ui.mjs <base-url>            # home page: panes populate
+//   node scripts/test-dashboard-ui.mjs <base-url> explore    # explore page: script executes (d3 stubbed)
 
 import vm from "node:vm";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5099";
+const MODE = process.argv[3] || "home";
+const PATH = MODE === "explore" ? "/explore" : "/";
 
 class El {
   constructor(tag) {
@@ -45,15 +48,33 @@ const document = {
 
 function fail(msg) { console.log("FAIL: " + msg); process.exit(1); }
 
+function makeStub() {
+  const handler = {
+    get(t, p) {
+      if (p === "then") return undefined;
+      if (p === Symbol.toPrimitive) return () => "";
+      if (p === "toString") return () => "";
+      if (p === "valueOf") return () => 0;
+      return stub;
+    },
+    apply() { return stub; },
+    construct() { return stub; },
+  };
+  const stub = new Proxy(function () {}, handler);
+  return stub;
+}
+
+process.on("unhandledRejection", (e) => fail("unhandled rejection: " + (e && e.message ? e.message : e)));
+
 async function main() {
   let html;
   try {
-    html = await (await fetch(BASE + "/")).text();
+    html = await (await fetch(BASE + PATH)).text();
   } catch (e) {
-    fail("cannot reach " + BASE + " (" + e.message + ")");
+    fail("cannot reach " + BASE + PATH + " (" + e.message + ")");
   }
   const m = html.match(/<script>([\s\S]*?)<\/script>/);
-  if (!m) fail("no inline <script> in /");
+  if (!m) fail("no inline <script> in " + PATH);
 
   const sandbox = {
     document,
@@ -63,18 +84,27 @@ async function main() {
     setInterval: (fn) => { timers.push(fn); return timers.length; },
     clearInterval: noop,
     Date, JSON, Math, Number, String, Boolean, Object, Array, Promise, RegExp,
-    encodeURIComponent, decodeURIComponent,
+    encodeURIComponent, decodeURIComponent, URLSearchParams,
+    location: { search: "", href: BASE + PATH },
   };
+  if (MODE === "explore") sandbox.d3 = makeStub();
+
   try {
     vm.createContext(sandbox);
     vm.runInContext(m[1], sandbox, { filename: "inline.js" });
   } catch (e) {
-    fail("inline script threw at load: " + e.message);
+    fail(PATH + " inline script threw at load: " + e.message);
   }
 
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise((r) => setTimeout(r, 400));
   for (const fn of timers) {
-    try { fn(); } catch (e) { fail("interval refresher threw: " + e.message); }
+    try { fn(); } catch (e) { fail(PATH + " interval refresher threw: " + e.message); }
+  }
+
+  if (MODE === "explore") {
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("PASS explore: inline script executes (d3 stubbed)");
+    process.exit(0);
   }
 
   const panes = ["session", "stats", "sessions", "activity", "config"];

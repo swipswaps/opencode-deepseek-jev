@@ -48,6 +48,10 @@ dashboard.sh
     Sessions are clickable: /api/session?id= returns the detail + parts,
     and /api/export/session?id=&format=txt|md|json downloads one session's
     chat history. /api/search?q= searches titles, text, and commands.
+    /explore (alias /viz) is the visual layer: a cost treemap, a brushable
+    cumulative-spend-vs-budget burn-down (linked views), a latency x cost
+    scatter, and the part timeline. d3 is vendored at
+    scripts/vendor/d3.min.js and served at /vendor/d3.min.js.
     /runbooks renders the operational runbooks; /api/runbooks is the data.
 
 cost-bottlenecks.sh

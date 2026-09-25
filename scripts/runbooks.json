@@ -1,5 +1,18 @@
 [
   {
+    "id": "connect-vision",
+    "title": "Connect a vision provider (OpenCode Zen)",
+    "purpose": "Enable image input. This repo ships deepseek-only config, so Zen vision models fail until authenticated.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "opencode",
+      "/connect",
+      "/models"
+    ],
+    "note": "Manual, needs an interactive terminal with browser access (not inside docker exec): run opencode, type /connect, choose OpenCode Zen, complete sign-in/billing, paste the key, then /models and pick Muse Spark 1.3 Free (or MiMo-V2.6-Flash Free). Verify names-only with: python3 -c 'import json,os;print(sorted(json.load(open(os.path.expanduser(\"~/.local/share/opencode/auth.json\")))))'. Then restart the web container; web-entrypoint merges deepseek without wiping Zen. Avoid pasting screenshots that contain secrets to Free-tier models."
+  },
+  {
     "id": "rotate-password",
     "title": "Rotate server password",
     "purpose": "Replace OPENCODE_SERVER_PASSWORD (its live value was echoed by docker compose config).",
@@ -88,5 +101,16 @@
       "./scripts/semantic-search.sh <query>"
     ],
     "note": "Ranked cross-session search over text, reasoning, and tool commands. Also live in the dashboard search box."
+  },
+  {
+    "id": "ocr-image",
+    "title": "Read a screenshot locally (OCR fallback)",
+    "purpose": "Extract text from an image without any API model, using tesseract (preferred) or PaddleOCR (receipts-ocr backend).",
+    "where": "container",
+    "commands": [
+      "./scripts/ocr-image.sh --check",
+      "./scripts/ocr-image.sh <image.png>"
+    ],
+    "note": "Fallback when image input is unavailable or a model rejects it. Install with: apt-get install -y tesseract-ocr (or pip install paddleocr paddlepaddle)."
   }
 ]

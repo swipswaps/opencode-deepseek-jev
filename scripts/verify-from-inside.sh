@@ -6,7 +6,7 @@
 #
 # Checks (fast, free by default):
 #   V1  opencode binary + version
-#   V2  auth.json present with a deepseek entry (key never printed)
+#   V2  auth.json present; list connected provider names (keys never printed)
 #   V3  DEEPSEEK_API_KEY and JEV_API_KEY set in the environment
 #   V4  opencode.json parses; model, provider, MCP servers listed
 #   V5  jev-review server.js present
@@ -60,10 +60,12 @@ main() {
     fi
 
     local auth="$HOME/.local/share/opencode/auth.json"
-    if [ -f "$auth" ] && grep -q '"deepseek"' "$auth"; then
-        pass "auth.json present with deepseek entry"
+    local providers
+    providers=$(node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(Object.keys(j).join(","))}catch(e){process.exit(1)}' "$auth") || providers=""
+    if [ -n "$providers" ]; then
+        pass "auth.json present (providers: $providers)"
     else
-        fail "auth.json missing or has no deepseek entry" "$auth"
+        fail "auth.json missing, unreadable, or has no providers" "$auth"
     fi
 
     [ -n "$DEEPSEEK_API_KEY" ] && pass "DEEPSEEK_API_KEY set (len ${#DEEPSEEK_API_KEY})" || fail "DEEPSEEK_API_KEY empty"

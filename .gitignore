@@ -8,6 +8,7 @@ __pycache__/
 staging.log
 data/opencode/
 data/search/
+data/observability/
 logs/artifacts-*/dump-*/
 logs/artifacts-*/stall-*/
 .env.local.bak.*

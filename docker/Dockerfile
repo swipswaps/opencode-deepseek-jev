@@ -13,7 +13,7 @@ RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/xdg-open \
 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates coreutils python3 sqlite3 \
+    git curl ca-certificates coreutils python3 sqlite3 tesseract-ocr \
     && apt-get clean
 
 RUN chmod 777 /home/node && \

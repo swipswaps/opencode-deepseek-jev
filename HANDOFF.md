@@ -11,6 +11,11 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 - Keys rotated. `.env.local` (mode 0600) is the **single source of truth** for
   `DEEPSEEK_API_KEY`, `JEV_API_KEY`, `OPENCODE_SERVER_PASSWORD`. Never `export`
   the password into a shell (a stale `$OPENCODE_SERVER_PASSWORD` caused drift).
+- Vision: `opencode.json` declares `deepseek-flash` as image-capable
+  (`attachment: true` + `modalities.input: ["text","image"]`), so images go
+  straight to DeepSeek — no Zen required. Local fallback is
+  `scripts/ocr-image.sh` (tesseract in-image, or PaddleOCR like
+  receipts-ocr); `web-entrypoint.sh` merges (never wipes) `auth.json`.
 
 ## Command surface (scripts/)
 | Script | Purpose |
@@ -23,7 +28,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-jev-functional.sh` | behavioral Jev proof (invokes jev_review) |
 | `verify-from-inside.sh [--full]` | in-container self-check (no docker) |
 | `verify-password-drift.sh` | 4-gate password consistency check |
-| `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya |
+| `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya; persists each run (latency + parsed `correctness`/`safe_to_merge` scores) to `data/observability/observability.db` (served at `/api/ab`) |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
 | `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
 | `test-dashboard.sh` | gate for dashboard.mjs (both pages' inline-JS parse + `/api/*` + headless client execution via `test-dashboard-ui.mjs`) |
@@ -38,6 +43,26 @@ page and `runbook.sh`; edit it once to change either.
 The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
+
+`/explore` (`/viz` now 302-redirects here) is the database-tool layer:
+a ranked **search** box (`/api/semantic`), a **sortable/filterable sessions
+table** (click a row to open the transcript), a **database map** (tables as
+nodes sized by row count, edges = foreign keys via `/api/schema`), an
+**integrations** panel (Jev vs Laya invocation counts via
+`/api/integrations`; Jev = 11 from `tool` parts, Laya = 0), a **Jev vs Laya
+A/B** panel (`/api/ab`), plus the charts:
+cost treemap, brushable cumulative-spend-vs-budget burn-down (linked to
+treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey, and
+the part timeline. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
+`scripts/vendor/` (served at `/vendor/*.js`, whitelisted). Presentation uses
+muted palettes, gridlines (`tickSize(-w)`), `treemapResquarify`, and
+`curveStepAfter`; model labels are parsed from the JSON column.
+
+RULES #61 ("no escape-dependent generated code") was added after two
+recurring template-literal escape incidents (`\n`, `\'` collapsing inside
+the backtick page templates). Countermeasure: `test-dashboard.sh` now
+parses the inline script of EVERY served page and executes the client
+headlessly via `test-dashboard-ui.mjs`.
 
 ## Architecture gotchas
 - **Host vs container.** `scripts/archive/one-shot/*` call `docker` (host only);
