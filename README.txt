@@ -333,7 +333,7 @@ ECC install on top of it. See HANDOFF.md "ECC skills (audit)".
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
-ocr) instead of one long page:
+patterns · ocr) instead of one long page:
   - Search everything: ranked FTS over titles, message text, and tool
     commands (same /api/semantic index as the dashboard), plus OCR text.
   - Sessions table: columns sort on click, a text filter narrows rows,
@@ -343,8 +343,10 @@ ocr) instead of one long page:
     keys (/api/schema).
   - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts.
   - Jev vs Laya A/B: persisted runs (/api/ab), latency + correctness.
+  - Patterns: tool-sequence bigrams and error tools (/api/patterns).
+  - Signals: error tool calls, rule mentions, churn, and the guard panel.
   - Charts: cost treemap, brushable burn-down, latency×cost scatter,
-    token-flow Sankey, part timeline.
+    token-flow Sankey, part timeline, word cloud.
 d3 v7.9.0 and d3-sankey v0.12.3 are vendored under scripts/vendor/ and
 served at /vendor/*.js, so everything works offline with pinned versions.
 Model labels are parsed from the JSON `session.model` column.
@@ -375,8 +377,9 @@ Cost bottlenecks
 
 Ranks the cost drivers in the database: effective $/1k-input, top sessions
 by cost and by input tokens, worst effective $/1k-input, tiny-session
-overhead, per-model cost share, and a "model mix check" that flags any
-spend outside the `deepseek-flash` default. Read-only; host or container.
+overhead, per-model cost share, a "model mix check" that flags any spend
+outside the `deepseek-flash` default, and a prompt cache-hit report
+(cache-read vs fresh input; 99.0% overall here). Read-only; host or container.
 
 Session database & tool-use methods
 -----------------------------------

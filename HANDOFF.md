@@ -95,16 +95,18 @@ The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
 `/explore` (`/viz` now 302-redirects here) is the database-tool layer,
-organised into **tabs** (overview · charts · signals · ocr) to avoid a
-~6000px wall. **overview**: a ranked search box (`/api/semantic`), a
+organised into **tabs** (overview · charts · signals · patterns · ocr) to avoid
+a ~6000px wall. **overview**: a ranked search box (`/api/semantic`), a
 sortable/filterable sessions table, a **duplicate-grouping** view
 (`/api/duplicates`), an integrations panel (Jev vs Laya counts), the A/B
 panel (`/api/ab`), and the database map (`/api/schema`). **signals**: error
-tool calls, error signatures, rule mentions, patch churn (`/api/signals`).
+tool calls, error signatures, rule mentions, patch churn (`/api/signals`) +
+the blacklist-guard panel (`/api/guard`). **patterns**: tool-sequence bigrams
+and error tools (`/api/patterns`; the view over `test-patterns.sh`'s data).
 **ocr**: screenshot text (`/api/ocr`, also folded into `/api/semantic`, CSV
 at `/api/export/ocr`). **charts**: cost treemap, brushable burn-down (linked
 to treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey,
-part timeline. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
+part timeline, word cloud. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
 `scripts/vendor/` (served at `/vendor/*.js`, whitelisted).
 
 RULES #61 ("no escape-dependent generated code") was added after two

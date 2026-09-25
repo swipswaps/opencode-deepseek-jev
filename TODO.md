@@ -18,8 +18,12 @@ Last updated: 2026-09-25
   never rendered). *Fixed this session;* hook is now in the charts tab.
 - **`session_context_epoch` (0 rows)** and account/credential tables have no
   consumer beyond the DB map — accepted (opencode-owned schema).
-- **Laya not deployed** (runbook exists); **LiteLLM `max_budget` not wired**;
-  **cache-hit report** missing. See G4/G5.
+- **External / host-only work is deferred** with the reason on each queue item
+  below: Laya, embeddings rerank, LiteLLM `max_budget`, Blockly, n8n, the
+  perspective / Plot libs. None is doable in-container without network or a
+  rich dependency.
+- **Cache-hit report** is now in `cost-bottlenecks.sh` (overall 99.0%);
+  **patterns view** is now built. Resolved.
 - **`test-dashboard.sh` ~2.5 min** (it re-runs `lint.sh` + `test-hygiene.sh` +
   the OCR self-test). Accepted: run it alone; `harness.sh --fast` skips it.
 - **`logs.sh --source system` needs the host** (no docker in the container).
@@ -29,43 +33,42 @@ Last updated: 2026-09-25
 
 ## In flight
 
-- [~] **G1 observability UX** — nav/docs/hash tabs/guard panel + design tokens
-      (DESIGN.md) landed; next: runbook tag filters, keyboard shortcuts.
 - [~] **G2 learning loop** — `issue-solutions.py` landed; next: persist a
       solution library and show a "known fix" hint on `/explore`.
-- [~] **harness.sh** — one-command status/gates/telemetry/export landed; next:
-      wire `doctor.sh` and an optional `--json`.
+- [~] **harness.sh** — next: wire `doctor.sh` (fast) and an optional `--json`.
 
 ## Queue (ranked, top first)
 
 ### G3 visualization
-- [ ] patterns view (`/api/patterns` + `/explore` tab) — data layer ready
-      (`test-patterns.sh`)
-- [ ] finos/perspective pivot grid
-- [ ] Observable Plot / Vega-Lite declarative charts
+- [ ] finos/perspective pivot grid — deferred: needs the WASM bundle vendored
+- [ ] Observable Plot / Vega-Lite charts — deferred: needs the libs vendored
 
 ### G4 cost
-- [ ] pin `deepseek-flash` (user action; `v4-pro` is 2.9×) — now policy-driven
-      (models.policy.json), plus a `/models` interactive chooser
-- [ ] wire `docker/litellm.config.yaml` `max_budget` into routing
-- [ ] prompt cache-hit report (`opencode stats --models`)
+- [ ] wire `docker/litellm.config.yaml` `max_budget` into routing — deferred:
+      needs the proxy running (host/docker); config + runbook already exist
 
 ### G7 visual tooling (authoring surface over the JSON config)
 - [ ] Blockly (vendored, offline) to author guard rules / runbooks -> emit the
-      same JSON the guard and dashboard already read
-- [ ] n8n on the host for scheduled jobs (harness, learn-rules) + alerts
+      same JSON the guard and dashboard read — deferred: new vendored dep
+- [ ] n8n on the host for scheduled jobs (harness, learn-rules) + alerts —
+      deferred: host service + port/auth
 
 ### G5 security / ops
-- [ ] Laya self-host (runbook exists) — a Laya→Jev cascade cuts Jev calls, but
-      Jev is only ~11 calls and Laya does NOT cut DeepSeek; pin flash first
-- [ ] embeddings rerank over FTS5 + redaction pass + hard request cap
+- [ ] Laya self-host (runbook exists) — deferred: external model server; it
+      cuts Jev calls only (~11), not DeepSeek
+- [ ] embeddings rerank over FTS5 + redaction pass + hard request cap —
+      deferred: needs an embedding model (Jev/Laya/API)
 
 ### G6 quality
-- [ ] fuzzy code search (FTS5 + trigram/`difflib` rerank)
-- [ ] run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`
+- [ ] fuzzy code search (FTS5 + trigram/`difflib` rerank) — doable, next
+- [ ] run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full` — doable, small
 
 ## Done (most recent first)
 
+- [x] patterns view: `/api/patterns` + `/explore ▸ patterns` tab (bigrams +
+      error tools), gated
+- [x] prompt cache-hit report in `cost-bottlenecks.sh` (99.0% overall)
+- [x] runbooks "manual only" filter; `/` focuses search on `/explore`
 - [x] doc audit + `doc-budget.sh` (token size + content-hash proof cache);
       fixed stale balance/model-mix figures and merged the duplicated Laya sections
 - [x] ECC audit + project skill `.opencode/skills/jev-harness/SKILL.md`

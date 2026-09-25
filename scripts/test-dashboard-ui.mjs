@@ -59,6 +59,7 @@ const document = {
   body: new El("body"),
   querySelector: () => null,
   querySelectorAll: () => [],
+  addEventListener: () => {},
   execCommand: () => true,
 };
 

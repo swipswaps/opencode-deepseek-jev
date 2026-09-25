@@ -106,6 +106,17 @@ main() {
               COALESCE(SUM(tokens_input),0) tiny_in_tok
          FROM session WHERE cost < 0.001;"
 
+    section "prompt cache (cache-read vs fresh input)"
+    q "SELECT COALESCE(json_extract(model,'\$.id'),'(none)') model,
+              SUM(tokens_input) input,
+              SUM(tokens_cache_read) cache_read,
+              printf('%.1f%%', 100.0*SUM(tokens_cache_read)/MAX(1,SUM(tokens_cache_read)+SUM(tokens_input))) hit_rate
+         FROM session GROUP BY json_extract(model,'\$.id') ORDER BY SUM(tokens_cache_read) DESC;"
+    q "SELECT printf('%.1f%%', 100.0*SUM(tokens_cache_read)/MAX(1,SUM(tokens_cache_read)+SUM(tokens_input))) overall_hit_rate,
+              SUM(tokens_cache_read) total_cache_read,
+              SUM(tokens_input) total_input
+         FROM session;"
+
     section "per model (cost share)"
     q "SELECT COALESCE(json_extract(model,'\$.id'),'(none)') model,
               COUNT(*) n,

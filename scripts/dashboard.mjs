@@ -265,6 +265,21 @@ function apiSignals() {
   return { errorCount: errors.length, errors, signatures, ruleMentions, patches };
 }
 
+function apiPatterns(limit) {
+  const ngrams = query(
+    "SELECT tool || '->' || next_tool AS gram, COUNT(*) n FROM (" +
+    "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
+    "lead(json_extract(data,'$.tool')) OVER (PARTITION BY session_id ORDER BY time_created) next_tool " +
+    "FROM part WHERE json_extract(data,'$.type')='tool') " +
+    "WHERE next_tool IS NOT NULL GROUP BY gram ORDER BY n DESC LIMIT ?", limit);
+  const errorTools = query(
+    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part " +
+    "WHERE json_extract(data,'$.type')='tool' AND json_extract(data,'$.state.status')='error' " +
+    "GROUP BY tool ORDER BY n DESC LIMIT 10");
+  const d = query("SELECT COUNT(DISTINCT json_extract(data,'$.tool')) n FROM part WHERE json_extract(data,'$.type')='tool'")[0];
+  return { ngrams, errorTools, distinct: d ? d.n : 0 };
+}
+
 function apiGuard(limit) {
   try {
     const lines = readFileSync(new URL("../data/observability/guard.log", import.meta.url), "utf8")
@@ -824,6 +839,7 @@ ${nav("explore")}
   <button class="tab active" data-tab="overview">overview</button>
   <button class="tab" data-tab="charts">charts</button>
   <button class="tab" data-tab="signals">signals</button>
+  <button class="tab" data-tab="patterns">patterns</button>
   <button class="tab" data-tab="ocr">ocr</button>
 </div>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
@@ -861,6 +877,10 @@ ${nav("explore")}
 <div class="chart" id="signals"></div>
 <h2>Blacklist guard — blocked / fixed during "Thinking"</h2>
 <div class="chart" id="guard"></div>
+</div>
+<div class="pane" data-pane="patterns" style="display:none">
+<h2>Patterns — recurring tool-sequence n-grams</h2>
+<div class="chart" id="patterns"></div>
 </div>
 <div class="pane" data-pane="ocr" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
@@ -1030,6 +1050,23 @@ async function renderSignals(){
     h+='<div class="item" data-go="'+esc(e.sid)+'"><span class="tag">error</span>'+esc(e.tool||'')+' '+esc(String(e.detail||'').slice(0,110))+' <span class="muted">'+esc(e.title||'')+'</span></div>';}
   el.html(h);
 }
+async function renderPatterns(){
+  var el=d3.select('#patterns');el.selectAll('*').remove();
+  var d=await j('/api/patterns?limit=30');
+  if(!d||!d.ngrams||!d.ngrams.length){el.text('no tool sequences yet');return;}
+  var max=d.ngrams[0].n||1;
+  var h='<div class="muted" style="font-size:12px">'+d.distinct+' distinct tools · top tool-sequence bigrams</div>';
+  for(var i=0;i<d.ngrams.length;i++){var g=d.ngrams[i];
+    var w=Math.max(2,Math.round(100*g.n/max));
+    h+='<div style="display:flex;align-items:center;gap:8px;margin:3px 0"><span style="width:220px;font-size:12px">'+esc(g.gram)+'</span><span style="display:inline-block;height:10px;width:'+w+'%;max-width:420px;background:#2ea043;border-radius:4px"></span><span class="muted">'+g.n+'</span></div>';
+  }
+  if(d.errorTools&&d.errorTools.length){
+    h+='<div class="muted" style="font-size:12px;margin-top:10px">error tool calls</div>';
+    for(var k=0;k<d.errorTools.length;k++){var e=d.errorTools[k];
+      h+='<div class="item"><span class="tag">error</span>'+esc(e.tool)+' x'+e.n+'</div>';}
+  }
+  el.html(h);
+}
 async function renderGuard(){
   var el=d3.select('#guard');el.selectAll('*').remove();
   var d=await j('/api/guard?limit=30');
@@ -1084,7 +1121,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderDupes();renderSignals();renderGuard();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderSignals();renderGuard();renderPatterns();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
@@ -1323,6 +1360,7 @@ async function renderCloud(){
 }
 
 document.getElementById('tl-reset').addEventListener('click',function(){renderTimeline(null,null);});
+document.addEventListener('keydown',function(ev){if(ev.key==='/'&&ev.target&&ev.target.tagName!=='INPUT'){var q=document.getElementById('q2');if(q){ev.preventDefault();q.focus();}}});
 load();
 </script></body></html>`;
 
@@ -1353,7 +1391,7 @@ const runbooksHtml = `<!doctype html>
 <body>
 ${nav("runbooks")}
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
-<div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option></select></div>
+<div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
 <div id="count" class="muted count"></div>
 <div id="list"></div>
 <script>
@@ -1364,7 +1402,8 @@ function render(){
   var shown=0;
   for(var i=0;i<RUNBOOKS.length;i++){
     var r=RUNBOOKS[i];
-    if(f!=='all'&&r.where!==f)continue;
+    if(f==='manual'){if(!r.manual)continue;}
+    else if(f!=='all'&&r.where!==f)continue;
     shown++;
     var card=document.createElement('div');card.className='card';
     var head=document.createElement('div');head.className='rb-head';
@@ -1535,6 +1574,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiSignals()), "application/json");
   } else if (url === "/api/guard") {
     send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
+  } else if (url === "/api/patterns") {
+    send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {
