@@ -33,8 +33,26 @@ resolve_repo() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-ok()  { PASS=$((PASS+1)); printf 'ts=%s level=INFO  status=PASS msg=%s\n' "$(date -u +%H:%M:%S)" "$1"; }
-bad() { FAIL=$((FAIL+1)); printf 'ts=%s level=ERROR status=FAIL msg=%s\n' "$(date -u +%H:%M:%S)" "$1"; }
+# --- diagnostic telemetry: ms= on every check line (see lint.sh) ---------
+now_ms() {
+    local t="${EPOCHREALTIME:-}"
+    if [ -z "$t" ]; then printf '%s000' "$(date +%s)"; return; fi
+    local s="${t%%.*}" us="${t#*.}"
+    [ -n "$us" ] || us=0
+    printf '%d' "$(( s * 1000 + 10#${us:0:3} ))"
+}
+LAST_MS=$(now_ms)
+SLOW_MS=0
+SLOW_MSG=""
+_stamp() {
+    local n
+    n=$(now_ms)
+    D=$((n - LAST_MS))
+    LAST_MS=$n
+    if [ "$D" -gt "$SLOW_MS" ]; then SLOW_MS=$D; SLOW_MSG="$1"; fi
+}
+ok()  { PASS=$((PASS+1)); _stamp "$1"; printf 'ts=%s ms=%s level=INFO  status=PASS msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
+bad() { FAIL=$((FAIL+1)); _stamp "$1"; printf 'ts=%s ms=%s level=ERROR status=FAIL msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
 
 main() {
     local REPO
@@ -121,6 +139,9 @@ main() {
     rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt"
     rmdir "$work"
 
+    if [ -n "$SLOW_MSG" ]; then
+        printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
+    fi
     printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"
     [ "$FAIL" -eq 0 ] && return 0 || return 1
 }

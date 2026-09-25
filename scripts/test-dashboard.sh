@@ -31,8 +31,26 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null 2>&1; }
 has() { grep -qF "$1" "$2"; }
 
-ok()  { PASS=$((PASS+1)); printf 'ts=%s level=INFO  status=PASS msg=%s\n' "$(date -u +%H:%M:%S)" "$1"; }
-bad() { FAIL=$((FAIL+1)); printf 'ts=%s level=ERROR status=FAIL msg=%s\n' "$(date -u +%H:%M:%S)" "$1"; }
+# --- diagnostic telemetry: ms= on every check line (see lint.sh) ---------
+now_ms() {
+    local t="${EPOCHREALTIME:-}"
+    if [ -z "$t" ]; then printf '%s000' "$(date +%s)"; return; fi
+    local s="${t%%.*}" us="${t#*.}"
+    [ -n "$us" ] || us=0
+    printf '%d' "$(( s * 1000 + 10#${us:0:3} ))"
+}
+LAST_MS=$(now_ms)
+SLOW_MS=0
+SLOW_MSG=""
+_stamp() {
+    local n
+    n=$(now_ms)
+    D=$((n - LAST_MS))
+    LAST_MS=$n
+    if [ "$D" -gt "$SLOW_MS" ]; then SLOW_MS=$D; SLOW_MSG="$1"; fi
+}
+ok()  { PASS=$((PASS+1)); _stamp "$1"; printf 'ts=%s ms=%s level=INFO  status=PASS msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
+bad() { FAIL=$((FAIL+1)); _stamp "$1"; printf 'ts=%s ms=%s level=ERROR status=FAIL msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
 
 main() {
     local REPO
@@ -82,8 +100,9 @@ main() {
     [ "$code" = "200" ] && ok 'server ready (200 on /)' || bad 'server ready (200 on /)'
 
     curl -s "http://$HOST:$PORT/" > "$work/home.html"
-    has '[runbooks]' "$work/home.html" && ok 'home nav [runbooks]' || bad 'home nav [runbooks]'
-    has '[explore]' "$work/home.html" && ok 'home nav [explore]' || bad 'home nav [explore]'
+    has 'href="/runbooks"' "$work/home.html" && ok 'home nav runbooks' || bad 'home nav runbooks'
+    has 'href="/explore"' "$work/home.html" && ok 'home nav explore' || bad 'home nav explore'
+    has 'href="/docs"' "$work/home.html" && ok 'home nav docs' || bad 'home nav docs'
 
     curl -s "http://$HOST:$PORT/explore" > "$work/explore.html"
     has '<title>opencode explore</title>' "$work/explore.html" && ok 'explore title' || bad 'explore title'
@@ -97,8 +116,19 @@ main() {
     has 'id="dmap"' "$work/explore.html" && ok 'explore db map' || bad 'explore db map'
     has 'id="ocr"' "$work/explore.html" && ok 'explore ocr section' || bad 'explore ocr section'
     has 'data-tab="charts"' "$work/explore.html" && ok 'explore tabs' || bad 'explore tabs'
+    has 'id="tabs"' "$work/explore.html" && ok 'explore tabs wired (id=tabs)' || bad 'explore tabs wired (id=tabs)'
+    has 'data-tab="overview"' "$work/explore.html" && ok 'explore tab is linkable (hash)' || bad 'explore tab is linkable (hash)'
     has 'id="dupes"' "$work/explore.html" && ok 'explore duplicates section' || bad 'explore duplicates section'
     has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
+    has 'class="nav"' "$work/explore.html" && ok 'shared nav present' || bad 'shared nav present'
+    curl -s "http://$HOST:$PORT/docs" > "$work/docs.html"
+    has '<title>opencode docs</title>' "$work/docs.html" && ok 'docs title' || bad 'docs title'
+    has 'id="docsel"' "$work/docs.html" && ok 'docs selector' || bad 'docs selector'
+    has 'id="docbody"' "$work/docs.html" && ok 'docs body' || bad 'docs body'
+    curl -s "http://$HOST:$PORT/api/doc?name=RULES.md" > "$work/doc.txt"
+    has 'Substitutions for the blacklist' "$work/doc.txt" && ok 'api/doc serves RULES.md' || bad 'api/doc serves RULES.md'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/api/doc?name=../../etc/passwd" > "$work/doc404.txt"
+    has '404' "$work/doc404.txt" && ok 'api/doc rejects non-whitelisted path' || bad 'api/doc rejects non-whitelisted path'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
     has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3.min.js" > "$work/d3code.txt"
@@ -114,7 +144,7 @@ main() {
     has 'id="count"' "$work/runbooks.html" && ok 'runbooks count element' || bad 'runbooks count element'
 
     local page pname
-    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html"; do
+    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html"; do
         pname=$(basename "$page")
         python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
@@ -269,6 +299,9 @@ PY
     kill -TERM "$srv" || true
     wait "$srv" || true
 
+    if [ -n "$SLOW_MSG" ]; then
+        printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
+    fi
     printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"
     [ "$FAIL" -eq 0 ] && return 0 || return 1
 }

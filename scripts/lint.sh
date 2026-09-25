@@ -20,9 +20,31 @@ PASS=0
 FAIL=0
 SKIP=0
 
-ok()   { PASS=$((PASS+1)); printf 'ts=%s level=INFO  status=PASS %s\n' "$(date -u +%H:%M:%S)" "$1"; }
-bad()  { FAIL=$((FAIL+1)); printf 'ts=%s level=ERROR status=FAIL %s\n' "$(date -u +%H:%M:%S)" "$1"; }
-skip() { SKIP=$((SKIP+1)); printf 'ts=%s level=WARN  status=SKIP %s\n' "$(date -u +%H:%M:%S)" "$1"; }
+# --- diagnostic telemetry -----------------------------------------------
+# Every check line carries ms=<wall time since the previous check>, and the
+# slowest check is named at the end. This is the actionable signal that an
+# arbitrary timeout is not: it says WHICH step is slow, not just that the
+# suite exceeded a budget.
+now_ms() {
+    local t="${EPOCHREALTIME:-}"
+    if [ -z "$t" ]; then printf '%s000' "$(date +%s)"; return; fi
+    local s="${t%%.*}" us="${t#*.}"
+    [ -n "$us" ] || us=0
+    printf '%d' "$(( s * 1000 + 10#${us:0:3} ))"
+}
+LAST_MS=$(now_ms)
+SLOW_MS=0
+SLOW_MSG=""
+_stamp() {
+    local n
+    n=$(now_ms)
+    D=$((n - LAST_MS))
+    LAST_MS=$n
+    if [ "$D" -gt "$SLOW_MS" ]; then SLOW_MS=$D; SLOW_MSG="$1"; fi
+}
+ok()   { PASS=$((PASS+1)); _stamp "$1"; printf 'ts=%s ms=%s level=INFO  status=PASS %s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
+bad()  { FAIL=$((FAIL+1)); _stamp "$1"; printf 'ts=%s ms=%s level=ERROR status=FAIL %s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
+skip() { SKIP=$((SKIP+1)); _stamp "$1"; printf 'ts=%s ms=%s level=WARN  status=SKIP %s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -39,15 +61,38 @@ main() {
     done
 
     if have shellcheck; then
+        # Parallel shellcheck: serial it is ~3s/file (~40s total), which is what
+        # pushed the combined gate past its budget. One background job per file;
+        # each writes its verdict to a temp file so the ok/bad counters stay in
+        # this shell (no sh -c, so no SC2016 and no escaped $1).
+        local scdir
+        scdir=$(mktemp -d)
+        local f i=0
         for f in "$REPO"/scripts/*.sh; do
             [ -f "$f" ] || continue
-            if shellcheck -S error "$f" >/dev/null; then
-                ok "shellcheck $(basename "$f")"
+            i=$((i+1))
+            (
+                if shellcheck -S error "$f" >/dev/null 2>&1; then
+                    printf 'PASS %s\n' "$f" > "$scdir/$i.res"
+                else
+                    printf 'FAIL %s\n' "$f" > "$scdir/$i.res"
+                fi
+            ) &
+        done
+        wait
+        local r scstat scfile
+        for r in "$scdir"/*.res; do
+            [ -f "$r" ] || continue
+            read -r scstat scfile < "$r"
+            if [ "$scstat" = PASS ]; then
+                ok "shellcheck $(basename "$scfile")"
             else
-                bad "shellcheck $(basename "$f")"
-                shellcheck -S error "$f" | head -6
+                bad "shellcheck $(basename "$scfile")"
+                shellcheck -S error "$scfile" 2>&1 | head -6
             fi
         done
+        rm -f "$scdir"/*.res
+        rmdir "$scdir"
     else
         skip 'shellcheck not installed (apt-get install -y shellcheck)'
     fi
@@ -119,6 +164,9 @@ main() {
         ok 'RULES: no sed / 2>/dev/null in scripts/*.sh'
     fi
 
+    if [ -n "$SLOW_MSG" ]; then
+        printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
+    fi
     printf '\n=== lint result: %d pass, %d fail, %d skip ===\n' "$PASS" "$FAIL" "$SKIP"
     [ "$FAIL" -eq 0 ]
 }
