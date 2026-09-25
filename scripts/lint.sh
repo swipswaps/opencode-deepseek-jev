@@ -61,6 +61,42 @@ main() {
         fi
     done
 
+    if have python3; then
+        for f in "$REPO"/scripts/*.py; do
+            [ -f "$f" ] || continue
+            if python3 -m py_compile "$f" >/dev/null 2>&1; then
+                ok "py_compile $(basename "$f")"
+            else
+                bad "py_compile $(basename "$f")"
+                python3 -m py_compile "$f" 2>&1 | head -4
+            fi
+        done
+    else
+        skip 'python3 not installed'
+    fi
+
+    local pyv=""
+    pyv=$(grep -rnE 'subprocess\.run\s*\(' "$REPO"/scripts/*.py || true)
+    if [ -n "$pyv" ]; then
+        bad "RULES: subprocess.run in scripts/*.py (use subprocess.Popen)"
+        printf '%s\n' "$pyv" | head -5
+    else
+        ok 'RULES: no subprocess.run in scripts/*.py'
+    fi
+
+    if [ -f "$REPO/scripts/scan-constraints.py" ] && have python3; then
+        if python3 "$REPO/scripts/scan-constraints.py" "$REPO/scripts" \
+                --exclude-dir archive --include '*.sh' --quiet >/dev/null; then
+            ok 'scan-constraints: no code-level blacklist hits (scripts/*.sh)'
+        else
+            bad 'scan-constraints: code-level blacklist hits (scripts/*.sh)'
+            python3 "$REPO/scripts/scan-constraints.py" "$REPO/scripts" \
+                --exclude-dir archive --include '*.sh' | head -12
+        fi
+    else
+        skip 'scan-constraints.py not available'
+    fi
+
     local v=""
     for f in "$REPO"/scripts/*.sh; do
         [ -f "$f" ] || continue

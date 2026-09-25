@@ -36,6 +36,30 @@ number and a constraint overlap, both are listed.
 | #57 | End sentinel. The script ends with a sentinel line so truncation in transit is detected. | `push_notes_v18.sh` line 20 |
 | #61 | No escape-dependent generated code. When JS/HTML is produced from a JS template literal, `\n`, `\'`, `\"`, `\\` are evaluated by the generator, not the consumer. Never emit inline handlers or escaped quotes; use `data-*` attributes plus delegated listeners. Every served page's inline script must be syntax-parsed AND executed headlessly. | `dashboard.mjs` (`html`, `exploreHtml`); `test-dashboard.sh`; `test-dashboard-ui.mjs` |
 
+## Substitutions for the blacklist
+
+When a banned construct is needed, use the substitute. "Find where to
+address" means: fix the *file* (`scan-constraints.py`, wired into `lint.sh`)
+and audit the *runtime* (`scripts/audit-tool-calls.py` over the tool-call
+database), because the agent's own commands are where these accumulate
+silently.
+
+| Banned | Substitute | Why |
+| ------ | ---------- | --- |
+| `sed` (#7) | `awk`, `grep`, or `python3` | `sed`'s in-place and escape semantics are a recurring footgun; the substitute is explicit and testable. |
+| `2>/dev/null` (#8) | let stderr flow and branch on the failure | Suppressing stderr hides the diagnostic that explains the failure — the telemetry the operator needs. |
+| `subprocess.run` | `subprocess.Popen(..., stdout=PIPE, stderr=PIPE)` then `communicate()` and log both streams | `.run` buffers and discards the live output; `.Popen` preserves it. |
+| `echo` (#38) | `printf '%s\n'` | `echo` flag/escape handling is not portable. |
+| `rm -rf` | `rm -f` on named paths | Never blind-delete a tree. |
+| `set -e` | `set -o pipefail` + explicit per-step handling | `-e` exits silently mid-pipe and hides which step failed. |
+| top-level `exit 1` | `main()` wrapper returning a code; final line `main "$@"` | Keeps control flow testable and the exit status explicit. |
+| bare `kill` | `kill -TERM` / `kill -KILL` | Signal explicitly. |
+
+A blacklisted token that is merely *named* (in a prompt, comment, or a search
+pattern) is not a violation. `scan-constraints.py` classifies file matches as
+code / string / comment and only fails on code; `audit-tool-calls.py` strips
+quoted regions before matching so `grep 'sed'` is not counted as `sed`.
+
 ## Generated code and escapes (rule #61)
 
 The recurring "backtick" defect class. A page's inline `<script>` is

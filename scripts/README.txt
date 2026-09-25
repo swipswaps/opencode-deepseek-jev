@@ -78,8 +78,34 @@ ocr-image.sh
 
 lint.sh
     Static gate: bash -n on every script, shellcheck (optional), node
-    --check on JS, and a RULES grep (no sed, no 2>/dev/null). Exits
-    non-zero on any failure; also run by test-dashboard.sh.
+    --check on JS, py_compile on Python, a subprocess.run check, a
+    scan-constraints.py pass over scripts/*.sh (code vs string/comment),
+    and a RULES grep (no sed, no 2>/dev/null). Exits non-zero on any
+    failure; also run by test-dashboard.sh.
+
+scan-constraints.py
+    Classifier-backed scan of shell scripts for the blacklist (sed,
+    2>/dev/null, rm -rf, set -e, exit 1, subprocess.run, bare kill),
+    reporting each match as code / string / comment and failing only on
+    code. lint.sh runs it on scripts/*.sh (archive excluded).
+
+audit-tool-calls.py
+    Audits the agent's OWN runtime tool calls (not files) for the same
+    blacklist, read-only from data/opencode/opencode.db: every tool call
+    is a part row whose data.state.input.command holds the command. Strips
+    quoted regions so `grep 'sed'` is not counted as `sed`. Prints counts,
+    sessions, samples and the sanctioned substitute (see RULES.md
+    "Substitutions for the blacklist"). --recent N, --json, --fail.
+
+prompt-lint.py
+    Fuzzy classifier + preference linter for user prompts. Reads the DB
+    read-only and the repo's own preference sources (RULES.md, HANDOFF.md,
+    README.txt, opencode.json) to (1) classify the prompt into a repo topic,
+    (2) fuzzy-match it against past user prompts (token Jaccard) so a
+    repeated request is visible before it is answered again, (3) surface
+    recurring error tool calls, and (4) flag blacklisted-tool mentions,
+    leaked secrets, underspecified asks and missing acceptance criteria.
+    Advisory; --last lints the latest prompt in the DB, --fail gates.
 
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs

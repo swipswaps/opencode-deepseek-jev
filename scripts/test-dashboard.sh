@@ -244,6 +244,14 @@ PY
         bad 'lint.sh present'
     fi
 
+    if [ -x "$REPO/scripts/test-hygiene.sh" ]; then
+        "$REPO/scripts/test-hygiene.sh" > "$work/hygiene.txt" 2>&1
+        local hyg_rc=$?
+        if [ "$hyg_rc" -eq 0 ]; then ok 'test-hygiene.sh passes'; else bad 'test-hygiene.sh passes'; tail -6 "$work/hygiene.txt"; fi
+    else
+        bad 'test-hygiene.sh present'
+    fi
+
     if [ -f "$REPO/scripts/ocr-tesseractjs.mjs" ]; then
         node "$REPO/scripts/ocr-tesseractjs.mjs" --self-test > "$work/downscale.txt" 2>&1
         local ds_rc=$?
