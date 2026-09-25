@@ -324,14 +324,20 @@ user rather than silently stop. The interactive chooser is the /models page in
 the observer UI (dashboard · explore · models · runbooks · docs · csv); switch
 from the TUI with /models or `opencode run -m <id>`.
 
-Working process (project skill)
--------------------------------
+Working process (project skill + command)
+-----------------------------------------
 .opencode/skills/jev-harness/SKILL.md is auto-loaded by opencode and codifies
 the loop for this repo: search-first (read HANDOFF/RULES/TODO + run preflight),
 respect the enforced blacklist, keep the model on policy, gate every change
 with harness.sh, learn from the corpus, and keep the docs current. Adapted from
 the ECC agent-harness pattern (github.com/affaan-m/ECC); do not stack a full
 ECC install on top of it. See HANDOFF.md "ECC skills (audit)".
+
+The recurring "list outstanding issues + implement the doable queue" prompt is
+a command, not a paste: run /status (`.opencode/command/status.md`). It lists
+issues in both senses, classifies work A local-now / B needs-host / C larger /
+D external, implements one doable segment, gates, and records a reason on each
+deferral — so a request that is impossible or ballooning is named, not half-done.
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·

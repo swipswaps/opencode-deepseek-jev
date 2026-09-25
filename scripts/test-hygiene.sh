@@ -223,6 +223,21 @@ sys.exit(0 if (m and "name:" in m.group(1) and "description:" in m.group(1)) els
         bad 'project skill present (.opencode/skills/jev-harness/SKILL.md)'
     fi
 
+    if [ -f "$REPO/.opencode/command/status.md" ]; then
+        if python3 -c '
+import sys, re
+h = open(sys.argv[1]).read()
+m = re.match(r"^---\n(.*?)\n---", h, re.S)
+sys.exit(0 if (m and "description:" in m.group(1)) else 1)
+' "$REPO/.opencode/command/status.md"; then
+            ok 'status command frontmatter valid'
+        else
+            bad 'status command frontmatter valid'
+        fi
+    else
+        bad 'status command present (.opencode/command/status.md)'
+    fi
+
     if [ -x "$REPO/scripts/doc-budget.sh" ]; then
         "$REPO/scripts/doc-budget.sh" --json > "$work/db.txt" 2>&1
         if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "total_tokens" in d and "budget" in d' "$work/db.txt"; then

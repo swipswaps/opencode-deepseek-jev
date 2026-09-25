@@ -76,6 +76,9 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] the recurring status prompt is now an artifact: `/status`
+      (`.opencode/command/status.md`) — both-senses issues, A–D bounding,
+      one doable segment, gate, output contract. Stop re-pasting it.
 - [x] solution library: `issue-solutions.py --write` → data/observability/solutions.json;
       `/api/solutions` + a "known fixes" list on `/explore ▸ patterns`
 - [x] patterns view: `/api/patterns` + `/explore ▸ patterns` tab (bigrams +

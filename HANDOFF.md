@@ -7,7 +7,11 @@
 > elevation) injected on every page via `scripts/dashboard.mjs` `THEME_CSS`.
 >
 > **Working process:** `.opencode/skills/jev-harness/SKILL.md` (auto-loaded by
-> opencode) — search-first → gate → guard → learn → document. Adapted from ECC.
+> opencode) — search-first → gate → guard → learn → document. Run
+> **`/status`** (`.opencode/command/status.md`) instead of re-pasting the
+> issues/implement prompt: it lists outstanding issues, bounds the work
+> (A local-now · B needs-host · C larger · D external), implements one doable
+> segment, gates, and defers the rest with a reason.
 
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
