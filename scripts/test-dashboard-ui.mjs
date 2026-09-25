@@ -18,6 +18,13 @@ class El {
   constructor(tag) {
     this.tag = tag; this.children = []; this._html = ""; this._text = "";
     this.style = {}; this.dataset = {}; this.attrs = {}; this.listeners = {};
+    this._classes = new Set();
+    this.classList = {
+      add: (c) => this._classes.add(c),
+      remove: (c) => this._classes.delete(c),
+      contains: (c) => this._classes.has(c),
+      toggle: (c) => (this._classes.has(c) ? (this._classes.delete(c), false) : (this._classes.add(c), true)),
+    };
   }
   set innerHTML(v) { this._html = String(v); this.children = []; }
   get innerHTML() { return this._html; }
@@ -29,12 +36,20 @@ class El {
   setAttribute(k, v) { this.attrs[k] = v; }
   getAttribute(k) { return this.attrs[k]; }
   querySelector() { return null; }
+  querySelectorAll() { return []; }
   closest() { return null; }
   select() {}
 }
 
 const reg = {};
-const getEl = (id) => (reg[id] = reg[id] || new El("div"));
+// Strict ids: an id that is not present in the served HTML is null, exactly as
+// a browser behaves. This is what catches `getElementById('tabs')` on a div
+// that only had class="tabs" — the stub-permissive shim used to hide it.
+let validIds = null;
+const getEl = (id) => {
+  if (validIds && !validIds.has(id)) return null;
+  return (reg[id] = reg[id] || new El("div"));
+};
 const timers = [];
 const noop = () => {};
 
@@ -43,6 +58,7 @@ const document = {
   createElement: (t) => new El(t),
   body: new El("body"),
   querySelector: () => null,
+  querySelectorAll: () => [],
   execCommand: () => true,
 };
 
@@ -75,6 +91,7 @@ async function main() {
   }
   const m = html.match(/<script>([\s\S]*?)<\/script>/);
   if (!m) fail("no inline <script> in " + PATH);
+  validIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((x) => x[1]));
 
   const sandbox = {
     document,
@@ -85,7 +102,8 @@ async function main() {
     clearInterval: noop,
     Date, JSON, Math, Number, String, Boolean, Object, Array, Promise, RegExp,
     encodeURIComponent, decodeURIComponent, URLSearchParams,
-    location: { search: "", href: BASE + PATH },
+    location: { search: "", hash: "", href: BASE + PATH },
+    window: { addEventListener: () => {} },
   };
   if (MODE === "explore") sandbox.d3 = makeStub();
 
@@ -103,7 +121,11 @@ async function main() {
 
   if (MODE === "explore") {
     await new Promise((r) => setTimeout(r, 500));
-    console.log("PASS explore: inline script executes (d3 stubbed)");
+    const tabs = getEl("tabs");
+    if (!tabs || !tabs.listeners.click || !tabs.listeners.click.length) {
+      fail("explore: #tabs click handler not wired (id present?)");
+    }
+    console.log("PASS explore: inline script executes and #tabs is wired (d3 stubbed)");
     process.exit(0);
   }
 

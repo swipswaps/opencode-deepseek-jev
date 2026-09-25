@@ -47,7 +47,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
 | `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
-| `lint.sh` | static gate: `bash -n` + `shellcheck` (baked into image) + `node --check` + RULES grep (no `sed`/`2>/dev/null`) |
+| `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
@@ -326,6 +326,43 @@ Built ones are marked; the rest are the backlog.
 A new tool's convention: read-only, `--json`, `--self-test`, no model call,
 wire its `--self-test` into `test-hygiene.sh`, document it in the command
 table and `scripts/README.txt`.
+
+## Remaining work — doable groups (solution ranked by efficacy)
+
+Each group is independently shippable. Within a group the options are ordered
+by value/effort; do the top item first.
+
+**G1 — Observability UX (in progress).** Every page now shares one sticky nav
+(`/ · /explore · /runbooks · /docs · /api/export`), `/explore` tabs are
+linkable and restore from the URL hash, and `/docs` renders HANDOFF/RULES/
+README in-UI (whitelisted, read-only). *Fixed:* `#tabs` had no `id`, so
+`getElementById('tabs')` threw and aborted `load()` — the page was dead in a
+browser. Remaining, in order: (a) make `/runbooks` cards filterable by tag and
+surface the `manual` flag as a badge colour, (b) a keyboard shortcut
+(`/` focuses search, `g t` jumps to a tab), (c) a landing card grid on `/`.
+
+**G2 — Learning loop.** Built: `issue-solutions.py` (issues → proven fixes).
+Next: (a) persist its output to `data/observability/solutions.db` and show a
+"known fix" hint on the `/explore` signals pane, (b) a `--fail` recurring-error
+gate in `test-dashboard.sh`, (c) fold the issue signatures into
+`prompt-lint.py` so a repeat is flagged at prompt time.
+
+**G3 — Visualization candidates.** (a) patterns view (n-gram tab; data layer
+already built by `test-patterns.sh`), (b) finos/perspective pivot grid,
+(c) Observable Plot / Vega-Lite declarative charts. See "Next candidates".
+
+**G4 — Cost control.** (a) *user action:* pin `deepseek-flash` (v4-pro is
+2.9×), (b) wire `docker/litellm.config.yaml` `max_budget` into routing,
+(c) a prompt cache-hit report (`opencode stats` shows 226M cache-read tokens).
+
+**G5 — Security / ops.** (a) Laya self-host to cut Jev cost (runbook exists),
+(b) embeddings rerank over FTS5 with a redaction pass and a hard request cap,
+(c) confirm the Jev key stays valid (the miner's 8 rejections were
+pre-rotation; `verify-api-keys.sh` now shows jev-review connected).
+
+**G6 — Test / quality.** Built: strict-id headless UI test (catches the
+missing-`id` class). Next: (a) fuzzy code search (FTS5 + trigram/difflib
+rerank), (b) run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`.
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·

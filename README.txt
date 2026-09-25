@@ -53,8 +53,18 @@ Static gate over the repo: `bash -n` on every script, `shellcheck` (baked
 into the image), `node --check` on the JS (including
 `.opencode/plugins/*.js`), `py_compile` on the Python, a `subprocess.run`
 check, a `scan-constraints.py` pass (code vs string/comment) over
-`scripts/*.sh`, and a RULES grep (no `sed`, no `2>/dev/null`). Run it
-before any push; `test-dashboard.sh` runs it too.
+`scripts/*.sh`, and a RULES grep (no `sed`, no `2>/dev/null`).
+
+Every check line carries `ms=<wall time since the previous check>` and the
+slowest check is named at the end — the actionable signal that a bare timeout
+is not. `shellcheck` runs in parallel (one background job per file); serially
+it was ~40s and was what pushed the combined gate past its budget.
+`test-dashboard.sh` already runs `lint.sh` and `test-hygiene.sh`, so run it
+alone rather than chaining all three (chaining doubles the lint cost).
+
+If tool output looks empty, suspect suppressed streams: the blacklist guard
+exists so `2>/dev/null` cannot hide the diagnostic. Audit with
+`./scripts/audit-tool-calls.py` — it reports exactly which commands hid stderr.
 
 Blacklist enforcement (three layers)
 ------------------------------------
@@ -230,6 +240,17 @@ the "prove the solution from the logs" loop; the same data feeds the planned
 solution library and the recurring-error gate (HANDOFF.md "Local tool-use
 options").
 
+Navigating the observability UI
+-------------------------------
+Every page (/ dashboard, /explore, /runbooks, /docs) shares one sticky nav:
+`dashboard · explore · runbooks · docs · csv`. The /explore tabs
+(overview · charts · signals · ocr) are linkable and restore from the URL
+hash, so `http://127.0.0.1:5099/explore#charts` opens the charts tab and the
+browser back/forward buttons work. /docs renders this repo's own HANDOFF.md,
+RULES.md, README.txt, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
+(read-only, whitelisted names via /api/doc), so the rules are reachable
+without leaving the browser.
+
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
 ocr) instead of one long page:
@@ -247,6 +268,12 @@ ocr) instead of one long page:
 d3 v7.9.0 and d3-sankey v0.12.3 are vendored under scripts/vendor/ and
 served at /vendor/*.js, so everything works offline with pinned versions.
 Model labels are parsed from the JSON `session.model` column.
+
+The headless UI test (test-dashboard-ui.mjs) now resolves element ids
+strictly: an id absent from the served HTML is null, exactly as a browser
+behaves. That is what caught `getElementById('tabs')` on a div that only had
+`class="tabs"` (the script threw and the page never loaded); a permissive
+stub had masked it.
 
 UX audit (host): `python3 scripts/ux-audit.py [url]` measures page height,
 panel/tab counts, tab toggle, and page errors via Playwright, and writes a

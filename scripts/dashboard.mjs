@@ -29,6 +29,39 @@ const RUNBOOKS = JSON.parse(
   readFileSync(new URL("./runbooks.json", import.meta.url), "utf8")
 );
 
+// Shared, consistent, sticky navigation across every served page. The CSV link
+// is a download endpoint; docs renders the repo's own markdown/text in-UI so
+// the rules and handoff are reachable without leaving the browser.
+const NAV_CSS =
+  ".nav{position:sticky;top:0;z-index:30;display:flex;gap:6px;flex-wrap:wrap;" +
+  "align-items:center;background:#0d1117;border-bottom:1px solid #30363d;" +
+  "padding:8px 0;margin:-20px 0 14px}" +
+  ".nav .brand{font-weight:600;color:#e6edf3;margin-right:8px;font-size:13px}" +
+  ".nav a{font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #30363d;" +
+  "color:#8b949e;text-decoration:none}" +
+  ".nav a:hover{border-color:#58a6ff;color:#58a6ff}" +
+  ".nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}";
+const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/runbooks", "runbooks"],
+                   ["/docs", "docs"], ["/api/export", "csv"]];
+function nav(active) {
+  let h = "<style>" + NAV_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
+  for (const it of NAV_ITEMS) {
+    h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\"" : "") + ">" + it[1] + "</a>";
+  }
+  return h + "</nav>";
+}
+
+// Docs reachable from the UI. Whitelisted — never read arbitrary paths.
+const DOC_FILES = ["HANDOFF.md", "RULES.md", "README.txt", "scripts/README.txt", "HANDOFF-PROMPT.txt"];
+function apiDoc(name) {
+  if (!DOC_FILES.includes(name)) return null;
+  try {
+    return readFileSync(new URL("../" + name, import.meta.url), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 if (!dbPath) {
   console.error("usage: node dashboard.mjs <db-path> [port] [host]");
   process.exit(2);
@@ -540,7 +573,7 @@ const html = `<!doctype html>
  #session{font-size:13px;margin-bottom:4px}
 </style></head>
 <body>
-<h1>opencode observability <a href="/explore" style="color:#58a6ff;font-size:13px;text-decoration:none">[explore]</a> <a href="/api/export" style="color:#58a6ff;font-size:13px;text-decoration:none">[csv]</a> <a href="/runbooks" style="color:#58a6ff;font-size:13px;text-decoration:none">[runbooks]</a></h1>
+${nav("dashboard")}
 <div id="session" class="muted"></div>
 <div class="row" id="stats"></div>
 <div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
@@ -743,9 +776,9 @@ const exploreHtml = `<!doctype html>
  .stat span{color:#8b949e;font-size:11px}
 </style></head>
 <body>
-<h1>opencode explore &nbsp;<a href="/">[dashboard]</a> <a href="/runbooks">[runbooks]</a> <a href="/api/export">[csv]</a></h1>
+${nav("explore")}
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
-<div class="tabs">
+<div class="tabs" id="tabs">
   <button class="tab active" data-tab="overview">overview</button>
   <button class="tab" data-tab="charts">charts</button>
   <button class="tab" data-tab="signals">signals</button>
@@ -970,16 +1003,22 @@ async function renderDupes(){
   for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
   el.html(h);
 }
-document.getElementById('tabs').addEventListener('click',function(ev){
-  var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
-  if(!b)return;
-  var name=b.getAttribute('data-tab');
-  var tabs=document.querySelectorAll('#tabs .tab');
-  for(var i=0;i<tabs.length;i++){tabs[i].classList.remove('active');}
-  b.classList.add('active');
+function activateTab(name,setHash){
+  if(!name)return;
+  var tabs=document.querySelectorAll('.tab');
+  for(var i=0;i<tabs.length;i++){
+    if(tabs[i].getAttribute('data-tab')===name){tabs[i].classList.add('active');}else{tabs[i].classList.remove('active');}
+  }
   var panes=document.querySelectorAll('.pane');
   for(var j=0;j<panes.length;j++){panes[j].style.display=(panes[j].getAttribute('data-pane')===name)?'block':'none';}
+  if(setHash){try{location.hash=name;}catch(e){}}
+}
+document.getElementById('tabs').addEventListener('click',function(ev){
+  var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
+  if(b){activateTab(b.getAttribute('data-tab'),true);}
 });
+if(typeof window!=='undefined'&&window.addEventListener){window.addEventListener('hashchange',function(){activateTab((location.hash||'').slice(1),false);});}
+activateTab((location.hash||'').slice(1)||'overview',false);
 async function load(){
   if(typeof d3==='undefined'){var el=document.getElementById('treemap');if(el){el.textContent='d3 failed to load (/vendor/d3.min.js)';}return;}
   var o=await j('/api/overview?limit=500');
@@ -1255,7 +1294,7 @@ const runbooksHtml = `<!doctype html>
  .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
 </style></head>
 <body>
-<h1>opencode runbooks <a href="/">[dashboard]</a> <a href="/explore">[explore]</a> <a href="/api/export">[csv]</a></h1>
+${nav("runbooks")}
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option></select></div>
 <div id="count" class="muted count"></div>
@@ -1306,6 +1345,33 @@ document.getElementById('f').addEventListener('change',render);
 fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNBOOKS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(runbooks unavailable)</div>';});
 </script></body></html>`;
 
+const docsHtml = `<!doctype html>
+<html><head><meta charset="utf-8"><title>opencode docs</title>
+<style>
+ body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
+ select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;margin:0 0 10px}
+ pre{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:14px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;max-height:75vh;overflow:auto}
+ .muted{color:#8b949e;font-size:12px}
+</style></head>
+<body>
+${nav("docs")}
+<div class="muted" style="margin-bottom:8px">The repo's own rules, handoff and docs, rendered in-UI. Read-only; whitelisted files only.</div>
+<select id="docsel"></select>
+<pre id="docbody">loading...</pre>
+<script>
+var DOCS=["HANDOFF.md","RULES.md","README.txt","scripts/README.txt","HANDOFF-PROMPT.txt"];
+var sel=document.getElementById('docsel');
+for(var i=0;i<DOCS.length;i++){var o=document.createElement('option');o.value=DOCS[i];o.textContent=DOCS[i];sel.appendChild(o);}
+async function loadDoc(name){
+  var body=document.getElementById('docbody');
+  body.textContent='loading...';
+  try{var r=await fetch('/api/doc?name='+encodeURIComponent(name));body.textContent=r.ok?await r.text():'('+name+' not found)';}
+  catch(e){body.textContent='(failed to load '+name+')';}
+}
+sel.addEventListener('change',function(){loadDoc(sel.value);});
+loadDoc(DOCS[0]);
+</script></body></html>`;
+
 function send(res, code, body, type) {
   res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" });
   res.end(body);
@@ -1336,6 +1402,15 @@ const server = http.createServer(async (req, res) => {
     }
   } else if (url === "/runbooks") {
     send(res, 200, runbooksHtml, "text/html; charset=utf-8");
+  } else if (url === "/docs") {
+    send(res, 200, docsHtml, "text/html; charset=utf-8");
+  } else if (url === "/api/doc") {
+    const body = apiDoc(params.name);
+    if (body == null) {
+      send(res, 404, "not found\n", "text/plain");
+    } else {
+      send(res, 200, body, "text/plain; charset=utf-8");
+    }
   } else if (url === "/api/runbooks") {
     send(res, 200, JSON.stringify(RUNBOOKS), "application/json");
   } else if (url === "/api/overview") {
