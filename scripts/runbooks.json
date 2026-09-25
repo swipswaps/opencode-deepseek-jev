@@ -145,5 +145,18 @@
       "./scripts/issue-solutions.py --json"
     ],
     "note": "Read-only, local, no model call. Pairs each error tool call with the next completed call in the same session and ranks the recurring (issue, fix) pairs."
+  },
+  {
+    "id": "logs",
+    "title": "Diagnose: aggregate telemetry",
+    "purpose": "Pull the real evidence (guard actions, tool errors + stack traces, events, app log, container log) instead of guessing from a slow step.",
+    "where": "container",
+    "commands": [
+      "./scripts/logs.sh",
+      "./scripts/logs.sh --source all --tail 60",
+      "./scripts/logs.sh --source app --grep ERROR",
+      "./scripts/logs.sh --source packet"
+    ],
+    "note": "Read-only. 'system' and 'packet' need the host (no docker in the container). Guard actions appear after opencode-web restarts to load the plugin; they are also shown on /explore > signals."
   }
 ]

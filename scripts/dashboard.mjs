@@ -236,6 +236,19 @@ function apiSignals() {
   return { errorCount: errors.length, errors, signatures, ruleMentions, patches };
 }
 
+function apiGuard(limit) {
+  try {
+    const lines = readFileSync(new URL("../data/observability/guard.log", import.meta.url), "utf8")
+      .split("\n").filter(Boolean);
+    const rows = lines.slice(-limit).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const counts = {};
+    for (const r of rows) counts[r.verdict] = (counts[r.verdict] || 0) + 1;
+    return { count: rows.length, counts, actions: rows.reverse() };
+  } catch {
+    return { count: 0, counts: {}, actions: [] };
+  }
+}
+
 function apiActivity() {
   const rows = query("SELECT time_created, data FROM part ORDER BY time_created DESC LIMIT 80");
   const items = [];
@@ -815,6 +828,8 @@ ${nav("explore")}
 <div class="pane" data-pane="signals" style="display:none">
 <h2>Signals — mistakes, rule mentions, churn</h2>
 <div class="chart" id="signals"></div>
+<h2>Blacklist guard — blocked / fixed during "Thinking"</h2>
+<div class="chart" id="guard"></div>
 </div>
 <div class="pane" data-pane="ocr" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
@@ -983,6 +998,16 @@ async function renderSignals(){
     h+='<div class="item" data-go="'+esc(e.sid)+'"><span class="tag">error</span>'+esc(e.tool||'')+' '+esc(String(e.detail||'').slice(0,110))+' <span class="muted">'+esc(e.title||'')+'</span></div>';}
   el.html(h);
 }
+async function renderGuard(){
+  var el=d3.select('#guard');el.selectAll('*').remove();
+  var d=await j('/api/guard?limit=30');
+  if(!d||!d.count){el.text('no guard actions yet — restart opencode-web to load the plugin; it logs to data/observability/guard.log');return;}
+  var parts=[];for(var k in (d.counts||{})){parts.push(k+'='+d.counts[k]);}
+  var h='<div class="muted" style="font-size:12px">'+d.count+' actions · '+parts.join(', ')+'</div>';
+  for(var i=0;i<d.actions.length;i++){var a=d.actions[i];
+    h+='<div class="item"><span class="tag">'+esc(a.verdict||'?')+'</span>'+esc((a.patterns||[]).join(','))+' <span class="muted">'+esc(String(a.command||'').slice(0,90))+'</span></div>';}
+  el.html(h);
+}
 document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();});
 document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
@@ -1027,7 +1052,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderDupes();renderSignals();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderSignals();renderGuard();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();
 }
 
@@ -1435,6 +1460,8 @@ const server = http.createServer(async (req, res) => {
     res.end(body);
   } else if (url === "/api/signals") {
     send(res, 200, JSON.stringify(apiSignals()), "application/json");
+  } else if (url === "/api/guard") {
+    send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {

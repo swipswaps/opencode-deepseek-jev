@@ -115,6 +115,15 @@ issue-solutions.py
     model call; read-only over data/opencode/opencode.db. --recent N,
     --top N, --json, --self-test.
 
+logs.sh
+    Aggregate actionable telemetry, local and read-only. Sources: guard
+    (data/observability/guard.log — every blacklist block/fix/warn the
+    agent's "Thinking" triggered), error (opencode.db tool failures with the
+    stack-trace text), event (the opencode event bus), app (~/.local/share/
+    opencode/log/opencode.log), system (docker logs of opencode-web; host
+    only), packet (the exact tcpdump command; not run). --source S,
+    --since MIN, --tail N, --grep RE.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a

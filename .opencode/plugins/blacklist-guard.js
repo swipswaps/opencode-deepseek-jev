@@ -32,6 +32,8 @@
 
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
+import { appendFileSync, mkdirSync } from "node:fs";
+
 const RULES = [
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "awk / grep / python3", rule: "#7" },
@@ -100,7 +102,20 @@ function mode() {
   return (m === "off" || m === "warn") ? m : "block";
 }
 
-export const BlacklistGuard = async ({ client }) => {
+export const BlacklistGuard = async ({ client, directory }) => {
+  // Durable flag: every verdict is appended to data/observability/guard.log
+  // (JSONL) so the dashboard and `scripts/logs.sh --source guard` can surface
+  // it. This is how blacklisted code used during "Thinking" becomes visible
+  // instead of silently succeeding. Best-effort: never break a tool call.
+  const GUARD_LOG = (directory ? String(directory).replace(/\/+$/, "") : ".") + "/data/observability/guard.log";
+  function record(verdict, message, extra) {
+    try {
+      mkdirSync(GUARD_LOG.replace(/\/guard\.log$/, ""), { recursive: true });
+      appendFileSync(GUARD_LOG, JSON.stringify(Object.assign({ ts: new Date().toISOString(), verdict, message }, extra)) + "\n");
+    } catch {
+      // logging must never break a tool call
+    }
+  }
   async function log(level, message, extra) {
     try {
       await client.app.log({ body: { service: "blacklist-guard", level, message, extra } });
@@ -142,10 +157,9 @@ export const BlacklistGuard = async ({ client }) => {
       const warners = hits.filter((h) => h.sev === "warn");
 
       if (blockers.length) {
-        await log("error", "blacklist blocked", {
-          patterns: blockers.map((h) => h.name),
-          command: command.slice(0, 200),
-        });
+        const names = blockers.map((h) => h.name);
+        await log("error", "blacklist blocked", { patterns: names, command: command.slice(0, 200) });
+        record("block", "blocked blacklisted command", { patterns: names, command: command.slice(0, 200) });
         const detail = blockers.map((h) => "- " + h.name + " (rule " + h.rule + "): use " + h.fix).join("\n");
         throw new Error(
           "blacklist-guard blocked this command:\n" + detail +
@@ -159,18 +173,15 @@ export const BlacklistGuard = async ({ client }) => {
         const r = remediate2devnull(output.args.command);
         if (r.count) {
           output.args.command = r.cmd;
-          await log("warn", "removed 2>/dev/null so stderr (the proof) is visible", {
-            removed: r.count,
-            command: r.cmd.slice(0, 200),
-          });
+          await log("warn", "removed 2>/dev/null so stderr (the proof) is visible", { removed: r.count, command: r.cmd.slice(0, 200) });
+          record("fix", "removed 2>/dev/null (stderr restored)", { removed: r.count, command: r.cmd.slice(0, 200) });
         }
       }
 
       if (warners.length) {
-        await log("warn", "blacklist warning (not blocked)", {
-          patterns: warners.map((h) => h.name),
-          command: command.slice(0, 200),
-        });
+        const names = warners.map((h) => h.name);
+        await log("warn", "blacklist warning (not blocked)", { patterns: names, command: command.slice(0, 200) });
+        record("warn", "blacklist warning (not blocked)", { patterns: names, command: command.slice(0, 200) });
       }
     },
   };

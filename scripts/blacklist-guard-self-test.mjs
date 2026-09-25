@@ -3,7 +3,8 @@
 // Imported by test-hygiene.sh. Kept as .mjs (not .sh) so the literal patterns
 // under test do not trip lint.sh's RULES grep over scripts/*.sh. The plugin
 // file is ESM (see .opencode/package.json {"type":"module"}).
-import { inspect, stripQuotes, remediate2devnull } from "../.opencode/plugins/blacklist-guard.js";
+import { inspect, stripQuotes, remediate2devnull, BlacklistGuard } from "../.opencode/plugins/blacklist-guard.js";
+import { readFileSync, rmSync } from "node:fs";
 
 const has = (cmd, name) => inspect(cmd).some((h) => h.name === name);
 
@@ -49,6 +50,28 @@ const rfix = [
 for (const [name, ok] of rfix) {
   if (!ok) fail++;
   console.log((ok ? "  PASS " : "  FAIL ") + name + (ok ? "" : " -> " + JSON.stringify([r1, r2, r3])));
+}
+
+// End-to-end: the hook rewrites/throws AND records to guard.log (temp dir).
+const tmp = "/tmp/opencode/guardtest";
+try { rmSync(tmp, { recursive: true, force: true }); } catch {}
+const hooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp });
+const before = hooks["tool.execute.before"];
+const o1 = { args: { command: "ls /nope 2>/dev/null" } };
+await before({ tool: "bash" }, o1);
+let threw = false;
+try { await before({ tool: "bash" }, { args: { command: "sed -n 1p f" } }); } catch { threw = true; }
+let logText = "";
+try { logText = readFileSync(tmp + "/data/observability/guard.log", "utf8"); } catch {}
+const hookChecks = [
+  ["hook rewrites 2>/dev/null away", !String(o1.args.command).includes("/dev/null")],
+  ["hook throws on sed", threw],
+  ["guard.log records a fix", logText.includes('"verdict":"fix"')],
+  ["guard.log records a block", logText.includes('"verdict":"block"')],
+];
+for (const [name, ok] of hookChecks) {
+  if (!ok) fail++;
+  console.log((ok ? "  PASS " : "  FAIL ") + name);
 }
 
 console.log("result: " + (fail ? "FAIL" : "PASS"));

@@ -136,7 +136,18 @@ main() {
         bad 'blacklist-guard-self-test.mjs present + node'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt"
+    if [ -x "$REPO/scripts/logs.sh" ]; then
+        if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
+            ok 'logs.sh runs (packet)'
+        else
+            bad 'logs.sh runs (packet)'
+            tail -4 "$work/logs.txt"
+        fi
+    else
+        bad 'logs.sh present + executable'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

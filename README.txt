@@ -230,15 +230,25 @@ container takes :5099 down for a few seconds.
 Learning from the logs
 ----------------------
     ./scripts/issue-solutions.py [--top N]        # issues -> proven fixes
+    ./scripts/logs.sh [--source S] [--since MIN]  # raw telemetry
 
-Free, local, no model call. Reads the chat database read-only and pairs each
-error tool call with the next completed call in the same session, then ranks
-the recurring (issue, fix) pairs with the log evidence. Example output:
-"JEV_API_KEY rejected" x8 -> the env/`.env.local` checks that fixed it;
-"Could not find oldString" x4 -> the grep that located the real text. This is
-the "prove the solution from the logs" loop; the same data feeds the planned
-solution library and the recurring-error gate (HANDOFF.md "Local tool-use
-options").
+Free, local, no model call. `issue-solutions.py` reads the chat database
+read-only and pairs each error tool call with the next completed call in the
+same session, then ranks the recurring (issue, fix) pairs with the log
+evidence. Example output: "JEV_API_KEY rejected" x8 -> the env/`.env.local`
+checks that fixed it; "Could not find oldString" x4 -> the grep that located
+the real text.
+
+`logs.sh` is the raw layer behind that: `--source guard` (every blacklist
+block/fix/warn the agent's own "Thinking" triggered, from
+data/observability/guard.log), `error` (tool failures + stack trace),
+`event` (the opencode event bus), `app` (~/.local/share/opencode/log/
+opencode.log), `system` (docker logs; host only), `packet` (the exact
+tcpdump command). Use it when a step is slow or output looks empty — the
+`ms=` telemetry names the slow check; `logs.sh` shows why.
+
+`TODO.md` is the running backlog: HANDOFF.md is the durable state, TODO.md is
+the queue. Update both at the end of a session.
 
 Navigating the observability UI
 -------------------------------

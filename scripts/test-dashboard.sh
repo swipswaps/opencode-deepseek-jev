@@ -120,6 +120,7 @@ main() {
     has 'data-tab="overview"' "$work/explore.html" && ok 'explore tab is linkable (hash)' || bad 'explore tab is linkable (hash)'
     has 'id="dupes"' "$work/explore.html" && ok 'explore duplicates section' || bad 'explore duplicates section'
     has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
+    has 'id="guard"' "$work/explore.html" && ok 'explore guard section' || bad 'explore guard section'
     has 'class="nav"' "$work/explore.html" && ok 'shared nav present' || bad 'shared nav present'
     curl -s "http://$HOST:$PORT/docs" > "$work/docs.html"
     has '<title>opencode docs</title>' "$work/docs.html" && ok 'docs title' || bad 'docs title'
@@ -185,7 +186,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=13' "$work/rbcheck.txt" && ok 'runbooks count=13' || bad 'runbooks count=13'
+    has 'count=14' "$work/rbcheck.txt" && ok 'runbooks count=14' || bad 'runbooks count=14'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"
@@ -223,6 +224,10 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "jev" in d and "laya" in d else 1)' "$work/integ.json" && ok 'api/integrations' || bad 'api/integrations'
         curl -s "http://$HOST:$PORT/api/ab" > "$work/ab.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and isinstance(d.get("summary"),dict) else 1)' "$work/ab.json" && ok 'api/ab' || bad 'api/ab'
+        curl -s "http://$HOST:$PORT/api/signals" > "$work/sig.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "signatures" in d else 1)' "$work/sig.json" && ok 'api/signals' || bad 'api/signals'
+        curl -s "http://$HOST:$PORT/api/guard" > "$work/guard.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
         curl -s "http://$HOST:$PORT/api/ocr" > "$work/ocr.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
         curl -s "http://$HOST:$PORT/api/duplicates" > "$work/dupes.json"

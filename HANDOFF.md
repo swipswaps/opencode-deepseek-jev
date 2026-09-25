@@ -1,5 +1,8 @@
 # Handoff — opencode-deepseek-jev
 
+> **Running todo:** `TODO.md` (queue) — HANDOFF.md is the durable state, TODO.md
+> is what's next. Update both at the end of a session so momentum persists.
+
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
 (`deepseek-flash`) + **Jev** (`jev-guard` plugin + `jev-review` MCP).
@@ -52,6 +55,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `issue-solutions.py` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call in the session), ranked with the log evidence — free, local, no model call |
+| `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
