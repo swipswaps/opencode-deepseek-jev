@@ -6,12 +6,15 @@ Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
 Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode-deepseek-jev`.
 
 ## Current state (2026-09-25)
-- All audits green: `scripts/audit-config.sh` → 18/18 OK; DeepSeek balance ~$4.72.
+- All audits green: `scripts/audit-config.sh` → 18/18 OK. DeepSeek balance is
+  **$1.15** (was ~$4.72 — see "Cost model" for why it dropped).
 - Everything is committed and pushed (`main`).
 - Added `scripts/test-patterns.sh`: read-only gate proving the tool-sequence
   n-gram substrate (the data layer behind the deferred "patterns view").
   Scoped the three deferred candidates (perspective pivot grid, Plot/Vega-Lite
-  charts, patterns view) — see "Next candidates".
+  charts, patterns view) — see "Next candidates". `cost-bottlenecks.sh` now
+  reports per-model cost share + a "model mix check" (flags non-`deepseek-flash`
+  spend).
 - Keys rotated. `.env.local` (mode 0600) is the **single source of truth** for
   `DEEPSEEK_API_KEY`, `JEV_API_KEY`, `OPENCODE_SERVER_PASSWORD`. Never `export`
   the password into a shell (a stale `$OPENCODE_SERVER_PASSWORD` caused drift).
@@ -128,6 +131,14 @@ n-grams)" candidate — no new capture needed.**
   output": 938k in). `cost.sh` summarizes; `dashboard.sh`/`/viz` charts it.
   **Long sessions re-send the whole history every turn and spike cost —
   start a fresh session (read this HANDOFF) once a session gets large.**
+- **Model mix is the #1 lever — check it before anything else.** As of
+  2026-09-25 `deepseek-v4-pro` ran just 3 "audit/handoff" sessions for
+  **$2.15 = ~94%** of all spend, while `deepseek-flash` (the `opencode.json`
+  default) ran 30 sessions for $0.14. If the balance drops fast, run
+  `cost-bottlenecks.sh` (new "model mix check") and switch the agent back to
+  `deepseek-flash` — a non-flash reasoning model re-prices the whole context
+  every turn. This session has been running on `deepseek-v4-pro`, which is
+  itself the cost leak.
 - Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
   (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
   that cost.
@@ -189,6 +200,19 @@ treats the agent containers as orphans.
   **Jev-API-compatible** self-hosted server (`POST /v1/systemone`) — a drop-in
   base-URL swap. Weak zero-shot (0.362) but 0.766 fine-tuned; ~$0 self-hosted.
 - Net: keep Jev now; consider Laya self-host to cut TypeSafe cost / go on-prem.
+
+### Does Laya / Muse cut the cost? (answered)
+- **Laya is not deployed** (it is a runbook: `pip install "laya[serve]"`).
+  It only replaces **Jev** (the `jev-review` MCP — 11 invocations total), *not*
+  DeepSeek. The DeepSeek chat spend ($2.15 on v4-pro) is a different model and
+  provider entirely. So **Laya will not reduce the API cost, and it is
+  irrelevant to the UX upgrades** — the pivot/chart/patterns work is local
+  JS + read-only SQLite and needs ~no model calls at all.
+- **Muse / other "free" models** (OpenCode Zen) are free-tier *vision* models:
+  weaker reasoning (poor for multi-step shell/DB work), rate-limited, and the
+  repo rule stands — do not paste secret-bearing screenshots to free tiers.
+  They are a fallback for image input, **not** a cost fix for the agent's core
+  work. The real lever is the one above: run `deepseek-flash`, not `v4-pro`.
 
 Next-session handoff prompt: see `HANDOFF-PROMPT.txt` (paste verbatim into a
 fresh session). It is kept out of this file deliberately — an agent-directed

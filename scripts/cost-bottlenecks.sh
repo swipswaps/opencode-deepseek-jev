@@ -106,16 +106,25 @@ main() {
               COALESCE(SUM(tokens_input),0) tiny_in_tok
          FROM session WHERE cost < 0.001;"
 
-    section "per model"
-    q "SELECT COALESCE(model,'(none)') model,
+    section "per model (cost share)"
+    q "SELECT COALESCE(json_extract(model,'\$.id'),'(none)') model,
               COUNT(*) n,
-              printf('\$%.4f', COALESCE(SUM(cost),0)) cost
-         FROM session GROUP BY model ORDER BY SUM(cost) DESC;"
+              printf('\$%.4f', COALESCE(SUM(cost),0)) cost,
+              printf('%.1f%%', 100.0*SUM(cost)/MAX(1,(SELECT SUM(cost) FROM session))) share
+         FROM session GROUP BY COALESCE(json_extract(model,'\$.id'),'(none)') ORDER BY SUM(cost) DESC;"
+
+    section "model mix check (default = deepseek-flash)"
+    q "SELECT printf('\$%.4f', COALESCE(SUM(cost),0)) nonflash_cost,
+              printf('%.1f%%', 100.0*SUM(cost)/MAX(1,(SELECT SUM(cost) FROM session))) nonflash_share
+         FROM session WHERE COALESCE(json_extract(model,'\$.id'),'') <> 'deepseek-flash';"
 
     printf '\nread: per_1k_in is the effective price of context. A high\n'
     printf 'per_1k_in with high in_tok is the bottleneck to cut first\n'
     printf '(trim context, summarize, or cache). tiny_sessions are the\n'
     printf 'fixed per-call overhead.\n'
+    printf 'If nonflash_share is high, switch the model back to\n'
+    printf 'deepseek-flash (the opencode.json default): a non-flash\n'
+    printf 'reasoning model re-prices the whole context every turn.\n'
     return 0
 }
 

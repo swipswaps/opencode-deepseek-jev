@@ -103,6 +103,7 @@ opencode.json. The staging script verifies:
 Cost monitoring
 ---------------
     ./scripts/cost.sh
+    ./scripts/cost-bottlenecks.sh --top N
 
 Prints DeepSeek cost accounting from two sources: the opencode database
 (per-session USD cost and input/output/reasoning/cache tokens) and the
@@ -110,6 +111,14 @@ provider balance endpoint (https://api.deepseek.com/user/balance). The
 API key is read from .env.local and never printed. Note that jev-review
 MCP calls are billed separately by TypeSafe and do not appear in the
 DeepSeek balance.
+
+Model choice is the dominant cost lever. Keep the agent on `deepseek-flash`
+(the opencode.json default): a non-flash reasoning model (e.g.
+`deepseek-v4-pro`) re-prices the whole context every turn and, as of
+2026-09-25, three such "audit" sessions cost $2.15 (~94% of all spend)
+vs $0.14 across 30 `deepseek-flash` sessions. `cost-bottlenecks.sh`
+reports per-model cost share and a "model mix check" that flags any
+non-flash spend — check that first if the balance drops.
 
 Live activity ("thinking")
 --------------------------
@@ -170,7 +179,8 @@ Cost bottlenecks
 
 Ranks the cost drivers in the database: effective $/1k-input, top sessions
 by cost and by input tokens, worst effective $/1k-input, tiny-session
-overhead, and a per-model breakdown. Read-only; host or container.
+overhead, per-model cost share, and a "model mix check" that flags any
+spend outside the `deepseek-flash` default. Read-only; host or container.
 
 Session database & tool-use methods
 -----------------------------------
