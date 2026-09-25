@@ -156,6 +156,25 @@ function apiOcr(limit) {
   };
 }
 
+function apiDuplicates() {
+  const rows = query("SELECT id, title, cost, tokens_input, time_created FROM session ORDER BY time_created DESC");
+  const groups = new Map();
+  for (const r of rows) {
+    const key = String(r.title || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  const out = [];
+  for (const [key, list] of groups) {
+    if (list.length > 1) {
+      out.push({ title: list[0].title, key, count: list.length, cost: list.reduce((a, r) => a + (Number(r.cost) || 0), 0), ids: list.map((r) => r.id) });
+    }
+  }
+  out.sort((a, b) => b.count - a.count);
+  return out.slice(0, 30);
+}
+
 function apiSignals() {
   const errors = query(
     "SELECT s.id sid, s.title title, p.time_created ts, json_extract(p.data,'$.tool') tool, " +
@@ -715,6 +734,9 @@ const exploreHtml = `<!doctype html>
  .item{padding:4px 0;border-bottom:1px solid #21262d;font-size:12px;cursor:pointer}
  .item:hover{background:#1f6feb22}
  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:6px;background:#30363d;color:#8b949e}
+ .tabs{display:flex;gap:6px;margin:10px 0}
+ .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
+ .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
  .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
  .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
  .stat b{display:block;font-size:16px}
@@ -723,20 +745,27 @@ const exploreHtml = `<!doctype html>
 <body>
 <h1>opencode explore &nbsp;<a href="/">[dashboard]</a> <a href="/runbooks">[runbooks]</a> <a href="/api/export">[csv]</a></h1>
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
+<div class="tabs">
+  <button class="tab active" data-tab="overview">overview</button>
+  <button class="tab" data-tab="charts">charts</button>
+  <button class="tab" data-tab="signals">signals</button>
+  <button class="tab" data-tab="ocr">ocr</button>
+</div>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
-<h2>Signals — mistakes, rule mentions, churn</h2>
-<div class="chart" id="signals"></div>
-<h2>OCR — screenshot text (searchable)</h2>
-<div class="chart" id="ocr"></div>
+<div class="pane" data-pane="overview">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
 <div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
+<h2>Duplicates — near-identical sessions</h2>
+<div class="chart" id="dupes"></div>
 <h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>
 <div class="chart" id="integrations"></div>
 <h2>Jev vs Laya — A/B runs (persisted)</h2>
 <div class="chart" id="ab"></div>
 <h2>Database map — tables sized by rows, edges = foreign keys</h2>
 <div class="chart" id="dmap"></div>
+</div>
+<div class="pane" data-pane="charts" style="display:none">
 <h2>Where the money goes — sessions sized by cost, grouped by model</h2>
 <div class="chart" id="treemap"></div>
 <h2>Cumulative spend vs budget — drag to filter the views below</h2>
@@ -749,6 +778,15 @@ const exploreHtml = `<!doctype html>
 <div class="chart" id="gantt"></div>
 <h2>Part timeline — <span id="tl-title">latest session</span> <button id="tl-reset">reset</button></h2>
 <div class="chart" id="timeline"></div>
+</div>
+<div class="pane" data-pane="signals" style="display:none">
+<h2>Signals — mistakes, rule mentions, churn</h2>
+<div class="chart" id="signals"></div>
+</div>
+<div class="pane" data-pane="ocr" style="display:none">
+<h2>OCR — screenshot text (searchable)</h2>
+<div class="chart" id="ocr"></div>
+</div>
 <div class="tip" id="tip"></div>
 <script>
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
@@ -924,6 +962,24 @@ async function renderOcr(){
     h+='<div class="item"><span class="tag">'+esc(r.engine)+'</span>'+esc(r.image)+' <span class="muted">'+esc(r.ts||'')+'</span><div class="muted" style="white-space:pre-wrap;font-size:11px">'+esc(r.snippet)+'</div></div>';}
   el.html(h);
 }
+async function renderDupes(){
+  var el=d3.select('#dupes');el.selectAll('*').remove();
+  var d=await j('/api/duplicates');
+  if(!d||!d.length){el.text('no duplicate sessions');return;}
+  var h='<div class="muted" style="font-size:12px">'+d.length+' duplicate groups (normalized title)</div>';
+  for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
+  el.html(h);
+}
+document.getElementById('tabs').addEventListener('click',function(ev){
+  var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
+  if(!b)return;
+  var name=b.getAttribute('data-tab');
+  var tabs=document.querySelectorAll('#tabs .tab');
+  for(var i=0;i<tabs.length;i++){tabs[i].classList.remove('active');}
+  b.classList.add('active');
+  var panes=document.querySelectorAll('.pane');
+  for(var j=0;j<panes.length;j++){panes[j].style.display=(panes[j].getAttribute('data-pane')===name)?'block':'none';}
+});
 async function load(){
   if(typeof d3==='undefined'){var el=document.getElementById('treemap');if(el){el.textContent='d3 failed to load (/vendor/d3.min.js)';}return;}
   var o=await j('/api/overview?limit=500');
@@ -932,7 +988,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderSignals();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderSignals();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();
 }
 
@@ -1292,6 +1348,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiAb(Number(params.limit) || 200)), "application/json");
   } else if (url === "/api/ocr") {
     send(res, 200, JSON.stringify(apiOcr(Number(params.limit) || 100)), "application/json");
+  } else if (url === "/api/duplicates") {
+    send(res, 200, JSON.stringify(apiDuplicates()), "application/json");
   } else if (url === "/api/export/ocr") {
     const rows = ocrRows(2000);
     let body = "id,ts,image,engine,lang,text\n";

@@ -96,6 +96,8 @@ main() {
     has 'id="integrations"' "$work/explore.html" && ok 'explore integrations' || bad 'explore integrations'
     has 'id="dmap"' "$work/explore.html" && ok 'explore db map' || bad 'explore db map'
     has 'id="ocr"' "$work/explore.html" && ok 'explore ocr section' || bad 'explore ocr section'
+    has 'data-tab="charts"' "$work/explore.html" && ok 'explore tabs' || bad 'explore tabs'
+    has 'id="dupes"' "$work/explore.html" && ok 'explore duplicates section' || bad 'explore duplicates section'
     has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
     has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
@@ -193,6 +195,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and isinstance(d.get("summary"),dict) else 1)' "$work/ab.json" && ok 'api/ab' || bad 'api/ab'
         curl -s "http://$HOST:$PORT/api/ocr" > "$work/ocr.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
+        curl -s "http://$HOST:$PORT/api/duplicates" > "$work/dupes.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/dupes.json" && ok 'api/duplicates' || bad 'api/duplicates'
         curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
         has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
     else
@@ -238,6 +242,20 @@ PY
         if [ "$lint_rc" -eq 0 ]; then ok 'lint.sh passes'; else bad 'lint.sh passes'; tail -6 "$work/lint.txt"; fi
     else
         bad 'lint.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/ocr-tesseractjs.mjs" ]; then
+        node "$REPO/scripts/ocr-tesseractjs.mjs" --self-test > "$work/downscale.txt" 2>&1
+        local ds_rc=$?
+        if [ "$ds_rc" -eq 0 ] && has 'downscale' "$work/downscale.txt"; then ok 'ocr downscale self-test'; else bad 'ocr downscale self-test'; cat "$work/downscale.txt"; fi
+    else
+        bad 'ocr-tesseractjs.mjs present'
+    fi
+
+    if [ -f "$REPO/scripts/ux-audit.py" ]; then
+        if python3 -m py_compile "$REPO/scripts/ux-audit.py"; then ok 'ux-audit.py compiles'; else bad 'ux-audit.py compiles'; fi
+    else
+        bad 'ux-audit.py present'
     fi
 
     kill -TERM "$srv" || true

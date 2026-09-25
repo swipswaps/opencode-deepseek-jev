@@ -3,6 +3,7 @@
   "private": true,
   "description": "Local OCR fallback (tesseract.js) for reading screenshots when API models fail.",
   "dependencies": {
+    "pngjs": "7.0.0",
     "tesseract.js": "7.0.0"
   }
 }

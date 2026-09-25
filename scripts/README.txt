@@ -81,6 +81,12 @@ lint.sh
     --check on JS, and a RULES grep (no sed, no 2>/dev/null). Exits
     non-zero on any failure; also run by test-dashboard.sh.
 
+ux-audit.py
+    Host-side Playwright UX audit of /explore: reports page height vs
+    viewport, panel/tab counts, tab toggle, and page errors, then writes a
+    full-page screenshot to logs/ux/. Needs playwright on the host (the
+    container has no browser).
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the

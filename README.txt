@@ -38,17 +38,19 @@ dashboard: /api/ocr lists runs, /api/export/ocr downloads CSV, and the OCR
 text is folded into /api/semantic so the search box finds screenshots too.
 
 The engines match github.com/swipswaps/receipts-ocr: tesseract.js (browser)
-and PaddleOCR (backend/app.py). **tesseract.js is pinned in package.json** and
-installed via `npm install`, so it reads screenshots out of the box with no
-apt/pip and no API model; `tesseract-ocr` is also baked into the image.
-PaddleOCR is available with `pip install paddleocr paddlepaddle`.
+and PaddleOCR (backend/app.py). **tesseract.js + pngjs are pinned in
+package.json** and installed via `npm install`, so it reads screenshots out
+of the box with no apt/pip and no API model; oversized images are
+downscaled before OCR so very tall screenshots don't stall. `tesseract-ocr`
+is also baked into the image. PaddleOCR is available with
+`pip install paddleocr paddlepaddle`.
 
 Linting
 -------
     ./scripts/lint.sh
 
-Static gate over the repo: `bash -n` on every script, `shellcheck` (if
-installed), `node --check` on the JS, and a RULES grep (no `sed`, no
+Static gate over the repo: `bash -n` on every script, `shellcheck` (baked
+into the image), `node --check` on the JS, and a RULES grep (no `sed`, no
 `2>/dev/null`). Run it before any push; `test-dashboard.sh` runs it too.
 
 To use a *different* vision model (e.g. Muse Spark via OpenCode Zen), on a
@@ -131,28 +133,26 @@ http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
 container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
-built as a database tool, not just charts:
+built as a database tool, organised into tabs (overview · charts · signals ·
+ocr) instead of one long page:
   - Search everything: ranked FTS over titles, message text, and tool
-    commands (same /api/semantic index as the dashboard).
+    commands (same /api/semantic index as the dashboard), plus OCR text.
   - Sessions table: columns sort on click, a text filter narrows rows,
     clicking a row opens its transcript.
+  - Duplicates: groups near-identical session titles (/api/duplicates).
   - Database map: 20 tables as nodes sized by row count, edges = foreign
     keys (/api/schema).
-  - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts
-    (/api/integrations; Jev calls counted from tool parts — currently 11
-    Jev, 0 Laya).
-  - Jev vs Laya A/B: ./scripts/test-jev-laya-ab.sh persists every run to
-    data/observability/observability.db (gitignored); /explore renders
-    /api/ab — per-run latency, correctness/safe_to_merge scores, and an
-    identical/differ summary.
-  - Charts: cost treemap (d3.treemapResquarify), a brushable cumulative
-    spend-vs-budget burn-down whose selection filters the treemap, scatter,
-    sankey, and Gantt (linked views; d3.curveStepAfter), a latency×cost
-    scatter with explicit log ticks, a token-flow Sankey by model, and the
-    part timeline.
+  - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts.
+  - Jev vs Laya A/B: persisted runs (/api/ab), latency + correctness.
+  - Charts: cost treemap, brushable burn-down, latency×cost scatter,
+    token-flow Sankey, part timeline.
 d3 v7.9.0 and d3-sankey v0.12.3 are vendored under scripts/vendor/ and
 served at /vendor/*.js, so everything works offline with pinned versions.
 Model labels are parsed from the JSON `session.model` column.
+
+UX audit (host): `python3 scripts/ux-audit.py [url]` measures page height,
+panel/tab counts, tab toggle, and page errors via Playwright, and writes a
+full-page screenshot to logs/ux/.
 
 Search from the terminal
 ------------------------

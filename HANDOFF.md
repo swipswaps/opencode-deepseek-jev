@@ -36,8 +36,9 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
 | `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
-| `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
-| `lint.sh` | static gate: `bash -n` + `shellcheck` (optional) + `node --check` + RULES grep (no `sed`/`2>/dev/null`) |
+| `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
+| `lint.sh` | static gate: `bash -n` + `shellcheck` (baked into image) + `node --check` + RULES grep (no `sed`/`2>/dev/null`) |
+| `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
@@ -46,23 +47,18 @@ page and `runbook.sh`; edit it once to change either.
 The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
-
-`/explore` (`/viz` now 302-redirects here) is the database-tool layer:
-a ranked **search** box (`/api/semantic`), a **sortable/filterable sessions
-table** (click a row to open the transcript), a **database map** (tables as
-nodes sized by row count, edges = foreign keys via `/api/schema`), an
-**integrations** panel (Jev vs Laya invocation counts via
-`/api/integrations`; Jev = 11 from `tool` parts, Laya = 0), a **Jev vs Laya A/B** panel (`/api/ab`), a **Signals** panel (error tool
-calls, error signatures, rule mentions, patch churn via `/api/signals`), an
-**OCR** panel (screenshot text via `/api/ocr`, also folded into `/api/semantic`
-so the search box finds screenshots, and downloadable at `/api/export/ocr`),
-plus the charts:
-cost treemap, brushable cumulative-spend-vs-budget burn-down (linked to
-treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey, and
-the part timeline. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
-`scripts/vendor/` (served at `/vendor/*.js`, whitelisted). Presentation uses
-muted palettes, gridlines (`tickSize(-w)`), `treemapResquarify`, and
-`curveStepAfter`; model labels are parsed from the JSON column.
+`/explore` (`/viz` now 302-redirects here) is the database-tool layer,
+organised into **tabs** (overview · charts · signals · ocr) to avoid a
+~6000px wall. **overview**: a ranked search box (`/api/semantic`), a
+sortable/filterable sessions table, a **duplicate-grouping** view
+(`/api/duplicates`), an integrations panel (Jev vs Laya counts), the A/B
+panel (`/api/ab`), and the database map (`/api/schema`). **signals**: error
+tool calls, error signatures, rule mentions, patch churn (`/api/signals`).
+**ocr**: screenshot text (`/api/ocr`, also folded into `/api/semantic`, CSV
+at `/api/export/ocr`). **charts**: cost treemap, brushable burn-down (linked
+to treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey,
+part timeline. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
+`scripts/vendor/` (served at `/vendor/*.js`, whitelisted).
 
 RULES #61 ("no escape-dependent generated code") was added after two
 recurring template-literal escape incidents (`\n`, `\'` collapsing inside
@@ -85,6 +81,8 @@ headlessly via `test-dashboard-ui.mjs`.
   `data/opencode/opencode.db`. **Input tokens (context) are the cost driver** —
   a session that inlines a large file/context can cost ~$0.78 (e.g. "ip addr
   output": 938k in). `cost.sh` summarizes; `dashboard.sh`/`/viz` charts it.
+  **Long sessions re-send the whole history every turn and spike cost —
+  start a fresh session (read this HANDOFF) once a session gets large.**
 - Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
   (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
   that cost.
