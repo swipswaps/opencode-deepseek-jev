@@ -159,6 +159,14 @@ models.sh / models.py
     data/observability/models.json for the /models UI page. preflight.sh uses
     the verdict; nothing hard-codes a single model name.
 
+doc-budget.sh
+    Measure the read-first doc corpus (RULES, TODO, README, HANDOFF, DESIGN,
+    scripts/README, skills) in tokens (~bytes/4), compare to DOC_BUDGET_TOKENS
+    (default 35000), and record a content hash + sizes to
+    data/observability/docs.json. An unchanged hash means nothing new to
+    re-learn (the ECC context-budget / content-hash-cache pattern). --json;
+    --fail exits 1 when over budget.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a

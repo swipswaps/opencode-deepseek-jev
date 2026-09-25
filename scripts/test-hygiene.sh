@@ -223,7 +223,19 @@ sys.exit(0 if (m and "name:" in m.group(1) and "description:" in m.group(1)) els
         bad 'project skill present (.opencode/skills/jev-harness/SKILL.md)'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt"
+    if [ -x "$REPO/scripts/doc-budget.sh" ]; then
+        "$REPO/scripts/doc-budget.sh" --json > "$work/db.txt" 2>&1
+        if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "total_tokens" in d and "budget" in d' "$work/db.txt"; then
+            ok 'doc-budget.sh --json valid'
+        else
+            bad 'doc-budget.sh --json valid'
+            cat "$work/db.txt"
+        fi
+    else
+        bad 'doc-budget.sh present + executable'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

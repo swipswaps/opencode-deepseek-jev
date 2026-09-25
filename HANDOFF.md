@@ -16,7 +16,8 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 
 ## Current state (2026-09-25)
 - All audits green: `scripts/audit-config.sh` → 18/18 OK. DeepSeek balance is
-  **$1.15** (was ~$4.72 — see "Cost model" for why it dropped).
+  healthy (topped up 2026-09-25; run `./scripts/cost.sh` for the live figure —
+  do not hard-code it here).
 - Everything is committed and pushed (`main`).
 - Added `scripts/test-patterns.sh`: read-only gate proving the tool-sequence
   n-gram substrate (the data layer behind the deferred "patterns view").
@@ -66,6 +67,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `harness.sh [--fast] [--export]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a timestamped report. `--fast` skips the slow dashboard gate |
 | `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
 | `models.sh [--write] [--json]` / `models.py` | model catalog + cost policy from `opencode models --verbose`; verdict ALLOW / ASK / BLOCK; surfaced at `/models` |
+| `doc-budget.sh [--json] [--fail]` | token size + content-hash of the read-first doc corpus (RULES/HANDOFF/README/TODO/DESIGN/skills); budget `DOC_BUDGET_TOKENS`; unchanged hash = nothing new to re-learn |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
@@ -177,22 +179,19 @@ n-grams)" candidate — no new capture needed.**
   output": 938k in). `cost.sh` summarizes; `dashboard.sh`/`/viz` charts it.
   **Long sessions re-send the whole history every turn and spike cost —
   start a fresh session (read this HANDOFF) once a session gets large.**
-- **Model mix is the #1 lever — check it before anything else.** As of
-  2026-09-25 `deepseek-v4-pro` ran just 3 "audit/handoff" sessions for
-  **$2.15 = ~94%** of all spend, while `deepseek-flash` (the `opencode.json`
-  default) ran 30 sessions for $0.14. If the balance drops fast, run
-  `cost-bottlenecks.sh` (new "model mix check") or `opencode stats --models`
-  and switch the agent back to `deepseek-flash` — a non-flash reasoning model
-  re-prices the whole context every turn (v4-pro input $0.435/1M vs flash
-  $0.15/1M, 2.9×). This session ran on `deepseek-v4-pro`, which is itself the
-  cost leak.
-- **How to switch the model:** `/models` is a **TUI slash command** — run
-  `opencode` in a terminal, type `/models`, pick `deepseek-flash` (a picker,
-  not a chat "send"). The web UI (4096) has its own model picker. For one
-  non-interactive run: `opencode run -m deepseek/deepseek-flash "…"`.
-  `opencode models` only *lists* models. The project `opencode.json` already
-  sets flash, so a global/UI selection (`~/.config/opencode/opencode.jsonc`)
-  is what overrides it — check that file first.
+- **Model mix is the #1 cost lever — check it before anything else.**
+  `deepseek-v4-pro` was ~94% of *lifetime* spend at its peak (3 long
+  "audit/handoff" sessions, long since ended); as `deepseek-flash` sessions
+  accumulate the live share is ~70% and falling. The figure drifts — read it
+  from `cost-bottlenecks.sh` "model mix check" or `opencode stats --models`,
+  never from a hard-coded percentage. A non-flash reasoning model re-prices the
+  whole context every turn (v4-pro input $0.435/1M vs flash $0.15/1M, 2.9×).
+- **Choosing a model is a policy, not a hard-code.** `/models` is a **TUI
+  slash command** (a picker, not a chat "send"); the web UI (4096) has its own
+  picker; for one run, `opencode run -m <id> "…"`. The ceiling/allow/deny live
+  in `models.policy.json` and `models.py` returns ALLOW / ASK / BLOCK; the
+  `/models` observer page lists the catalog, the recommended alternative and
+  the policy. `preflight.sh` fails closed on ASK/BLOCK.
 - Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
   (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
   that cost.
@@ -211,24 +210,13 @@ and the model is `deepseek-flash`. Run `preflight.sh` before any paid session
 order: gate on a cheap local signal, fail closed, check the cheapest signal
 first, never retry blind (capture `logs.sh` output before retrying).
 
-### Laya before Jev — what it does and does not save
+### Laya / Muse and the cost
 
-"Laya before Jev" is a **cascade** (try self-hosted Laya first, escalate to
-hosted Jev on low confidence/error). It reduces **Jev/TypeSafe** calls, and
-Jev has no public balance API, so the saving is real but small here: only
-**11 jev-review invocations** exist in total. It does **not** reduce DeepSeek
-cost — Laya is a Jev-API-compatible *classifier*, not a chat model, so it
-never replaces the agent's completions. The two levers are independent:
-
-| lever | cuts | size in this repo |
-| ----- | ---- | ----------------- |
-| pin `deepseek-flash` | DeepSeek chat | large (v4-pro was 75% of $2.04) |
-| Laya-before-Jev cascade | Jev/TypeSafe | small (11 calls) |
-| LiteLLM `max_budget` | hard cap on DeepSeek | guardrail, not a cut |
-| prompt cache + fewer turns | DeepSeek input | already 226M cache-read |
-
-So: pin flash first; wire the LiteLLM cap; only then invest in the Laya
-cascade (its real payoff is on-prem / no-TypeSafe, not dollars).
+Single source: "Jev vs Laya" near the end of this file (facts + lever table).
+Short version: the Laya cascade cuts **Jev** calls only (11 here, tiny); it
+does **not** cut DeepSeek; free Muse-style models are a vision fallback, not a
+chat replacement. Keep the model on policy (pin `deepseek-flash` or a free
+model) and wire the LiteLLM cap before investing in Laya.
 
 ### Model choice is a policy, not a hard-code
 
@@ -559,10 +547,19 @@ treats the agent containers as orphans.
   base-URL swap. Weak zero-shot (0.362) but 0.766 fine-tuned; ~$0 self-hosted.
 - Net: keep Jev now; consider Laya self-host to cut TypeSafe cost / go on-prem.
 
+Lever table (ranked by dollar impact here):
+
+| lever | cuts | size |
+| ----- | ---- | ---- |
+| model on policy (`deepseek-flash` or free) | DeepSeek chat | large (v4-pro was ~94% of lifetime at peak) |
+| LiteLLM `max_budget` | caps DeepSeek | guardrail, not a cut |
+| prompt cache + fewer turns | DeepSeek input | already 226M cache-read |
+| Laya-before-Jev cascade | Jev/TypeSafe | small (11 calls) |
+
 ### Does Laya / Muse cut the cost? (answered)
 - **Laya is not deployed** (it is a runbook: `pip install "laya[serve]"`).
   It only replaces **Jev** (the `jev-review` MCP — 11 invocations total), *not*
-  DeepSeek. The DeepSeek chat spend ($2.15 on v4-pro) is a different model and
+  DeepSeek. The DeepSeek chat spend (v4-pro) is a different model and
   provider entirely. So **Laya will not reduce the API cost, and it is
   irrelevant to the UX upgrades** — the pivot/chart/patterns work is local
   JS + read-only SQLite and needs ~no model calls at all.

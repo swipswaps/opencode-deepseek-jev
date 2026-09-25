@@ -194,12 +194,12 @@ MCP calls are billed separately by TypeSafe and do not appear in the
 DeepSeek balance.
 
 Model choice is the dominant cost lever. Keep the agent on `deepseek-flash`
-(the opencode.json default): a non-flash reasoning model (e.g.
-`deepseek-v4-pro`) re-prices the whole context every turn and, as of
-2026-09-25, three such "audit" sessions cost $2.15 (~94% of all spend)
-vs $0.14 across 30 `deepseek-flash` sessions. `cost-bottlenecks.sh`
-reports per-model cost share and a "model mix check" that flags any
-non-flash spend — check that first if the balance drops.
+(the opencode.json default) or a free model: a non-flash reasoning model
+(e.g. `deepseek-v4-pro`) re-prices the whole context every turn — 2.9x the
+input price. Three long "audit" sessions on v4-pro were ~94% of lifetime
+spend at their peak; the live share drifts, so read it from
+`cost-bottlenecks.sh` "model mix check" (or the /models page), not from a
+hard-coded number. The ceiling is `models.policy.json`.
 
 Live activity ("thinking")
 --------------------------
@@ -279,10 +279,19 @@ One command for the whole state
     ./scripts/harness.sh [--fast] [--export]
 
 Runs every gate (lint, test-hygiene, test-patterns, test-dashboard), then the
-live telemetry (guard actions + tool errors), the cost headline and the
-TODO "in flight" list, and prints a summary. `--fast` skips the slow dashboard
-gate; `--export` writes a timestamped report to logs/. Robust: a failing gate
-is reported and the run continues.
+live telemetry (guard actions + tool errors), the cost headline, the learned
+rules, the model catalog, the doc budget and the TODO "in flight" list, and
+prints a summary. `--fast` skips the slow dashboard gate; `--export` writes a
+timestamped report to logs/. Robust: a failing gate is reported and the run
+continues.
+
+The doc corpus that a session reads first (RULES/HANDOFF/README/TODO/DESIGN/
+skills) is itself context cost:
+
+    ./scripts/doc-budget.sh          # ~tokens + content hash; unchanged = cached
+
+It records a hash in data/observability/docs.json, so an unchanged corpus means
+nothing new to re-learn (the ECC context-budget / content-hash-cache pattern).
 
 Before spending on a session, run the fail-closed spend gate:
 
