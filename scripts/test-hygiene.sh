@@ -187,6 +187,17 @@ main() {
         bad 'learn-rules.py present + executable'
     fi
 
+    if [ -f "$REPO/scripts/fuzzy-search.py" ]; then
+        if python3 "$REPO/scripts/fuzzy-search.py" --self-test > "$work/fz.txt" 2>&1; then
+            ok 'fuzzy-search: self-test'
+        else
+            bad 'fuzzy-search: self-test'
+            cat "$work/fz.txt"
+        fi
+    else
+        bad 'fuzzy-search.py present'
+    fi
+
     if [ -f "$REPO/scripts/models.py" ]; then
         if python3 "$REPO/scripts/models.py" --self-test > "$work/mo.txt" 2>&1; then
             ok 'models.py: self-test'
@@ -272,7 +283,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-test.py present'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt"
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/fz.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

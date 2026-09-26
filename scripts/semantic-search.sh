@@ -19,6 +19,7 @@ DB=""
 IDX=""
 LIMIT=15
 REBUILD=0
+FUZZY=0
 QUERY=""
 
 resolve_repo() {
@@ -34,7 +35,7 @@ resolve_repo() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-use() { printf 'usage: %s [--rebuild] [--limit N] <query...>\n' "$0"; }
+use() { printf 'usage: %s [--rebuild] [--fuzzy] [--limit N] <query...>\n' "$0"; }
 
 build() {
     printf 'building %s\n' "$IDX"
@@ -114,6 +115,7 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --rebuild) REBUILD=1; shift ;;
+            --fuzzy) FUZZY=1; shift ;;
             --limit)
                 case "${2:-}" in
                     ''|*[!0-9]*) use; return 2 ;;
@@ -134,6 +136,15 @@ main() {
         fi
         use
         return 2
+    fi
+
+    if [ "$FUZZY" -eq 1 ]; then
+        if [ ! -f "$REPO/scripts/fuzzy-search.py" ]; then
+            printf 'FAIL: scripts/fuzzy-search.py missing\n'
+            return 2
+        fi
+        python3 "$REPO/scripts/fuzzy-search.py" --index "$IDX" --db "$DB" --limit "$LIMIT" "$QUERY"
+        return $?
     fi
 
     search

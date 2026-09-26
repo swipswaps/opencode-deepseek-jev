@@ -121,7 +121,7 @@ main() {
     if [ "$JSON" -eq 0 ]; then
         if [ -x "$REPO/scripts/learn-rules.py" ]; then
             section "learned rules (corpus -> data/observability/learned-rules.json)"
-            "$REPO/scripts/learn-rules.py" --since-days 30 --write 2>&1 | head -n 18
+            "$REPO/scripts/learn-rules.py" --since-days 30 --write 2>&1 | head -n 24
         fi
         if [ -x "$REPO/scripts/issue-solutions.py" ]; then
             section "solution library (-> data/observability/solutions.json)"

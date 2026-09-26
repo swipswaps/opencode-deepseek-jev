@@ -154,6 +154,7 @@ UX_EOF
     curl -s "http://$HOST:$PORT/models" > "$work/models.html"
     has '<title>opencode models</title>' "$work/models.html" && ok 'models title' || bad 'models title'
     has 'id="banner"' "$work/models.html" && ok 'models banner' || bad 'models banner'
+    has '#cat{overflow-x:auto}' "$work/models.html" && ok 'models scrolls internally (390px)' || bad 'models scrolls internally (390px)'
     curl -s "http://$HOST:$PORT/api/models" > "$work/models.json"
     python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "models" in d or d.get("available") is False else 1)' "$work/models.json" && ok 'api/models' || bad 'api/models'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"

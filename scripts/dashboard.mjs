@@ -1152,7 +1152,7 @@ async function renderTreemap(){
   groups.sort(function(a,b){return d3.sum(b.children,function(d){return +d.cost||0;})-d3.sum(a.children,function(d){return +d.cost||0;});});
   var root=d3.hierarchy({children:groups}).sum(function(d){return +d.cost||0;});
   var W=1000,H=Math.max(240,Math.min(560,root.leaves().length*12));
-  d3.treemapResquarify().size([W,H]).paddingInner(2).paddingTop(18).paddingOuter(2).round(true)(root);
+  d3.treemap().size([W,H]).paddingInner(2).paddingTop(18).paddingOuter(2).round(true).tile(d3.treemapResquarify)(root);
   var svg=el.append('svg').attr('width',W).attr('height',H);
   var defs=svg.append('defs');
   root.children.forEach(function(g,i){
@@ -1497,6 +1497,7 @@ const modelsHtml = `<!doctype html>
  .muted{color:#8b949e;font-size:12px}
  .banner{padding:10px 14px;border-radius:8px;margin:8px 0;border:1px solid #30363d}
  .banner.ok{border-color:#2ea043}.banner.ask{border-color:#d29922}.banner.block{border-color:#ff7b72}
+ #cat{overflow-x:auto}
 </style></head>
 <body>
 ${nav("models")}

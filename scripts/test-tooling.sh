@@ -132,6 +132,24 @@ main() {
         fi
     fi
 
+    # The explore treemap uses the vendored d3. The page must call it as a
+    # layout with a tile function; calling d3.treemapResquarify() as a layout
+    # throws in the browser. Prove the exact call pattern works against the
+    # vendored bundle.
+    if have node && [ -f "$REPO/scripts/vendor/d3.min.js" ]; then
+        if node -e '
+const d3 = require(process.argv[1]);
+const root = d3.hierarchy({ children: [{ v: 3 }, { v: 1 }, { v: 2 }] }).sum((d) => d.v || 0);
+d3.treemap().size([300, 200]).paddingInner(2).tile(d3.treemapResquarify)(root);
+if (!(root.x1 > 0)) throw new Error("layout did not run");
+' "$REPO/scripts/vendor/d3.min.js" > "$work/d3.txt" 2>&1; then
+            ok "vendored d3 treemap (layout+tile) works"
+        else
+            bad "vendored d3 treemap (layout+tile) works"
+            cat "$work/d3.txt"
+        fi
+    fi
+
     if [ -n "$SLOW_MSG" ]; then
         printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
     fi

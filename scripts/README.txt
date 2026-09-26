@@ -66,7 +66,15 @@ semantic-search.sh
     text, reasoning, and tool commands. Persists an index at
     data/search/opencode-index.db (gitignored); the dashboard builds the
     same index in memory for /api/semantic. --rebuild rebuilds; --limit N
-    caps results. Host or container.
+    caps results; --fuzzy delegates to fuzzy-search.py for typo tolerance.
+    Host or container.
+
+fuzzy-search.py
+    Typo-tolerant search over the on-disk index. Tokenizes the query and each
+    part, scores exact hits plus near-matches (difflib), and ranks — so a
+    mistyped token ("edti") still finds "edit". Free, local, read-only, no
+    model call. Used by `semantic-search.sh --fuzzy`. --limit N, --json,
+    --self-test.
 
 ocr-image.sh
     Local OCR fallback for reading screenshots/scans when API models can't

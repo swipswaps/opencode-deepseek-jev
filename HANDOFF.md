@@ -59,7 +59,8 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `test-dashboard.sh` | gate for dashboard.mjs (both pages' inline-JS parse + `/api/*` + headless client execution via `test-dashboard-ui.mjs`) |
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
-| `semantic-search.sh [--rebuild] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`) |
+| `semantic-search.sh [--rebuild] [--fuzzy] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`); `--fuzzy` = typo tolerance |
+| `fuzzy-search.py <q>` | tokenize + exact hits + `difflib` near-matches over the on-disk index; `edti` finds `edit`; `--limit N`, `--json`, `--self-test` |
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
 | `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
@@ -433,13 +434,13 @@ Built ones are marked; the rest are the backlog.
 5. **Topic/trend timeline** (not built). Classify each session with the
    `prompt-lint.py` categories, plot topic share and cost per topic over time.
    Reuse the `/explore` charts.
-6. **Solution library** (not built). Persist `issue-solutions.py` output to
-   `data/observability/` so a known fix is proposed at the moment of failure.
-7. **Fuzzy code search** (partial: FTS5 in `semantic-search.sh`). Add a
-   trigram/`difflib` rerank for typo-tolerant lookup across commands and code.
-8. **Prompt cache-hit report** (not built). `opencode stats` shows 226M
-   cache-read tokens; a per-session hit-rate view would show whether prefix
-   churn is burning money.
+6. **Solution library** (built). `issue-solutions.py --write` persists
+   `data/observability/solutions.json`; `/api/solutions` shows a known fix at
+   the moment of failure.
+7. **Fuzzy code search** (built). `fuzzy-search.py` + `semantic-search.sh
+   --fuzzy` — tokenized exact hits + `difflib` near-matches ("edti" → "edit").
+8. **Prompt cache-hit report** (built). `cost-bottlenecks.sh` prints cache-read
+   vs fresh input per model + overall (99.0% here).
 
 A new tool's convention: read-only, `--json`, `--self-test`, no model call,
 wire its `--self-test` into `test-hygiene.sh`, document it in the command

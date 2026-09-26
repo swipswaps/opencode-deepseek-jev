@@ -8,16 +8,13 @@ Last updated: 2026-09-25
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
-- **The 5099 dashboard serves whatever `dashboard.mjs` was loaded at container
-  start.** `web-entrypoint.sh` starts it once. So after editing `dashboard.mjs`
-  the page is STALE until `docker compose -f docker/docker-compose.yml restart
-  opencode-web` (or a fresh `./scripts/dashboard.sh`). The first host
-  `ux-test.py` run showed `/models` 404, `/docs` 404, an old `/explore` DOM
-  (6-section overview, tab-toggle failure) and a `null addEventListener` — all
-  stale-code artifacts. *Action:* restart, then re-run `ux-test.py`; the real
-  responsive bugs (viewport, favicon) are fixed in code.
-- **Guard not loaded yet.** `data/observability/guard.log` stays empty until
-  `opencode-web` restarts; the `/explore` guard panel says so. *Action:* restart
+- **Dashboard reloads only on restart (resolved).** 5099 serves whatever
+  `dashboard.mjs` was loaded when `web-entrypoint.sh` started it; edits need
+  `docker compose -f docker/docker-compose.yml restart opencode-web`. The first
+  host `ux-test.py` run's `/models` 404, `/docs` 404 and old-`/explore`
+  failures were stale code; restarting fixed them (ux-test 10/7 → 15/2).
+- **Guard loaded, awaiting a trigger.** After the restart the plugin is live;
+  `guard.log` is empty only because no blacklisted command has run since. *Action:* restart
   the container once, then confirm a blocked `sed` and a fixed `2>/dev/null`.
 - **Model pinning — resolved 2026-09-25.** `opencode.json` and the last
   session both show `deepseek-flash`; balance topped up to $10.64. `preflight.sh`
@@ -51,8 +48,9 @@ Last updated: 2026-09-25
   Tier 10 edit has landed and is lint-gated; its *functional* proof needs a
   host (doctor's Tier 0/1/5 call `docker`). Run `./scripts/doctor.sh --full`
   on the host once to confirm Tier 10.
-- **Segment C — doable code, larger:** fuzzy code search
-  (`semantic-search.sh` trigram/`difflib` rerank over the FTS5 candidates).
+- **Segment C — drained:** fuzzy code search landed
+  (`fuzzy-search.py` + `semantic-search.sh --fuzzy`, typo-tolerant over the
+  FTS5 index). Remaining code work is larger and best in its own session.
 - **Segment D — external / host / new deps (not doable in-container):**
   perspective WASM, Plot/Vega-Lite libs, LiteLLM `max_budget` (proxy up),
   Laya, embeddings rerank, Blockly, n8n. Each is its own session; do not batch.
@@ -80,10 +78,18 @@ Last updated: 2026-09-25
       deferred: needs an embedding model (Jev/Laya/API)
 
 ### G6 quality
-- [ ] fuzzy code search (FTS5 + trigram/`difflib` rerank) — doable, next
+- [x] fuzzy code search (FTS5 + `difflib` rerank) — `fuzzy-search.py` +
+      `semantic-search.sh --fuzzy`
 
 ## Done (most recent first)
 
+- [x] fuzzy code search: `fuzzy-search.py` (typo-tolerant; `edti` → `edit`) +
+      `semantic-search.sh --fuzzy`; self-test gated; Segment C drained
+- [x] fixed the two real bugs the host `ux-test.py` surfaced: the treemap called
+      `d3.treemapResquarify()` as a layout (throws `_squarify`) → correct
+      `d3.treemap().tile(d3.treemapResquarify)`; the `/models` table overflowed
+      at 390px → `#cat{overflow-x:auto}`. Both gated (functional d3 check +
+      structure check).
 - [x] responsive fixes found by the host `ux-test.py` run: `<meta name="viewport">`
       on every page (fixes 390px overflow) + `/favicon.ico` 204 (kills the
       console 404). Gated.

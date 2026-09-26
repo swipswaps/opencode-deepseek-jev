@@ -393,11 +393,13 @@ Search from the terminal
 ------------------------
     ./scripts/semantic-search.sh <query...>     # ranked, across sessions
     ./scripts/semantic-search.sh --rebuild      # rebuild the on-disk index
+    ./scripts/semantic-search.sh --fuzzy <q...> # typo-tolerant ("edti" -> "edit")
 
 Builds a persistent FTS5 index at data/search/opencode-index.db (gitignored)
 and prints bm25-ranked hits with snippets. Same index the dashboard serves
 from memory; this on-disk copy is the substrate for a future Laya/Jev
-semantic reranker.
+semantic reranker. `--fuzzy` (or `fuzzy-search.py`) adds a local `difflib`
+rerank over the index so a mistyped token still finds the right material.
 
 Cost bottlenecks
 ----------------
