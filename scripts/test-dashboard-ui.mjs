@@ -90,8 +90,9 @@ async function main() {
   } catch (e) {
     fail("cannot reach " + BASE + PATH + " (" + e.message + ")");
   }
-  const m = html.match(/<script>([\s\S]*?)<\/script>/);
-  if (!m) fail("no inline <script> in " + PATH);
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  if (!scripts.length) fail("no inline <script> in " + PATH);
+  const code = scripts.join("\n;\n");
   validIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((x) => x[1]));
 
   const sandbox = {
@@ -110,7 +111,7 @@ async function main() {
 
   try {
     vm.createContext(sandbox);
-    vm.runInContext(m[1], sandbox, { filename: "inline.js" });
+    vm.runInContext(code, sandbox, { filename: "inline.js" });
   } catch (e) {
     fail(PATH + " inline script threw at load: " + e.message);
   }

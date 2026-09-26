@@ -271,7 +271,11 @@ RULES.md, README.txt, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
 (read-only, whitelisted names via /api/doc), so the rules are reachable
 without leaving the browser. /manage (API /api/tools, source scripts/tools.json)
 surfaces the repo's tools — purpose, host/container, copyable commands — so the
-scripts are discoverable from the UI, not only the terminal.
+scripts are discoverable from the UI, not only the terminal. The nav shows the
+**served git revision**; if the on-disk HEAD differs it turns red
+(`STALE served … vs HEAD …`) — restart opencode-web to serve new code. Data
+exports: `/api/export` (sessions CSV), `/api/export/session`, `/api/export/ocr`,
+`/api/export/patterns`, `/api/export/guard`.
 
 The UI follows DESIGN.md: one accent (#2ea043), an 8px grid, Material
 elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on

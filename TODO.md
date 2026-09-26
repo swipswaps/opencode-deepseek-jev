@@ -83,6 +83,11 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] viz output methods + stale-code visibility: `[csv]` for patterns and
+      guard (`/api/export/patterns`, `/api/export/guard`); nav **served-rev**
+      indicator turns red when HEAD moved (restart to serve new code)
+- [x] gemini picker: added `provider.env: ["GEMINI_API_KEY"]` (opencode shows a
+      provider in the model picker only when its credential is present) + cost
 - [x] `/manage` page (`/api/tools`, source `scripts/tools.json`): surfaces the
       repo's tools with purpose/host/container/copyable commands; nav + gated
 - [x] Gemini provider: added model `cost` (Flash $0.3/$2.5, Flash-Lite $0.1/$0.4)

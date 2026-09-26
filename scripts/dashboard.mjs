@@ -25,6 +25,14 @@ const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
 const host = process.argv[4] || "127.0.0.1";
 
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+let SERVED_REV = "";
+try {
+  SERVED_REV = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+} catch {
+  SERVED_REV = "";
+}
+
 const RUNBOOKS = JSON.parse(
   readFileSync(new URL("./runbooks.json", import.meta.url), "utf8")
 );
@@ -75,7 +83,9 @@ function nav(active) {
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\"" : "") + ">" + it[1] + "</a>";
   }
-  return h + "</nav>";
+  h += "<span id=\"rev\" class=\"muted\" style=\"margin-left:auto;font-size:11px\"></span>";
+  h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
+  return h;
 }
 
 // Docs reachable from the UI. Whitelisted — never read arbitrary paths.
@@ -99,6 +109,39 @@ function apiModels() {
 
 function apiTools() {
   return TOOLS;
+}
+
+let revCache = { at: 0, data: null };
+function apiRev() {
+  if (revCache.data && Date.now() - revCache.at < 10000) return revCache.data;
+  let head = "";
+  try {
+    head = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+  } catch {
+    head = "";
+  }
+  const data = { served: SERVED_REV, head, stale: !!(head && SERVED_REV && head !== SERVED_REV) };
+  revCache = { at: Date.now(), data };
+  return data;
+}
+
+function apiExportPatterns() {
+  const p = apiPatterns(500);
+  let body = "kind,key,n\n";
+  for (const g of p.ngrams) body += '"bigram","' + String(g.gram).replace(/"/g, '""') + '",' + g.n + "\n";
+  for (const e of p.errorTools) body += '"error_tool","' + String(e.tool).replace(/"/g, '""') + '",' + e.n + "\n";
+  return body;
+}
+
+function apiExportGuard() {
+  const g = apiGuard(5000);
+  let body = "ts,verdict,patterns,command\n";
+  for (const a of g.actions) {
+    body += '"' + String(a.ts || "") + '","' + String(a.verdict || "") + '","' +
+      String((a.patterns || []).join(" ")).replace(/"/g, '""') + '","' +
+      String(a.command || "").replace(/"/g, '""').replace(/\s+/g, " ") + '"\n';
+  }
+  return body;
 }
 
 function apiSolutions() {
@@ -896,11 +939,11 @@ ${nav("explore")}
 <div class="pane" data-pane="signals" style="display:none">
 <h2>Signals — mistakes, rule mentions, churn</h2>
 <div class="chart" id="signals"></div>
-<h2>Blacklist guard — blocked / fixed during "Thinking"</h2>
+<h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard">[csv]</a></h2>
 <div class="chart" id="guard"></div>
 </div>
 <div class="pane" data-pane="patterns" style="display:none">
-<h2>Patterns — recurring tool-sequence n-grams</h2>
+<h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns">[csv]</a></h2>
 <div class="chart" id="patterns"></div>
 </div>
 <div class="pane" data-pane="ocr" style="display:none">
@@ -1655,6 +1698,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(RUNBOOKS), "application/json");
   } else if (url === "/api/tools") {
     send(res, 200, JSON.stringify(apiTools()), "application/json");
+  } else if (url === "/api/rev") {
+    send(res, 200, JSON.stringify(apiRev()), "application/json");
   } else if (url === "/api/overview") {
     send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500)), "application/json");
   } else if (url === "/api/schema") {
@@ -1675,6 +1720,12 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-ocr.csv" });
     res.end(body);
+  } else if (url === "/api/export/patterns") {
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-patterns.csv" });
+    res.end(apiExportPatterns());
+  } else if (url === "/api/export/guard") {
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-guard.csv" });
+    res.end(apiExportGuard());
   } else if (url === "/api/signals") {
     send(res, 200, JSON.stringify(apiSignals()), "application/json");
   } else if (url === "/api/guard") {

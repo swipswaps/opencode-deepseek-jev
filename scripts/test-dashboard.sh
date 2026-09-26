@@ -107,6 +107,9 @@ main() {
     curl -s -D - -o /dev/null "http://$HOST:$PORT/" > "$work/headers.txt"
     has 'Content-Security-Policy' "$work/headers.txt" && ok 'CSP header present' || bad 'CSP header present'
     has 'X-Content-Type-Options' "$work/headers.txt" && ok 'nosniff header present' || bad 'nosniff header present'
+    has 'id="rev"' "$work/home.html" && ok 'served-rev indicator' || bad 'served-rev indicator'
+    curl -s "http://$HOST:$PORT/api/rev" > "$work/rev.json"
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "served" in d and "stale" in d else 1)' "$work/rev.json" && ok 'api/rev' || bad 'api/rev'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/favicon.ico" > "$work/fav.txt"
     has '204' "$work/fav.txt" && ok 'favicon.ico served (no console 404)' || bad 'favicon.ico served (204)'
 
@@ -184,7 +187,7 @@ UX_EOF
     local page pname
     for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html" "$work/manage.html"; do
         pname=$(basename "$page")
-        python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
+        python3 -c 'import sys,re; h=open(sys.argv[1]).read(); print("\n;\n".join(re.findall(r"<script>(.*?)</script>", h, re.S)))' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
             ok "inline script parses ($pname)"
         else
@@ -275,6 +278,10 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/dupes.json" && ok 'api/duplicates' || bad 'api/duplicates'
         curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
         has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
+        curl -s "http://$HOST:$PORT/api/export/patterns" > "$work/pat.csv"
+        has 'kind,key,n' "$work/pat.csv" && ok 'api/export/patterns csv' || bad 'api/export/patterns csv'
+        curl -s "http://$HOST:$PORT/api/export/guard" > "$work/guard.csv"
+        has 'ts,verdict' "$work/guard.csv" && ok 'api/export/guard csv' || bad 'api/export/guard csv'
     else
         bad 'found a session id for endpoint tests'
     fi

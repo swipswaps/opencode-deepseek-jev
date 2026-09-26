@@ -142,7 +142,9 @@ headlessly via `test-dashboard-ui.mjs`.
   comes back in a few seconds. The dashboard is not a separate service. Same
   corollary: **edits to `dashboard.mjs` are served only after that restart** —
   the running process keeps the old code (this is what made the first host
-  `ux-test.py` run report stale `/models` 404s and an old `/explore`).
+  `ux-test.py` run report stale `/models` 404s and an old `/explore`). The nav
+  now shows the **served revision** and turns red (`STALE served … vs HEAD …`)
+  when the on-disk HEAD has moved — so staleness is visible, not guessed.
 - **Runbooks are data, not code.** `scripts/runbooks.json` is the single
   source for the dashboard `/runbooks` page and `runbook.sh`; add an entry
   there (never hardcode in `dashboard.mjs`) and bump the `count=N` assertion
