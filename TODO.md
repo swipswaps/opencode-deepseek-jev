@@ -83,6 +83,12 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] repo **code index + flags**: `code-index.py` -> `data/observability/code.db`
+      (75 files, 325 flags), served at `/api/code` + `/explore ▸ code` — the
+      local half of "assemble/inspect/flag repo code" (Jev/Laya/DeepSeek
+      classification is the external next layer)
+- [x] `prompt-lint.py` flags prompts >= 0.9 similar to a prior one (dedup /
+      semantic cache) — protects spend on repeated requests
 - [x] viz output methods + stale-code visibility: `[csv]` for patterns and
       guard (`/api/export/patterns`, `/api/export/guard`); nav **served-rev**
       indicator turns red when HEAD moved (restart to serve new code)

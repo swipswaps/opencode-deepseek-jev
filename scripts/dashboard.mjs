@@ -111,6 +111,30 @@ function apiTools() {
   return TOOLS;
 }
 
+function apiProviders() {
+  let cfg = {};
+  try { cfg = JSON.parse(readFileSync(new URL("../opencode.json", import.meta.url), "utf8")); } catch { cfg = {}; }
+  let policy = {};
+  try { policy = JSON.parse(readFileSync(new URL("../models.policy.json", import.meta.url), "utf8")); } catch { policy = {}; }
+  const providers = Object.entries(cfg.provider || {}).map((e) => {
+    const id = e[0], p = e[1] || {};
+    return { id, name: p.name || id, npm: p.npm || "(models.dev)", env: p.env || [], models: Object.keys(p.models || {}) };
+  });
+  return { default_model: cfg.model || null, providers, allow: policy.allow || [], deny: policy.deny || [] };
+}
+
+function apiCode(limit) {
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/code.db", import.meta.url)), { readOnly: true });
+    const files = db.prepare("SELECT path, ext, bytes, lines, symbols, flags_n FROM code ORDER BY flags_n DESC, bytes DESC LIMIT ?").all(limit || 200);
+    const flags = db.prepare("SELECT name, COUNT(*) n FROM code_flag GROUP BY name ORDER BY n DESC").all();
+    db.close();
+    return { available: true, files, flags };
+  } catch {
+    return { available: false, files: [], flags: [] };
+  }
+}
+
 let revCache = { at: 0, data: null };
 function apiRev() {
   if (revCache.data && Date.now() - revCache.at < 10000) return revCache.data;
@@ -901,6 +925,7 @@ ${nav("explore")}
   <button class="tab" data-tab="charts">charts</button>
   <button class="tab" data-tab="signals">signals</button>
   <button class="tab" data-tab="patterns">patterns</button>
+  <button class="tab" data-tab="code">code</button>
   <button class="tab" data-tab="data">data</button>
   <button class="tab" data-tab="ocr">ocr</button>
 </div>
@@ -909,6 +934,10 @@ ${nav("explore")}
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
 <div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
+</div>
+<div class="pane" data-pane="code" style="display:none">
+<h2>Code — repo files flagged by the database (scripts/code-index.py)</h2>
+<div class="chart" id="code"></div>
 </div>
 <div class="pane" data-pane="data" style="display:none">
 <h2>Duplicates — near-identical sessions</h2>
@@ -1137,6 +1166,16 @@ async function renderPatterns(){
   }
   el.html(h);
 }
+async function renderCode(){
+  var el=d3.select('#code');el.selectAll('*').remove();
+  var d=await j('/api/code?limit=400');
+  if(!d||d.available===false||!d.files||!d.files.length){el.text('no code index yet - run ./scripts/code-index.py');return;}
+  var parts=[];for(var i=0;i<d.flags.length;i++){parts.push(esc(d.flags[i].name)+'='+d.flags[i].n);}
+  var h='<div class="muted" style="font-size:12px">'+d.files.length+' files · '+parts.join(', ')+'</div>';
+  for(var k=0;k<d.files.length;k++){var f=d.files[k];if(!f.flags_n)continue;
+    h+='<div class="item"><span class="tag">'+f.flags_n+' flagged</span>'+esc(f.path)+' <span class="muted">'+esc(String(f.symbols||'').slice(0,70))+'</span></div>';}
+  el.html(h);
+}
 async function renderGuard(){
   var el=d3.select('#guard');el.selectAll('*').remove();
   var d=await j('/api/guard?limit=30');
@@ -1191,7 +1230,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderDupes();renderSignals();renderGuard();renderPatterns();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderSignals();renderGuard();renderPatterns();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
@@ -1534,10 +1573,12 @@ const managedHtml = `<!doctype html>
 <body>
 ${nav("manage")}
 <div class="muted" style="font-size:12px">The repo's tools, surfaced read-only. host = run where docker/browser live; container = safe inside the agent container. Copy, then paste into a terminal.</div>
+<div id="providers"></div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="container">container only</option><option value="host">host only</option></select></div>
 <div id="count" class="muted count"></div>
 <div id="list"></div>
 <script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 var TOOLS=[];
 function render(){
   var f=document.getElementById('f').value;
@@ -1571,6 +1612,14 @@ function copy(text,btn){
 }
 document.getElementById('f').addEventListener('change',render);
 fetch('/api/tools').then(function(r){return r.json();}).then(function(d){TOOLS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(tools unavailable)</div>';});
+fetch('/api/providers').then(function(r){return r.json();}).then(function(d){
+  var h='<div class="card"><div class="rb-head"><span class="rb-title">Providers</span></div>';
+  h+='<div class="muted" style="font-size:12px">default: '+esc(d.default_model||'?')+' &middot; allow: '+esc((d.allow||[]).join(', '))+' &middot; deny: '+esc((d.deny||[]).join(', '))+'</div>';
+  for(var i=0;i<(d.providers||[]).length;i++){var p=d.providers[i];
+    h+='<div class="item"><span class="tag">'+esc(p.npm)+'</span><b>'+esc(p.id)+'</b> '+esc(p.name)+' <span class="muted">models: '+esc((p.models||[]).join(', '))+' &middot; env: '+esc((p.env||[]).join(', ')||'-')+'</span></div>';}
+  h+='<div class="rb-purpose">Add a provider: create the key, add it to .env.local (mode 0600), add a provider block to opencode.json with provider.env, then restart opencode-web and pick it in /models. This config-defined provider will not appear in /connect. See the connect-gemini runbook.</div></div>';
+  document.getElementById('providers').innerHTML=h;
+}).catch(function(){});
 </script></body></html>`;
 
 const docsHtml = `<!doctype html>
@@ -1700,6 +1749,10 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiTools()), "application/json");
   } else if (url === "/api/rev") {
     send(res, 200, JSON.stringify(apiRev()), "application/json");
+  } else if (url === "/api/code") {
+    send(res, 200, JSON.stringify(apiCode(Number(params.limit) || 200)), "application/json");
+  } else if (url === "/api/providers") {
+    send(res, 200, JSON.stringify(apiProviders()), "application/json");
   } else if (url === "/api/overview") {
     send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500)), "application/json");
   } else if (url === "/api/schema") {

@@ -77,6 +77,13 @@ hard-code a single model: the cheapest sufficient model wins, and the choice
 stays reviewable at `/models`. This replaces a blunt "flash or STOP" — there
 are free and specialty models the operator may prefer.
 
+**Dedup before spend.** Run `scripts/prompt-lint.py` on a large request first:
+a prompt that is >= 0.9 similar to a prior user prompt (token Jaccard) is a
+duplicate — reuse the prior answer instead of re-spending a session. That is
+the local, deterministic form of a semantic cache. The same principle applies
+to repo code: `scripts/code-index.py` assembles and flags it so inspection
+does not require re-reading the tree.
+
 ## Generated code and escapes (rule #61)
 
 The recurring "backtick" defect class. A page's inline `<script>` is

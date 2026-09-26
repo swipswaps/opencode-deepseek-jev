@@ -67,6 +67,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `issue-solutions.py [--write]` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call); `--write` persists `data/observability/solutions.json` served at `/api/solutions` — free, local |
+| `code-index.py [--flags] [--grep RE]` | index + flag the repo's own code into `data/observability/code.db` (symbols, blacklist, TODO/FIXME); served at `/api/code`, `/explore ▸ code` |
 | `learn-rules.py [--since-days N] [--write]` | contrastive corpus learning: state (error) → action shape → outcome; emits advisory avoid/prefer/recovery rules to `data/observability/learned-rules.json` |
 | `logs.sh` | aggregate telemetry: `guard` (blacklist actions during Thinking), `error` (tool failures + stack traces), `event`, `app`, `system`, `packet` — read-only, local |
 | `harness.sh [--fast] [--export] [--json]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a report, `--json` emits only `{ts,rev,passed,failed,gates[]}`; `--fast` skips the slow dashboard gate |
@@ -104,7 +105,7 @@ The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
 `/explore` (`/viz` now 302-redirects here) is the database-tool layer,
-organised into **tabs** (overview · charts · signals · patterns · data · ocr)
+organised into **tabs** (overview · charts · signals · patterns · code · data · ocr)
 to avoid a ~6000px wall. **overview**: a ranked search box (`/api/semantic`)
 and a sortable/filterable sessions table — the essentials only. **data**: the
 database-tool views — duplicate grouping (`/api/duplicates`), integrations

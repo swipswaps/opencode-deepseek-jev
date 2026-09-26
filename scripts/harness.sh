@@ -154,12 +154,13 @@ main() {
         > "$REPO/data/observability/last-gate.json"
 
     if [ "$JSON" -eq 1 ]; then
-        printf '{"ts":"%s","rev":"%s","passed":%d,"failed":%d,"gates":[%s]}\n' \
+        printf '{"ts":"%s","rev":"%s","passed":%d,"failed":%d,"end":true,"gates":[%s]}\n' \
             "$TS" "$REV" "$PASS_GATES" "$FAILED_GATES" "$GATE_JSON"
     else
         section "summary"
         printf 'gates passed: %d   gates failed: %d\n' "$PASS_GATES" "$FAILED_GATES"
         printf 'note: test-dashboard.sh already runs lint.sh and test-hygiene.sh.\n'
+        printf '@@END harness passed=%d failed=%d ts=%s\n' "$PASS_GATES" "$FAILED_GATES" "$TS"
         if [ "$EXPORT" -eq 1 ]; then
             local rep="$REPO/logs/harness-$TS.md"
             mkdir -p "$REPO/logs"

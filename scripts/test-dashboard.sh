@@ -134,6 +134,8 @@ main() {
     has 'data-tab="patterns"' "$work/explore.html" && ok 'explore patterns tab' || bad 'explore patterns tab'
     has 'id="patterns"' "$work/explore.html" && ok 'explore patterns section' || bad 'explore patterns section'
     has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'
+    has 'data-tab="code"' "$work/explore.html" && ok 'explore code tab' || bad 'explore code tab'
+    has 'id="code"' "$work/explore.html" && ok 'explore code section' || bad 'explore code section'
     python3 - "$work/explore.html" > "$work/uxcheck.txt" <<'UX_EOF'
 import sys, re
 h = open(sys.argv[1]).read()
@@ -180,6 +182,7 @@ UX_EOF
     curl -s "http://$HOST:$PORT/manage" > "$work/manage.html"
     has '<title>opencode manage</title>' "$work/manage.html" && ok 'manage title' || bad 'manage title'
     has 'id="list"' "$work/manage.html" && ok 'manage list element' || bad 'manage list element'
+    has 'id="providers"' "$work/manage.html" && ok 'manage providers element' || bad 'manage providers element'
     has 'container only' "$work/manage.html" && ok 'manage filter' || bad 'manage filter'
     curl -s "http://$HOST:$PORT/api/tools" > "$work/tools.json"
     python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and d and all("id" in x and "commands" in x and "where" in x for x in d) else 1)' "$work/tools.json" && ok 'api/tools valid' || bad 'api/tools valid'
@@ -272,6 +275,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
         curl -s "http://$HOST:$PORT/api/solutions" > "$work/sol.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("issues"),list) or d.get("available") is False else 1)' "$work/sol.json" && ok 'api/solutions' || bad 'api/solutions'
+        curl -s "http://$HOST:$PORT/api/code" > "$work/code.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("files"),list) and ("flags" in d) else 1)' "$work/code.json" && ok 'api/code' || bad 'api/code'
         curl -s "http://$HOST:$PORT/api/ocr" > "$work/ocr.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
         curl -s "http://$HOST:$PORT/api/duplicates" > "$work/dupes.json"
@@ -348,6 +353,17 @@ PY
     else
         bad 'ux-audit.py present'
     fi
+
+    local r404="" rcode route
+    for route in / /explore /runbooks /manage /docs /models /api/rev /api/tools \
+        /api/providers /api/code /api/cost /api/balance /api/schema /api/integrations \
+        /api/ab /api/ocr /api/duplicates /api/signals /api/guard /api/patterns \
+        /api/solutions /api/runbooks /api/export /api/export/ocr /api/export/patterns \
+        /api/export/guard /vendor/d3.min.js /vendor/d3-sankey.min.js; do
+        rcode=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT$route" 2>&1)
+        if [ "$rcode" = "404" ]; then r404="$r404 $route"; fi
+    done
+    if [ -z "$r404" ]; then ok 'route sweep: every page + api non-404'; else bad "route sweep 404:$r404"; fi
 
     kill -TERM "$srv" || true
     wait "$srv" || true

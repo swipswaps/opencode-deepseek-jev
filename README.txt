@@ -249,6 +249,23 @@ opencode.log), `system` (docker logs; host only), `packet` (the exact
 tcpdump command). Use it when a step is slow or output looks empty — the
 `ms=` telemetry names the slow check; `logs.sh` shows why.
 
+Repo code index
+---------------
+    ./scripts/code-index.py            # assemble + flag the repo's own code
+    ./scripts/code-index.py --flags    # file:line flag list
+    ./scripts/code-index.py --grep RE  # files whose path/symbols match
+
+Indexes the repo's own code/config/docs (per-file metadata + top-level symbols)
+into data/observability/code.db and flags blacklist patterns plus TODO/FIXME —
+so code can be inspected alongside the chat database and, later, classified by
+Jev/Laya/DeepSeek. Surfaced at /api/code and /explore ▸ code.
+
+Duplicate prompts (dedup / semantic cache)
+------------------------------------------
+`prompt-lint.py` flags a prompt that is >= 0.9 similar to a prior user prompt
+(token Jaccard): reuse the prior answer instead of spending another session.
+That is the local, deterministic form of a semantic cache.
+
 `learn-rules.py` goes a step further: it builds **(state, action, outcome)**
 triples from the log — the error signature, the shape of the next call, and
 whether it completed — and emits advisory *avoid* / *prefer* / *recovery*
@@ -375,7 +392,7 @@ deferral — so a request that is impossible or ballooning is named, not half-do
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
-patterns · data · ocr) instead of one long page:
+patterns · code · data · ocr) instead of one long page:
   - Search everything: ranked FTS over titles, message text, and tool
     commands (same /api/semantic index as the dashboard), plus OCR text.
   - Sessions table: columns sort on click, a text filter narrows rows,

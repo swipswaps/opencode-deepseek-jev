@@ -228,6 +228,10 @@ def lint(prompt: str, past: list[dict], errors: list[dict], repo: Path, top: int
         key=lambda x: -x["score"],
     )
     similar = [s for s in scored if s["score"] > 0][:top]
+    if similar and similar[0]["score"] >= 0.9:
+        flags.append({"sev": "low", "kind": "duplicate",
+                      "msg": f"prompt is {similar[0]['score']:.2f}-similar to a prior prompt ({similar[0]['session'][:12]})",
+                      "fix": "reuse the prior answer instead of spending another session (dedup / semantic cache)"})
     return {"prompt": prompt, "category": cat, "flags": flags,
             "similar": similar, "recurring_errors": errors,
             "high": sum(1 for f in flags if f["sev"] == "high")}

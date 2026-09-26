@@ -204,6 +204,17 @@ main() {
         bad 'fuzzy-search.py present'
     fi
 
+    if [ -f "$REPO/scripts/code-index.py" ]; then
+        if python3 "$REPO/scripts/code-index.py" --self-test > "$work/ci.txt" 2>&1; then
+            ok 'code-index: self-test'
+        else
+            bad 'code-index: self-test'
+            cat "$work/ci.txt"
+        fi
+    else
+        bad 'code-index.py present'
+    fi
+
     if [ -f "$REPO/scripts/models.py" ]; then
         if python3 "$REPO/scripts/models.py" --self-test > "$work/mo.txt" 2>&1; then
             ok 'models.py: self-test'
@@ -295,7 +306,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-test.py present'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/fz.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt"
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/fz.txt" "$work/ci.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then
