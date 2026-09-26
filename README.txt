@@ -385,6 +385,9 @@ errors, no horizontal scroll at 390px, not an unscrollable wall, and on
 /explore every tab toggles and the overview stays compact (the split that moved
 duplicates/integrations/A-B/database-map into the new `data` tab). It exits
 non-zero on failure and prints SKIP (not a pass) if playwright is absent.
+`python3 scripts/ux-test.py --check` reports whether playwright/chromium and
+the running dashboard are ready, with the exact install commands; the same
+steps are a runbook ("ux-test", host) at /runbooks.
 
 Search from the terminal
 ------------------------

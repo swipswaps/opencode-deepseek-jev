@@ -76,6 +76,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
+| `ux-test.py [url] [--check]` | host-side Playwright UX **test** (assertions: console, 390px overflow, tab toggles, compact overview); `--check` reports readiness; SKIP without a browser; runbook `ux-test` |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`

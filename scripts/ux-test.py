@@ -128,14 +128,48 @@ def run(base: str, outdir: Path) -> int:
     return 1 if r.fail_n else 0
 
 
+def check(base: str) -> int:
+    """Report prerequisites so 'user can test now' has a yes/no answer."""
+    print("=== ux-test.py --check ===")
+    rc = 0
+    try:
+        from playwright.sync_api import sync_playwright
+        print("  PASS  playwright importable")
+    except Exception:
+        print("  SKIP  playwright not installed -> pip install playwright")
+        return 1
+    try:
+        with sync_playwright() as p:
+            b = p.chromium.launch()
+            b.close()
+        print("  PASS  chromium launches")
+    except Exception as e:
+        print(f"  SKIP  chromium unavailable -> playwright install chromium ({e})")
+        return 1
+    import urllib.request
+    try:
+        urllib.request.urlopen(base + "/", timeout=5)
+        print(f"  PASS  server reachable at {base}")
+    except Exception as e:
+        rc = 1
+        print(f"  FAIL  server not reachable at {base} ({e}) — start it (./scripts/web.sh or dashboard.sh)")
+    if rc == 0:
+        print("  ready: python3 scripts/ux-test.py " + base)
+    return rc
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("base", nargs="?", default="http://127.0.0.1:5099")
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--check", action="store_true", help="report prerequisites and exit")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
+    base = args.base.rstrip("/")
+    if args.check:
+        return check(base)
     repo = resolve_repo(Path(__file__).parent) or resolve_repo(Path.cwd())
     out = args.out or ((repo / "logs" / "ux") if repo else Path("logs/ux"))
-    return run(args.base.rstrip("/"), out)
+    return run(base, out)
 
 
 if __name__ == "__main__":

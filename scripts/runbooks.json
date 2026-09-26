@@ -182,5 +182,18 @@
       "./scripts/preflight.sh --json"
     ],
     "note": "Run harness.sh first: it records data/observability/last-gate.json, which preflight reads. preflight also reads the DeepSeek balance (one free GET). MIN_BALANCE env overrides the $1.00 floor; --allow-pro skips the model checks."
+  },
+  {
+    "id": "ux-test",
+    "title": "UX test (Playwright, host)",
+    "purpose": "Assert the observability UI is usable: no console errors, no horizontal scroll at 390px, tabs toggle, and the overview stays compact.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "pip install playwright && playwright install chromium",
+      "python3 scripts/ux-test.py --check",
+      "python3 scripts/ux-test.py http://127.0.0.1:5099"
+    ],
+    "note": "Host-side only (the container has no browser). The dashboard must be up on 5099 (web.sh or dashboard.sh). --check reports playwright/chromium/server readiness with the exact install commands; without a browser the test prints SKIP (not a pass). Screenshots land in logs/ux/."
   }
 ]

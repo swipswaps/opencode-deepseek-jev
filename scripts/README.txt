@@ -190,7 +190,9 @@ ux-test.py
     errors, no horizontal scroll at 390px, not an unscrollable wall, and on
     /explore that every tab toggles its pane and the overview stays compact.
     Exits non-zero on failure. If playwright is absent it prints SKIP (not a
-    pass) and exits 0. Screenshots to logs/ux/.
+    pass) and exits 0. --check reports playwright/chromium/server readiness
+    with the exact install commands. Screenshots to logs/ux/. There is a
+    "ux-test" runbook (host) so it is one copy-paste away.
 
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at

@@ -76,6 +76,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] UX test is one-step runnable: `ux-test.py --check` (readiness +
+      install commands) and a host `ux-test` runbook (17 runbooks total)
 - [x] UX: split `/explore` overview (6 → 2 sections); moved duplicates/
       integrations/A-B/database-map to a new `data` tab; sticky tab bar.
       Verified: `/explore` was 40 KB / 18 `<h2>`; gated structurally
