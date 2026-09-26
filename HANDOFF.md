@@ -136,7 +136,10 @@ headlessly via `test-dashboard-ui.mjs`.
   `dashboard.mjs` on :5099 and then `opencode web`; compose publishes
   `127.0.0.1:5099`. So `./scripts/web-stop.sh` (or any `restart opencode-web`)
   **takes the dashboard down** until the container's entrypoint reruns — it
-  comes back in a few seconds. The dashboard is not a separate service.
+  comes back in a few seconds. The dashboard is not a separate service. Same
+  corollary: **edits to `dashboard.mjs` are served only after that restart** —
+  the running process keeps the old code (this is what made the first host
+  `ux-test.py` run report stale `/models` 404s and an old `/explore`).
 - **Runbooks are data, not code.** `scripts/runbooks.json` is the single
   source for the dashboard `/runbooks` page and `runbook.sh`; add an entry
   there (never hardcode in `dashboard.mjs`) and bump the `count=N` assertion

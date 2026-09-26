@@ -8,6 +8,14 @@ Last updated: 2026-09-25
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
+- **The 5099 dashboard serves whatever `dashboard.mjs` was loaded at container
+  start.** `web-entrypoint.sh` starts it once. So after editing `dashboard.mjs`
+  the page is STALE until `docker compose -f docker/docker-compose.yml restart
+  opencode-web` (or a fresh `./scripts/dashboard.sh`). The first host
+  `ux-test.py` run showed `/models` 404, `/docs` 404, an old `/explore` DOM
+  (6-section overview, tab-toggle failure) and a `null addEventListener` — all
+  stale-code artifacts. *Action:* restart, then re-run `ux-test.py`; the real
+  responsive bugs (viewport, favicon) are fixed in code.
 - **Guard not loaded yet.** `data/observability/guard.log` stays empty until
   `opencode-web` restarts; the `/explore` guard panel says so. *Action:* restart
   the container once, then confirm a blocked `sed` and a fixed `2>/dev/null`.
@@ -76,6 +84,9 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] responsive fixes found by the host `ux-test.py` run: `<meta name="viewport">`
+      on every page (fixes 390px overflow) + `/favicon.ico` 204 (kills the
+      console 404). Gated.
 - [x] UX test is one-step runnable: `ux-test.py --check` (readiness +
       install commands) and a host `ux-test` runbook (17 runbooks total)
 - [x] UX: split `/explore` overview (6 → 2 sections); moved duplicates/

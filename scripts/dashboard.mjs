@@ -62,7 +62,8 @@ const THEME_CSS =
   ".tab,.tag,.badge{border-radius:var(--pill)}" +
   ".tab.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
   ".nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
-  ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}";
+  ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}" +
+  ".card{overflow-x:auto}";
 
 function nav(active) {
   let h = "<style>" + NAV_CSS + THEME_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
@@ -610,7 +611,7 @@ async function apiBalance() {
 }
 
 const html = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode observability</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode observability</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 8px}
@@ -805,7 +806,7 @@ setInterval(refreshConfig,30000);
 </script></body></html>`;
 
 const exploreHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode explore</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode explore</title>
 <script src="/vendor/d3.min.js"></script>
 <script src="/vendor/d3-sankey.min.js"></script>
 <style>
@@ -1382,7 +1383,7 @@ load();
 </script></body></html>`;
 
 const runbooksHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode runbooks</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode runbooks</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 8px}
@@ -1459,7 +1460,7 @@ fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNB
 </script></body></html>`;
 
 const docsHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode docs</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode docs</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;margin:0 0 10px}
@@ -1486,7 +1487,7 @@ loadDoc(DOCS[0]);
 </script></body></html>`;
 
 const modelsHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>opencode models</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode models</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  table{border-collapse:collapse;width:100%;font-size:12px}
@@ -1530,7 +1531,10 @@ function send(res, code, body, type) {
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
-  if (url === "/") {
+  if (url === "/favicon.ico") {
+    res.writeHead(204, { "Cache-Control": "max-age=86400" });
+    res.end();
+  } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
   } else if (url === "/explore") {
     send(res, 200, exploreHtml, "text/html; charset=utf-8");

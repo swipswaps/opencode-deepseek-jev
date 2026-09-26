@@ -103,6 +103,9 @@ main() {
     has 'href="/runbooks"' "$work/home.html" && ok 'home nav runbooks' || bad 'home nav runbooks'
     has 'href="/explore"' "$work/home.html" && ok 'home nav explore' || bad 'home nav explore'
     has 'href="/docs"' "$work/home.html" && ok 'home nav docs' || bad 'home nav docs'
+    has 'name="viewport"' "$work/home.html" && ok 'responsive viewport meta' || bad 'responsive viewport meta'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/favicon.ico" > "$work/fav.txt"
+    has '204' "$work/fav.txt" && ok 'favicon.ico served (no console 404)' || bad 'favicon.ico served (204)'
 
     curl -s "http://$HOST:$PORT/explore" > "$work/explore.html"
     has '<title>opencode explore</title>' "$work/explore.html" && ok 'explore title' || bad 'explore title'
