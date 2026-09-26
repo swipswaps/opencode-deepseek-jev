@@ -225,6 +225,12 @@ main() {
         bad 'models.policy.json present'
     fi
 
+    if python3 -c 'import json,sys; o=json.load(open(sys.argv[1])); p=json.load(open(sys.argv[2])); assert "gemini" in o.get("provider",{}); assert any("gemini" in m for m in p.get("allow",[]))' "$REPO/opencode.json" "$REPO/models.policy.json"; then
+        ok 'gemini provider declared + policy allows it'
+    else
+        bad 'gemini provider declared + policy allows it'
+    fi
+
     if [ -f "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
         if python3 -c '
 import sys, re

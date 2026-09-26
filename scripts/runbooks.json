@@ -195,5 +195,20 @@
       "python3 scripts/ux-test.py http://127.0.0.1:5099"
     ],
     "note": "Host-side only (the container has no browser). The dashboard must be up on 5099 (web.sh or dashboard.sh). --check reports playwright/chromium/server readiness with the exact install commands; without a browser the test prints SKIP (not a pass). Screenshots land in logs/ux/."
+  },
+  {
+    "id": "connect-gemini",
+    "title": "Connect Google Gemini",
+    "purpose": "Add Gemini as an OpenAI-compatible provider so it appears in /models and the /models policy page.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "# create a key at https://aistudio.google.com/apikey, then add a line to .env.local (mode 0600):",
+      "printf 'GEMINI_API_KEY=<your-key>\\n' >> .env.local",
+      "docker compose -f docker/docker-compose.yml restart opencode-web",
+      "./scripts/models.sh --write",
+      "./scripts/preflight.sh"
+    ],
+    "note": "Manual: paste the key. Gemini goes through @ai-sdk/openai-compatible at https://generativelanguage.googleapis.com/v1beta/openai/. Then pick it with /models (TUI) or `opencode run -m gemini/gemini-2.5-flash`. gemini-2.5-flash and gemini-2.5-flash-lite are allow-listed in models.policy.json (Flash input is ~$0.30/1M, above the $0.20 ceiling — allowed explicitly)."
   }
 ]

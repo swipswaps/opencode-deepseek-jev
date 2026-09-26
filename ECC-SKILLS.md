@@ -20,10 +20,10 @@ Kubernetes, languages we do not use).
 | `cost-aware-llm-pipeline` | `models.policy.json` + `models.py` ALLOW/ASK/BLOCK (INC) |
 | `cost-tracking` | `cost.sh`, `cost-bottlenecks.sh` per-model share (INC) |
 | `token-budget-advisor` | `cost.sh --estimate`, `doc-budget.sh` (INC) |
-| `strategic-compact` | HANDOFF "Cost model"; fresh sessions, `--replay-limit` (REF) |
+| `strategic-compact` | `opencode.json` `compaction` (auto+prune, `tail_turns: 20`) + `cost-bottlenecks.sh` context-budget section (INC) |
 | `continuous-learning` / `continuous-learning-v2` | `learn-rules.py` advisory rules (INC) |
 | `verification-loop` / `delivery-gate` / `gateguard` | `harness.sh` + `lint.sh`/`test-*.sh` (INC) |
-| `security-review` / `security-scan` / `safety-guard` | `blacklist-guard.js`, `scan-constraints.py`, `prompt-lint.py` secret regex (INC) |
+| `security-review` / `security-scan` / `safety-guard` | `blacklist-guard.js` (incl. **interpreter-wrapper scan**: `bash -c`/`sh -c`/`python3 -c`/`eval`, and **pipe-to-shell**: `curl\|sh`, `base64 -d\|sh`), `scan-constraints.py`, secret regex, **CSP + nosniff** headers (INC) |
 | `content-hash-cache-pattern` | `last-gate.json` proof cache; `doc-budget.sh` hash (INC) |
 | `repo-scan` / `codebase-onboarding` / `workspace-surface-audit` | `audit-tool-calls.py`; the orphaned-capability audit (INC) |
 | `dashboard-builder` / `design-system` / `make-interfaces-feel-better` | `dashboard.mjs`, `DESIGN.md` (INC) |
@@ -44,8 +44,12 @@ Kubernetes, languages we do not use).
 ## Consulted for depth (REF)
 
 When a lane needs more than the local tool: `context-budget`,
-`strategic-compact`, `deep-research`, `prompt-optimizer`, `verification-loop`.
-Do not install ECC's hooks — they would duplicate the guard.
+`deep-research`, `prompt-optimizer`, `verification-loop`. Do not install ECC's
+hooks — they would duplicate the guard.
+
+Sources used to confirm shapes: the published opencode JSON Schema
+(`https://opencode.ai/config.json` — `$defs/Config/properties/compaction`), the
+built-in `customize-opencode` skill, and ECC's skill index.
 
 ## Not applicable (N/A)
 

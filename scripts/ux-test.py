@@ -27,7 +27,7 @@ import argparse
 import sys
 from pathlib import Path
 
-PAGES = ["/", "/explore", "/runbooks", "/models", "/docs"]
+PAGES = ["/", "/explore", "/runbooks", "/models", "/manage", "/docs"]
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
 

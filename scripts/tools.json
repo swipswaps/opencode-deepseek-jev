@@ -1,0 +1,100 @@
+[
+  {
+    "id": "harness",
+    "title": "Whole-state check",
+    "where": "container",
+    "purpose": "Every gate (lint, test-hygiene, test-patterns, test-dashboard) + telemetry + cost + TODO in-flight. --json for wrappers.",
+    "commands": ["./scripts/harness.sh", "./scripts/harness.sh --fast", "./scripts/harness.sh --json", "./scripts/harness.sh --export"]
+  },
+  {
+    "id": "preflight",
+    "title": "Spend gate (fail closed)",
+    "where": "container",
+    "purpose": "Refuses (exit 1) unless keys, last gate run, balance and model policy all pass. Run before any paid session.",
+    "commands": ["./scripts/preflight.sh", "./scripts/preflight.sh --json"]
+  },
+  {
+    "id": "models",
+    "title": "Model catalog + cost policy",
+    "where": "container",
+    "purpose": "ALLOW / ASK / BLOCK from models.policy.json; also the data behind the /models page.",
+    "commands": ["./scripts/models.sh", "./scripts/models.sh --write", "./scripts/models.sh --json"]
+  },
+  {
+    "id": "learn",
+    "title": "Learned rules (corpus)",
+    "where": "container",
+    "purpose": "Contrastive (state, action, outcome) rules -> data/observability/learned-rules.json; the guard reads them.",
+    "commands": ["./scripts/learn-rules.py --since-days 30 --write", "./scripts/learn-rules.py --json"]
+  },
+  {
+    "id": "solutions",
+    "title": "Solution library",
+    "where": "container",
+    "purpose": "Recurring errors and the next action that fixed each -> solutions.json; shown on /explore > patterns.",
+    "commands": ["./scripts/issue-solutions.py --write", "./scripts/issue-solutions.py --json"]
+  },
+  {
+    "id": "search",
+    "title": "Search (ranked + fuzzy)",
+    "where": "container",
+    "purpose": "FTS5/bm25 over every part; --fuzzy tolerates typos (edti -> edit).",
+    "commands": ["./scripts/semantic-search.sh <query>", "./scripts/semantic-search.sh --rebuild", "./scripts/semantic-search.sh --fuzzy edti", "./scripts/fuzzy-search.py <query>"]
+  },
+  {
+    "id": "telemetry",
+    "title": "Telemetry",
+    "where": "container",
+    "purpose": "guard actions, tool errors + traces, events, app log, container log, packet hint.",
+    "commands": ["./scripts/logs.sh", "./scripts/logs.sh --source all --tail 60", "./scripts/logs.sh --source guard"]
+  },
+  {
+    "id": "docbudget",
+    "title": "Doc budget",
+    "where": "container",
+    "purpose": "Token size + content hash of the read-first corpus; unchanged hash = nothing new to re-learn.",
+    "commands": ["./scripts/doc-budget.sh", "./scripts/doc-budget.sh --json"]
+  },
+  {
+    "id": "guard",
+    "title": "Blacklist guard self-test",
+    "where": "container",
+    "purpose": "Proves block/fix/warn plus interpreter-wrapper and pipe-to-shell catches.",
+    "commands": ["node scripts/blacklist-guard-self-test.mjs"]
+  },
+  {
+    "id": "contracts",
+    "title": "Tool contract tests",
+    "where": "container",
+    "purpose": "Asserts every --json tool emits the keys a wrapper reads.",
+    "commands": ["./scripts/test-tooling.sh", "./scripts/test-hygiene.sh", "./scripts/test-patterns.sh", "./scripts/test-dashboard.sh"]
+  },
+  {
+    "id": "doctor",
+    "title": "Health check",
+    "where": "host",
+    "purpose": "Ordered tiers; --full adds the Jev proof (Tier 9) and repo gates (Tier 10).",
+    "commands": ["./scripts/doctor.sh", "./scripts/doctor.sh --full"]
+  },
+  {
+    "id": "uxtest",
+    "title": "UX test (Playwright)",
+    "where": "host",
+    "purpose": "Asserts the served pages: console clean, no 390px overflow, tabs toggle, overview compact.",
+    "commands": ["pip install playwright && playwright install chromium", "python3 scripts/ux-test.py --check", "python3 scripts/ux-test.py http://127.0.0.1:5099"]
+  },
+  {
+    "id": "ocr",
+    "title": "Read a screenshot locally",
+    "where": "container",
+    "purpose": "OCR fallback when image input is unavailable (tesseract / PaddleOCR); searchable via /api/semantic.",
+    "commands": ["./scripts/ocr-image.sh --check", "./scripts/ocr-image.sh <image.png>"]
+  },
+  {
+    "id": "cost",
+    "title": "Cost accounting",
+    "where": "container",
+    "purpose": "DeepSeek balance + per-session cost + Jev count; bottlenecks, model mix, prompt cache, context budget.",
+    "commands": ["./scripts/cost.sh", "./scripts/cost.sh --estimate IN OUT REASONING", "./scripts/cost-bottlenecks.sh --top 8"]
+  }
+]

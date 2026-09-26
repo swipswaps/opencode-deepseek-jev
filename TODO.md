@@ -83,6 +83,20 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] `/manage` page (`/api/tools`, source `scripts/tools.json`): surfaces the
+      repo's tools with purpose/host/container/copyable commands; nav + gated
+- [x] Gemini provider: added model `cost` (Flash $0.3/$2.5, Flash-Lite $0.1/$0.4)
+      so models.policy.json can judge it (was showing $0.0)
+- [x] ECC `security-review` extended: guard now also blocks **pipe-to-shell**
+      obfuscation (`curl … | sh`, `base64 -d | sh`) in addition to the
+      interpreter-wrapper scan; self-test covers both
+- [x] ECC `security-review` used: fixed the guard's interpreter-wrapper bypass
+      (`bash -c`/`sh -c`/`python3 -c`/`eval` now re-inspected) + added CSP +
+      nosniff headers; triaged the external second-opinion audit (most was
+      hallucinated; the bypass was the one real finding)
+- [x] ECC `strategic-compact` incorporated: `opencode.json` `compaction`
+      (auto + prune, `tail_turns: 20`) + `cost-bottlenecks.sh` context-budget
+      section (`CONTEXT_BUDGET`, default 200k). Schema-verified.
 - [x] ECC skill triage: `ECC-SKILLS.md` — confirmed applicable subset with
       status (INC/REF/N/A) and repo equivalent; referenced from `jev-harness`.
       Verified: host `ux-test.py` now 17 pass / 0 fail after the restart

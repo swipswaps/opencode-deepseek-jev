@@ -41,6 +41,8 @@ const RULES = [
     fix: "rm -f on named paths", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",
     fix: "subprocess.Popen(..., stdout=PIPE, stderr=PIPE) + communicate()", rule: "convention" },
+  { name: "pipe-to-shell", pattern: "(?:curl|wget|base64)[^|\\n]*\\|\\s*(?:ba|z|k|da)?sh\\b", sev: "block",
+    fix: "download and inspect the script before running it (no curl|sh, no base64|sh)", rule: "security" },
   { name: "2>/dev/null", pattern: "2>\\s*/dev/null", sev: "fix",
     fix: "redirect removed so stderr (the proof) reaches the tool result", rule: "#8" },
   { name: "echo", pattern: "(?:^|[;&|()]\\s*)echo\\s", sev: "warn",
@@ -69,11 +71,43 @@ export function stripQuotes(cmd) {
   return out;
 }
 
-// Return the rules matched by a command string (quote-aware).
+// Extract the script text from an interpreter wrapper (`bash -c '…'`,
+// `sh -lc "…"`, `python3 -c '…'`, `eval '…'`) so a blacklisted command hidden
+// INSIDE the quoted script is still inspected. Quote-stripping alone misses it:
+// `bash -c 'sed -i x'` would otherwise pass because `sed` sits inside quotes.
+const WRAP_RE = /\b(?:bash|sh|zsh|ksh|dash|python3?)\b\s+(?:-[A-Za-z]+\s+)*?-?[A-Za-z]*c\s+("[^"]*"|'[^']*')|\beval\s+("[^"]*"|'[^']*')/g;
+export function innerScripts(command) {
+  const out = [];
+  const src = String(command || "");
+  const bare = stripQuotes(src);
+  WRAP_RE.lastIndex = 0;
+  let m;
+  while ((m = WRAP_RE.exec(src)) !== null) {
+    // Skip a wrapper that is itself inside quotes (e.g. echo "bash -c '…'").
+    if (bare[m.index] === " ") continue;
+    const arg = m[1] || m[2];
+    if (arg) out.push(arg.slice(1, -1));
+  }
+  return out;
+}
+
+// Return the rules matched by a command string. The outer command is matched
+// quote-aware (`grep 'sed'` passes); any interpreter-wrapped script is matched
+// too, so the wrapper cannot smuggle a blocked command past the guard.
 export function inspect(command) {
-  const bare = stripQuotes(command);
   const hits = [];
-  for (const r of RULES) if (r.re.test(bare)) hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
+  const seen = new Set();
+  const scan = (text) => {
+    const bare = stripQuotes(text);
+    for (const r of RULES) {
+      if (!seen.has(r.name) && r.re.test(bare)) {
+        seen.add(r.name);
+        hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
+      }
+    }
+  };
+  scan(command);
+  for (const inner of innerScripts(command)) scan(inner);
   return hits;
 }
 

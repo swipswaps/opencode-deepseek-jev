@@ -17,6 +17,7 @@ set -o pipefail
 
 DB=""
 TOP=10
+CTX_BUDGET="${CONTEXT_BUDGET:-200000}"
 
 resolve_repo() {
     local c="$1"
@@ -91,6 +92,14 @@ main() {
               tokens_input in_tok,
               printf('\$%.4f', cost) cost
          FROM session ORDER BY tokens_input DESC LIMIT $TOP;"
+
+    section "context budget (latest session)"
+    q "SELECT substr(title,1,40) title,
+              tokens_input,
+              printf('%.0f%%', 100.0*tokens_input/$CTX_BUDGET) of_budget
+         FROM session ORDER BY time_created DESC LIMIT 1;"
+    printf 'budget: %s input tokens (CONTEXT_BUDGET) · compaction auto+prune, tail_turns=20 (opencode.json)\n' "$CTX_BUDGET"
+    printf 'read: over budget → start a fresh session; long sessions re-send history every turn.\n'
 
     section "worst effective \$/1k input (>=1000 in)"
     q "SELECT substr(title,1,44) title,

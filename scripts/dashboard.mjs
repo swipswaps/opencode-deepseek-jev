@@ -29,6 +29,10 @@ const RUNBOOKS = JSON.parse(
   readFileSync(new URL("./runbooks.json", import.meta.url), "utf8")
 );
 
+const TOOLS = JSON.parse(
+  readFileSync(new URL("./tools.json", import.meta.url), "utf8")
+);
+
 // Shared, consistent, sticky navigation across every served page. The CSV link
 // is a download endpoint; docs renders the repo's own markdown/text in-UI so
 // the rules and handoff are reachable without leaving the browser.
@@ -42,7 +46,8 @@ const NAV_CSS =
   ".nav a:hover{border-color:#58a6ff;color:#58a6ff}" +
   ".nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}";
 const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/models", "models"],
-                   ["/runbooks", "runbooks"], ["/docs", "docs"], ["/api/export", "csv"]];
+                   ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
+                   ["/api/export", "csv"]];
 
 // Design tokens (DESIGN.md): one accent, 8px grid, Material elevation. Injected
 // on every page via nav(); overrides page CSS on equal specificity because it
@@ -90,6 +95,10 @@ function apiModels() {
   } catch {
     return { available: false, models: [] };
   }
+}
+
+function apiTools() {
+  return TOOLS;
 }
 
 function apiSolutions() {
@@ -1459,6 +1468,68 @@ document.getElementById('f').addEventListener('change',render);
 fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNBOOKS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(runbooks unavailable)</div>';});
 </script></body></html>`;
 
+const managedHtml = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode manage</title>
+<style>
+ body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
+ a{color:#58a6ff;text-decoration:none;font-size:13px}
+ .muted{color:#8b949e}
+ .bar{display:flex;align-items:center;gap:10px;margin:10px 0}
+ select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px}
+ .card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;margin:10px 0}
+ .rb-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+ .rb-title{font-weight:600;font-size:14px}
+ .badge{display:inline-block;padding:1px 6px;border-radius:999px;font-size:11px}
+ .badge.HOST{background:#b6232433;color:#ff7b72}
+ .badge.CONTAINER{background:#2ea04333;color:#7ee787}
+ .rb-purpose{font-size:12px;color:#8b949e;margin-bottom:6px}
+ .cmd{display:flex;gap:8px;align-items:flex-start;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:6px 8px;margin:0 0 6px}
+ .cmd code{flex:1;white-space:pre-wrap;word-break:break-word;font-size:12px}
+ button{background:#1f6feb;color:#fff;border:0;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+ .count{font-size:11px}
+</style></head>
+<body>
+${nav("manage")}
+<div class="muted" style="font-size:12px">The repo's tools, surfaced read-only. host = run where docker/browser live; container = safe inside the agent container. Copy, then paste into a terminal.</div>
+<div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="container">container only</option><option value="host">host only</option></select></div>
+<div id="count" class="muted count"></div>
+<div id="list"></div>
+<script>
+var TOOLS=[];
+function render(){
+  var f=document.getElementById('f').value;
+  var el=document.getElementById('list');el.innerHTML='';
+  var shown=0;
+  for(var i=0;i<TOOLS.length;i++){
+    var t=TOOLS[i];
+    if(f!=='all'&&t.where!==f)continue;
+    shown++;
+    var card=document.createElement('div');card.className='card';
+    var head=document.createElement('div');head.className='rb-head';
+    var ti=document.createElement('span');ti.className='rb-title';ti.textContent=t.title;
+    var b=document.createElement('span');b.className='badge '+(t.where==='host'?'HOST':'CONTAINER');b.textContent=t.where.toUpperCase();
+    head.appendChild(ti);head.appendChild(b);card.appendChild(head);
+    var p=document.createElement('div');p.className='rb-purpose';p.textContent=t.purpose;card.appendChild(p);
+    for(var j=0;j<t.commands.length;j++){
+      var row=document.createElement('div');row.className='cmd';
+      var code=document.createElement('code');code.textContent=t.commands[j];
+      var btn=document.createElement('button');btn.textContent='copy';btn.dataset.cmd=t.commands[j];btn.setAttribute('aria-label','copy command');
+      btn.addEventListener('click',function(){copy(this.dataset.cmd,this);});
+      row.appendChild(code);row.appendChild(btn);card.appendChild(row);
+    }
+    el.appendChild(card);
+  }
+  document.getElementById('count').textContent=shown+' of '+TOOLS.length+' tools';
+}
+function copy(text,btn){
+  function done(){btn.textContent='copied';setTimeout(function(){btn.textContent='copy';},1200);}
+  function fallback(){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done();}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);}else{fallback();}
+}
+document.getElementById('f').addEventListener('change',render);
+fetch('/api/tools').then(function(r){return r.json();}).then(function(d){TOOLS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(tools unavailable)</div>';});
+</script></body></html>`;
+
 const docsHtml = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode docs</title>
 <style>
@@ -1525,7 +1596,13 @@ load();
 </script></body></html>`;
 
 function send(res, code, body, type) {
-  res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" });
+  res.writeHead(code, {
+    "Content-Type": type,
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+  });
   res.end(body);
 }
 
@@ -1557,6 +1634,8 @@ const server = http.createServer(async (req, res) => {
     }
   } else if (url === "/runbooks") {
     send(res, 200, runbooksHtml, "text/html; charset=utf-8");
+  } else if (url === "/manage") {
+    send(res, 200, managedHtml, "text/html; charset=utf-8");
   } else if (url === "/docs") {
     send(res, 200, docsHtml, "text/html; charset=utf-8");
   } else if (url === "/models") {
@@ -1574,6 +1653,8 @@ const server = http.createServer(async (req, res) => {
     }
   } else if (url === "/api/runbooks") {
     send(res, 200, JSON.stringify(RUNBOOKS), "application/json");
+  } else if (url === "/api/tools") {
+    send(res, 200, JSON.stringify(apiTools()), "application/json");
   } else if (url === "/api/overview") {
     send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500)), "application/json");
   } else if (url === "/api/schema") {

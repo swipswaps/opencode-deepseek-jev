@@ -3,6 +3,6 @@
   "max_input_per_m_usd": 0.2,
   "require_toolcall": true,
   "require_attachment": false,
-  "allow": ["deepseek-flash"],
+  "allow": ["deepseek-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"],
   "deny": ["deepseek-v4-pro"]
 }

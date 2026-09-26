@@ -263,13 +263,15 @@ the queue. Update both at the end of a session.
 Navigating the observability UI
 -------------------------------
 Every page (/ dashboard, /explore, /runbooks, /docs) shares one sticky nav:
-`dashboard · explore · runbooks · docs · csv`. The /explore tabs
+`dashboard · explore · models · runbooks · manage · docs · csv`. The /explore tabs
 (overview · charts · signals · ocr) are linkable and restore from the URL
 hash, so `http://127.0.0.1:5099/explore#charts` opens the charts tab and the
 browser back/forward buttons work. /docs renders this repo's own HANDOFF.md,
 RULES.md, README.txt, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
 (read-only, whitelisted names via /api/doc), so the rules are reachable
-without leaving the browser.
+without leaving the browser. /manage (API /api/tools, source scripts/tools.json)
+surfaces the repo's tools — purpose, host/container, copyable commands — so the
+scripts are discoverable from the UI, not only the terminal.
 
 The UI follows DESIGN.md: one accent (#2ea043), an 8px grid, Material
 elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on
@@ -331,8 +333,26 @@ pass. The catalog (from `opencode models --verbose`) currently has 7 free Zen
 models plus deepseek-flash and v4-pro. The verdict is ALLOW / ASK / BLOCK:
 ASK means over policy but cheaper/qualified alternatives exist, so alert the
 user rather than silently stop. The interactive chooser is the /models page in
-the observer UI (dashboard · explore · models · runbooks · docs · csv); switch
+the observer UI (dashboard · explore · models · runbooks · manage · docs · csv); switch
 from the TUI with /models or `opencode run -m <id>`.
+
+Adding a provider (Google Gemini)
+---------------------------------
+Gemini is not a native provider in this opencode build (`opencode models
+google` → "Provider not found"), so it is wired exactly like DeepSeek: an
+OpenAI-compatible provider block in opencode.json.
+
+1. Create a key at https://aistudio.google.com/apikey.
+2. Add `GEMINI_API_KEY=<key>` to .env.local (mode 0600). Compose passes it to
+   the web container via `env_file` and to the TUI via the environment list.
+3. Restart: `docker compose -f docker/docker-compose.yml restart opencode-web`.
+4. `./scripts/models.sh --write && ./scripts/preflight.sh`.
+5. Select it: `/models` (TUI) or `opencode run -m gemini/gemini-2.5-flash`.
+
+The block points at https://generativelanguage.googleapis.com/v1beta/openai/.
+`gemini-2.5-flash` and `gemini-2.5-flash-lite` are allow-listed in
+models.policy.json (Flash input ~$0.30/1M is above the $0.20 ceiling, so it is
+explicitly allowed). The same steps are a "connect-gemini" runbook at /runbooks.
 
 Working process (project skill + command)
 -----------------------------------------
@@ -410,6 +430,9 @@ by cost and by input tokens, worst effective $/1k-input, tiny-session
 overhead, per-model cost share, a "model mix check" that flags any spend
 outside the `deepseek-flash` default, and a prompt cache-hit report
 (cache-read vs fresh input; 99.0% overall here). Read-only; host or container.
+It also prints a "context budget (latest session)" line (`CONTEXT_BUDGET`,
+default 200k input tokens); `opencode.json` sets `compaction` (auto + prune,
+`tail_turns: 20`) to bound replayed context.
 
 Session database & tool-use methods
 -----------------------------------

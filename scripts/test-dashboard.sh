@@ -104,6 +104,9 @@ main() {
     has 'href="/explore"' "$work/home.html" && ok 'home nav explore' || bad 'home nav explore'
     has 'href="/docs"' "$work/home.html" && ok 'home nav docs' || bad 'home nav docs'
     has 'name="viewport"' "$work/home.html" && ok 'responsive viewport meta' || bad 'responsive viewport meta'
+    curl -s -D - -o /dev/null "http://$HOST:$PORT/" > "$work/headers.txt"
+    has 'Content-Security-Policy' "$work/headers.txt" && ok 'CSP header present' || bad 'CSP header present'
+    has 'X-Content-Type-Options' "$work/headers.txt" && ok 'nosniff header present' || bad 'nosniff header present'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/favicon.ico" > "$work/fav.txt"
     has '204' "$work/fav.txt" && ok 'favicon.ico served (no console 404)' || bad 'favicon.ico served (204)'
 
@@ -170,9 +173,16 @@ UX_EOF
     has 'host only' "$work/runbooks.html" && ok 'filter: host only' || bad 'filter: host only'
     has 'container only' "$work/runbooks.html" && ok 'filter: container only' || bad 'filter: container only'
     has 'id="count"' "$work/runbooks.html" && ok 'runbooks count element' || bad 'runbooks count element'
+    has 'href="/manage"' "$work/home.html" && ok 'home nav manage' || bad 'home nav manage'
+    curl -s "http://$HOST:$PORT/manage" > "$work/manage.html"
+    has '<title>opencode manage</title>' "$work/manage.html" && ok 'manage title' || bad 'manage title'
+    has 'id="list"' "$work/manage.html" && ok 'manage list element' || bad 'manage list element'
+    has 'container only' "$work/manage.html" && ok 'manage filter' || bad 'manage filter'
+    curl -s "http://$HOST:$PORT/api/tools" > "$work/tools.json"
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and d and all("id" in x and "commands" in x and "where" in x for x in d) else 1)' "$work/tools.json" && ok 'api/tools valid' || bad 'api/tools valid'
 
     local page pname
-    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html"; do
+    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html" "$work/manage.html"; do
         pname=$(basename "$page")
         python3 -c 'import sys,re; h=open(sys.argv[1]).read(); m=re.search(r"<script>(.*?)</script>", h, re.S); sys.stdout.write(m.group(1) if m else "")' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
@@ -213,7 +223,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=17' "$work/rbcheck.txt" && ok 'runbooks count=17' || bad 'runbooks count=17'
+    has 'count=18' "$work/rbcheck.txt" && ok 'runbooks count=18' || bad 'runbooks count=18'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"

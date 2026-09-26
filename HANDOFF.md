@@ -81,7 +81,9 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
-page and `runbook.sh`; edit it once to change either.
+page and `runbook.sh`; `scripts/tools.json` is the single source for the
+`/manage` page (`/api/tools`) — the tool catalog with purpose, host/container
+and copyable commands. Edit the JSON once to change either.
 
 ### Built-in opencode tools (use these before writing new scripts)
 
@@ -193,6 +195,10 @@ n-grams)" candidate — no new capture needed.**
   output": 938k in). `cost.sh` summarizes; `dashboard.sh`/`/viz` charts it.
   **Long sessions re-send the whole history every turn and spike cost —
   start a fresh session (read this HANDOFF) once a session gets large.**
+- **Compaction is on.** `opencode.json` sets `compaction: { auto, prune,
+  tail_turns: 20 }` (ECC `strategic-compact`) to bound replayed context, and
+  `cost-bottlenecks.sh` prints a "context budget (latest session)" check
+  (`CONTEXT_BUDGET`, default 200k input tokens). Over budget → fresh session.
 - **Model mix is the #1 cost lever — check it before anything else.**
   `deepseek-v4-pro` was ~94% of *lifetime* spend at its peak (3 long
   "audit/handoff" sessions, long since ended); as `deepseek-flash` sessions
@@ -206,6 +212,12 @@ n-grams)" candidate — no new capture needed.**
   in `models.policy.json` and `models.py` returns ALLOW / ASK / BLOCK; the
   `/models` observer page lists the catalog, the recommended alternative and
   the policy. `preflight.sh` fails closed on ASK/BLOCK.
+- **Adding a provider (Gemini).** No native `google` provider in this build
+  (`opencode models google` → "Provider not found"), so Gemini is an
+  OpenAI-compatible block in `opencode.json` (`gemini`, baseURL
+  `https://generativelanguage.googleapis.com/v1beta/openai/`, `{env:GEMINI_API_KEY}`).
+  Put the key in `.env.local`, restart, `models.sh --write`. Models are
+  allow-listed in `models.policy.json`; runbook `connect-gemini`.
 - Hard caps: `docker/docker-compose.litellm.yml` + `docker/litellm.config.yaml`
   (`max_budget`). Jev/TypeSafe has no public balance API; Laya self-host cuts
   that cost.
@@ -482,6 +494,25 @@ pre-rotation; `verify-api-keys.sh` now shows jev-review connected).
 **G6 — Test / quality.** Built: strict-id headless UI test (catches the
 missing-`id` class). Next: (a) fuzzy code search (FTS5 + trigram/difflib
 rerank), (b) run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`.
+
+## External audit triage (2026-09-26)
+
+A second-opinion audit was run against the README (it never reached the code —
+every raw/API read failed), so treat it as low-confidence. Triage:
+
+- **Real, fixed:** the blacklist guard was bypassable via interpreter wrappers
+  (`bash -c 'sed -i x'`, `sh -lc "rm -rf …"`, `python3 -c "subprocess.run(…)"`,
+  `eval '2>/dev/null …'`) because quote-stripping hid the inner script.
+  `blacklist-guard.js` now extracts and re-inspects wrapped scripts (unquoted
+  wrappers only, so `echo "bash -c '…'"` is not a false positive). Also added
+  a **CSP + `X-Content-Type-Options: nosniff`** header to every dashboard page.
+- **Already handled:** unauthenticated server (`web.sh` refuses without
+  `OPENCODE_SERVER_PASSWORD`); secrets (`\.env.local` 0600, gitignored, never
+  printed); indirect prompt injection (`jev-guard` plugin); Docker UID
+  (README troubleshooting); `2>/dev/null` removal (deliberate, documented);
+  duplicate sessions (read-only — we never write the DB).
+- **Rejected / hallucinated:** an invented CVE, a non-existent
+  `scripts/staging.sh`, and "no dark mode" (the UI is dark by default).
 
 ## ECC skills (audit — what to borrow)
 
