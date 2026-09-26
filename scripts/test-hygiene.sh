@@ -250,7 +250,18 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'doc-budget.sh present + executable'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt"
+    if [ -x "$REPO/scripts/test-tooling.sh" ]; then
+        if "$REPO/scripts/test-tooling.sh" > "$work/tt.txt" 2>&1; then
+            ok 'test-tooling.sh passes (JSON contracts)'
+        else
+            bad 'test-tooling.sh passes (JSON contracts)'
+            tail -6 "$work/tt.txt"
+        fi
+    else
+        bad 'test-tooling.sh present + executable'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

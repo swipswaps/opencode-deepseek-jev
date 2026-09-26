@@ -288,6 +288,15 @@ timestamped report to logs/; `--json` emits only
 `{ts,rev,passed,failed,gates[]}` for a wrapper. Robust: a failing gate is
 reported and the run continues.
 
+The tooling's machine interfaces are contract-tested:
+
+    ./scripts/test-tooling.sh     # every --json tool emits the keys callers read
+    ./scripts/test-hygiene.sh     # runs test-tooling.sh too
+
+test-tooling.sh proves preflight, doc-budget, learn-rules, issue-solutions,
+audit-tool-calls, prompt-lint, models and logs emit parseable JSON with the
+expected keys; it never calls harness.sh, so it cannot recurse.
+
 The doc corpus that a session reads first (RULES/HANDOFF/README/TODO/DESIGN/
 skills) is itself context cost:
 

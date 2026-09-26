@@ -171,6 +171,13 @@ doc-budget.sh
     re-learn (the ECC context-budget / content-hash-cache pattern). --json;
     --fail exits 1 when over budget.
 
+test-tooling.sh
+    Contract test for the harness tooling's machine interfaces. Proves every
+    tool that advertises --json emits parseable JSON with the keys a wrapper
+    reads (preflight, doc-budget, learn-rules, issue-solutions,
+    audit-tool-calls, prompt-lint --last, models --catalog) plus logs.sh.
+    Never calls harness.sh (would recurse), so it is safe from test-hygiene.
+
 ux-audit.py
     Host-side Playwright UX audit of /explore: reports page height vs
     viewport, panel/tab counts, tab toggle, and page errors, then writes a

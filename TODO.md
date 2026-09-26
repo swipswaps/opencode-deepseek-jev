@@ -76,6 +76,8 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] `test-tooling.sh` — contract test for every `--json` tool's keys;
+      wired into `test-hygiene.sh` (no recursion)
 - [x] `doctor.sh --full` Tier 10 runs `test-hygiene` + `test-patterns`
       (lint-gated; functional proof needs the host)
 - [x] `harness.sh --json` — pure `{ts,rev,passed,failed,gates[]}` for wrappers

@@ -72,6 +72,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
 | `models.sh [--write] [--json]` / `models.py` | model catalog + cost policy from `opencode models --verbose`; verdict ALLOW / ASK / BLOCK; surfaced at `/models` |
 | `doc-budget.sh [--json] [--fail]` | token size + content-hash of the read-first doc corpus (RULES/HANDOFF/README/TODO/DESIGN/skills); budget `DOC_BUDGET_TOKENS`; unchanged hash = nothing new to re-learn |
+| `test-tooling.sh` | contract test for the tooling's `--json` interfaces (preflight/doc-budget/learn-rules/issue-solutions/audit-tool-calls/prompt-lint/models/logs); wired into `test-hygiene.sh`, never calls `harness.sh` |
 | `scan-constraints.py` | code-vs-string/comment blacklist scan of shell files; now run by `lint.sh` |
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
