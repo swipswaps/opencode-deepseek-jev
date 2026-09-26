@@ -83,6 +83,9 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] ECC skill triage: `ECC-SKILLS.md` — confirmed applicable subset with
+      status (INC/REF/N/A) and repo equivalent; referenced from `jev-harness`.
+      Verified: host `ux-test.py` now 17 pass / 0 fail after the restart
 - [x] fuzzy code search: `fuzzy-search.py` (typo-tolerant; `edti` → `edit`) +
       `semantic-search.sh --fuzzy`; self-test gated; Segment C drained
 - [x] fixed the two real bugs the host `ux-test.py` surfaced: the treemap called

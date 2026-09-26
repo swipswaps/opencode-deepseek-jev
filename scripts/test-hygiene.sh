@@ -164,6 +164,12 @@ main() {
         bad 'DESIGN.md present'
     fi
 
+    if [ -f "$REPO/ECC-SKILLS.md" ]; then
+        ok 'ECC-SKILLS.md present'
+    else
+        bad 'ECC-SKILLS.md present'
+    fi
+
     if [ -x "$REPO/scripts/preflight.sh" ]; then
         "$REPO/scripts/preflight.sh" --json > "$work/pf.txt" 2>&1
         if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "ready" in d and "critical" in d' "$work/pf.txt"; then

@@ -68,9 +68,11 @@ not a deadline.
 
 ## ECC lineage
 
-This repo implements much of ECC's philosophy locally. If the ECC plugin is
-installed, consult its skills for depth: `search-first`, `cost-aware-llm-pipeline`,
-`context-budget`, `continuous-learning`, `verification-loop`, `delivery-gate`,
-`security-review`, `dashboard-builder`, `design-system`,
-`content-hash-cache-pattern`. Do not stack a second install on top of this
-skill; prefer the repo's own tools first.
+This repo implements much of ECC's philosophy locally. The **confirmed
+applicable subset** (with its repo equivalent and status) is `ECC-SKILLS.md`.
+The high-value set to keep in mind: `search-first`, `cost-aware-llm-pipeline`,
+`context-budget`, `content-hash-cache-pattern`, `continuous-learning`,
+`verification-loop`/`delivery-gate`, `security-review`, `dashboard-builder`,
+`design-system`, `error-handling`, `agent-introspection-debugging`. Consult
+the ECC skill for depth; do **not** stack a second install (it would duplicate
+`blacklist-guard.js`). Prefer the repo's own tools first.

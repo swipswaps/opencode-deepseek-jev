@@ -485,6 +485,9 @@ rerank), (b) run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`.
 
 ## ECC skills (audit — what to borrow)
 
+Confirmed triage with per-skill status (INC / REF / N/A) and the repo
+equivalent: **`ECC-SKILLS.md`**. Summary follows.
+
 Reviewed `github.com/affaan-m/ECC` (292 skills, hooks, "instincts",
 AgentShield). Most of what ECC offers this repo already has locally; map:
 
