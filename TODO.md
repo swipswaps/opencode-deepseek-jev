@@ -76,6 +76,11 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] UX: split `/explore` overview (6 → 2 sections); moved duplicates/
+      integrations/A-B/database-map to a new `data` tab; sticky tab bar.
+      Verified: `/explore` was 40 KB / 18 `<h2>`; gated structurally
+- [x] `ux-test.py` — host-side Playwright UX test with assertions (console,
+      390px overflow, tab toggles, compact overview); SKIPs without a browser
 - [x] `test-tooling.sh` — contract test for every `--json` tool's keys;
       wired into `test-hygiene.sh` (no recursion)
 - [x] `doctor.sh --full` Tier 10 runs `test-hygiene` + `test-patterns`

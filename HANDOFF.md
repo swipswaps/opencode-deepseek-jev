@@ -100,11 +100,12 @@ The dashboard also drills down: click a session row for its detail panel
 and per-session chat download (txt/md/json); the search box queries titles,
 message text, and tool commands across all sessions.
 `/explore` (`/viz` now 302-redirects here) is the database-tool layer,
-organised into **tabs** (overview · charts · signals · patterns · ocr) to avoid
-a ~6000px wall. **overview**: a ranked search box (`/api/semantic`), a
-sortable/filterable sessions table, a **duplicate-grouping** view
-(`/api/duplicates`), an integrations panel (Jev vs Laya counts), the A/B
-panel (`/api/ab`), and the database map (`/api/schema`). **signals**: error
+organised into **tabs** (overview · charts · signals · patterns · data · ocr)
+to avoid a ~6000px wall. **overview**: a ranked search box (`/api/semantic`)
+and a sortable/filterable sessions table — the essentials only. **data**: the
+database-tool views — duplicate grouping (`/api/duplicates`), integrations
+(Jev vs Laya counts), the A/B panel (`/api/ab`), and the database map
+(`/api/schema`). **signals**: error
 tool calls, error signatures, rule mentions, patch churn (`/api/signals`) +
 the blacklist-guard panel (`/api/guard`). **patterns**: tool-sequence bigrams
 and error tools (`/api/patterns`; the view over `test-patterns.sh`'s data)

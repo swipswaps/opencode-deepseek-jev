@@ -832,7 +832,7 @@ const exploreHtml = `<!doctype html>
  .item{padding:4px 0;border-bottom:1px solid #21262d;font-size:12px;cursor:pointer}
  .item:hover{background:#1f6feb22}
  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:6px;background:#30363d;color:#8b949e}
- .tabs{display:flex;gap:6px;margin:10px 0}
+ .tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:40px;z-index:25;background:#0d1117;padding:6px 0;margin:6px 0;border-bottom:1px solid #30363d}
  .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
  .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
  .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
@@ -848,6 +848,7 @@ ${nav("explore")}
   <button class="tab" data-tab="charts">charts</button>
   <button class="tab" data-tab="signals">signals</button>
   <button class="tab" data-tab="patterns">patterns</button>
+  <button class="tab" data-tab="data">data</button>
   <button class="tab" data-tab="ocr">ocr</button>
 </div>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
@@ -855,6 +856,8 @@ ${nav("explore")}
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
 <div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
+</div>
+<div class="pane" data-pane="data" style="display:none">
 <h2>Duplicates — near-identical sessions</h2>
 <div class="chart" id="dupes"></div>
 <h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>

@@ -184,6 +184,14 @@ ux-audit.py
     full-page screenshot to logs/ux/. Needs playwright on the host (the
     container has no browser).
 
+ux-test.py
+    Host-side Playwright UX TEST (assertions, not just a report). For each
+    page (/, /explore, /runbooks, /models, /docs) it asserts: no console
+    errors, no horizontal scroll at 390px, not an unscrollable wall, and on
+    /explore that every tab toggles its pane and the overview stays compact.
+    Exits non-zero on failure. If playwright is absent it prints SKIP (not a
+    pass) and exits 0. Screenshots to logs/ux/.
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the

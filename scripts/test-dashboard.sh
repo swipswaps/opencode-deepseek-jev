@@ -124,6 +124,20 @@ main() {
     has 'id="guard"' "$work/explore.html" && ok 'explore guard section' || bad 'explore guard section'
     has 'data-tab="patterns"' "$work/explore.html" && ok 'explore patterns tab' || bad 'explore patterns tab'
     has 'id="patterns"' "$work/explore.html" && ok 'explore patterns section' || bad 'explore patterns section'
+    has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'
+    python3 - "$work/explore.html" > "$work/uxcheck.txt" <<'UX_EOF'
+import sys, re
+h = open(sys.argv[1]).read()
+parts = re.split(r'data-pane="([a-z]+)"', h)
+panes = {parts[i]: parts[i + 1] for i in range(1, len(parts), 2)}
+ov = panes.get("overview", "").count("<h2")
+data = panes.get("data", "").count("<h2")
+tabs = h.count("data-tab=")
+print("overview_sections=%d data_sections=%d tabs=%d" % (ov, data, tabs))
+sys.exit(0 if (ov <= 3 and data >= 3 and tabs >= 5) else 1)
+UX_EOF
+    local ux_rc=$?
+    if [ "$ux_rc" -eq 0 ]; then ok 'UX: overview compact (<=3 sections) + data tab holds internals'; else bad 'UX: overview compact + data tab'; cat "$work/uxcheck.txt"; fi
     has 'class="nav"' "$work/explore.html" && ok 'shared nav present' || bad 'shared nav present'
     curl -s "http://$HOST:$PORT/docs" > "$work/docs.html"
     has '<title>opencode docs</title>' "$work/docs.html" && ok 'docs title' || bad 'docs title'

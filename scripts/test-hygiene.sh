@@ -261,7 +261,18 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'test-tooling.sh present + executable'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt"
+    if [ -f "$REPO/scripts/ux-test.py" ]; then
+        if python3 "$REPO/scripts/ux-test.py" --help > "$work/uxh.txt" 2>&1; then
+            ok 'ux-test.py --help'
+        else
+            bad 'ux-test.py --help'
+            cat "$work/uxh.txt"
+        fi
+    else
+        bad 'ux-test.py present'
+    fi
+
+    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

@@ -351,7 +351,7 @@ deferral — so a request that is impossible or ballooning is named, not half-do
 
 Visual exploration lives at /explore (/viz now 302-redirects there). It is
 built as a database tool, organised into tabs (overview · charts · signals ·
-patterns · ocr) instead of one long page:
+patterns · data · ocr) instead of one long page:
   - Search everything: ranked FTS over titles, message text, and tool
     commands (same /api/semantic index as the dashboard), plus OCR text.
   - Sessions table: columns sort on click, a text filter narrows rows,
@@ -379,6 +379,12 @@ stub had masked it.
 UX audit (host): `python3 scripts/ux-audit.py [url]` measures page height,
 panel/tab counts, tab toggle, and page errors via Playwright, and writes a
 full-page screenshot to logs/ux/.
+
+UX test (host): `python3 scripts/ux-test.py [url]` asserts the UX — no console
+errors, no horizontal scroll at 390px, not an unscrollable wall, and on
+/explore every tab toggles and the overview stays compact (the split that moved
+duplicates/integrations/A-B/database-map into the new `data` tab). It exits
+non-zero on failure and prints SKIP (not a pass) if playwright is absent.
 
 Search from the terminal
 ------------------------
