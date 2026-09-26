@@ -39,9 +39,10 @@ Last updated: 2026-09-25
 
 - **Segment A — local, doable now:** **drained.** Learning loop closed,
   patterns view, cache report, `harness --json`, `/status` command.
-- **Segment B — needs a host/test this container cannot run:** wire
-  `doctor.sh --full` to run `test-hygiene`/`test-patterns` (doctor is
-  docker-coupled, so it must be validated on the host).
+- **Segment B — needs a host/test this container cannot run:** the `doctor.sh`
+  Tier 10 edit has landed and is lint-gated; its *functional* proof needs a
+  host (doctor's Tier 0/1/5 call `docker`). Run `./scripts/doctor.sh --full`
+  on the host once to confirm Tier 10.
 - **Segment C — doable code, larger:** fuzzy code search
   (`semantic-search.sh` trigram/`difflib` rerank over the FTS5 candidates).
 - **Segment D — external / host / new deps (not doable in-container):**
@@ -72,10 +73,11 @@ Last updated: 2026-09-25
 
 ### G6 quality
 - [ ] fuzzy code search (FTS5 + trigram/`difflib` rerank) — doable, next
-- [ ] run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full` — doable, small
 
 ## Done (most recent first)
 
+- [x] `doctor.sh --full` Tier 10 runs `test-hygiene` + `test-patterns`
+      (lint-gated; functional proof needs the host)
 - [x] `harness.sh --json` — pure `{ts,rev,passed,failed,gates[]}` for wrappers
       (closes the last in-flight item)
 - [x] the recurring status prompt is now an artifact: `/status`

@@ -447,6 +447,34 @@ tier9() {
     fi
 }
 
+# ----------------------------------------------------------------------------
+# Tier 10 — repo gates: test-hygiene + test-patterns (needs --full)
+# ----------------------------------------------------------------------------
+tier10() {
+    printf 'Tier 10: repo gates (hygiene + patterns)\n'
+    if [ "$FULL" -ne 1 ]; then
+        skip "run with --full to enable"
+        return
+    fi
+
+    local g script out rc
+    for g in test-hygiene test-patterns; do
+        script="$REPO_DIR/scripts/$g.sh"
+        if [ ! -x "$script" ]; then
+            fail "missing scripts/$g.sh"
+            continue
+        fi
+        out=$("$script" 2>&1)
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            pass "$g.sh passed"
+        else
+            fail "$g.sh failed (rc=$rc)"
+            print_lines '        ' "$out"
+        fi
+    done
+}
+
 summary() {
     printf '\n=== summary ===\n'
     printf '  pass: %d\n' "$pass_count"
@@ -475,6 +503,7 @@ main() {
     tier7
     tier8
     tier9
+    tier10
 
     summary
 }

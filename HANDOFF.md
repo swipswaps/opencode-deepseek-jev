@@ -45,7 +45,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 ## Command surface (scripts/)
 | Script | Purpose |
 |--------|---------|
-| `doctor.sh [--full]` | health check; `--full` Tier 9 = Jev functional proof |
+| `doctor.sh [--full]` | health check; `--full` Tier 9 = Jev functional proof, Tier 10 = repo gates (hygiene + patterns) |
 | `cost.sh [--estimate IN OUT [REAS]]` | DeepSeek cost/balance + Jev invocation count |
 | `thinking.sh` | live agent activity (tail -F over the DB) |
 | `dashboard.sh` | read-only observability web UI (http://127.0.0.1:5099) |

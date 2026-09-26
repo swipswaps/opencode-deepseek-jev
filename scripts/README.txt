@@ -23,8 +23,9 @@ doctor.sh
     Ordered health check: binaries, docker daemon, keys, provider
     liveness, image presence, and an end-to-end model round-trip.
     Fast mode (no arguments) is free.
-    --full adds plugin/MCP checks, a live model call (~$1e-4), and a
-    Jev functional proof (Tier 9, invokes jev_review for real).
+    --full adds plugin/MCP checks, a live model call (~$1e-4), a
+    Jev functional proof (Tier 9, invokes jev_review for real), and the
+    repo gates (Tier 10: test-hygiene + test-patterns, both local).
 
     Exit 0 on success, non-zero on failure. The output is the diagnostic.
 
