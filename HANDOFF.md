@@ -18,6 +18,60 @@ Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
 (`deepseek-flash`) + **Jev** (`jev-guard` plugin + `jev-review` MCP).
 Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode-deepseek-jev`.
 
+## Where we are (2026-09-27) — screen blindness, guard, exposure
+
+*Durable state after the "web UI freezes / black page" work. Read this with the
+tables below; it is the causal summary, not a task list (that is `TODO.md`).*
+
+- **The symptom is client-side, the truth is server-side.** The interactive
+  web view (`:4096`) sits on a Server-Sent-Events projection of
+  `data/opencode/opencode.db`; it can visibly "freeze" (Shell stuck, blank
+  pane) while the store is complete. Upstream confirms the class:
+  `anomalyco/opencode#48623` (blank output), `#46419` (the web client does **no**
+  client-side image optimization), `#40231`/`#37803`/`#37339` (black screen).
+  None is fixable inside this repo; the route-around is to observe the store.
+- **So the repo now detects blindness without a browser.**
+  `scripts/session-health.mjs` (read-only, no model call) reports two
+  low-false-positive signals from the `part` log — a tool stuck `running`
+  (`S0`), and a blank tail (last part is a tool, no text after, `S1`). It
+  **rejects** the naive long-gap signal (`S2`), because measured here every such
+  gap was overnight user-idle (≈100% false positives; a noisy alert is worse
+  than none). Served at `/api/health` and `/explore ▸ signals`; `--live` also
+  reads `GET /session/status`; `--self-test` runs offline fixtures and is gated
+  in `test-hygiene.sh`.
+- **The runtime guard is firing.** It was silently inert because interactive
+  sessions root at `$HOME/.opencode`, not `/workspace`, so the project plugin
+  glob missed it; `web-entrypoint.sh` now links it into the global plugin dir
+  and the plugin writes a `loaded` heartbeat + a one-time `hook` marker.
+  Verified: `loaded` + `hook` in `data/observability/guard.log`, and a live
+  `sed` was blocked. `sed`/`2>/dev/null`/`subprocess.run` no longer pass
+  unrecorded during "Thinking".
+- **Exposure is contained, not rotated.** `/proc/1/environ` printed
+  `JEV_API_KEY` + `OPENCODE_SERVER_PASSWORD` once; `data/opencode/`,
+  `data/observability/` and `logs/` are gitignored (never pushed) and `:4096`
+  is now **loopback-only**, so the leaked password no longer gates a LAN
+  service. The residual path is session **export** — treat exports as
+  secret-bearing. Rotation is deferred (see `TODO.md`).
+- **Visualisation:** Observable Plot is vendored (one 209 KB UMD file that reads
+  the already-present global `d3`) and drives the tool→tool bigram pivot on
+  `/explore ▸ patterns`; finos/perspective remains deferred (WASM + CSP cost).
+
+**How we got here (causal chain, in one line each).** A wrong assumption
+("restarting serves new code; the guard is configured so it runs") met three
+measurements (stale-code symptom, no `guard.log`, a `2>/dev/null` that hid its
+own error) and one canonical source (opencode docs: project plugin dir is
+scanned *relative to the session root*). The fix follows the evidence: observe
+the store (not the view), load the guard globally, and fail closed on spend —
+which is exactly the `search-first → gate → guard → learn → document` loop in
+the `jev-harness` skill.
+
+**Next (best-practice order).** (1) Confirm on the host: `/explore ▸ signals`
+renders the panel and `ux-audit.py` is PASS. (2) P2 vendored
+`known-issues.json` + fuzzy correlation across DB/code/docs. (3) P3
+downscale-before-attach for images (the plausible black-page trigger). (4) P4
+per-model quirk ledger. (5) Rotate keys/password only if 4096 is ever widened
+to the LAN.
+
 ## Current state (2026-09-25)
 - All audits green: `scripts/audit-config.sh` → 18/18 OK. DeepSeek balance is
   healthy (topped up 2026-09-25; run `./scripts/cost.sh` for the live figure —
@@ -64,6 +118,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
 | `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
+| `session-health.mjs [db] [--json] [--live] [--self-test]` | read-only, browser-independent detection of **stalled** (tool stuck `running`) and **blank** (last part is a tool, no text after) turns; served at `/api/health` + `/explore ▸ signals`; `--live` adds `GET /session/status`; self-test uses offline fixtures |
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `issue-solutions.py [--write]` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call); `--write` persists `data/observability/solutions.json` served at `/api/solutions` — free, local |
@@ -113,9 +168,12 @@ database-tool views — duplicate grouping (`/api/duplicates`), integrations
 (Jev vs Laya counts), the A/B panel (`/api/ab`), and the database map
 (`/api/schema`). **signals**: error
 tool calls, error signatures, rule mentions, patch churn (`/api/signals`) +
-the blacklist-guard panel (`/api/guard`). **patterns**: tool-sequence bigrams
+the blacklist-guard panel (`/api/guard`) and the **session-health** panel
+(`/api/health`) that flags stalled/blank turns without a browser. **patterns**: tool-sequence bigrams
 and error tools (`/api/patterns`; the view over `test-patterns.sh`'s data)
-plus known fixes (`/api/solutions`, from `issue-solutions.py --write`).
+plus known fixes (`/api/solutions`, from `issue-solutions.py --write`), and a
+declarative **tool→tool pivot** (from × to bigram matrix) rendered with
+vendored Observable Plot (see "Next candidates").
 **ocr**: screenshot text (`/api/ocr`, also folded into `/api/semantic`, CSV
 at `/api/export/ocr`). **charts**: cost treemap, brushable burn-down (linked
 to treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey,
@@ -134,9 +192,20 @@ headlessly via `test-dashboard-ui.mjs`.
   `verify-from-inside.sh` for in-container checks.
 - **`.env.local` is the only source of truth.** `web.sh` and `doctor.sh` read it;
   the container gets it via compose `env_file`.
-- **Ports:** 4096 (opencode web, auth required), 5099 (dashboard, localhost-only),
+- **Ports:** 4096 (opencode web, auth required; **loopback-only** since
+  2026-09-27), 5099 (dashboard, localhost-only),
   5001 (Dockge), 4000 (optional LiteLLM proxy). Firefox blocks 6000–6010 (X11)
   — use 5099/8080/3000.
+- **Exposing 4096 to the LAN (only if you truly need it).** The single gate on
+  4096 is `OPENCODE_SERVER_PASSWORD`; binding `0.0.0.0` puts it on the LAN. If
+  you widen it, do all three together, never just the port: (1) rotate the
+  password first (`./scripts/archive/one-shot/rotate-api-keys.sh` preserves it
+  now; the `rotate-password` runbook covers a password-only rotation);
+  (2) change only the publish line in `docker/docker-compose.yml` to
+  `"4096:4096"` and recreate; (3) add a host firewall rule that allows the
+  LAN CIDR and denies the rest, e.g.
+  `sudo ufw allow from 192.168.1.0/24 to any port 4096 proto tcp` then
+  `sudo ufw deny 4096/tcp`. Revert by restoring `"127.0.0.1:4096:4096"`.
 - **5099 lives inside `opencode-web`.** `web-entrypoint.sh` starts
   `dashboard.mjs` on :5099 and then `opencode web`; compose publishes
   `127.0.0.1:5099`. So `./scripts/web-stop.sh` (or any `restart opencode-web`)
@@ -363,6 +432,40 @@ those stay uncommitted. Kill switch if the guard misbehaves:
 matcher and the `2>/dev/null` rewriter are unit-tested by
 `scripts/blacklist-guard-self-test.mjs` (in `test-hygiene.sh`).
 
+**Proving the guard is actually loaded (do not trust "it's configured").** An
+interactive session's project `directory` is not always `/workspace`: the web
+UI boots sessions at `$HOME/.opencode` (`booting location services
+directory=/home/node/.opencode`), so the project-scoped
+`{plugin,plugins}/*.{ts,js}` glob under `/workspace/.opencode/` is **never
+scanned** for those sessions — the guard silently never loads, `sed` /
+`2>/dev/null` / `subprocess.run` pass through, and there is no telemetry. The
+fix is in `docker/web-entrypoint.sh`: it symlinks the guard into the **global**
+plugin dir (`$XDG_CONFIG_HOME/opencode/plugins/blacklist-guard.js`), which
+opencode scans for every project (verified: a fresh `opencode run` from
+`/home/node/.opencode` writes the heartbeat only after the symlink exists).
+
+The plugin (1) anchors its log to `<repo>/data/observability/guard.log` via
+`import.meta.url` (not the session directory), and (2) writes a
+`{"verdict":"loaded"}` **heartbeat** at registration plus a one-time
+`{"verdict":"hook"}` on the first `bash` call. After a restart:
+
+    grep -h '"verdict":"loaded"' data/observability/guard.log
+    grep -h '"verdict":"hook"'   data/observability/guard.log   # after any bash tool call
+
+No `loaded` line ⇒ not loaded (check the symlink: `readlink -f
+~/.config/opencode/plugins/blacklist-guard.js`), then restart. `loaded` but no
+`hook` ⇒ the hook is not wired (opencode version mismatch). This is the
+falsifiable check that was missing — on 2026-09-27 neither line existed and
+`2>/dev/null` was flowing unmodified.
+
+**Session root gotcha.** Interactive (web/TUI) sessions can have
+`session.directory = /home/node/.opencode` (HOME) while `opencode run` from the
+container is rooted at `/workspace`. Project-scoped config/plugins therefore
+differ between them; anything that must apply everywhere (the guard) belongs in
+the global config dir or the global plugin dir, not only `.opencode/`.
+
+
+
 ### Writing the next prompt (rigorous template)
 
 A prompt is an interface contract. State the falsifiable outcome, the
@@ -569,30 +672,33 @@ verify the LiteLLM model id (`deepseek/deepseek-chat`) against the live
 API and opencode.json (`deepseek-flash`); optional Langfuse/Phoenix
 tracing.
 
-## Next candidates (deferred, not started)
+## Next candidates (status)
 
-These are the visualisation layer's next batch. Each has a data substrate
-that already exists; none is wired yet.
+These are the visualisation layer's batch. Each has a data substrate that
+already exists.
 
-1. **finos/perspective pivot grid** — WASM pivot table as a new `/explore`
-   tab. Vendor the esm bundle like d3 (`scripts/vendor/` + `/vendor/*`
-   whitelist), feed it `/api/schema` columns + `/api/sessions` rows. Offline,
-   no build step. Gate under `test-dashboard.sh` (inline-script parse +
-   headless execution, RULES #61).
-2. **Observable Plot / Vega-Lite declarative charts** — replace or augment
-   the hand-rolled d3 charts (treemap/burn/scatter/sankey/gantt) with
-   declarative specs. Still vendored + offline, still served at `/vendor/*`,
-   still gated by `test-dashboard.sh` + `test-dashboard-ui.mjs`.
-3. **Patterns view (tool-sequence n-grams)** — mine `part` tool sequences
-   (see "Session database & tool-use methods") into a `/api/patterns`
-   endpoint + a `/explore` tab: recurring tool chains (`bash->read->edit->bash`)
-   and error-prone chains (tool parts with `state.status='error'`). The
-   read-only extraction is already proven by `scripts/test-patterns.sh`.
+1. **Patterns view (tool-sequence n-grams)** — **done.** `/api/patterns`
+   (bigrams + error tools) + `/explore ▸ patterns`; read-only extraction
+   proven by `scripts/test-patterns.sh`. `apiPatterns` now also returns
+   `from`/`to` per row (not just the joined `gram`) for the pivot below.
+2. **Observable Plot declarative charts** — **started.** Plot v0.6.17 UMD is
+   vendored at `scripts/vendor/plot.umd.min.js` (209 KB, one file, reads the
+   **global `d3`** — load order d3 → d3-sankey → Plot; no WASM, no CSP
+   change, no build step). The first spec is the **tool→tool bigram pivot**
+   (`Plot.cell` + band x/y + quantile `greens`) in `/explore ▸ patterns`
+   (`renderPivot`). Remaining: migrate the hand-rolled d3 charts
+   (treemap/burn/scatter/sankey/gantt) to Plot specs one at a time.
+3. **finos/perspective pivot grid** — **deferred, low fit.** The full viewer
+   stack is ~28 MB unpacked plus WASM, needs `'wasm-unsafe-eval'` added to
+   the dashboard CSP, and cannot be exercised by the in-container headless
+   gate (no `WebAssembly`, no layout, no canvas). Ship it only if a host-only
+   page (like Dockge) accepts the cost; the pivot *value* is already covered
+   by the Plot matrix without the payload.
 
-Order of attack: 3 → 1 → 2. Patterns (3) is smallest and unblocks the
-n-gram substrate for the other two; the pivot grid (1) is the highest
-leverage for the sessions table; declarative charts (2) are the largest
-refactor and should land last.
+Order of attack settlement: 3 → 2 (pivot via Plot) → 1 last. The Plot UMD
+is one vendored file and reuses the already-present d3, so it lands the
+"declarative charts" lane and the pivot's useful part together; Perspective
+is the largest and least verifiable, so it goes last (if at all).
 
 Security/ops notes: the LiteLLM runbook validates with
 `docker compose ... config --quiet` — plain `config` resolves `env_file`

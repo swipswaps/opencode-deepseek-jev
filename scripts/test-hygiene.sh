@@ -136,6 +136,38 @@ main() {
         bad 'blacklist-guard-self-test.mjs present + node'
     fi
 
+    if have node && [ -f "$REPO/scripts/session-health.mjs" ]; then
+        if node --experimental-sqlite "$REPO/scripts/session-health.mjs" --self-test > "$work/sh_st.txt" 2>&1; then
+            ok 'session-health: self-test (offline fixtures)'
+        else
+            bad 'session-health: self-test (offline fixtures)'
+            cat "$work/sh_st.txt"
+        fi
+    else
+        bad 'session-health.mjs present + node'
+    fi
+
+    # Regression: the web UI creates sessions rooted at $HOME/.opencode, not
+    # /workspace, so the project-scoped plugin glob misses the guard. The
+    # entrypoint must link it into the GLOBAL plugin dir. Assert the wiring is
+    # present (static) and, when it exists, that the symlink resolves to the
+    # repo guard (runtime).
+    if grep -qF 'GUARD_DIR' "$REPO/docker/web-entrypoint.sh"; then
+        ok 'web-entrypoint installs the guard globally'
+    else
+        bad 'web-entrypoint installs the guard globally'
+    fi
+    local glink="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/blacklist-guard.js"
+    if [ -e "$glink" ]; then
+        if [ "$(readlink -f "$glink")" = "$REPO/.opencode/plugins/blacklist-guard.js" ]; then
+            ok 'global guard symlink resolves to the repo plugin'
+        else
+            bad 'global guard symlink resolves to the repo plugin'
+        fi
+    else
+        ok 'global guard symlink not present yet (entrypoint creates it at start)'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

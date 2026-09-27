@@ -53,7 +53,12 @@ services:
     working_dir: /workspace
     entrypoint: ["/workspace/docker/web-entrypoint.sh"]
     ports:
-      - "4096:4096"
+      # Loopback-only by default: the only gate on 4096 is
+      # OPENCODE_SERVER_PASSWORD, and binding 0.0.0.0 exposes it to the LAN.
+      # For LAN access, see "Exposing 4096 to the LAN" in HANDOFF.md — do that
+      # only together with rotation + a firewall rule, never by widening this
+      # line alone. 5099 is already loopback-only.
+      - "127.0.0.1:4096:4096"
       - "127.0.0.1:5099:5099"
     volumes:
       - ..:/workspace

@@ -108,6 +108,7 @@ async function main() {
     window: { addEventListener: () => {} },
   };
   if (MODE === "explore") sandbox.d3 = makeStub();
+  if (MODE === "explore") sandbox.Plot = makeStub();
 
   try {
     vm.createContext(sandbox);

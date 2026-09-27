@@ -103,5 +103,12 @@
     "where": "container",
     "purpose": "DeepSeek balance + per-session cost + Jev count; bottlenecks, model mix, prompt cache, context budget.",
     "commands": ["./scripts/cost.sh", "./scripts/cost.sh --estimate IN OUT REASONING", "./scripts/cost-bottlenecks.sh --top 8"]
+  },
+  {
+    "id": "session-health",
+    "title": "Session health (stalls / blank turns)",
+    "where": "container",
+    "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Surfaces at /explore ▸ signals and /api/health; --live also reads /session/status.",
+    "commands": ["node --experimental-sqlite scripts/session-health.mjs", "node --experimental-sqlite scripts/session-health.mjs --json", "node --experimental-sqlite scripts/session-health.mjs --live", "node --experimental-sqlite scripts/session-health.mjs --self-test"]
   }
 ]

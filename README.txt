@@ -164,6 +164,15 @@ Secrets hygiene
 - .env.local is gitignored and mode 0600.
 - The web UI (port 4096) requires OPENCODE_SERVER_PASSWORD; web.sh
   refuses to start without it (pass --insecure to override).
+- Port 4096 is bound to 127.0.0.1 only (loopback). The password is the single
+  gate, so it must not be the only thing between the service and a LAN.
+  Widening it is a three-part change — rotate first, widen only the publish
+  line, then firewall the CIDR; see HANDOFF "Exposing 4096 to the LAN". Never
+  widen the port alone.
+- data/opencode/ and data/observability/ are gitignored, so session text and
+  telemetry are never pushed. Session EXPORTS (/api/export/session,
+  chatlog.sh) can embed secrets that appeared in the transcript — treat any
+  exported session as secret-bearing.
 - Stale *.bak.* snapshots (including old .env.local.bak.* key copies)
   are removed with ./scripts/cleanup-baks.sh --apply.
 
@@ -292,7 +301,27 @@ scripts are discoverable from the UI, not only the terminal. The nav shows the
 **served git revision**; if the on-disk HEAD differs it turns red
 (`STALE served … vs HEAD …`) — restart opencode-web to serve new code. Data
 exports: `/api/export` (sessions CSV), `/api/export/session`, `/api/export/ocr`,
-`/api/export/patterns`, `/api/export/guard`.
+`/api/export/patterns`, `/api/export/guard`. The **signals** tab also carries a
+**session-health** panel (`/api/health`) that flags stalled/blank turns from the
+database alone — the route-around when the interactive web view freezes.
+
+Session health (stalls / blank turns)
+-------------------------------------
+The interactive web view can freeze ("Shell" stuck, blank message pane) while
+the agent is not actually stalled; the server's store is still complete.
+`scripts/session-health.mjs` reads data/opencode/opencode.db read-only and
+reports two low-false-positive signals straight from the row log:
+
+- running_tool — a tool part still state.status="running" past --run-ms
+  (default 120s): the sharpest agent-stall fingerprint.
+- blank_tail — a recent session whose last part is a tool with no text part
+  after it: the "no answer printed" fingerprint.
+
+It deliberately does NOT report long inter-part gaps: measured here they were
+~100% overnight user-idle, and a noisy alert is worse than none ("cry wolf").
+Served at /api/health and /explore ▸ signals; --live additionally reads
+GET /session/status; --self-test runs offline on synthetic fixtures and is
+gated in test-hygiene.sh. No model call, no browser.
 
 The UI follows DESIGN.md: one accent (#2ea043), an 8px grid, Material
 elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on

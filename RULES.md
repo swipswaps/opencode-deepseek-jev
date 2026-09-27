@@ -20,8 +20,8 @@ number and a constraint overlap, both are listed.
 
 | Rule | Meaning | Evidence of use |
 | ---- | ------- | --------------- |
-| #7  | No `sed`. If a text transform is unavoidable, it must be guarded and called out. | `push_notes_v18.sh` header |
-| #8  | No `2>/dev/null`. Never suppress stderr. Handle the failure case explicitly instead. | `patch-ls-2devnull.sh` |
+| #7  | No `sed` — in scripts *and* in the agent's own "Thinking" commands. Reach for `python3`, then `awk`, then `grep`/`find`; use `cat`/`curl` to read. Only if none apply may a guarded `sed` be used and called out. | `push_notes_v18.sh` header |
+| #8  | No `2>/dev/null` — in scripts *and* in "Thinking". Never suppress stderr. Handle the failure case explicitly instead. During "Thinking" the blacklist-guard removes the redirect so the diagnostic (the proof) reaches the tool result. | `patch-ls-2devnull.sh` |
 | #28 | Dependency check. Verify required tools exist (`command -v`) before using them. | `push_notes_v18.sh` deps block |
 | #34 | Push-evidence (paired with #47). After a push, prove the result. | `push_notes_v18.sh` header |
 | #37 | SKIP is not PASS. A skipped check must never be reported as a pass. | `push_notes_v18.sh` header |
@@ -46,8 +46,8 @@ silently.
 
 | Banned | Substitute | Why |
 | ------ | ---------- | --- |
-| `sed` (#7) | `awk`, `grep`, or `python3` | `sed`'s in-place and escape semantics are a recurring footgun; the substitute is explicit and testable. |
-| `2>/dev/null` (#8) | let stderr flow and branch on the failure | Suppressing stderr hides the diagnostic that explains the failure — the telemetry the operator needs. |
+| `sed` (#7) | `python3` → `awk` → `grep`/`find`; `cat`/`curl` to read | `sed`'s in-place and escape semantics are a recurring footgun; the substitute is explicit and testable. Preference order is literal: try `python3`, then `awk`, then `grep`/`find` before `sed`. |
+| `2>/dev/null` (#8) | let stderr flow and branch on the failure | Suppressing stderr hides the diagnostic that explains the failure — the telemetry the operator needs. Applies equally to the agent's own "Thinking" bash calls; the guard strips the redirect so the proof is not lost. |
 | `subprocess.run` | `subprocess.Popen(..., stdout=PIPE, stderr=PIPE)` then `communicate()` and log both streams | `.run` buffers and discards the live output; `.Popen` preserves it. |
 | `echo` (#38) | `printf '%s\n'` | `echo` flag/escape handling is not portable. |
 | `rm -rf` | `rm -f` on named paths | Never blind-delete a tree. |
@@ -59,6 +59,24 @@ A blacklisted token that is merely *named* (in a prompt, comment, or a search
 pattern) is not a violation. `scan-constraints.py` classifies file matches as
 code / string / comment and only fails on code; `audit-tool-calls.py` strips
 quoted regions before matching so `grep 'sed'` is not counted as `sed`.
+
+## Service exposure and data egress
+
+Two security practices that are testable and repeatedly relevant here:
+
+- **Loopback by default.** A service published by compose binds
+  `127.0.0.1:<port>`, never `0.0.0.0`. The web UI's only gate is
+  `OPENCODE_SERVER_PASSWORD`, so widening it is a **three-part change**:
+  rotate the password first, change only the publish line, then firewall the
+  CIDR (see HANDOFF "Exposing 4096 to the LAN"). Never widen the port alone.
+- **Minimise before egress.** Do not send secret-bearing content to a hosted
+  free tier. Preference order: (1) no external call at all; (2) a closed
+  allow-list of structural fields (counts, durations, tool names, error
+  *categories*); (3) a local, self-hosted model; (4) redaction **plus** an
+  operator preview. Regex-only redaction is the weakest option — it fails
+  open, because a token fragment can cross (demonstrated: a Jev-key tail
+  survived a masking pass). "Thinking" tool calls also obey `#7`/`#8`, and
+  `blacklist-guard.js` enforces them at execution time.
 
 ## Model cost policy
 

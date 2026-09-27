@@ -47,6 +47,22 @@ else
     printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json left untouched\n' >&2
 fi
 
+# Load the repo's blacklist-guard for EVERY project. The interactive web UI
+# creates sessions rooted at $HOME/.opencode (observed: directory=/home/node/.opencode
+# via "booting location services"), NOT /workspace, so the project-scoped
+# `{plugin,plugins}/*.{ts,js}` glob under /workspace/.opencode/ is never scanned
+# for those sessions. opencode DOES scan the global plugin dir
+# ($XDG_CONFIG_HOME/opencode/plugins), so symlink the guard there. Without this,
+# the guard silently never loads and "Thinking" keeps using sed / 2>/dev/null /
+# subprocess.run with no telemetry (proven: no guard.log heartbeat).
+GUARD_SRC="/workspace/.opencode/plugins/blacklist-guard.js"
+GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+if [ -f "$GUARD_SRC" ]; then
+    mkdir -p "$GUARD_DIR"
+    ln -sf "$GUARD_SRC" "$GUARD_DIR/blacklist-guard.js"
+    printf '[web-entrypoint] blacklist-guard linked into %s\n' "$GUARD_DIR" >&2
+fi
+
 # Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;
 # bypass only with an explicit OPENCODE_ALLOW_INSECURE=1.
 if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && [ "${OPENCODE_ALLOW_INSECURE:-0}" != "1" ]; then

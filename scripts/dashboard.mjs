@@ -20,6 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { healthReport } from "./session-health.mjs";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -352,11 +353,11 @@ function apiSignals() {
 
 function apiPatterns(limit) {
   const ngrams = query(
-    "SELECT tool || '->' || next_tool AS gram, COUNT(*) n FROM (" +
+    "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n FROM (" +
     "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
     "lead(json_extract(data,'$.tool')) OVER (PARTITION BY session_id ORDER BY time_created) next_tool " +
     "FROM part WHERE json_extract(data,'$.type')='tool') " +
-    "WHERE next_tool IS NOT NULL GROUP BY gram ORDER BY n DESC LIMIT ?", limit);
+    "WHERE next_tool IS NOT NULL GROUP BY tool, next_tool ORDER BY n DESC LIMIT ?", limit);
   const errorTools = query(
     "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part " +
     "WHERE json_extract(data,'$.type')='tool' AND json_extract(data,'$.state.status')='error' " +
@@ -375,6 +376,14 @@ function apiGuard(limit) {
     return { count: rows.length, counts, actions: rows.reverse() };
   } catch {
     return { count: 0, counts: {}, actions: [] };
+  }
+}
+
+function apiHealth() {
+  try {
+    return healthReport(dbPath);
+  } catch (e) {
+    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [] };
   }
 }
 
@@ -890,11 +899,13 @@ const exploreHtml = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode explore</title>
 <script src="/vendor/d3.min.js"></script>
 <script src="/vendor/d3-sankey.min.js"></script>
+<script src="/vendor/plot.umd.min.js"></script>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 4px} h2{font-size:13px;color:#8b949e;margin:16px 0 6px}
  a{color:#58a6ff;text-decoration:none;font-size:13px}
  .chart{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin:6px 0;overflow-x:auto}
+ #stable{max-height:58vh;overflow:auto}
  .tip{position:absolute;background:#21262d;border:1px solid #30363d;padding:6px 8px;border-radius:4px;font-size:12px;pointer-events:none;opacity:0;max-width:420px;z-index:10}
  .muted{color:#8b949e;font-size:12px}
  button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
@@ -914,6 +925,7 @@ const exploreHtml = `<!doctype html>
  .item{padding:4px 0;border-bottom:1px solid #21262d;font-size:12px;cursor:pointer}
  .item:hover{background:#1f6feb22}
  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:6px;background:#30363d;color:#8b949e}
+ .ERR{background:#b6232433;color:#ff7b72;font-weight:600}
  .tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:40px;z-index:25;background:#0d1117;padding:6px 0;margin:6px 0;border-bottom:1px solid #30363d}
  .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
  .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
@@ -971,6 +983,8 @@ ${nav("explore")}
 <div class="chart" id="cloud"></div>
 </div>
 <div class="pane" data-pane="signals" style="display:none">
+<h2>Session health — stalled / blank turns (read-only, browser-independent)</h2>
+<div class="chart" id="health"></div>
 <h2>Signals — mistakes, rule mentions, churn</h2>
 <div class="chart" id="signals"></div>
 <h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard">[csv]</a></h2>
@@ -979,6 +993,8 @@ ${nav("explore")}
 <div class="pane" data-pane="patterns" style="display:none">
 <h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns">[csv]</a></h2>
 <div class="chart" id="patterns"></div>
+<h2>Pivot — from tool &times; to tool (bigram matrix, Observable Plot)</h2>
+<div class="chart" id="pivot"></div>
 </div>
 <div class="pane" data-pane="ocr" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
@@ -1171,6 +1187,33 @@ async function renderPatterns(){
   }
   el.html(h);
 }
+async function renderPivot(){
+  var host=document.getElementById('pivot');
+  if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
+  var d=await j('/api/patterns?limit=200');
+  if(!d||!d.ngrams||!d.ngrams.length){host.textContent='no tool sequences yet';return;}
+  if(d.ngrams[0].from==null){host.textContent='patterns endpoint has no from/to columns';return;}
+  var froms=[],tos=[],seenF={},seenT={},i;
+  for(i=0;i<d.ngrams.length;i++){var g=d.ngrams[i];
+    if(!seenF[g.from]){seenF[g.from]=1;froms.push(g.from);}
+    if(!seenT[g.to]){seenT[g.to]=1;tos.push(g.to);}}
+  var rows=[];for(i=0;i<d.ngrams.length;i++){rows.push({from:d.ngrams[i].from,to:d.ngrams[i].to,n:Number(d.ngrams[i].n)||0});}
+  var span=Math.max(froms.length,tos.length);
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:Math.min(820,140+110*span),
+    height:Math.min(600,110+30*span),
+    marginLeft:90,marginTop:20,
+    color:{scheme:'greens',legend:true,label:'count'},
+    x:{label:'to tool',domain:tos,tickRotate:-35},
+    y:{label:'from tool',domain:froms},
+    marks:[
+      Plot.cell(rows,{x:'to',y:'from',fill:'n'}),
+      Plot.text(rows,{x:'to',y:'from',text:function(r){return r.n;},fill:'#0d1117',fontSize:10,fontWeight:600})
+    ]
+  }));
+}
 async function renderCode(){
   var el=d3.select('#code');el.selectAll('*').remove();
   var d=await j('/api/code?limit=400');
@@ -1179,6 +1222,19 @@ async function renderCode(){
   var h='<div class="muted" style="font-size:12px">'+d.files.length+' files · '+parts.join(', ')+'</div>';
   for(var k=0;k<d.files.length;k++){var f=d.files[k];if(!f.flags_n)continue;
     h+='<div class="item"><span class="tag">'+f.flags_n+' flagged</span>'+esc(f.path)+' <span class="muted">'+esc(String(f.symbols||'').slice(0,70))+'</span></div>';}
+  el.html(h);
+}
+async function renderHealth(){
+  var el=d3.select('#health');el.selectAll('*').remove();
+  var d=await j('/api/health');
+  if(!d||d.available===false||!d.findings){el.text('no session-health data');return;}
+  var c=d.counts||{};
+  var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+'</div>';
+  if(!d.findings.length){h+='<div class="item">no stalls or blank turns — the web view lagging is a client issue, not an agent stall</div>';}
+  for(var i=0;i<d.findings.length;i++){var f=d.findings[i];
+    if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}
+    else {h+='<div class="item"><span class="tag">blank</span>'+esc(f.session)+' '+esc(f.model)+' — no text '+esc(String(f.age_s))+'s after last tool</div>';}
+  }
   el.html(h);
 }
 async function renderGuard(){
@@ -1235,7 +1291,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderDupes();renderSignals();renderGuard();renderPatterns();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderSignals();renderGuard();renderHealth();renderPatterns();renderPivot();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
@@ -1718,7 +1774,7 @@ const server = http.createServer(async (req, res) => {
     res.end();
   } else if (url.indexOf("/vendor/") === 0) {
     const name = url.slice("/vendor/".length);
-    if (name === "d3.min.js" || name === "d3-sankey.min.js") {
+    if (name === "d3.min.js" || name === "d3-sankey.min.js" || name === "plot.umd.min.js") {
       try {
         const body = readFileSync(new URL("./vendor/" + name, import.meta.url));
         res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "max-age=86400" });
@@ -1788,6 +1844,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiSignals()), "application/json");
   } else if (url === "/api/guard") {
     send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
+  } else if (url === "/api/health") {
+    send(res, 200, JSON.stringify(apiHealth()), "application/json");
   } else if (url === "/api/patterns") {
     send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {

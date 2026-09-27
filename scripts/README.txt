@@ -53,6 +53,10 @@ dashboard.sh
     cumulative-spend-vs-budget burn-down (linked views), a latency x cost
     scatter, and the part timeline. d3 is vendored at
     scripts/vendor/d3.min.js and served at /vendor/d3.min.js.
+    /explore ▸ patterns adds a declarative tool→tool bigram pivot
+    (Observable Plot v0.6.17 UMD, vendored at
+    scripts/vendor/plot.umd.min.js; it reads the global d3, so load
+    order is d3 → d3-sankey → Plot).
     /runbooks renders the operational runbooks; /api/runbooks is the data.
 
 cost-bottlenecks.sh
@@ -129,7 +133,9 @@ issue-solutions.py
 logs.sh
     Aggregate actionable telemetry, local and read-only. Sources: guard
     (data/observability/guard.log — every blacklist block/fix/warn the
-    agent's "Thinking" triggered), error (opencode.db tool failures with the
+    agent's "Thinking" triggered, plus a `loaded` heartbeat and a one-time
+    `hook` marker so "not loaded" is distinguishable from "idle"), error
+    (opencode.db tool failures with the
     stack-trace text), event (the opencode event bus), app (~/.local/share/
     opencode/log/opencode.log), system (docker logs of opencode-web; host
     only), packet (the exact tcpdump command; not run). --source S,
@@ -248,6 +254,16 @@ thinking.sh
     opencode database and prints step boundaries, tool calls (with state
     and command), reasoning text, and answer text as they are written.
     Polls every 2s by default (THINKING_POLL=1 for 1s).
+
+session-health.mjs
+    Read-only, browser-independent detection of stalled and blank turns
+    straight from data/opencode/opencode.db (no model call, no browser):
+    a tool part still "running" past the deadline, and a recent session
+    whose last part is a tool with no text after it. The naive "long gap"
+    signal is deliberately NOT a finding (~100% user-idle false positives).
+    Exports healthReport() to dashboard.mjs (/api/health, /explore ▸
+    signals panel); --json, --live (adds GET /session/status), and
+    --self-test (offline fixtures) run from the CLI.
 
 test-patterns.sh
     Read-only proof of the tool-sequence substrate behind the "patterns

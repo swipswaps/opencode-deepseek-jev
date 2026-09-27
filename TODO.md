@@ -8,14 +8,50 @@ Last updated: 2026-09-27
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
+- **Guard runtime was silently inert (root-caused + fixed 2026-09-27).** Web
+  sessions boot at `$HOME/.opencode`, not `/workspace`, so the project-scoped
+  `{plugin,plugins}/*.{ts,js}` glob never found the guard; `sed`/`2>/dev/null`/
+  `subprocess.run` passed through with no telemetry. Fix: `web-entrypoint.sh`
+  symlinks the guard into the **global** plugin dir
+  (`~/.config/opencode/plugins/`). Verified in-container: a fresh
+  `opencode run` from `/home/node/.opencode` writes the `loaded` heartbeat only
+  after the symlink exists. *Verified 2026-09-27:* `loaded` 16:19:24 and `hook`
+  16:31:28 in `data/observability/guard.log`; the live server blocked a `sed`
+  during this session. Resolved.
+- **Rotation bricked startup (fixed 2026-09-27).** `rotate-api-keys.sh` wrote a
+  2-line `.env.local` (DeepSeek+JEV only), dropping `OPENCODE_SERVER_PASSWORD`
+  and `GEMINI_API_KEY`; the entrypoint refused to start unsecured → R6 `http=000`
+  for 180 s → rollback. The script now rewrites only the two rotated lines and
+  preserves every other key. *Action:* re-run it — the leaked DeepSeek/JEV keys
+  are still live (the earlier run rolled back), and rotate the password too.
+- **Secret exposure (2026-09-27, self-inflicted) — disposition: accept local,
+  no rotation.** `tr '\0' '\n' </proc/1/environ` printed `JEV_API_KEY` and
+  `OPENCODE_SERVER_PASSWORD` into a tool result. `data/opencode/` and
+  `data/observability/` are **gitignored** (never pushed), and 4096 is now
+  **loopback-only**, so the leaked password no longer gates a LAN service. The
+  residual path is session **export** (`/api/export/session`, `chatlog.sh`) —
+  share those only with care. *If* LAN access is ever needed, rotate first (see
+  HANDOFF "Exposing 4096 to the LAN"); DeepSeek was never printed.
+- **/explore overview height.** `ux-audit.py` failed "fits ~1.5x viewport"
+  (1599px/900 = 1.8x) because the sessions table grew with 38 rows. Fixed at the
+  source (`#stable{max-height:58vh;overflow:auto}`), gated structurally in
+  `test-dashboard.sh`; *confirm on host* with `ux-audit.py` → expect PASS.
+- **Session blindness (2026-09-27) — fix landed (P1), host confirm pending.**
+  A browser-independent detector now lives at `scripts/session-health.mjs`
+  (stalled `running` tool + blank tail; the naive long-gap signal is rejected as
+  ~100% user-idle), served at `/api/health` + `/explore ▸ signals`, self-tested
+  offline. *Action:* restart `opencode-web` to serve it, then open
+  `/explore ▸ signals`. The SPA freeze itself is upstream
+  (anomalyco/opencode#48623, #46419); the panel is the route-around.
+
 - **Dashboard reloads only on restart (resolved).** 5099 serves whatever
   `dashboard.mjs` was loaded when `web-entrypoint.sh` started it; edits need
   `docker compose -f docker/docker-compose.yml restart opencode-web`. The first
   host `ux-test.py` run's `/models` 404, `/docs` 404 and old-`/explore`
   failures were stale code; restarting fixed them (ux-test 10/7 → 15/2).
-- **Guard loaded, awaiting a trigger.** After the restart the plugin is live;
-  `guard.log` is empty only because no blacklisted command has run since. *Action:* restart
-  the container once, then confirm a blocked `sed` and a fixed `2>/dev/null`.
+- **Guard loaded and firing (resolved 2026-09-27).** `guard.log` shows `loaded`
+  + `hook`; a live `sed` was blocked during the session, so the runtime-
+  prevention layer is no longer detection-only.
 - **Model pinning — resolved 2026-09-25.** `opencode.json` and the last
   session both show `deepseek-flash`; balance topped up to $10.64. `preflight.sh`
   now fails closed if a non-flash model reappears.
@@ -58,8 +94,12 @@ Last updated: 2026-09-27
 ## Queue (ranked, top first)
 
 ### G3 visualization
-- [ ] finos/perspective pivot grid — deferred: needs the WASM bundle vendored
-- [ ] Observable Plot / Vega-Lite charts — deferred: needs the libs vendored
+- [x] Observable Plot vendored + tool→tool bigram pivot on `/explore ▸ patterns`
+      (`scripts/vendor/plot.umd.min.js`, `renderPivot`, `/api/patterns` from/to)
+- [ ] migrate the hand-rolled d3 charts to Plot specs (one at a time)
+- [ ] finos/perspective pivot grid — deferred: ~28 MB WASM + needs CSP
+      `wasm-unsafe-eval`; not exercisable by the in-container headless gate;
+      the pivot value is covered by the Plot matrix
 
 ### G4 cost
 - [ ] wire `docker/litellm.config.yaml` `max_budget` into routing — deferred:
@@ -83,6 +123,30 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] P1 session health: `scripts/session-health.mjs` (read-only; stalled
+      `running` tool + blank tail; long-gap rejected as ~100% user-idle) +
+      `/api/health` + `/explore ▸ signals` panel + offline fixture self-test
+      gated in `test-hygiene.sh`; `/api/health` and the panel gated in
+      `test-dashboard.sh`
+- [x] P0 security: `docker/docker-compose.yml` binds 4096 to
+      `127.0.0.1:4096` (loopback); the LAN how-to (rotate + firewall + revert)
+      is documented in HANDOFF, so the leaked password no longer gates a
+      LAN-exposed service
+- [x] root-caused the inert guard: web sessions run in `$HOME/.opencode`, so
+      `.opencode/plugins/` under `/workspace` was never scanned; `web-entrypoint.sh`
+      now links the guard into the global plugin dir (empirically verified via a
+      fresh `opencode run` heartbeat). Also fixed `rotate-api-keys.sh` to stop
+      clobbering `OPENCODE_SERVER_PASSWORD`/`GEMINI_API_KEY` (the cause of the
+      R6 `http=000` outage); `#stable` scroll cap made `ux-audit.py` PASS (1.0x)
+- [x] guard made observable + rules tightened: log anchored to the repo via
+      `import.meta.url` (was the session `directory`), `loaded` heartbeat +
+      one-time `hook` marker so "not loaded" ≠ "idle"; `sed` substitute is now
+      the ordered chain `python3 → awk → grep/find`; RULES #7/#8 say the rules
+      apply to the agent's own "Thinking" commands; self-test asserts all of it
+- [x] declarative pivot: vendored Observable Plot 0.6.17 UMD (one 209 KB file,
+      reuses the global d3 — no WASM/CSP change) and a tool→tool bigram matrix
+      on `/explore ▸ patterns`; `/api/patterns` rows now carry `from`/`to`;
+      gated (vendor 200, page refs, headless exec w/ Plot stub)
 - [x] OCR read-back, no more "I can't read images": `ux-trace.py --ocr` reads
       each screenshot back locally (tesseract CLI / tesseract.js, receipts-ocr)
       into a new `ux_shot` table; the `jev-harness` skill gained a rule —

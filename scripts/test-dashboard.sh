@@ -131,8 +131,12 @@ main() {
     has 'id="dupes"' "$work/explore.html" && ok 'explore duplicates section' || bad 'explore duplicates section'
     has 'id="ab"' "$work/explore.html" && ok 'explore ab section' || bad 'explore ab section'
     has 'id="guard"' "$work/explore.html" && ok 'explore guard section' || bad 'explore guard section'
+    has 'id="health"' "$work/explore.html" && ok 'explore session-health section' || bad 'explore session-health section'
     has 'data-tab="patterns"' "$work/explore.html" && ok 'explore patterns tab' || bad 'explore patterns tab'
     has 'id="patterns"' "$work/explore.html" && ok 'explore patterns section' || bad 'explore patterns section'
+    has 'id="pivot"' "$work/explore.html" && ok 'explore pivot section' || bad 'explore pivot section'
+    has '/vendor/plot.umd.min.js' "$work/explore.html" && ok 'explore loads vendored Plot' || bad 'explore loads vendored Plot'
+    has 'max-height:58vh' "$work/explore.html" && ok 'explore sessions table scrolls internally (fits viewport)' || bad 'explore sessions table scrolls internally (fits viewport)'
     has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'
     has 'data-tab="code"' "$work/explore.html" && ok 'explore code tab' || bad 'explore code tab'
     has 'id="code"' "$work/explore.html" && ok 'explore code section' || bad 'explore code section'
@@ -171,6 +175,8 @@ UX_EOF
     has '200' "$work/d3code.txt" && ok 'vendored d3 served' || bad 'vendored d3 served'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3-sankey.min.js" > "$work/skcode.txt"
     has '200' "$work/skcode.txt" && ok 'vendored d3-sankey served' || bad 'vendored d3-sankey served'
+    curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/plot.umd.min.js" > "$work/plotcode.txt"
+    has '200' "$work/plotcode.txt" && ok 'vendored Plot served' || bad 'vendored Plot served'
 
     curl -s "http://$HOST:$PORT/runbooks" > "$work/runbooks.html"
     has '<title>opencode runbooks</title>' "$work/runbooks.html" && ok 'runbooks title' || bad 'runbooks title'
@@ -248,6 +254,7 @@ PY
     has 'id="q"' "$work/home.html" && ok 'home search box' || bad 'home search box'
     has 'id="drill"' "$work/home.html" && ok 'home drill panel' || bad 'home drill panel'
     has 'min-height:24px' "$work/home.html" && ok 'touch targets: button min 24px (CSS)' || bad 'touch targets: button min 24px (CSS)'
+    has '.ERR{' "$work/home.html" && ok 'live activity: error state styled (.ERR)' || bad 'live activity: error state styled (.ERR)'
 
     curl -s "http://$HOST:$PORT/api/sessions?limit=1" > "$work/s1.json"
     local sid
@@ -273,8 +280,10 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "signatures" in d else 1)' "$work/sig.json" && ok 'api/signals' || bad 'api/signals'
         curl -s "http://$HOST:$PORT/api/guard" > "$work/guard.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
+        curl -s "http://$HOST:$PORT/api/health" > "$work/health.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("counts") or {}; sys.exit(0 if isinstance(d.get("findings"),list) and "running_tools" in c and "blank_tails" in c else 1)' "$work/health.json" && ok 'api/health' || bad 'api/health'
         curl -s "http://$HOST:$PORT/api/patterns" > "$work/pat.json"
-        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); g=d.get("ngrams") or []; sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d and (not g or ("from" in g[0] and "to" in g[0])) else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
         curl -s "http://$HOST:$PORT/api/solutions" > "$work/sol.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("issues"),list) or d.get("available") is False else 1)' "$work/sol.json" && ok 'api/solutions' || bad 'api/solutions'
         curl -s "http://$HOST:$PORT/api/code" > "$work/code.json"
@@ -359,9 +368,9 @@ PY
     local r404="" rcode route
     for route in / /explore /runbooks /manage /docs /models /api/rev /api/tools \
         /api/providers /api/code /api/cost /api/balance /api/schema /api/integrations \
-        /api/ab /api/ocr /api/duplicates /api/signals /api/guard /api/patterns \
+        /api/ab /api/ocr /api/duplicates /api/signals /api/guard /api/health /api/patterns \
         /api/solutions /api/runbooks /api/export /api/export/ocr /api/export/patterns \
-        /api/export/guard /vendor/d3.min.js /vendor/d3-sankey.min.js; do
+        /api/export/guard /vendor/d3.min.js /vendor/d3-sankey.min.js /vendor/plot.umd.min.js; do
         rcode=$(curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT$route" 2>&1)
         if [ "$rcode" = "404" ]; then r404="$r404 $route"; fi
     done

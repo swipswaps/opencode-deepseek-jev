@@ -68,7 +68,7 @@ const tmp = "/tmp/opencode/guardtest";
 try { rmSync(tmp, { recursive: true, force: true }); } catch {}
 mkdirSync(tmp + "/data/observability", { recursive: true });
 writeFileSync(tmp + "/data/observability/learned-rules.json", JSON.stringify({ avoid: [{ shape: "ls" }] }));
-const hooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp });
+const hooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp }, { logDir: tmp + "/data/observability" });
 const before = hooks["tool.execute.before"];
 const o1 = { args: { command: "ls /nope 2>/dev/null" } };
 await before({ tool: "bash" }, o1);
@@ -79,6 +79,8 @@ try { logText = readFileSync(tmp + "/data/observability/guard.log", "utf8"); } c
 const hookChecks = [
   ["hook rewrites 2>/dev/null away", !String(o1.args.command).includes("/dev/null")],
   ["hook throws on sed", threw],
+  ["guard.log records a load heartbeat", logText.includes('"verdict":"loaded"')],
+  ["guard.log records the hook firing", logText.includes('"verdict":"hook"')],
   ["guard.log records a fix", logText.includes('"verdict":"fix"')],
   ["guard.log records a block", logText.includes('"verdict":"block"')],
   ["guard.log records a learned advisory", logText.includes('"verdict":"learned"')],
@@ -87,6 +89,18 @@ for (const [name, ok] of hookChecks) {
   if (!ok) fail++;
   console.log((ok ? "  PASS " : "  FAIL ") + name);
 }
+
+// The sed substitute must steer to the ordered preference chain, not just awk.
+const sedFix = (inspect("sed -n 1p f").find((h) => h.name === "sed") || {}).fix || "";
+const sedOk = /python3/.test(sedFix) && /awk/.test(sedFix) && /grep/.test(sedFix);
+if (!sedOk) fail++;
+console.log((sedOk ? "  PASS " : "  FAIL ") + "sed substitute names python3 -> awk -> grep (chain)");
+
+// Anchored log path: with no options.logDir the heartbeat must land in the
+// repo's data/observability, regardless of the `directory` opencode passes.
+const anchoredHooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: "/nonexistent/session/dir" });
+if (typeof anchoredHooks["tool.execute.before"] !== "function") fail++;
+console.log((typeof anchoredHooks["tool.execute.before"] === "function" ? "  PASS " : "  FAIL ") + "factory survives a bogus session directory");
 
 console.log("result: " + (fail ? "FAIL" : "PASS"));
 process.exit(fail ? 1 : 0);

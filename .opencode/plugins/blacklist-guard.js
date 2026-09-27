@@ -33,10 +33,18 @@
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// The observability directory is anchored to THIS file's location, not to the
+// session/project `directory` opencode passes in. Interactive sessions can run
+// with a different project root (e.g. /home/node/.opencode), which made the
+// guard write its log somewhere that never got read — making a mis-load
+// indistinguishable from "no matches yet". Anchor to <repo>/data/observability.
+const DEFAULT_OBS = fileURLToPath(new URL("../../data/observability/", import.meta.url)).replace(/\/+$/, "");
 
 const RULES = [
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
-    fix: "awk / grep / python3", rule: "#7" },
+    fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",
     fix: "rm -f on named paths", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",
@@ -136,12 +144,16 @@ function mode() {
   return (m === "off" || m === "warn") ? m : "block";
 }
 
-export const BlacklistGuard = async ({ client, directory }) => {
+export const BlacklistGuard = async ({ client, directory }, options) => {
   // Durable flag: every verdict is appended to data/observability/guard.log
   // (JSONL) so the dashboard and `scripts/logs.sh --source guard` can surface
   // it. This is how blacklisted code used during "Thinking" becomes visible
   // instead of silently succeeding. Best-effort: never break a tool call.
-  const GUARD_LOG = (directory ? String(directory).replace(/\/+$/, "") : ".") + "/data/observability/guard.log";
+  //
+  // Location: tests pass options.logDir; runtime anchors to the plugin's own
+  // repo (DEFAULT_OBS) so the file is always the one the dashboard reads.
+  const OBS_DIR = (options && options.logDir) || DEFAULT_OBS;
+  const GUARD_LOG = OBS_DIR + "/guard.log";
   function record(verdict, message, extra) {
     try {
       mkdirSync(GUARD_LOG.replace(/\/guard\.log$/, ""), { recursive: true });
@@ -158,11 +170,19 @@ export const BlacklistGuard = async ({ client, directory }) => {
     }
   }
 
+  // Heartbeat: a load marker proves the plugin is wired, independent of
+  // whether any blacklisted command has run. Without it, "guard missing" and
+  // "guard idle" look identical on disk. Appended once per process.
+  if (!globalThis.__opencodeBlacklistGuardLoaded) {
+    globalThis.__opencodeBlacklistGuardLoaded = true;
+    record("loaded", "blacklist-guard registered", { log: GUARD_LOG, mode: mode() });
+  }
+
   // Learned rules (scripts/learn-rules.py --write): shapes with a high
   // historical failure rate. Advisory only — warn + record, never block. A
   // human promotes a confirmed pattern into RULES.md / the fixed blacklist to
   // make it deterministic. Disable with OPENCODE_LEARNED_GUARD=off.
-  const GUARD_LEARNED = (directory ? String(directory).replace(/\/+$/, "") : ".") + "/data/observability/learned-rules.json";
+  const GUARD_LEARNED = OBS_DIR + "/learned-rules.json";
   let learnedCache = { at: 0, set: new Set() };
   function avoidShapes() {
     if (Date.now() - learnedCache.at < 30000) return learnedCache.set;
@@ -218,6 +238,14 @@ export const BlacklistGuard = async ({ client, directory }) => {
       if (input.tool !== "bash") return;
       const command = output && output.args && output.args.command;
       if (typeof command !== "string" || !command) return;
+
+      // First time the hook actually runs for a bash call, record it. This is
+      // the proof that opencode is invoking tool.execute.before (the `loaded`
+      // heartbeat only proves the module imported).
+      if (!globalThis.__opencodeBlacklistGuardHooked) {
+        globalThis.__opencodeBlacklistGuardHooked = true;
+        record("hook", "tool.execute.before invoked for bash", { sample: command.slice(0, 120) });
+      }
 
       let hits;
       try {

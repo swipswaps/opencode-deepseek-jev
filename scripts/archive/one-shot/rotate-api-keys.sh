@@ -206,12 +206,28 @@ r3_prompt_new_keys() {
 
 r4_write_env() {
     section "R4  write new .env.local (mode 0600)"
-    (umask 077 && cat > "$R_ENV" <<ENV_EOF
-DEEPSEEK_API_KEY=$NEW_DEEPSEEK
-JEV_API_KEY=$NEW_JEV
-ENV_EOF
-)
+    # Rewrite ONLY the two rotated keys and preserve every other line
+    # (GEMINI_API_KEY, OPENCODE_SERVER_PASSWORD, comments, blank lines).
+    # The old version emitted a 2-line file, which dropped
+    # OPENCODE_SERVER_PASSWORD — the entrypoint then refused to start
+    # unsecured and R6 timed out with http=000 (observed 2026-09-27).
+    local tmp="$R_ENV.tmp.$$"
+    local seen_ds=0 seen_jev=0
+    (umask 077 && : > "$tmp")
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            DEEPSEEK_API_KEY=*) printf 'DEEPSEEK_API_KEY=%s\n' "$NEW_DEEPSEEK" >> "$tmp"; seen_ds=1 ;;
+            JEV_API_KEY=*)      printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"; seen_jev=1 ;;
+            *)                  printf '%s\n' "$line" >> "$tmp" ;;
+        esac
+    done < "$R_ENV"
+    [ "$seen_ds" -eq 1 ]  || printf 'DEEPSEEK_API_KEY=%s\n' "$NEW_DEEPSEEK" >> "$tmp"
+    [ "$seen_jev" -eq 1 ] || printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"
+    chmod 600 "$tmp"
+    mv "$tmp" "$R_ENV"
     chmod 600 "$R_ENV"
+    printf '  keys preserved: '
+    cut -d= -f1 "$R_ENV" | paste -sd, -
     ls -la "$R_ENV" | indent
     return 0
 }

@@ -62,6 +62,17 @@ main() {
         return 1
     fi
 
+    # ---- Self-heal .env.local (merge, never overwrite) ----
+    if [ -x "$REPO_DIR/scripts/ensure-env.sh" ]; then
+        "$REPO_DIR/scripts/ensure-env.sh"
+        if [ "$?" -ne 0 ]; then
+            printf 'GATE FAIL: ensure-env.sh refused; fix .env.local before starting\n'
+            return 1
+        fi
+    else
+        printf 'WARN: scripts/ensure-env.sh missing; skipping self-heal\n'
+    fi
+
     # ---- Load keys + password from .env.local (single source of truth) ----
     local shell_pass="${OPENCODE_SERVER_PASSWORD:-}"
     if [ -f "$ENV_FILE" ]; then
@@ -69,10 +80,11 @@ main() {
             case "$k" in
                 DEEPSEEK_API_KEY) DEEPSEEK_API_KEY="$v" ;;
                 JEV_API_KEY)      JEV_API_KEY="$v" ;;
+                GEMINI_API_KEY)   GEMINI_API_KEY="$v" ;;
                 OPENCODE_SERVER_PASSWORD) OPENCODE_SERVER_PASSWORD="$v" ;;
             esac
         done < "$ENV_FILE"
-        export DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD
+        export DEEPSEEK_API_KEY JEV_API_KEY GEMINI_API_KEY OPENCODE_SERVER_PASSWORD
         printf 'loaded %s\n' "$ENV_FILE"
     else
         printf 'WARN: %s not found; container will lack keys\n' "$ENV_FILE"
