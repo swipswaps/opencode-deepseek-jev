@@ -430,6 +430,19 @@ non-zero on failure and prints SKIP (not a pass) if playwright is absent.
 the running dashboard are ready, with the exact install commands; the same
 steps are a runbook ("ux-test", host) at /runbooks.
 
+UX trace (host): `python3 scripts/ux-trace.py [url]` proves the journey
+instead of only asserting it — a recorder is injected before navigation so
+every click, drag and scroll is logged with the element and its coordinates,
+each step is screenshotted, and every interactive element is enumerated as a
+numbered "hotspot" on an overlay screenshot. Runs/events/hotspots/findings are
+persisted to `data/observability/ux.db` and a handoff report is written to
+`logs/ux/report.md`, so a handoff reads the database rather than re-running or
+guessing. Pain points surfaced: console/page errors, 390px overflow, page-wall
+height, click targets under 24px, and overlapping targets.
+`python3 scripts/ux-trace.py --self-test` runs offline (no browser);
+`--json` emits a machine summary; `--check` reports prerequisites. The same
+steps are a runbook ("ux-trace", host).
+
 Search from the terminal
 ------------------------
     ./scripts/semantic-search.sh <query...>     # ranked, across sessions

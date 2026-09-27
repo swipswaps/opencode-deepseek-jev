@@ -197,6 +197,20 @@
     "note": "Host-side only (the container has no browser). The dashboard must be up on 5099 (web.sh or dashboard.sh). --check reports playwright/chromium/server readiness with the exact install commands; without a browser the test prints SKIP (not a pass). Screenshots land in logs/ux/."
   },
   {
+    "id": "ux-trace",
+    "title": "UX trace (every click/drag/scroll logged, host)",
+    "purpose": "Prove the UX journey, not just assert it: injects a recorder so every click, drag and scroll is logged with the element and coordinates, enumerates interactive hotspots with bounding boxes + an overlay screenshot, and persists runs/events/hotspots/findings to data/observability/ux.db.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "pip install playwright && playwright install chromium",
+      "python3 scripts/ux-trace.py --check",
+      "python3 scripts/ux-trace.py http://127.0.0.1:5099",
+      "python3 scripts/ux-trace.py http://127.0.0.1:5099 --json"
+    ],
+    "note": "Host-side only. Writes screenshots + hotspots + a handoff report to logs/ux/ and structured rows to data/observability/ux.db (ux_run/ux_event/ux_hotspot/ux_finding) so a handoff reads the database instead of re-running. --self-test runs offline with no browser."
+  },
+  {
     "id": "connect-gemini",
     "title": "Connect Google Gemini",
     "purpose": "Add Gemini as an OpenAI-compatible provider so it appears in /models and the /models policy page.",

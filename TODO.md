@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -83,6 +83,12 @@ Last updated: 2026-09-25
 
 ## Done (most recent first)
 
+- [x] `ux-trace.py` — host-side interaction trace: injects a recorder so every
+      click/drag/scroll is logged (element + coords + per-step screenshot),
+      enumerates hotspots (bounding boxes + overlay screenshot), persists to
+      `data/observability/ux.db` (ux_run/ux_event/ux_hotspot/ux_finding) +
+      `logs/ux/report.md`; `--self-test` gated in `test-hygiene.sh`, `ux-trace`
+      runbook added (runbooks 18 → 19)
 - [x] repo **code index + flags**: `code-index.py` -> `data/observability/code.db`
       (75 files, 325 flags), served at `/api/code` + `/explore ▸ code` — the
       local half of "assemble/inspect/flag repo code" (Jev/Laya/DeepSeek

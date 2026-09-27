@@ -205,7 +205,7 @@ import json, sys
 d = json.load(open(sys.argv[1]))
 errs = []
 ids = [r.get("id") for r in d] if isinstance(d, list) else []
-for want in ("rotate-password", "litellm", "laya"):
+for want in ("rotate-password", "litellm", "laya", "ux-trace"):
     if want not in ids:
         errs.append("missing runbook " + want)
 if not isinstance(d, list):
@@ -229,7 +229,7 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=18' "$work/rbcheck.txt" && ok 'runbooks count=18' || bad 'runbooks count=18'
+    has 'count=19' "$work/rbcheck.txt" && ok 'runbooks count=19' || bad 'runbooks count=19'
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"
@@ -240,6 +240,7 @@ PY
         has 'laya|host' "$work/rblist.txt" && ok 'runbook.sh lists laya' || bad 'runbook.sh lists laya'
         has 'connect-vision|host' "$work/rblist.txt" && ok 'runbook.sh lists connect-vision' || bad 'runbook.sh lists connect-vision'
         has 'ocr-image|container' "$work/rblist.txt" && ok 'runbook.sh lists ocr-image' || bad 'runbook.sh lists ocr-image'
+        has 'ux-trace|host' "$work/rblist.txt" && ok 'runbook.sh lists ux-trace' || bad 'runbook.sh lists ux-trace'
     else
         bad 'runbook.sh present and executable'
     fi

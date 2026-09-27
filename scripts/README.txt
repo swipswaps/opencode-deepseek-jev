@@ -202,6 +202,20 @@ ux-test.py
     with the exact install commands. Screenshots to logs/ux/. There is a
     "ux-test" runbook (host) so it is one copy-paste away.
 
+ux-trace.py
+    Host-side Playwright UX trace that proves the journey, not just asserts
+    it. Injects a recorder before navigation so EVERY click, drag and scroll
+    is logged (element + coordinates) alongside a screenshot per step, then
+    enumerates every interactive element as a "hotspot" (bounding box) and
+    draws a numbered overlay onto a screenshot. Persists runs/events/hotspots/
+    findings to data/observability/ux.db (ux_run/ux_event/ux_hotspot/
+    ux_finding) and writes a handoff report (logs/ux/report.md) so a handoff
+    reads the database instead of re-running. Findings surface pain points:
+    console/page errors, 390px overflow, page-wall height, click targets
+    < 24px, overlapping targets. --check reports prerequisites; --self-test
+    runs offline (no browser, wired into test-hygiene.sh); --json emits a
+    machine summary. There is a "ux-trace" runbook (host).
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the
