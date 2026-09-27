@@ -44,10 +44,12 @@ export const DEFAULTS = {
   recentSessions: 40, // only the most recent N sessions are online-interesting
 };
 
-// The session row stores `model` as a JSON string; keep only the id.
+// The session row stores `model` as a JSON string; it may be an object
+// ({"id":"deepseek-flash",...}) or a bare JSON string ("deepseek-flash").
 function modelId(m) {
   try {
-    return JSON.parse(m).id;
+    const o = JSON.parse(m);
+    return typeof o === "string" ? o : (o && (o.id || o.modelID)) || m || "(none)";
   } catch {
     return m || "(none)";
   }

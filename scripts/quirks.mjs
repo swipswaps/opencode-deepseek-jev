@@ -128,6 +128,42 @@ export function annotateReport(report, issues = loadIssues()) {
   return { correlated, known_issues, by_model };
 }
 
+// PER-MODEL QUIRK LEDGER (P4): join each model to its tool-error rate and its
+// blacklist-construct usage, so "which model keeps emitting sed/2>/dev/null or
+// fails most" is a measured property, not a hunch. Bounded to the most recent
+// sessions so it stays cheap enough for a page load. Read-only.
+export function modelLedger(dbPath, opts = {}) {
+  const recent = opts.recentSessions ?? 40;
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const rows = db
+    .prepare(
+      `SELECT
+         CASE WHEN s.model IS NULL THEN '(unattributed)'
+              ELSE COALESCE(json_extract(s.model,'$.id'), json_extract(s.model,'$'), s.model) END AS model,
+         COUNT(DISTINCT s.id) AS sessions,
+         SUM(CASE WHEN json_extract(p.data,'$.type')='tool' THEN 1 ELSE 0 END) AS tool_parts,
+         SUM(CASE WHEN json_extract(p.data,'$.type')='tool'
+                   AND json_extract(p.data,'$.state.status')='error' THEN 1 ELSE 0 END) AS errors,
+         SUM(CASE WHEN json_extract(p.data,'$.state.input.command') LIKE '% sed %'
+                    OR json_extract(p.data,'$.state.input.command') LIKE '%|sed %'
+                    THEN 1 ELSE 0 END) AS used_sed,
+         SUM(CASE WHEN json_extract(p.data,'$.state.input.command') LIKE '%/dev/null%'
+                    THEN 1 ELSE 0 END) AS used_devnull,
+         SUM(CASE WHEN json_extract(p.data,'$.state.input.command') LIKE '%subprocess.run%'
+                    THEN 1 ELSE 0 END) AS used_subprocess
+       FROM part p JOIN session s ON s.id = p.session_id
+      WHERE p.session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)
+      GROUP BY 1
+      ORDER BY tool_parts DESC`,
+    )
+    .all(recent);
+  for (const r of rows) {
+    r.error_rate = r.tool_parts ? Number((r.errors / r.tool_parts).toFixed(3)) : 0;
+    r.quirk_hits = (r.used_sed || 0) + (r.used_devnull || 0) + (r.used_subprocess || 0);
+  }
+  return rows;
+}
+
 // --- corpus scan (CLI): where does this quirk already appear? --------------
 function countIn(text, kw) {
   let n = 0, i = 0;
@@ -197,6 +233,17 @@ async function selfTest() {
   db.prepare("INSERT INTO part(data) VALUES(?)").run('{"type":"text","text":"ok"}');
   db.close();
 
+  // Second fixture: sessions + parts for the per-model ledger.
+  const mdb = join(dir, "m.db");
+  const m = new DatabaseSync(mdb);
+  m.exec("CREATE TABLE session(id TEXT, model TEXT, time_created INTEGER); CREATE TABLE part(session_id TEXT, data TEXT);");
+  m.prepare("INSERT INTO session VALUES(?,?,?)").run("s1", '{"id":"deepseek-flash"}', 2000);
+  m.prepare("INSERT INTO session VALUES(?,?,?)").run("s2", '{"id":"free-model"}', 1000);
+  m.prepare("INSERT INTO part VALUES(?,?)").run("s1", JSON.stringify({ type: "tool", tool: "bash", state: { status: "error", input: { command: "ls /x 2>/dev/null" } } }));
+  m.prepare("INSERT INTO part VALUES(?,?)").run("s1", JSON.stringify({ type: "tool", tool: "bash", state: { status: "completed", input: { command: "grep x f" } } }));
+  m.prepare("INSERT INTO part VALUES(?,?)").run("s2", JSON.stringify({ type: "tool", tool: "read", state: { status: "completed", input: { filePath: "/x" } } }));
+  m.close();
+
   const issues = loadIssues();
   const has = (arr, id) => arr.some((x) => x.id === id);
   const checks = [
@@ -207,6 +254,15 @@ async function selfTest() {
     ["decoy 'the cat sat on the mat' matches nothing high", matchIssues("the cat sat on the mat", issues).every((x) => x.score < 0.6)],
     ["docHits counts occurrences", (docHits(["blank", "black screen"], [doc]))[doc] === 3],
     ["dbHits counts matching rows", dbHits(["blank"], dbfile) === 1],
+    ["modelLedger returns one row per model", modelLedger(mdb).length === 2],
+    ["modelLedger: deepseek-flash error=1, devnull=1, quirk_hits>=1", (() => {
+      const d = modelLedger(mdb).find((x) => x.model === "deepseek-flash");
+      return !!d && d.errors === 1 && d.used_devnull === 1 && d.quirk_hits >= 1;
+    })()],
+    ["modelLedger: free-model has 0 errors + 0 quirk hits", (() => {
+      const f = modelLedger(mdb).find((x) => x.model === "free-model");
+      return !!f && f.errors === 0 && f.quirk_hits === 0;
+    })()],
   ];
   rmSync(dir, { recursive: true, force: true });
   let fail = 0;

@@ -115,7 +115,7 @@
     "id": "quirks",
     "title": "Quirks (symptom → known issue, fuzzy)",
     "where": "container",
-    "purpose": "Correlate a symptom with a vendored map of known upstream issues (fuzzy text + typo tolerant), and fuzzily search the chat DB, repo code and docs for where it appears. Offline, no network. /api/health carries the per-finding correlations.",
+    "purpose": "Correlate a symptom with a vendored map of known upstream issues (fuzzy text + typo tolerant), fuzzily search the chat DB, repo code and docs, and show a per-model quirk ledger (tool-error rate + sed/2>/dev/null/subprocess usage). Offline, no network. /api/health carries the correlations and per-model ledger.",
     "commands": ["node --experimental-sqlite scripts/quirks.mjs --self-test", "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'", "node --experimental-sqlite scripts/quirks.mjs --report"]
   }
 ]

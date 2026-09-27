@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { healthReport } from "./session-health.mjs";
-import { annotateReport } from "./quirks.mjs";
+import { annotateReport, modelLedger } from "./quirks.mjs";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -383,9 +383,11 @@ function apiGuard(limit) {
 function apiHealth() {
   try {
     const r = healthReport(dbPath);
-    return Object.assign(r, annotateReport(r));
+    Object.assign(r, annotateReport(r));
+    r.per_model = modelLedger(dbPath);
+    return r;
   } catch (e) {
-    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {} };
+    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [] };
   }
 }
 
@@ -1243,6 +1245,10 @@ async function renderHealth(){
     h+='<div class="muted" style="font-size:12px;margin-top:8px">known upstream issues correlated with these findings (scripts/known-issues.json)</div>';
     for(var k=0;k<d.known_issues.length;k++){var it=d.known_issues[k];
       h+='<div class="item"><span class="tag">'+esc(it.severity||'?')+'</span><a href="'+esc(it.url||'#')+'" target="_blank" rel="noopener">'+esc(it.id)+'</a> <span class="muted">'+esc(String(it.title||'').slice(0,80))+' (x'+esc(String(it.n||0))+')</span></div>';}}
+  if(d.per_model&&d.per_model.length){
+    h+='<div class="muted" style="font-size:12px;margin-top:8px">per-model quirks — tool errors + blacklist constructs (recent sessions)</div>';
+    for(var q=0;q<d.per_model.length;q++){var pm=d.per_model[q];
+      h+='<div class="item"><span class="tag'+(pm.quirk_hits>0?' ERR':'')+'">model</span>'+esc(pm.model)+' — '+esc(String(pm.tool_parts))+' tools, errors '+esc(String(pm.errors))+' ('+esc(String(Math.round((pm.error_rate||0)*1000)/10))+'%) · sed '+esc(String(pm.used_sed||0))+' · 2>/dev/null '+esc(String(pm.used_devnull||0))+'</div>';}}
   el.html(h);
 }
 async function renderGuard(){

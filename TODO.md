@@ -44,6 +44,13 @@ Last updated: 2026-09-27
   `/explore ▸ signals`. The SPA freeze itself is upstream
   (anomalyco/opencode#48623, #46419); the panel is the route-around.
 
+- **P3 downscale-before-attach — deferred (D, upstream/frontend).** Criticism
+  first: upstream `#46419` says the fix is client-side ("no client-side
+  optimization"), and the only server hooks (`experimental.chat.messages.transform`)
+  run *after* the SPA has already rendered the giant inline `data:` image, so a
+  server transform cannot prevent the black page; a PNG-only local helper is a
+  half-measure. Honest scope = guidance (attach downscaled images, one per
+  message) + upstream fix. Do **not** batch.
 - **Dashboard reloads only on restart (resolved).** 5099 serves whatever
   `dashboard.mjs` was loaded when `web-entrypoint.sh` started it; edits need
   `docker compose -f docker/docker-compose.yml restart opencode-web`. The first
@@ -123,6 +130,11 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] P4 quirks ledger: `modelLedger()` (in `scripts/quirks.mjs`) joins each
+      model to its tool-error rate + `sed`/`2>/dev/null`/`subprocess.run` usage;
+      `/api/health` returns `per_model`, the panel renders it; offline fixture
+      assertions added to `quirks --self-test`; fixed model grouping
+      (object-vs-JSON-string rows; `GROUP BY 1` vs the ambiguous column name)
 - [x] P2 quirks: `scripts/quirks.mjs` + vendored `scripts/known-issues.json`
       map a symptom to a known upstream issue (fuzzy + typo-tolerant) and fuzzily
       scan DB/code/docs; `/api/health` now carries per-finding correlations and a
