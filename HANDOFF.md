@@ -82,29 +82,15 @@ inline image, so a client-side fix (upstream), not a repo transform, is the
 honest scope; guidance only. (4) Rotate keys/password only if 4096 is ever
 widened to the LAN.
 
-## Current state (2026-09-25)
-- All audits green: `scripts/audit-config.sh` → 18/18 OK. DeepSeek balance is
-  healthy (topped up 2026-09-25; run `./scripts/cost.sh` for the live figure —
-  do not hard-code it here).
-- Everything is committed and pushed (`main`).
-- Added `scripts/test-patterns.sh`: read-only gate proving the tool-sequence
-  n-gram substrate (the data layer behind the deferred "patterns view").
-  Scoped the three deferred candidates (perspective pivot grid, Plot/Vega-Lite
-  charts, patterns view) — see "Next candidates". `cost-bottlenecks.sh` now
-  reports per-model cost share + a "model mix check" (flags non-`deepseek-flash`
-  spend).
-- Hygiene is enforced in three layers (files · runtime detection · runtime
-  prevention): `.opencode/plugins/blacklist-guard.js` blocks blacklisted bash
-  commands at execution time. Restart opencode to load it.
-- Keys rotated. `.env.local` (mode 0600) is the **single source of truth** for
+## Current state (2026-09-25) — historical
+- Audits green; balance healthy (read the live figure from `./scripts/cost.sh`;
+  never hard-code it). Everything committed and pushed (`main`).
+- `.env.local` (mode 0600) is the **single source of truth** for
   `DEEPSEEK_API_KEY`, `JEV_API_KEY`, `OPENCODE_SERVER_PASSWORD`. Never `export`
   the password into a shell (a stale `$OPENCODE_SERVER_PASSWORD` caused drift).
-- Vision: `opencode.json` declares `deepseek-flash` as image-capable
-  (`attachment: true` + `modalities.input: ["text","image"]`), so images go
-  straight to DeepSeek — no Zen required. Local fallback is
-  `scripts/ocr-image.sh` (tesseract CLI in-image, **tesseract.js pinned in
-  `package.json`**, or PaddleOCR like receipts-ocr); `web-entrypoint.sh`
-  merges (never wipes) `auth.json`.
+- Vision: `opencode.json` declares `deepseek-flash` image-capable; local
+  fallback `scripts/ocr-image.sh`. (Hygiene layers — see "Hygiene enforcement".)
+
 
 ## Command surface (scripts/)
 | Script | Purpose |
@@ -341,53 +327,22 @@ So a non-flash model is not a blind STOP: it is an alert with options.
 
 ## Drag-and-drop, database-driven tooling (options)
 
-The repo is already a database-driven tool layer: `dashboard.mjs` reads SQLite
-and serves JSON; the config surfaces are data (`runbooks.json`,
-`models.policy.json`, `learned-rules.json`). A visual builder would be an
-*authoring surface* over those files, not a new runtime. Options, ranked:
-
-1. **Blockly** (vendored, offline) — generates code from blocks; best fit to
-   author the guard rules / runbook commands visually and emit the same JSON.
-   No server, matches the vendored-d3 precedent, gateable by `test-dashboard`.
-2. **n8n** / **Node-RED** — flow automation with DB + HTTP nodes; good for
-   scheduled learning jobs (`harness.sh`, `learn-rules.py`) and alerts. Heavier
-   (a Node service), needs a port and auth, so it lives on the host like Dockge.
-3. **Retool / Appsmith / Budibase / ToolJet** — internal-tool builders over
-   SQL; fast CRUD UIs, but they want DB credentials with write access, which
-   violates the read-only rule here (RULES: never write `opencode.db`).
-4. **LangFlow / Flowise** — visual LLM chains; redundant with the local-first
-   posture (they add a model hop) and not needed for the deterministic layer.
-
-Recommendation: start with **Blockly** for rule/runbook authoring (offline,
-vendored, one gate) and **n8n on the host** for scheduled jobs; keep every
-builder's output as JSON consumed by `dashboard.mjs` and the guard. The
-machine interface stays stable: `{shape, rate, total}` rules, `{id, title,
-commands}` runbooks, `{max_input_per_m_usd, allow, deny}` policy.
+A visual builder here would be an *authoring surface* over the existing JSON
+config (`runbooks.json`, `models.policy.json`, `learned-rules.json`), not a new
+runtime. Recommendation: **Blockly** (vendored, offline) for rule/runbook
+authoring and **n8n on the host** for scheduled jobs; keep every builder's
+output as the same JSON the guard and dashboard read. Rejected: Retool/Appsmith
+(want write DB creds, violating read-only), LangFlow/Flowise (extra model hop).
+Full ranked list + interfaces: `TODO.md` G7.
 
 ### Context & cost optimization — tools to add
 
-Local tool-use that shrinks what is sent to the API (the actual lever once the
-model is `deepseek-flash`):
-
-- **Exact tokenizer.** `cost.sh --estimate` uses a blended $/token; a real
-  DeepSeek tokenizer gives an exact per-message budget before sending.
-- **Retrieval, not replay.** `semantic-search.sh` / `/api/semantic` already
-  index every part (FTS5/bm25). Select only matching parts into context
-  instead of replaying whole history.
-- **Prompt-cache hygiene.** Keep a stable prompt prefix — `opencode stats`
-  shows 226M cache-read tokens at ~$0.003/1M (≪ input). Reordering the prefix
-  destroys the hit rate.
-- **Hard caps + routing.** `docker/litellm.config.yaml` (`max_budget`) is
-  scaffolded but not wired: `opencode.json` still points at DeepSeek directly.
-  Route `opencode` → LiteLLM (`127.0.0.1:4000/v1`) to enforce a hard cap.
-- **Bound replayed context.** `opencode --replay-limit N` / `--no-replay`
-  cap what a resumed session re-sends. The DB also tracks compaction
-  (`session.time_compacting`, `session_context_epoch`; 0 rows = never used).
-- **Visualization transparency (local, offline).** Already present: `/explore`
-  (d3 v7.9.0 + d3-sankey, DB map, signals, OCR) and `test-patterns.sh`.
-  To add: `finos/perspective` (WASM pivot), `Observable Plot` / `Vega-Lite`
-  (declarative charts) — vendor under `scripts/vendor/`, gate in
-  `test-dashboard.sh`. See "Next candidates".
+- **Exact tokenizer** (`cost.sh --estimate` uses a blended rate).
+- **Retrieval, not replay** (`semantic-search.sh` / `/api/semantic`, FTS5/bm25).
+- **Prompt-cache hygiene** (stable prefix; 226M cache-read at ≪ input).
+- **Hard caps + routing** (`docker/litellm.config.yaml` `max_budget`, not wired).
+- **Bound replayed context** (`--replay-limit`, compaction).
+- **Visualization transparency** — see "Next candidates".
 
 ## Hygiene enforcement (three layers)
 
@@ -510,118 +465,41 @@ gate outputs, `git diff --stat`, the exact commands run.
 
 ## Corpus learning — why, not just which
 
-Depth of learning, three tiers:
+Three depths: **(1) which** (memoise) — `last-gate.json` proof cache, so an
+unchanged result is never re-derived; **(2) which, ranked** (descriptive) —
+`test-patterns.sh` n-grams + `audit-tool-calls.py` say *what* recurs;
+**(3) why** (causal-ish) — `learn-rules.py` builds contrastive
+**(state, action, outcome)** triples; a shape that recovers a state is a
+*prefer* rule, one that fails is an *avoid* rule.
 
-1. **Which** (memoisation). `harness.sh` records
-   `data/observability/last-gate.json`; `preflight.sh` reads it instead of
-   re-running the gates. The rule is "don't re-derive what you already proved."
-   Generalised: content-address the *inputs* (repo tree hash + gate
-   definitions) → store the outcome → reuse when the hash matches → invalidate
-   when it changes. That is a **proof cache**, and it is what stops re-spending
-   API calls to re-learn an unchanged result.
-2. **Which, ranked** (descriptive). `test-patterns.sh` (n-grams) and
-   `audit-tool-calls.py` count recurring shapes. They say *what* recurs, not
-   *why*.
-3. **Why** (causal-ish). `learn-rules.py` builds contrastive triples from the
-   log — **(state, action, outcome)** — where state is the error signature that
-   just fired, action is the shape of the next call, outcome is whether that
-   call completed. Aggregated, a shape that recovers a state is a *prefer*
-   rule; a shape that fails is an *avoid* rule. Same-state/different-action
-   comparison is what separates "this failed" from "this fails, and *that*
-   works instead."
+**Deterministic circumvention is not a prompt.** A learned rule is pushed into
+the *harness*, not the context: `learn-rules.py --write` → the guard reads
+`learned-rules.json` and records `learned` advisories → a human promotes a
+confirmed pattern into `RULES.md` / the blacklist → the guard blocks it. The
+corpus supplies evidence, the harness enforces, the person decides. `--since-days`
+expires stale patterns.
 
-**Deterministic circumvention is not a prompt.** You cannot make an LLM
-reliably obey a remembered rule. So the learned rule is pushed into the
-*harness*, not the context: `learn-rules.py` writes rules → the guard reads
-`learned-rules.json` and records `learned` advisories on avoid shapes →
-a human promotes a confirmed pattern into `RULES.md` / the fixed blacklist →
-the guard blocks it deterministically. The corpus supplies evidence; the
-harness supplies enforcement; the person supplies the decision. Recency
-(`--since-days`) keeps a stale pattern (e.g. a rotated key) from being enforced
-forever.
+## Local tool-use options
 
-Pointed at many chat logs paired with repo code, the same shape works, one
-layer down: extract the patch/command that accompanied each outcome, cluster by
-the pre-state, and rank. The scope that is *not* built here is the repo-code
-half (pairing diffs to outcomes); the tool-action half already runs. A visual
-builder (n8n / Blockly-style) would be the authoring surface over these rules.
+Built (all read-only, local, no model call): `issue-solutions.py` (error →
+proven fix), `prompt-lint.py` (dedupe/vagueness), `audit-tool-calls.py --fail`
+(recurring-error gate), `test-patterns.sh` (n-grams), `issue-solutions.py --write`
++ `/api/solutions` (solution library), `fuzzy-search.py` +
+`semantic-search.sh --fuzzy`, `cost-bottlenecks.sh` (cache-hit report). Backlog:
+a topic/trend timeline (classify sessions, plot topic share/cost over time).
+Convention for a new tool: read-only, `--json`, `--self-test`, no model call,
+self-test wired into `test-hygiene.sh`, documented in the command table and
+`scripts/README.txt`.
 
-## Local tool-use options (ranked by efficacy)
+## Remaining work — doable groups
 
-Free, local, read-only over the chat DB or the repo. Ranked by value/effort.
-Built ones are marked; the rest are the backlog.
-
-1. **Issue → proven fix miner** (built: `issue-solutions.py`). Pairs each
-   error tool call with the next `completed` call and ranks the recurring
-   pairs. Evidence: `JEV_API_KEY` rejected ×8, permission rejections ×8,
-   `oldString` mismatches ×4 — each with the command that resolved it.
-2. **Prompt linter / dedupe** (built: `prompt-lint.py`). Stops re-asking and
-   flags underspecified prompts before they cost a session.
-3. **Recurring-error gate** (built: `audit-tool-calls.py --fail`,
-   `/api/signals`). Fail a push if the same error signature recurs.
-4. **Tool-sequence n-grams** (data layer built: `test-patterns.sh`;
-   the view is "Next candidates" #1).
-5. **Topic/trend timeline** (not built). Classify each session with the
-   `prompt-lint.py` categories, plot topic share and cost per topic over time.
-   Reuse the `/explore` charts.
-6. **Solution library** (built). `issue-solutions.py --write` persists
-   `data/observability/solutions.json`; `/api/solutions` shows a known fix at
-   the moment of failure.
-7. **Fuzzy code search** (built). `fuzzy-search.py` + `semantic-search.sh
-   --fuzzy` — tokenized exact hits + `difflib` near-matches ("edti" → "edit").
-8. **Prompt cache-hit report** (built). `cost-bottlenecks.sh` prints cache-read
-   vs fresh input per model + overall (99.0% here).
-
-A new tool's convention: read-only, `--json`, `--self-test`, no model call,
-wire its `--self-test` into `test-hygiene.sh`, document it in the command
-table and `scripts/README.txt`.
-
-## Remaining work — doable groups (solution ranked by efficacy)
-
-Each group is independently shippable. Within a group the options are ordered
-by value/effort; do the top item first.
-
-**G1 — Observability UX (in progress).** Every page now shares one sticky nav
-(`/ · /explore · /runbooks · /docs · /api/export`), `/explore` tabs are
-linkable and restore from the URL hash, and `/docs` renders HANDOFF/RULES/
-README in-UI (whitelisted, read-only). *Fixed:* `#tabs` had no `id`, so
-`getElementById('tabs')` threw and aborted `load()` — the page was dead in a
-browser. Remaining, in order: (a) make `/runbooks` cards filterable by tag and
-surface the `manual` flag as a badge colour, (b) a keyboard shortcut
-(`/` focuses search, `g t` jumps to a tab), (c) a landing card grid on `/`.
-Interaction tracing is built: `ux-trace.py` logs every click/drag/scroll plus
-hotspots and per-step screenshots into `data/observability/ux.db` and
-`logs/ux/report.md` — the data-driven substrate for "when is a handoff needed
-and what does the next session need to know" (see command table). Its first
-host run already paid off: it found 42 sub-24px touch targets (copy buttons +
-`#brush-reset`/`#detail-close`); fixed at the source via `THEME_CSS`
-`button{min-height:24px;min-width:24px}` and gated in `test-dashboard.sh`.
-It can also OCR its own screenshots (`--ocr` → `ux_shot`) so a text-only
-reader can see the UI — and that lesson (never declare a capability gap the
-repo fills) is now a rule in `.opencode/skills/jev-harness/SKILL.md`.
-
-**G2 — Learning loop.** Built: `issue-solutions.py` (issues → proven fixes).
-Next: (a) persist its output to `data/observability/solutions.db` and show a
-"known fix" hint on the `/explore` signals pane, (b) a `--fail` recurring-error
-gate in `test-dashboard.sh`, (c) fold the issue signatures into
-`prompt-lint.py` so a repeat is flagged at prompt time.
-
-**G3 — Visualization candidates.** (a) patterns view (n-gram tab; data layer
-already built by `test-patterns.sh`), (b) finos/perspective pivot grid,
-(c) Observable Plot / Vega-Lite declarative charts. See "Next candidates".
-
-**G4 — Cost control.** (a) *user action:* pin `deepseek-flash` (v4-pro is
-2.9×), (b) wire `docker/litellm.config.yaml` `max_budget` into routing,
-(c) a prompt cache-hit report (`opencode stats` shows 226M cache-read tokens).
-
-**G5 — Security / ops.** (a) Laya self-host to cut Jev cost (runbook exists),
-(b) embeddings rerank over FTS5 with a redaction pass and a hard request cap,
-(c) confirm the Jev key stays valid (the miner's 8 rejections were
-pre-rotation; `verify-api-keys.sh` now shows jev-review connected).
-
-**G6 — Test / quality.** Built: strict-id headless UI test (catches the
-missing-`id` class). Next: (a) fuzzy code search (FTS5 + trigram/difflib
-rerank), (b) run `test-patterns.sh`/`test-hygiene.sh` from `doctor.sh --full`.
+The live queue (with dispositions and segment letters A–D) is **`TODO.md`** —
+read it there, do not duplicate it here. Standing groups: **G1** observability
+UX (nav/tabs/`/docs`/`ux-trace` built; remaining: runbook tag filter, keyboard
+shortcuts, landing grid), **G2** learning loop (solutions + recurring-error gate
+built), **G3** visualization (patterns done, Plot pivot done, perspective
+deferred), **G4** cost control (pin model; wire LiteLLM `max_budget`), **G5**
+security/ops (Laya, embeddings rerank), **G6** test/quality.
 
 ## External audit triage (2026-09-26)
 
@@ -644,30 +522,10 @@ every raw/API read failed), so treat it as low-confidence. Triage:
 
 ## ECC skills (audit — what to borrow)
 
-Confirmed triage with per-skill status (INC / REF / N/A) and the repo
-equivalent: **`ECC-SKILLS.md`**. Summary follows.
-
-Reviewed `github.com/affaan-m/ECC` (292 skills, hooks, "instincts",
-AgentShield). Most of what ECC offers this repo already has locally; map:
-
-| ECC skill | this repo's equivalent |
-| --------- | ---------------------- |
-| search-first | read HANDOFF/RULES/TODO before coding (the `jev-harness` skill) |
-| cost-aware-llm-pipeline / cost-tracking / token-budget-advisor | `models.policy.json`, `models.sh`, `preflight.sh`, `cost-bottlenecks.sh` |
-| context-budget / strategic-compact | HANDOFF "Cost model"; `--replay-limit`, fresh sessions |
-| continuous-learning / unified-memory / knowledge-ops | `learn-rules.py`, `issue-solutions.py`, `audit-tool-calls.py` |
-| verification-loop / delivery-gate / gateguard | `harness.sh`, `test-*.sh`, `lint.sh` |
-| security-review / security-scan / safety-guard / AgentShield | `blacklist-guard.js`, `scan-constraints.py`, `prompt-lint.py` secrets |
-| content-hash-cache-pattern | `last-gate.json` proof cache |
-| dashboard-builder / design-system / make-interfaces-feel-better | `dashboard.mjs`, `DESIGN.md` |
-| docker-patterns / agent-harness-construction / eval-harness | `docker/`, `harness.sh`, `test-dashboard.sh` |
-| repo-scan / workspace-surface-audit / codebase-onboarding | `audit-tool-calls.py`, the unused-capability audit |
-| hookify-rules / rules-distill | `RULES.md`, the substitution table |
-
-Do **not** stack a full ECC install here (292 skills + hooks would duplicate
-the guard). Borrow patterns; install ECC only if a lane genuinely needs a skill
-this repo lacks. The repo's own skill is
-`.opencode/skills/jev-harness/SKILL.md`.
+The confirmed applicable subset (per-skill INC / REF / N/A + the repo
+equivalent) is **`ECC-SKILLS.md`** — read it there. Do **not** stack a full ECC
+install (292 skills + hooks would duplicate `blacklist-guard.js`); borrow
+patterns. The repo's own skill is `.opencode/skills/jev-harness/SKILL.md`.
 
 ## Triage status
 S1 auth ✅ · S2 rotate+cleanup ✅ · S3 pin ✅ · B1 Jev proof ✅ · B2 sidebar test ✅ ·
@@ -717,40 +575,25 @@ and prints every `.env.local` value. `docker-compose.litellm.yml` sets
 `name: litellm` so the proxy is a separate compose project and never
 treats the agent containers as orphans.
 
-## Jev vs Laya (decision to revisit)
-- **Jev** = hosted API (TypeSafe), zero-shot strong, leads on >20-option label
-  spaces (Banking77 0.870 vs Laya 0.425). No open weights.
-- **Laya** = Apache-2.0 open weights (HuggingFace `convaiinnovations/laya`,
-  ModernBERT-large 421M / mmBERT-base 322M). Ships `laya-serve`, a
-  **Jev-API-compatible** self-hosted server (`POST /v1/systemone`) — a drop-in
-  base-URL swap. Weak zero-shot (0.362) but 0.766 fine-tuned; ~$0 self-hosted.
-- Net: keep Jev now; consider Laya self-host to cut TypeSafe cost / go on-prem.
-
-Lever table (ranked by dollar impact here):
+## Jev vs Laya (decision)
+- **Jev** = hosted TypeSafe API; strong zero-shot (Banking77 0.870) — keep for now.
+- **Laya** = Apache-2.0 open weights, ships a Jev-API-compatible `laya-serve`
+  (`POST /v1/systemone`) — a drop-in base-URL swap; weak zero-shot (0.362),
+  0.766 fine-tuned, ~$0 self-hosted.
+- **It does not cut DeepSeek chat cost** (Jev is a different provider, ~11
+  calls). The real lever is running `deepseek-flash`, not `v4-pro`. Zen "free"
+  models are vision fallbacks, not a chat-cost fix — and never paste
+  secret-bearing screenshots to a free tier.
 
 | lever | cuts | size |
 | ----- | ---- | ---- |
-| model on policy (`deepseek-flash` or free) | DeepSeek chat | large (v4-pro was ~94% of lifetime at peak) |
+| model on policy (`deepseek-flash`/free) | DeepSeek chat | large |
 | LiteLLM `max_budget` | caps DeepSeek | guardrail, not a cut |
 | prompt cache + fewer turns | DeepSeek input | already 226M cache-read |
 | Laya-before-Jev cascade | Jev/TypeSafe | small (11 calls) |
 
-### Does Laya / Muse cut the cost? (answered)
-- **Laya is not deployed** (it is a runbook: `pip install "laya[serve]"`).
-  It only replaces **Jev** (the `jev-review` MCP — 11 invocations total), *not*
-  DeepSeek. The DeepSeek chat spend (v4-pro) is a different model and
-  provider entirely. So **Laya will not reduce the API cost, and it is
-  irrelevant to the UX upgrades** — the pivot/chart/patterns work is local
-  JS + read-only SQLite and needs ~no model calls at all.
-- **Muse / other "free" models** (OpenCode Zen) are free-tier *vision* models:
-  weaker reasoning (poor for multi-step shell/DB work), rate-limited, and the
-  repo rule stands — do not paste secret-bearing screenshots to free tiers.
-  They are a fallback for image input, **not** a cost fix for the agent's core
-  work. The real lever is the one above: run `deepseek-flash`, not `v4-pro`.
-
-Next-session handoff prompt: see `HANDOFF-PROMPT.txt` (paste verbatim into a
-fresh session). It is kept out of this file deliberately — an agent-directed
-"read this, then do X" block inside HANDOFF.md trips `jev-guard`'s injection
-detector on every read (observed p=0.94).
+Next-session prompt: `HANDOFF-PROMPT.txt` (kept out of this file — an
+agent-directed "read this, then do X" block here trips `jev-guard`'s injection
+detector, p≈0.94).
 
 

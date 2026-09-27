@@ -68,42 +68,19 @@ exists so `2>/dev/null` cannot hide the diagnostic. Audit with
 
 Blacklist enforcement (three layers)
 ------------------------------------
-The rule blacklist (`sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`,
-`echo`) is enforced at three points, because detection alone let it
-accumulate:
-
-    files      lint.sh + scan-constraints.py   fail the build
-    runtime    scripts/audit-tool-calls.py     report what the agent ran
-    runtime    .opencode/plugins/              block it before it runs
-               blacklist-guard.js
-
-`.opencode/plugins/blacklist-guard.js` is auto-loaded from the plugin
-directory (no opencode.json entry — adding one double-loads it). It hooks
-`tool.execute.before`, so it acts on the agent's own bash commands during
-"Thinking" before they run. Three verdicts:
-
-    block   sed, rm -rf, subprocess.run   throw; return the substitute
-    fix     2>/dev/null                   remove the redirect so stderr
-                                          (the proof) reaches the result
-    warn    echo                          log only
-
-The `fix` verdict is deliberate: `2>/dev/null` fails silently and the
-suppressed stderr is the evidence needed to fix the problem, so removing
-the redirect preserves proof instead of hiding it. Matching is quote-aware:
-`grep 'sed'` passes, `sed -n …` is acted on. `subprocess.run` is warned only
-when written into file content (it is always quoted Python, invisible to
-bash). Policy via `OPENCODE_BLACKLIST_GUARD` = unset/`block` (default) |
-`warn` | `off`.
-
-Reload (config is read at startup, not hot-reloaded) — restart just the web
-service:
-
-    docker compose -f docker/docker-compose.yml restart opencode-web
-    # or: ./scripts/web-stop.sh && ./scripts/web.sh
-
-The matcher/rewriter is unit-tested by scripts/blacklist-guard-self-test.mjs
-(in test-hygiene.sh). If the guard ever misbehaves, set
-`OPENCODE_BLACKLIST_GUARD=off` and restart.
+The blacklist (`sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`) is
+enforced at three points: files (`lint.sh` + `scan-constraints.py` fail the
+build), runtime detection (`scripts/audit-tool-calls.py` reports what the agent
+ran), and runtime prevention (`.opencode/plugins/blacklist-guard.js`, auto-loaded
+from the plugin dir — no `opencode.json` entry, which would double-load it).
+The guard hooks `tool.execute.before` and acts on the agent's own bash commands
+during "Thinking" before they run: **block** (`sed`/`rm -rf`/`subprocess.run`,
+throws with the substitute), **fix** (`2>/dev/null` — the redirect is removed so
+stderr, the proof, reaches the result), **warn** (`echo`). Matching is
+quote-aware (`grep 'sed'` passes). Policy: `OPENCODE_BLACKLIST_GUARD` =
+unset/`block` | `warn` | `off`; reload with
+`docker compose -f docker/docker-compose.yml restart opencode-web`. Full detail:
+HANDOFF "Hygiene enforcement"; unit test: `blacklist-guard-self-test.mjs`.
 
 Writing prompts
 ---------------
@@ -419,61 +396,24 @@ issues in both senses, classifies work A local-now / B needs-host / C larger /
 D external, implements one doable segment, gates, and records a reason on each
 deferral — so a request that is impossible or ballooning is named, not half-done.
 
-Visual exploration lives at /explore (/viz now 302-redirects there). It is
-built as a database tool, organised into tabs (overview · charts · signals ·
-patterns · code · data · ocr) instead of one long page:
-  - Search everything: ranked FTS over titles, message text, and tool
-    commands (same /api/semantic index as the dashboard), plus OCR text.
-  - Sessions table: columns sort on click, a text filter narrows rows,
-    clicking a row opens its transcript.
-  - Duplicates: groups near-identical session titles (/api/duplicates).
-  - Database map: 20 tables as nodes sized by row count, edges = foreign
-    keys (/api/schema).
-  - Integrations: Jev (hosted) vs Laya (self-hosted) invocation counts.
-  - Jev vs Laya A/B: persisted runs (/api/ab), latency + correctness.
-  - Patterns: tool-sequence bigrams and error tools (/api/patterns), plus
-    known fixes (/api/solutions, from issue-solutions.py --write).
-  - Signals: error tool calls, rule mentions, churn, and the guard panel.
-  - Charts: cost treemap, brushable burn-down, latency×cost scatter,
-    token-flow Sankey, part timeline, word cloud.
-d3 v7.9.0 and d3-sankey v0.12.3 are vendored under scripts/vendor/ and
-served at /vendor/*.js, so everything works offline with pinned versions.
-Model labels are parsed from the JSON `session.model` column.
+Visual exploration lives at /explore (/viz 302-redirects there): a tabbed
+database tool (overview · charts · signals · patterns · code · data · ocr) —
+ranked search, a sortable sessions table, duplicate grouping, the DB map,
+integrations, the A/B panel, patterns + known fixes, signals + guard +
+session-health, and the charts. d3 v7.9.0 and d3-sankey v0.12.3 are vendored
+under scripts/vendor/ and served at /vendor/*.js (offline, pinned). Full list:
+HANDOFF "Navigating the observability UI".
 
-The headless UI test (test-dashboard-ui.mjs) now resolves element ids
-strictly: an id absent from the served HTML is null, exactly as a browser
-behaves. That is what caught `getElementById('tabs')` on a div that only had
-`class="tabs"` (the script threw and the page never loaded); a permissive
-stub had masked it.
+The headless UI test (test-dashboard-ui.mjs) resolves element ids strictly (an
+id absent from the served HTML is null, as in a browser) — which caught the
+missing `#tabs` id that made the page dead.
 
-UX audit (host): `python3 scripts/ux-audit.py [url]` measures page height,
-panel/tab counts, tab toggle, and page errors via Playwright, and writes a
-full-page screenshot to logs/ux/.
-
-UX test (host): `python3 scripts/ux-test.py [url]` asserts the UX — no console
-errors, no horizontal scroll at 390px, not an unscrollable wall, and on
-/explore every tab toggles and the overview stays compact (the split that moved
-duplicates/integrations/A-B/database-map into the new `data` tab). It exits
-non-zero on failure and prints SKIP (not a pass) if playwright is absent.
-`python3 scripts/ux-test.py --check` reports whether playwright/chromium and
-the running dashboard are ready, with the exact install commands; the same
-steps are a runbook ("ux-test", host) at /runbooks.
-
-UX trace (host): `python3 scripts/ux-trace.py [url]` proves the journey
-instead of only asserting it — a recorder is injected before navigation so
-every click, drag and scroll is logged with the element and its coordinates,
-each step is screenshotted, and every interactive element is enumerated as a
-numbered "hotspot" on an overlay screenshot. Runs/events/hotspots/findings are
-persisted to `data/observability/ux.db` and a handoff report is written to
-`logs/ux/report.md`, so a handoff reads the database rather than re-running or
-guessing. Pain points surfaced: console/page errors, 390px overflow, page-wall
-height, click targets under 24px, and overlapping targets.
-`python3 scripts/ux-trace.py --self-test` runs offline (no browser);
-`--json` emits a machine summary; `--check` reports prerequisites. The same
-steps are a runbook ("ux-trace", host). With `--ocr` it also reads each
-screenshot back to text (tesseract, or tesseract.js from receipts-ocr) into the
-`ux_shot` table, so a text-only reader can see the UI; the OCR text is untrusted
-data, never instructions.
+Host-only UX tools (Playwright; run as `python3 scripts/…` from the repo root):
+`ux-audit.py [url]` (height, panel counts, tab toggle, page errors, screenshot),
+`ux-test.py [url]` (assertions; `--check` prerequisites; SKIP not PASS when
+absent), `ux-trace.py [url]` (records every click/drag/scroll + hotspots into
+`data/observability/ux.db` + `logs/ux/report.md`; `--ocr` reads each shot back
+to text; `--self-test` offline). Runbooks: "ux-test", "ux-trace" (host).
 
 Search from the terminal
 ------------------------

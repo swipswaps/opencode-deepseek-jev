@@ -130,6 +130,10 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] doc trim (budget): removed superseded/duplicated prose from HANDOFF
+      (48.2k→38.5k bytes) and README (29.3k→26.2k); corpus 33 451 → 30 165
+      tokens, budget 35 000 (≈4.8k headroom). Kept all load-bearing facts; the
+      live queue stays in TODO, the ECC map in ECC-SKILLS.md
 - [x] P4 quirks ledger: `modelLedger()` (in `scripts/quirks.mjs`) joins each
       model to its tool-error rate + `sed`/`2>/dev/null`/`subprocess.run` usage;
       `/api/health` returns `per_model`, the panel renders it; offline fixture
