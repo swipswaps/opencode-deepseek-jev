@@ -206,6 +206,23 @@ def fetch_rev(base: str) -> str:
         return "unknown"
 
 
+def wait_for_server(base: str, tries: int = 40, delay: float = 0.5) -> bool:
+    """Poll until the dashboard answers 200 before tracing.
+
+    Without this, a run fired right after `restart opencode-web` sees every
+    page fail and (before the fail-closed fix) could report PASS with 0 pages.
+    """
+    for _ in range(tries):
+        try:
+            with urllib.request.urlopen(base + "/", timeout=3) as r:
+                if getattr(r, "status", 200) == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(delay)
+    return False
+
+
 def init_schema(con: sqlite3.Connection) -> None:
     con.executescript(SCHEMA)
     con.commit()
@@ -523,7 +540,16 @@ def run(base: str, outdir: Path, db: Path, repo: Path | None = None,
     rev = fetch_rev(base)
     all_runs = []
     totals = {"pass": 0, "fail": 0, "warn": 0, "skip": 0}
+    loaded_pages = 0
     ts = now_utc()
+
+    if not wait_for_server(base):
+        print("FAIL: server not reachable at %s "
+              "(start it: ./scripts/web.sh or ./scripts/dashboard.sh)" % base)
+        con.close()
+        return {"ts": ts, "rev": rev, "base": base, "db": str(db), "ocr": engine,
+                "runs": [], "totals": {"pass": 0, "fail": 1, "warn": 0, "skip": 0},
+                "result": "FAIL"}
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -545,12 +571,23 @@ def run(base: str, outdir: Path, db: Path, repo: Path | None = None,
                 pr["fail"] += 1
                 pr["findings"].append({"severity": "error", "code": "load_failed",
                                        "message": "page failed to load", "detail": str(e)})
-                page.close()
+                fid = insert_run(con, {
+                    "ts": ts, "rev": rev, "base": base, "page": path,
+                    "viewport_w": DESKTOP["width"], "viewport_h": DESKTOP["height"],
+                    "duration_ms": int((time.time() - t0) * 1000),
+                    "clicks": 0, "drags": 0, "scrolls": 0, "hotspots": 0,
+                    "pass": 0, "fail": 1, "warn": 0, "skip": 0, "result": "FAIL"})
+                for f in pr["findings"]:
+                    insert_finding(con, fid, f)
+                totals["fail"] += 1
+                print("%-12s LOAD FAILED (%s)" % (path, str(e)[:70]))
                 all_runs.append({"page": path, "pass": 0, "fail": 1, "warn": 0,
                                  "skip": 0, "clicks": 0, "drags": 0, "scrolls": 0,
                                  "hotspots": 0, "findings": pr["findings"]})
+                page.close()
                 continue
 
+            loaded_pages += 1
             page.wait_for_timeout(300)
             duration_ms = int((time.time() - t0) * 1000)
 
@@ -724,11 +761,14 @@ def run(base: str, outdir: Path, db: Path, repo: Path | None = None,
             page.close()
         browser.close()
 
+    if loaded_pages == 0:
+        print("FAIL: 0 of %d pages loaded — nothing was traced" % len(PAGES))
     con.close()
+    result = "FAIL" if (totals["fail"] or loaded_pages == 0) else "PASS"
     return {
         "ts": ts, "rev": rev, "base": base, "db": str(db), "ocr": engine,
-        "runs": all_runs, "totals": totals,
-        "result": "FAIL" if totals["fail"] else "PASS",
+        "pages_loaded": loaded_pages, "runs": all_runs, "totals": totals,
+        "result": result,
     }
 
 

@@ -702,6 +702,7 @@ const html = `<!doctype html>
  .TOOL{background:#1f6feb33;color:#58a6ff}.REASON{background:#8957e533;color:#d2a8ff}
  .TEXT{background:#2ea04333;color:#7ee787}.STEP{background:#30363d;color:#8b949e}
  .PATCH{background:#b6232433;color:#ff7b72}
+ .ERR{background:#b6232433;color:#ff7b72;font-weight:600}.RUN{background:#d2992233;color:#d29922}
  .muted{color:#8b949e}
  table{border-collapse:collapse;width:100%;font-size:12px}
  th,td{text-align:left;padding:3px 8px;border-bottom:1px solid #21262d}
@@ -733,6 +734,8 @@ var expanded={};
 function item(x){
   var cls=String(x.type||'').toUpperCase();
   var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':cls;
+  if(x.type==='tool'&&x.status==='error'){tag=tag+' ERR';}
+  else if(x.type==='tool'&&x.status==='running'){tag=tag+' RUN';}
   var short='',full='';
   if(x.type==='tool'){short=esc(x.tool)+' ['+esc(x.status)+'] '+esc((x.cmd||'').slice(0,90));full=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
   else if(x.type==='reasoning'||x.type==='text'){short=esc((x.text||'').slice(0,140));full=esc(x.text||'');}
@@ -812,6 +815,8 @@ var drillId=null;
 function drillItem(x){
   var cls=String(x.type||'').toUpperCase();
   var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':cls;
+  if(x.type==='tool'&&x.status==='error'){tag=tag+' ERR';}
+  else if(x.type==='tool'&&x.status==='running'){tag=tag+' RUN';}
   var body='';
   if(x.type==='tool'){body=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
   else if(x.type==='reasoning'||x.type==='text'){body=esc(String(x.text||'').slice(0,600));}
