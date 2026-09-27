@@ -62,18 +62,19 @@ export function healthReport(dbPath, opts = {}) {
   const recent = opts.recentSessions ?? DEFAULTS.recentSessions;
   const db = new DatabaseSync(dbPath, { readOnly: true });
 
-  // S0 — tools stuck in `running`.
+  // S0 — tools stuck in `running` (join session for per-model attribution).
   const running = db
     .prepare(
-      `SELECT session_id,
-              time_created,
-              json_extract(data,'$.tool')                AS tool,
-              json_extract(data,'$.state.input.command') AS cmd
-         FROM part
-        WHERE json_extract(data,'$.type') = 'tool'
-          AND json_extract(data,'$.state.status') = 'running'
-          AND time_created < ?
-        ORDER BY time_created DESC
+      `SELECT p.session_id                           AS session_id,
+              p.time_created                          AS time_created,
+              json_extract(p.data,'$.tool')           AS tool,
+              json_extract(p.data,'$.state.input.command') AS cmd,
+              s.model                                 AS model
+         FROM part p LEFT JOIN session s ON s.id = p.session_id
+        WHERE json_extract(p.data,'$.type') = 'tool'
+          AND json_extract(p.data,'$.state.status') = 'running'
+          AND p.time_created < ?
+        ORDER BY p.time_created DESC
         LIMIT 20`,
     )
     .all(now - runMs);
@@ -119,6 +120,7 @@ export function healthReport(dbPath, opts = {}) {
     findings.push({
       kind: "running_tool",
       session: r.session_id,
+      model: modelId(r.model),
       tool: r.tool || "?",
       started_at: iso(r.time_created),
       age_s: Math.round((now - r.time_created) / 1000),

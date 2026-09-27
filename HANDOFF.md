@@ -55,6 +55,13 @@ tables below; it is the causal summary, not a task list (that is `TODO.md`).*
 - **Visualisation:** Observable Plot is vendored (one 209 KB UMD file that reads
   the already-present global `d3`) and drives the tool→tool bigram pivot on
   `/explore ▸ patterns`; finos/perspective remains deferred (WASM + CSP cost).
+- **Findings now explain themselves (P2).** `scripts/quirks.mjs` maps a
+  finding's symptom to a **vendored** `scripts/known-issues.json` (upstream
+  #48623, #46419, #40231, #37803, #37339, #51614, #50434, #49608, #51503) with
+  fuzzy, typo-tolerant matching ("blnak" → "blank"), and fuzzily scans the chat
+  DB + repo code + docs for prior occurrences. It lives in `scripts/` (not
+  `data/observability/`, which is gitignored) so it is reviewable and committed;
+  `/api/health` carries the correlation and a per-model tally.
 
 **How we got here (causal chain, in one line each).** A wrong assumption
 ("restarting serves new code; the guard is configured so it runs") met three
@@ -66,11 +73,10 @@ which is exactly the `search-first → gate → guard → learn → document` lo
 the `jev-harness` skill.
 
 **Next (best-practice order).** (1) Confirm on the host: `/explore ▸ signals`
-renders the panel and `ux-audit.py` is PASS. (2) P2 vendored
-`known-issues.json` + fuzzy correlation across DB/code/docs. (3) P3
-downscale-before-attach for images (the plausible black-page trigger). (4) P4
-per-model quirk ledger. (5) Rotate keys/password only if 4096 is ever widened
-to the LAN.
+renders the panel and `ux-audit.py` is PASS. (2) **P2 done** (known-issues +
+fuzzy correlation). (3) P3 downscale-before-attach for images (the plausible
+black-page trigger). (4) P4 per-model quirk ledger. (5) Rotate keys/password
+only if 4096 is ever widened to the LAN.
 
 ## Current state (2026-09-25)
 - All audits green: `scripts/audit-config.sh` → 18/18 OK. DeepSeek balance is
@@ -119,6 +125,7 @@ to the LAN.
 | `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |
 | `test-patterns.sh` | read-only proof of the tool-sequence n-gram substrate (tool parts, distinct tools, bigrams, error chains) — data layer for the "patterns view" candidate |
 | `session-health.mjs [db] [--json] [--live] [--self-test]` | read-only, browser-independent detection of **stalled** (tool stuck `running`) and **blank** (last part is a tool, no text after) turns; served at `/api/health` + `/explore ▸ signals`; `--live` adds `GET /session/status`; self-test uses offline fixtures |
+| `quirks.mjs [--query TEXT] [--report] [--self-test]` | correlates a symptom with a vendored `scripts/known-issues.json` map (fuzzy + typo-tolerant) and fuzzily searches the DB/code/docs for where it appears; `/api/health` carries per-finding correlations; offline, no network |
 | `audit-tool-calls.py` | audit the agent's **own runtime tool calls** (from the DB) for the blacklist: `sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`; prints substitutes; `--fail` to gate |
 | `prompt-lint.py` | fuzzy prompt classifier + preference linter: classifies the topic, fuzzy-matches past prompts (Jaccard), surfaces recurring errors, flags blacklist mentions / secrets / vagueness / missing acceptance |
 | `issue-solutions.py [--write]` | mine the chat DB for recurring errors and the command that fixed each (next `completed` call); `--write` persists `data/observability/solutions.json` served at `/api/solutions` — free, local |

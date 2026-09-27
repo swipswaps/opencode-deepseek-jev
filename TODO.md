@@ -123,6 +123,10 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] P2 quirks: `scripts/quirks.mjs` + vendored `scripts/known-issues.json`
+      map a symptom to a known upstream issue (fuzzy + typo-tolerant) and fuzzily
+      scan DB/code/docs; `/api/health` now carries per-finding correlations and a
+      per-model tally; `quirks --self-test` gated in `test-hygiene.sh`
 - [x] P1 session health: `scripts/session-health.mjs` (read-only; stalled
       `running` tool + blank tail; long-gap rejected as ~100% user-idle) +
       `/api/health` + `/explore ▸ signals` panel + offline fixture self-test

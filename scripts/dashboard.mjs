@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { healthReport } from "./session-health.mjs";
+import { annotateReport } from "./quirks.mjs";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -381,9 +382,10 @@ function apiGuard(limit) {
 
 function apiHealth() {
   try {
-    return healthReport(dbPath);
+    const r = healthReport(dbPath);
+    return Object.assign(r, annotateReport(r));
   } catch (e) {
-    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [] };
+    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {} };
   }
 }
 
@@ -1235,6 +1237,12 @@ async function renderHealth(){
     if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}
     else {h+='<div class="item"><span class="tag">blank</span>'+esc(f.session)+' '+esc(f.model)+' — no text '+esc(String(f.age_s))+'s after last tool</div>';}
   }
+  if(d.by_model){var bm=[];for(var mk in d.by_model){bm.push(esc(mk)+'='+esc(String(d.by_model[mk])));}
+    if(bm.length){h+='<div class="muted" style="font-size:11px;margin-top:6px">findings by model: '+bm.join(', ')+'</div>';}}
+  if(d.known_issues&&d.known_issues.length){
+    h+='<div class="muted" style="font-size:12px;margin-top:8px">known upstream issues correlated with these findings (scripts/known-issues.json)</div>';
+    for(var k=0;k<d.known_issues.length;k++){var it=d.known_issues[k];
+      h+='<div class="item"><span class="tag">'+esc(it.severity||'?')+'</span><a href="'+esc(it.url||'#')+'" target="_blank" rel="noopener">'+esc(it.id)+'</a> <span class="muted">'+esc(String(it.title||'').slice(0,80))+' (x'+esc(String(it.n||0))+')</span></div>';}}
   el.html(h);
 }
 async function renderGuard(){

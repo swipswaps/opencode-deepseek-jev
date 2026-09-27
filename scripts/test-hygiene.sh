@@ -147,6 +147,17 @@ main() {
         bad 'session-health.mjs present + node'
     fi
 
+    if have node && [ -f "$REPO/scripts/quirks.mjs" ]; then
+        if node --experimental-sqlite "$REPO/scripts/quirks.mjs" --self-test > "$work/qk_st.txt" 2>&1; then
+            ok 'quirks: self-test (fuzzy matcher + corpus counters)'
+        else
+            bad 'quirks: self-test (fuzzy matcher + corpus counters)'
+            cat "$work/qk_st.txt"
+        fi
+    else
+        bad 'quirks.mjs present + node'
+    fi
+
     # Regression: the web UI creates sessions rooted at $HOME/.opencode, not
     # /workspace, so the project-scoped plugin glob misses the guard. The
     # entrypoint must link it into the GLOBAL plugin dir. Assert the wiring is

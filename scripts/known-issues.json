@@ -1,0 +1,79 @@
+{
+  "_comment": "Vendored, curated map of known upstream opencode issues -> symptom matchers. Read offline by scripts/quirks.mjs. No runtime network. URLs verified 200 on 2026-09-27. `match` are JS regex strings (case-insensitive) for symptom text; `keywords` are literal tokens used for fuzzy corpus search (DB / repo code / docs).",
+  "source": "https://github.com/anomalyco/opencode/issues",
+  "verified": "2026-09-27",
+  "issues": [
+    {
+      "id": "anomalyco/opencode#48623",
+      "title": "Chat produces blank output after sending messages (free models too)",
+      "url": "https://github.com/anomalyco/opencode/issues/48623",
+      "severity": "high",
+      "match": ["blank", "no (text|answer|output|response)", "empty (response|message|pane)"],
+      "keywords": ["blank", "empty response", "no answer", "no text part"]
+    },
+    {
+      "id": "anomalyco/opencode#46419",
+      "title": "Web image attachments: no client-side optimization",
+      "url": "https://github.com/anomalyco/opencode/issues/46419",
+      "severity": "high",
+      "match": ["image", "attachment", "data:image", "base64", "payload", "screenshot"],
+      "keywords": ["image", "attachment", "base64", "data:image", "downscale"]
+    },
+    {
+      "id": "anomalyco/opencode#40231",
+      "title": "TUI black screen when running from source outside the repo directory",
+      "url": "https://github.com/anomalyco/opencode/issues/40231",
+      "severity": "high",
+      "match": ["black screen", "outside the repo", "session director", "wrong director"],
+      "keywords": ["black screen", "session directory", "project directory", "home/.opencode"]
+    },
+    {
+      "id": "anomalyco/opencode#37803",
+      "title": "TUI screen goes black when agent starts working (render loop stalls)",
+      "url": "https://github.com/anomalyco/opencode/issues/37803",
+      "severity": "high",
+      "match": ["black screen", "render loop", "stall", "freeze during processing"],
+      "keywords": ["black screen", "render", "stall", "freeze"]
+    },
+    {
+      "id": "anomalyco/opencode#37339",
+      "title": "Desktop: screen goes black during processing; zombie session responds in new tabs",
+      "url": "https://github.com/anomalyco/opencode/issues/37339",
+      "severity": "medium",
+      "match": ["black", "zombie", "during processing"],
+      "keywords": ["black", "zombie", "processing"]
+    },
+    {
+      "id": "anomalyco/opencode#51614",
+      "title": "Plugin host behaviour that provider plugins rely on has no runtime tests",
+      "url": "https://github.com/anomalyco/opencode/issues/51614",
+      "severity": "medium",
+      "match": ["plugin", "hook.*not.*(run|fire|wire)", "tool\\.execute", "loaded"],
+      "keywords": ["plugin", "tool.execute.before", "hook", "loaded"]
+    },
+    {
+      "id": "anomalyco/opencode#50434",
+      "title": "plugins: local plugins cannot resolve @opencode/plugin import",
+      "url": "https://github.com/anomalyco/opencode/issues/50434",
+      "severity": "medium",
+      "match": ["plugin", "cannot resolve", "@opencode/plugin", "import"],
+      "keywords": ["plugin", "resolve", "@opencode/plugin", "import"]
+    },
+    {
+      "id": "anomalyco/opencode#49608",
+      "title": "plugins for V2: local plugin paths fail to load (file entries rejected)",
+      "url": "https://github.com/anomalyco/opencode/issues/49608",
+      "severity": "medium",
+      "match": ["plugin", "file://", "fail.*load", "path.*reject"],
+      "keywords": ["plugin", "file://", "load", "path"]
+    },
+    {
+      "id": "anomalyco/opencode#51503",
+      "title": "provider/streaming: reasoning degenerates into repetitive loop on long session",
+      "url": "https://github.com/anomalyco/opencode/issues/51503",
+      "severity": "medium",
+      "match": ["reasoning", "loop", "repetit", "degenerat", "long session"],
+      "keywords": ["reasoning", "loop", "repetitive", "long session"]
+    }
+  ]
+}

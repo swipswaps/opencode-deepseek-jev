@@ -110,5 +110,12 @@
     "where": "container",
     "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Surfaces at /explore ▸ signals and /api/health; --live also reads /session/status.",
     "commands": ["node --experimental-sqlite scripts/session-health.mjs", "node --experimental-sqlite scripts/session-health.mjs --json", "node --experimental-sqlite scripts/session-health.mjs --live", "node --experimental-sqlite scripts/session-health.mjs --self-test"]
+  },
+  {
+    "id": "quirks",
+    "title": "Quirks (symptom → known issue, fuzzy)",
+    "where": "container",
+    "purpose": "Correlate a symptom with a vendored map of known upstream issues (fuzzy text + typo tolerant), and fuzzily search the chat DB, repo code and docs for where it appears. Offline, no network. /api/health carries the per-finding correlations.",
+    "commands": ["node --experimental-sqlite scripts/quirks.mjs --self-test", "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'", "node --experimental-sqlite scripts/quirks.mjs --report"]
   }
 ]

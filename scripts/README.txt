@@ -265,6 +265,15 @@ session-health.mjs
     signals panel); --json, --live (adds GET /session/status), and
     --self-test (offline fixtures) run from the CLI.
 
+quirks.mjs
+    Correlates a symptom with a vendored map of known upstream issues
+    (scripts/known-issues.json) and fuzzily searches the chat DB, repo code
+    and docs for where it appears. matchIssues() is fuzzy and typo-tolerant
+    ("blnak" -> "blank", Levenshtein); annotateReport() is the cheap form
+    used on every /api/health page load; corpusHits() (DB LIKE + doc/code
+    scan) is CLI-only. --self-test is offline; --query TEXT is ad-hoc;
+    --report annotates the live session-health report. Offline, no network.
+
 test-patterns.sh
     Read-only proof of the tool-sequence substrate behind the "patterns
     view (tool-sequence n-grams)" candidate. Opens the opencode database
