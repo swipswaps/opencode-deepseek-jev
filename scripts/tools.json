@@ -84,6 +84,13 @@
     "commands": ["pip install playwright && playwright install chromium", "python3 scripts/ux-test.py --check", "python3 scripts/ux-test.py http://127.0.0.1:5099"]
   },
   {
+    "id": "uxtrace",
+    "title": "UX trace (clicks/drags/scrolls + hotspots)",
+    "where": "host",
+    "purpose": "Logs every click/drag/scroll with screenshots + hotspots into ux.db; --ocr reads the shots back to text. The handoff substrate.",
+    "commands": ["python3 scripts/ux-trace.py --check", "python3 scripts/ux-trace.py http://127.0.0.1:5099", "python3 scripts/ux-trace.py --ocr http://127.0.0.1:5099"]
+  },
+  {
     "id": "ocr",
     "title": "Read a screenshot locally",
     "where": "container",

@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -83,6 +83,16 @@ Last updated: 2026-09-26
 
 ## Done (most recent first)
 
+- [x] OCR read-back, no more "I can't read images": `ux-trace.py --ocr` reads
+      each screenshot back locally (tesseract CLI / tesseract.js, receipts-ocr)
+      into a new `ux_shot` table; the `jev-harness` skill gained a rule —
+      *never declare a capability gap the repo fills* (grep `scripts/tools.json`
+      first). Self-test 6 → 9 checks.
+- [x] first `ux-trace.py` host run surfaced 42 sub-24px touch targets (copy
+      buttons + `#brush-reset`/`#detail-close`; WCAG 2.5.8 minimum). Resolved at
+      the source: `THEME_CSS` now sets `button{min-height:24px;min-width:24px}`
+      (one rule, not 40); gated in-container in `test-dashboard.sh`; the
+      `small_target` heuristic now aggregates identical shapes into one finding.
 - [x] `ux-trace.py` — host-side interaction trace: injects a recorder so every
       click/drag/scroll is logged (element + coords + per-step screenshot),
       enumerates hotspots (bounding boxes + overlay screenshot), persists to

@@ -79,7 +79,7 @@ Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode
 | `.opencode/plugins/blacklist-guard.js` | execution-time guard on the agent's own bash calls: blocks `sed`/`subprocess.run`/`rm -rf`, **removes `2>/dev/null`** so stderr (the proof) flows, warns `echo`; auto-loaded, reload with `docker compose -f docker/docker-compose.yml restart opencode-web` |
 | `ux-audit.py [url] [outdir]` | host-side Playwright UX audit of `/explore` (page height, panel/tab counts, tab toggle, page errors, full-page screenshot); needs `pip install playwright` on host |
 | `ux-test.py [url] [--check]` | host-side Playwright UX **test** (assertions: console, 390px overflow, tab toggles, compact overview); `--check` reports readiness; SKIP without a browser; runbook `ux-test` |
-| `ux-trace.py [url] [--out DIR] [--db DB] [--json] [--self-test]` | host-side Playwright **interaction trace**: injects a recorder so every click/drag/scroll is logged (element + coords + per-step screenshot), enumerates interactive hotspots with bounding boxes + an overlay screenshot, and persists `ux_run`/`ux_event`/`ux_hotspot`/`ux_finding` to `data/observability/ux.db` + `logs/ux/report.md` — the database is the handoff substrate; `--self-test` is offline and gated in `test-hygiene.sh` |
+| `ux-trace.py [url] [--out DIR] [--db DB] [--ocr] [--json] [--self-test]` | host-side Playwright **interaction trace**: injects a recorder so every click/drag/scroll is logged (element + coords + per-step screenshot), enumerates interactive hotspots with bounding boxes + an overlay screenshot, and persists `ux_run`/`ux_event`/`ux_hotspot`/`ux_finding` to `data/observability/ux.db` + `logs/ux/report.md` — the database is the handoff substrate; `--ocr` also reads each shot back to text into `ux_shot` (tesseract, opt-in/slow); `--self-test` is offline and gated in `test-hygiene.sh` |
 | `web.sh [--insecure]` / `web-logs.sh` / `web-stop.sh` | web UI lifecycle |
 
 `scripts/runbooks.json` is the single source for the dashboard `/runbooks`
@@ -478,7 +478,13 @@ surface the `manual` flag as a badge colour, (b) a keyboard shortcut
 Interaction tracing is built: `ux-trace.py` logs every click/drag/scroll plus
 hotspots and per-step screenshots into `data/observability/ux.db` and
 `logs/ux/report.md` — the data-driven substrate for "when is a handoff needed
-and what does the next session need to know" (see command table).
+and what does the next session need to know" (see command table). Its first
+host run already paid off: it found 42 sub-24px touch targets (copy buttons +
+`#brush-reset`/`#detail-close`); fixed at the source via `THEME_CSS`
+`button{min-height:24px;min-width:24px}` and gated in `test-dashboard.sh`.
+It can also OCR its own screenshots (`--ocr` → `ux_shot`) so a text-only
+reader can see the UI — and that lesson (never declare a capability gap the
+repo fills) is now a rule in `.opencode/skills/jev-harness/SKILL.md`.
 
 **G2 — Learning loop.** Built: `issue-solutions.py` (issues → proven fixes).
 Next: (a) persist its output to `data/observability/solutions.db` and show a

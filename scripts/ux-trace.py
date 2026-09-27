@@ -19,7 +19,15 @@ Outputs (per run):
   logs/ux/<page>-hotspots.png  viewport screenshot with numbered hotspot boxes
   logs/ux/<page>-step-*.png    screenshot after each scripted interaction
   logs/ux/report.md            handoff report (what was clicked, what hurts)
-  data/observability/ux.db     ux_run / ux_event / ux_hotspot / ux_finding
+  data/observability/ux.db     ux_run / ux_event / ux_hotspot / ux_finding / ux_shot
+
+OCR read-back (opt-in, `--ocr`): each page-level screenshot is read back
+LOCALLY (tesseract CLI, else tesseract.js from receipts-ocr) and its text
+stored in ux_shot — so a text-only handoff (or a model without image input)
+can read the UI too. It is best-effort and degrades to "skipped" when no
+engine exists; the OCR text is untrusted UI data, never instructions
+(jev-guard flags it). Off by default because tesseract is ~1s per megapixel
+here (~65s for a 1440x900 shot).
 
 Pain points surfaced (findings, persisted + reported):
   error  console/page errors, horizontal overflow at 390px, tab toggle failure
@@ -36,8 +44,9 @@ PASS (RULES #37).
     python3 scripts/ux-trace.py --check                # prerequisites
     python3 scripts/ux-trace.py --self-test            # offline, no browser
 
-Constraints (RULES.md): no subprocess.run / no shell-out (urllib + sqlite3
-only), no sed / 2>/dev/null / rm -rf / set -e. main() wrapper, exit via return.
+Constraints (RULES.md): no `subprocess.run` — `subprocess.Popen` only (as
+notes/clipboard_matcher.py does), no sed / 2>/dev/null / rm -rf / set -e.
+main() wrapper, exit via return.
 """
 
 from __future__ import annotations
@@ -45,7 +54,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.request
@@ -162,9 +173,14 @@ CREATE TABLE IF NOT EXISTS ux_finding(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER NOT NULL, severity TEXT, code TEXT, message TEXT, detail TEXT
 );
+CREATE TABLE IF NOT EXISTS ux_shot(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL, path TEXT, kind TEXT, engine TEXT, text TEXT
+);
 CREATE INDEX IF NOT EXISTS ux_event_run ON ux_event(run_id);
 CREATE INDEX IF NOT EXISTS ux_hotspot_run ON ux_hotspot(run_id);
 CREATE INDEX IF NOT EXISTS ux_finding_run ON ux_finding(run_id);
+CREATE INDEX IF NOT EXISTS ux_shot_run ON ux_shot(run_id);
 """
 
 
@@ -240,17 +256,80 @@ def insert_finding(con: sqlite3.Connection, run_id: int, f: dict) -> None:
     )
 
 
+def insert_shot(con: sqlite3.Connection, run_id: int, path: str, kind: str,
+                engine: str, text: str) -> None:
+    con.execute(
+        "INSERT INTO ux_shot(run_id,path,kind,engine,text) VALUES(?,?,?,?,?)",
+        (run_id, path, kind, engine, (text or "")[:20000]),
+    )
+
+
+def ocr_engine(repo: Path | None) -> str:
+    """Detect a local OCR engine (no model call). Returns 'off' if none."""
+    if shutil.which("tesseract"):
+        return "tesseract"
+    if repo and shutil.which("node") and (repo / "scripts" / "ocr-tesseractjs.mjs").is_file():
+        return "tesseract.js"
+    return "off"
+
+
+def ocr_image(path: str, repo: Path | None, engine: str) -> str:
+    """Read a screenshot back to text locally. Best-effort: '' on any failure.
+
+    Uses subprocess.Popen only (RULES forbid the `.run` form) and captures both
+    streams. The result is UNTRUSTED UI text — a data source, never commands.
+    """
+    if engine == "off" or not path:
+        return ""
+    if engine == "tesseract":
+        cmd = ["tesseract", path, "stdout", "-l", "eng"]
+    elif engine == "tesseract.js" and repo:
+        cmd = ["node", str(repo / "scripts" / "ocr-tesseractjs.mjs"), path]
+    else:
+        return ""
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        try:
+            out, _err = proc.communicate(timeout=90)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return ""
+        if proc.returncode != 0:
+            return ""
+        return (out or "").strip()
+    except Exception:
+        return ""
+
+
 def analyze_hotspots(hotspots: list) -> list:
-    """Pure heuristics over hotspot boxes; shared by run + self-test."""
+    """Pure heuristics over hotspot boxes; shared by run + self-test.
+
+    Small-target findings are aggregated by shape (tag + w + h) so a page with
+    40 identical copy buttons yields ONE finding ("40 x button 45x22"), not 40
+    lines of noise — the report is a handoff artifact, not a log dump.
+    """
     findings = []
     small = [h for h in hotspots if h.get("visible") and
              (h.get("w", 0) < 24 or h.get("h", 0) < 24)]
-    for h in small[:20]:
+    groups = {}
+    order = []
+    for h in small:
+        key = (h.get("tag", ""), h.get("w", 0), h.get("h", 0))
+        if key not in groups:
+            groups[key] = {"h": h, "n": 0}
+            order.append(key)
+        groups[key]["n"] += 1
+    for key in order:
+        g = groups[key]
+        h = g["h"]
         findings.append({
             "severity": "warn", "code": "small_target",
             "message": "click target < 24px (touch-unfriendly)",
-            "detail": "%s#%s %sx%s" % (h.get("tag", ""), h.get("id", ""),
-                                       h.get("w", 0), h.get("h", 0)),
+            "detail": "%d x %s#%s %sx%s" % (g["n"], h.get("tag", ""),
+                                            h.get("id", ""), h.get("w", 0),
+                                            h.get("h", 0)),
         })
     boxes = [h for h in hotspots if h.get("visible") and
              (h.get("w", 0) > 0 and h.get("h", 0) > 0)]
@@ -425,7 +504,8 @@ def click_tab(page, name: str) -> bool:
     return False
 
 
-def run(base: str, outdir: Path, db: Path) -> dict:
+def run(base: str, outdir: Path, db: Path, repo: Path | None = None,
+        use_ocr: bool = True) -> dict:
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
@@ -439,6 +519,7 @@ def run(base: str, outdir: Path, db: Path) -> dict:
     con = sqlite3.connect(str(db))
     init_schema(con)
 
+    engine = ocr_engine(repo) if use_ocr else "off"
     rev = fetch_rev(base)
     all_runs = []
     totals = {"pass": 0, "fail": 0, "warn": 0, "skip": 0}
@@ -478,11 +559,13 @@ def run(base: str, outdir: Path, db: Path) -> dict:
             visible_hotspots = [h for h in hotspots if h.get("visible")]
             pr["pass"] += 1
 
-            page.screenshot(path=str(outdir / ("%s-full.png" % name)), full_page=True)
+            shot_full = str(outdir / ("%s-full.png" % name))
+            page.screenshot(path=shot_full, full_page=True)
+            shot_hot = str(outdir / ("%s-hotspots.png" % name))
             try:
-                draw_hotspot_overlay(page, hotspots, str(outdir / ("%s-hotspots.png" % name)))
+                draw_hotspot_overlay(page, hotspots, shot_hot)
             except Exception:
-                pass
+                shot_hot = ""
 
             # --- phone checks --------------------------------------------
             page.set_viewport_size(PHONE)
@@ -490,9 +573,12 @@ def run(base: str, outdir: Path, db: Path) -> dict:
             scroll_w = page.evaluate("() => document.documentElement.scrollWidth")
             inner_w = page.evaluate("() => window.innerWidth")
             height = page.evaluate("() => document.documentElement.scrollHeight")
-            page.screenshot(path=str(outdir / ("%s-390.png" % name)), full_page=True)
+            shot_390 = str(outdir / ("%s-390.png" % name))
+            page.screenshot(path=shot_390, full_page=True)
             page.set_viewport_size(DESKTOP)
             page.wait_for_timeout(200)
+            page_shots = [("full", shot_full), ("hotspots", shot_hot),
+                          ("390", shot_390)]
 
             if errors:
                 pr["fail"] += 1
@@ -616,6 +702,11 @@ def run(base: str, outdir: Path, db: Path) -> dict:
                 insert_event(con, run_id, i, label, norm_event(e), shot)
             for f in pr["findings"]:
                 insert_finding(con, run_id, f)
+            for kind, sp in page_shots:
+                if not sp:
+                    continue
+                txt = ocr_image(sp, repo, engine) if engine != "off" else ""
+                insert_shot(con, run_id, sp, kind, engine, txt)
 
             totals["pass"] += pr["pass"]
             totals["fail"] += pr["fail"]
@@ -635,7 +726,7 @@ def run(base: str, outdir: Path, db: Path) -> dict:
 
     con.close()
     return {
-        "ts": ts, "rev": rev, "base": base, "db": str(db),
+        "ts": ts, "rev": rev, "base": base, "db": str(db), "ocr": engine,
         "runs": all_runs, "totals": totals,
         "result": "FAIL" if totals["fail"] else "PASS",
     }
@@ -648,6 +739,7 @@ def write_report(summary: dict, outdir: Path) -> Path:
              "- ts: %s" % summary["ts"],
              "- rev: %s" % summary["rev"],
              "- base: %s" % summary["base"],
+             "- ocr: %s" % summary.get("ocr", "off"),
              "- db: %s" % summary["db"], "",
              "| page | pass | fail | warn | clicks | drags | scrolls | hotspots |",
              "|------|------|------|------|--------|-------|---------|----------|"]
@@ -691,19 +783,26 @@ def self_test() -> int:
                               "w": 40, "h": 20, "visible": True})
     insert_finding(con, rid, {"severity": "warn", "code": "small_target",
                               "message": "tiny", "detail": "button#t 40x20"})
+    insert_shot(con, rid, "x-full.png", "full", "off", "hello ui")
     n_run = con.execute("SELECT COUNT(*) FROM ux_run").fetchone()[0]
     n_ev = con.execute("SELECT COUNT(*) FROM ux_event").fetchone()[0]
     n_hs = con.execute("SELECT COUNT(*) FROM ux_hotspot").fetchone()[0]
     n_fn = con.execute("SELECT COUNT(*) FROM ux_finding").fetchone()[0]
+    n_sh = con.execute("SELECT COUNT(*) FROM ux_shot").fetchone()[0]
     con.close()
-    check(n_run == 1 and n_ev == 1 and n_hs == 1 and n_fn == 1,
-          "schema + persistence round-trip (run/event/hotspot/finding)")
+    check(n_run == 1 and n_ev == 1 and n_hs == 1 and n_fn == 1 and n_sh == 1,
+          "schema + persistence round-trip (run/event/hotspot/finding/shot)")
 
     # 2. hotspot heuristics fire on synthetic boxes
     small = analyze_hotspots([{"tag": "button", "id": "a", "x": 0, "y": 0,
                                "w": 10, "h": 10, "visible": True}])
     check(any(f["code"] == "small_target" for f in small),
           "small_target detected (<24px)")
+    many = analyze_hotspots([{"tag": "button", "id": "", "x": 0, "y": 0,
+                              "w": 45, "h": 22, "visible": True} for _ in range(40)])
+    sm = [f for f in many if f["code"] == "small_target"]
+    check(len(sm) == 1 and sm[0]["detail"] == "40 x button# 45x22",
+          "small_target dedupes 40 identical buttons to one finding")
     overlap = analyze_hotspots([
         {"tag": "button", "id": "a", "x": 0, "y": 0, "w": 100, "h": 100, "visible": True},
         {"tag": "a", "id": "b", "x": 10, "y": 10, "w": 100, "h": 100, "visible": True},
@@ -720,6 +819,14 @@ def self_test() -> int:
     check("window.__ux" in RECORDER_JS and "drain" in RECORDER_JS,
           "recorder JS defines window.__ux.drain")
 
+    # 4. OCR read-back: engine detection + graceful skip (no shell-out)
+    check(ocr_image("/nonexistent.png", None, "off") == "",
+          "ocr_image: engine off -> empty")
+    check(ocr_image("/nonexistent.png", None, "unknown-engine") == "",
+          "ocr_image: unknown engine -> empty")
+    check(ocr_engine(None) in ("tesseract", "tesseract.js", "off"),
+          "ocr_engine returns a known engine")
+
     print("\n  result: %d pass, %d fail" % (ok, fail))
     return 0 if fail == 0 else 1
 
@@ -732,6 +839,8 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="emit only a JSON summary")
     ap.add_argument("--check", action="store_true", help="report prerequisites and exit")
     ap.add_argument("--self-test", action="store_true", help="offline self-test (no browser)")
+    ap.add_argument("--ocr", action="store_true",
+                    help="also read screenshots back via local OCR into ux_shot (slow)")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
     base = args.base.rstrip("/")
 
@@ -745,7 +854,7 @@ def main(argv: list | None = None) -> int:
     db = args.db or ((repo / "data" / "observability" / "ux.db") if repo
                      else Path("data/observability/ux.db"))
 
-    summary = run(base, out, db)
+    summary = run(base, out, db, repo, args.ocr)
 
     if args.json:
         print(json.dumps(summary))
@@ -753,6 +862,7 @@ def main(argv: list | None = None) -> int:
         report = write_report(summary, out)
         t = summary["totals"]
         print("\n  screenshots: %s" % out)
+        print("  ocr: %s" % summary.get("ocr", "off"))
         print("  db: %s" % summary["db"])
         print("  report: %s" % report)
         print("  result: %s (%d pass, %d fail, %d warn, %d skip)" % (

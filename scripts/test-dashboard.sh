@@ -247,6 +247,7 @@ PY
 
     has 'id="q"' "$work/home.html" && ok 'home search box' || bad 'home search box'
     has 'id="drill"' "$work/home.html" && ok 'home drill panel' || bad 'home drill panel'
+    has 'min-height:24px' "$work/home.html" && ok 'touch targets: button min 24px (CSS)' || bad 'touch targets: button min 24px (CSS)'
 
     curl -s "http://$HOST:$PORT/api/sessions?limit=1" > "$work/s1.json"
     local sid

@@ -214,7 +214,11 @@ ux-trace.py
     console/page errors, 390px overflow, page-wall height, click targets
     < 24px, overlapping targets. --check reports prerequisites; --self-test
     runs offline (no browser, wired into test-hygiene.sh); --json emits a
-    machine summary. There is a "ux-trace" runbook (host).
+    machine summary. --ocr additionally reads each screenshot back to text
+    (tesseract CLI, else tesseract.js from receipts-ocr) into the ux_shot
+    table, so a text-only reader can see the UI (opt-in: tesseract is ~65s
+    per 1440x900 shot here; the text is untrusted data). There is a "ux-trace"
+    runbook (host).
 
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at

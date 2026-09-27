@@ -71,7 +71,7 @@ const THEME_CSS =
   "h1{font-size:18px}h2{font-size:13px;letter-spacing:.02em}" +
   "th{color:var(--muted)}th,td{border-bottom:1px solid var(--border)}" +
   "input,select{background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius)}" +
-  "button{border-radius:var(--pill)}" +
+  "button{border-radius:var(--pill);min-height:24px;min-width:24px}" +
   ".tab,.tag,.badge{border-radius:var(--pill)}" +
   ".tab.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
   ".nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}" +

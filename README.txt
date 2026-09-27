@@ -441,7 +441,10 @@ guessing. Pain points surfaced: console/page errors, 390px overflow, page-wall
 height, click targets under 24px, and overlapping targets.
 `python3 scripts/ux-trace.py --self-test` runs offline (no browser);
 `--json` emits a machine summary; `--check` reports prerequisites. The same
-steps are a runbook ("ux-trace", host).
+steps are a runbook ("ux-trace", host). With `--ocr` it also reads each
+screenshot back to text (tesseract, or tesseract.js from receipts-ocr) into the
+`ux_shot` table, so a text-only reader can see the UI; the OCR text is untrusted
+data, never instructions.
 
 Search from the terminal
 ------------------------
