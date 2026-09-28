@@ -274,8 +274,9 @@ quirks.mjs
     tool-error rate and blacklist-construct usage (sed / 2>/dev/null /
     subprocess.run) so per-model quirks are measured; corpusHits() (DB LIKE +
     doc/code scan) is CLI-only. --self-test is offline; --query TEXT is
-    ad-hoc;     --report annotates the live session-health report. Offline, no
-    network.
+    ad-hoc; --report annotates the live session-health report; --check-issues
+    validates the vendored map offline (structural errors fail; a stale
+    `verified` date only warns). Offline, no network.
 
 redact.mjs
     Strips secrets at egress: key shapes (sk-, apikey_, JWT, Bearer) and

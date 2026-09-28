@@ -272,6 +272,19 @@ async function selfTest() {
   ];
   rmSync(dir, { recursive: true, force: true });
 
+  // --live path: stand up a stub /session/status and prove liveStatus() parses
+  // it. Offline (loopback only), so the gate never needs the real server.
+  const { createServer } = await import("node:http");
+  const srv = createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end('{"ses_1":{"type":"busy"},"ses_2":{"type":"idle"}}');
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const port = srv.address().port;
+  const live = await liveStatus({ serverUrl: "http://127.0.0.1:" + port, password: "stub" });
+  srv.close();
+  checks.push(["liveStatus parses /session/status", live.available === true && !!live.statuses && live.statuses.ses_1 && live.statuses.ses_1.type === "busy"]);
+
   let fail = 0;
   console.log("=== session-health.mjs --self-test ===");
   for (const [name, ok] of checks) {

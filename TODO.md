@@ -130,6 +130,13 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] A-items proven from the DB/logs: session-health `--live` tested (stub
+      `/session/status` in the suite) and exercised against the live server
+      (`available:true`); `quirks --check-issues` validates the vendored map
+      offline (structural errors fail, staleness warns) and is gated. Evidence:
+      `guard.log` verdict counts, the opencode.db leak surface (60 PASSWORD= /
+      150 apikey_ rows) vs a 0-hit redacted export (91 `[REDACTED]`), the health
+      findings, and the model ledger — all read back from the databases/logs
 - [x] A1/A2/A3 residuals: `scripts/redact.mjs` redacts secrets at every export
       boundary (`/api/export/session` + sessions/patterns/guard CSVs; stdin
       filter; self-test gated) — verified live on the leaked session (0

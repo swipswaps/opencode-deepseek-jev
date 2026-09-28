@@ -43,6 +43,42 @@ export function loadIssues(path = KNOWN_ISSUES) {
   return issues;
 }
 
+// Offline validity + staleness check for the vendored map. FAILS on structural
+// errors (missing fields, duplicate id, non-github url, uncompilable regex);
+// only WARNS when the `verified` date is older than maxAgeDays (curation is a
+// human task, not a build failure). No network: URL liveness is deliberately
+// not checked here (that would break offline + inject untrusted content).
+export function checkIssues(path = KNOWN_ISSUES, { maxAgeDays = 180, now = Date.now() } = {}) {
+  const j = JSON.parse(readFileSync(path, "utf8"));
+  const issues = Array.isArray(j) ? j : j.issues;
+  const errors = [];
+  const ids = new Set();
+  for (const it of issues) {
+    for (const f of ["id", "title", "url", "severity", "match", "keywords"]) {
+      if (!it[f]) errors.push((it.id || "(no id)") + ": missing " + f);
+    }
+    if (it.id) {
+      if (ids.has(it.id)) errors.push(it.id + ": duplicate id");
+      ids.add(it.id);
+    }
+    if (!/^https:\/\/github\.com\//.test(it.url || "")) errors.push((it.id || "?") + ": url is not a github link");
+    for (const p of it.match || []) {
+      try { new RegExp(p, "i"); } catch { errors.push(it.id + ": uncompilable regex " + JSON.stringify(p)); }
+    }
+  }
+  const verified = j.verified || null;
+  let ageDays = null;
+  if (verified) {
+    const t = Date.parse(verified);
+    if (Number.isNaN(t)) errors.push("verified date unparseable: " + verified);
+    else ageDays = Math.floor((now - t) / 86400000);
+  } else {
+    errors.push("no verified date");
+  }
+  const stale = ageDays !== null && ageDays > maxAgeDays;
+  return { path, count: issues.length, errors, verified, age_days: ageDays, max_age_days: maxAgeDays, stale };
+}
+
 // --- fuzzy text primitives -------------------------------------------------
 function tokens(s) {
   return String(s || "").toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1);
@@ -263,6 +299,12 @@ async function selfTest() {
       const f = modelLedger(mdb).find((x) => x.model === "free-model");
       return !!f && f.errors === 0 && f.quirk_hits === 0;
     })()],
+    ["checkIssues passes on the vendored map", checkIssues().errors.length === 0],
+    ["checkIssues flags a broken regex", (() => {
+      const bad = join(dir, "bad.json");
+      writeFileSync(bad, JSON.stringify({ verified: "2026-01-01", issues: [{ id: "x", title: "t", url: "https://github.com/a/b/issues/1", severity: "low", match: ["("], keywords: ["k"] }] }));
+      return checkIssues(bad).errors.length > 0;
+    })()],
   ];
   rmSync(dir, { recursive: true, force: true });
   let fail = 0;
@@ -275,6 +317,12 @@ async function selfTest() {
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--self-test")) return selfTest();
+  if (argv.includes("--check-issues")) {
+    const r = checkIssues();
+    console.log(JSON.stringify(r, null, 2));
+    if (r.stale) console.log("WARN: known-issues.json verified " + r.age_days + " days ago (> " + r.max_age_days + ") — re-verify the issue list");
+    return r.errors.length ? 1 : 0;
+  }
   const issues = loadIssues();
   if (argv.includes("--query")) {
     const q = argv[argv.indexOf("--query") + 1] || "";
