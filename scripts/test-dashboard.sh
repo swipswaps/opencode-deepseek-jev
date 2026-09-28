@@ -275,6 +275,16 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("mode")=="fts" and isinstance(d.get("results"),list) else 1)' "$work/sem.json" && ok 'api/semantic (fts)' || bad 'api/semantic (fts)'
         curl -s "http://$HOST:$PORT/api/overview?limit=5" > "$work/ov.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and "budget" in d else 1)' "$work/ov.json" && ok 'api/overview' || bad 'api/overview'
+        curl -s "http://$HOST:$PORT/api/overview?limit=5" > "$work/ov2.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/ov2.json" && ok 'api/overview served from cache' || bad 'api/overview served from cache'
+        curl -s "http://$HOST:$PORT/api/overview?limit=200" > "$work/ov200.json"
+        python3 - "$work/ov.json" "$work/ov200.json" <<'PY'
+import json, sys
+a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
+# param-aware key: limit=5 and limit=200 must not share an entry
+sys.exit(0 if len(a.get("sessions", [])) != len(b.get("sessions", [])) else 1)
+PY
+        if [ "$?" -eq 0 ]; then ok 'api/overview cache keyed by limit (5 != 200)'; else bad 'api/overview cache keyed by limit (5 != 200)'; fi
         curl -s "http://$HOST:$PORT/api/schema" > "$work/schema.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("tables") and isinstance(d.get("edges"),list) else 1)' "$work/schema.json" && ok 'api/schema' || bad 'api/schema'
         curl -s "http://$HOST:$PORT/api/integrations" > "$work/integ.json"

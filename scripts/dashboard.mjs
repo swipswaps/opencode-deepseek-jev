@@ -231,11 +231,21 @@ function budgetUsd() {
   return usd;
 }
 
+// apiOverview/apiSchema are cached (measured uncached 0.13-1.06s / 0.31-1.38s);
+// apiCode is deliberately NOT cached (measured 12-29ms — caching would be
+// cargo-cult). The overview key includes the request param, so limit=5 and
+// limit=200 never share an entry.
 function apiOverview(limit) {
+  return ttlCached("overview:" + Number(limit || 500), CACHE_TTL_MS, () => apiOverviewFresh(limit));
+}
+function apiOverviewFresh(limit) {
   return { budget: budgetUsd(), sessions: apiSessions(limit) };
 }
 
 function apiSchema() {
+  return ttlCached("schema", CACHE_TTL_MS, apiSchemaFresh);
+}
+function apiSchemaFresh() {
   const tnames = query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
   const tables = [];
   for (const t of tnames) {
@@ -351,6 +361,7 @@ function ttlCached(key, ttlMs, fn) {
   return value;
 }
 const SIGNALS_TTL_MS = Number(process.env.SIGNALS_TTL_MS || 30000);
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 15000);
 function apiSignals() {
   return ttlCached("signals", SIGNALS_TTL_MS, apiSignalsFresh);
 }
