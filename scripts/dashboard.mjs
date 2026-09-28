@@ -597,6 +597,9 @@ function apiSearch(q, limit) {
 }
 
 let fts = { db: null, at: 0, count: -1, sourceMax: -1 };
+// Minimum time before the in-memory FTS index is rebuilt, even if the DB
+// advanced. Bounds the ~3s rebuild to once per window under continuous writes.
+const FTS_MIN_REBUILD_MS = Number(process.env.FTS_MIN_REBUILD_MS || 30000);
 
 function sanitizeFts(q) {
   const words = String(q || "").toLowerCase().match(/[a-z0-9_]+/g) || [];
@@ -613,7 +616,12 @@ function ftsSource() {
 function ensureFts() {
   const src = ftsSource();
   const n = Number(src.n), m = Number(src.m);
-  if (fts.db && fts.count === n && fts.sourceMax === m && Date.now() - fts.at < 60000) return fts.db;
+  // Debounce: the agent writes the DB continuously, so sourceMax advances on
+  // almost every call and a naive cache rebuilds the whole in-memory FTS index
+  // (~3s) per search. Reuse for a minimum window (accepting that staleness)
+  // before allowing a rebuild.
+  if (fts.db && Date.now() - fts.at < FTS_MIN_REBUILD_MS) return fts.db;
+  if (fts.db && fts.count === n && fts.sourceMax === m) return fts.db;
   const db = new DatabaseSync(":memory:");
   db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
   const rows = query(

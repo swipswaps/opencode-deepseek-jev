@@ -319,6 +319,12 @@ ensure-env.sh
     caller can say "re-login") when it generates. --repo <dir> is the test seam.
     Behavior gate: scripts/test-ensure-env.sh (in test-hygiene.sh).
 
+monitor-snapshot.sh
+    One-shot repo health snapshot from the databases/logs (read-only; names/
+    codes/counts only, safe to paste or store under notes/): DB/utils counts,
+    guard.log tail, opencode.log tail, docker ps, :4096/:5099 probes, key
+    names. --json, --no-docker, --db PATH, --self-test (offline fixture).
+
 watch.sh
     Read-only live problem monitor (no daemon, no model call). One sweep by
     default; --loop SEC repeats. Reports the gate state, the session-health

@@ -248,6 +248,17 @@ main() {
         bad 'watch.sh present'
     fi
 
+    if [ -f "$REPO/scripts/monitor-snapshot.sh" ]; then
+        if bash "$REPO/scripts/monitor-snapshot.sh" --self-test > "$work/ms.txt" 2>&1; then
+            ok 'monitor-snapshot: self-test'
+        else
+            bad 'monitor-snapshot: self-test'
+            cat "$work/ms.txt"
+        fi
+    else
+        bad 'monitor-snapshot.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

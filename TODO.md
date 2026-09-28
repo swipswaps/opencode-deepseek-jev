@@ -65,6 +65,15 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] `/api/semantic` FTS debounce: `FTS_MIN_REBUILD_MS` (default 30s) — the
+      in-memory index was rebuilt (~3s) on nearly every search because the agent
+      keeps writing the DB and advancing `sourceMax`; now results are at most
+      30s stale instead. call1 3.09s (build) → call2 0.90s (no rebuild).
+- [x] `monitor-snapshot.sh` finished + gated (was untracked, non-executable,
+      broken self-test): the arg parser used `for a in "$@"` with `shift`, so
+      `--db PATH` set `db` to the wrong token and the self-test's fixture DB was
+      never used ("FAIL json shape"). Rewritten as a `while`/`case` parser,
+      chmod +x, self-test PASS, wired into test-hygiene, documented.
 - [x] dashboard latency: `/api/health` is now TTL-cached (`HEALTH_TTL_MS`,
       default 15s) with `cached`/`age_ms` surfaced — measured **6.8s → 0.011s**
       on repeat. Root cause: ~7s of synchronous aggregation (healthReport 4.7s +
