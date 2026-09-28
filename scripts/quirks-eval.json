@@ -1,5 +1,5 @@
 {
-  "_comment": "Labeled eval set for scripts/quirks.mjs matchIssues(). This is the ANSWER KEY: do not edit it to tune the matcher. `kind`: constructive = text built from the issue's own keywords (assert recall 1.0); decoy = text with no issue keyword (assert it matches nothing); real = a redacted snippet sampled from opencode.db (report precision/recall/FPR; labels are the human ground truth by the rule below).",
+  "_comment": "Labeled eval set for scripts/quirks.mjs matchIssues(). This is the ANSWER KEY: do not edit it to tune the matcher. `cases` (constructive/decoy/real) is the TRAIN set — patterns may be chosen against it; `heldout` is the OUT-OF-SAMPLE set — report it, never tune on it (if you do, move those rows into `cases` and add fresh heldout rows). `kind`: constructive = text built from the issue's own keywords (assert recall 1.0); decoy = text with no issue keyword (assert it matches nothing); real = a redacted snippet sampled from opencode.db (report precision/recall/FPR; labels are the human ground truth by the rule below).",
   "method": "Sample query: DISTINCT substr(json_extract(data,'$.text'),1,200) FROM part WHERE type IN ('text','reasoning') AND data LIKE '%blank%'|'%black screen%'|'%plugin%'|'%image%'|'%stall%'|'%freeze%'|'%not render%'. Text redacted with scripts/redact.mjs before committing. Label rule: a row is positive for issue X iff it names the same failure mode as X, else null. Labels are blind to matchIssues output (authored before scoring).",
   "sampled_at": "2026-09-28",
   "cases": [
@@ -26,5 +26,17 @@
     { "kind": "real", "expect": null, "text": "The existing sidebar-audit.md claims /notes is not visible, but in THIS environment /notes IS visible." },
     { "kind": "real", "expect": null, "text": "Key facts: Project identity OpenCode + DeepSeek V4.1 Flash + Jev, Docker-based, keys in .env.local, managed by Dockge." },
     { "kind": "real", "expect": null, "text": "bash -n and shellcheck the scripts, then py_compile the python files and node --check the mjs files" }
+  ],
+  "heldout": [
+    { "expect": null, "text": "The jev_review call failed due to API key. Hmm. The task requires replying with a correctness score." },
+    { "expect": null, "text": "Interesting - this transcript is a PRIOR run of this exact same task (run=689c98e5). So my own current run is likely being recorded." },
+    { "expect": null, "text": "So the notes directory exists as a bind-mount source on the host but inside the container it is mounted elsewhere." },
+    { "expect": null, "text": "Very important: /api/session/active returns 11 bytes JSON, meaning it EXISTS and is empty even after creating a session." },
+    { "expect": null, "text": "I have enough. Now write the report to /workspace/logs/sidebar-audit.md and summarise the sections." },
+    { "expect": "anomalyco/opencode#48623", "text": "the response pane is blank after I sent my message" },
+    { "expect": "anomalyco/opencode#48623", "text": "the assistant panel showed nothing at all, just an empty area" },
+    { "expect": "anomalyco/opencode#37803", "text": "the screen freezes and stops responding while the agent is working" },
+    { "expect": "anomalyco/opencode#50434", "text": "cannot import the plugin package in the local setup" },
+    { "expect": "anomalyco/opencode#46419", "text": "the image attachment is enormous and slows everything down" }
   ]
 }

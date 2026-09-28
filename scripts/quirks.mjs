@@ -115,6 +115,19 @@ export function runEval(path = QUIRKS_EVAL, issues = loadIssues()) {
       fpr: rate(pred.filter((x) => !x.expect), (x) => x.got !== null),
     };
   }
+  // HELD-OUT set: cases NOT inspected when the patterns were chosen, so the
+  // reported numbers are out-of-sample. Recall here is the generalisation test;
+  // it is REPORTED, not gated as 1.0 (gating then tuning on it would re-create
+  // the train-on-test problem). Only a loose FPR ceiling is asserted.
+  const held = (Array.isArray(j.heldout) ? j.heldout : []).map((c) => ({ expect: c.expect, got: top(c.text), text: c.text }));
+  const heldPos = held.filter((r) => r.expect);
+  const heldout = {
+    n: held.length,
+    positives: heldPos.length,
+    recall: rate(heldPos, (r) => r.got === r.expect),
+    fpr: rate(held.filter((r) => !r.expect), (r) => r.got !== null),
+    table: held.map((r) => ({ expect: r.expect, got: r.got, text: r.text })),
+  };
   return {
     method: j.method,
     sampled_at: j.sampled_at,
@@ -122,6 +135,7 @@ export function runEval(path = QUIRKS_EVAL, issues = loadIssues()) {
     constructive_recall: rate(byKind.constructive, (r) => r.got === r.expect),
     decoy_fpr: rate(byKind.decoy, (r) => r.got !== null),
     real,
+    heldout,
     sweep,
   };
 }
@@ -368,6 +382,7 @@ async function selfTest() {
   checks.push(["eval: constructive recall 1.0", ev.constructive_recall === 1]);
   checks.push(["eval: decoy FPR 0", ev.decoy_fpr === 0]);
   checks.push(["eval: real FPR at most 44% (tuned operating point)", ev.real.fpr !== null && ev.real.fpr <= 0.45]);
+  checks.push(["eval: heldout FPR <= 50% (out-of-sample)", ev.heldout.fpr === null || ev.heldout.fpr <= 0.5]);
 
   let fail = 0;
   console.log("=== quirks.mjs --self-test ===");
@@ -377,6 +392,8 @@ async function selfTest() {
   console.log("  constructive recall: " + pct(ev.constructive_recall) + "  decoy FPR: " + pct(ev.decoy_fpr));
   console.log("  real: n=" + ev.real.n + " positives=" + ev.real.positives +
     " recall=" + pct(ev.real.recall) + " precision=" + pct(ev.real.precision) + " FPR=" + pct(ev.real.fpr));
+  console.log("  heldout (out-of-sample): n=" + ev.heldout.n + " positives=" + ev.heldout.positives +
+    " recall=" + pct(ev.heldout.recall) + " FPR=" + pct(ev.heldout.fpr));
   for (const th of Object.keys(ev.sweep).map(Number).sort((a, b) => a - b)) {
     const s = ev.sweep[th];
     console.log("  sweep th=" + th + ": predicted=" + s.predicted + " precision=" + pct(s.precision) + " FPR=" + pct(s.fpr));

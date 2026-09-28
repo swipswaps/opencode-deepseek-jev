@@ -270,7 +270,11 @@ quirks.mjs
     labeled set (`scripts/quirks-eval.json`, the answer key — do not tune it)
     and prints precision/recall/FPR plus a threshold sweep, persisting
     data/observability/quirks-eval.json. `matchIssues` default threshold is
-    0.5 (the sweep knee; 0.15 over-fired at FPR 67% vs 44%). Offline, no network.
+    0.5 (the sweep knee; 0.15 over-fired at FPR 67% vs 44%). The set has a
+    TRAIN block (`cases` — patterns may be chosen against it) and a HELD-OUT
+    block (`heldout` — reported, never tuned on; measured recall 40% / FPR 20%
+    at the 0.5 default, i.e. the matcher is precision-leaning and weak on
+    paraphrases for free text). Offline, no network.
 
 redact.mjs
     Strips secrets at egress: key shapes (sk-, apikey_, JWT, Bearer) and

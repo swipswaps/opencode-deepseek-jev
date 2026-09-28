@@ -65,6 +65,13 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] held-out validation of the matcher (the honest counterweight to Step 3):
+      added an out-of-sample `heldout` block to `quirks-eval.json` and measured
+      it. Result: **recall 40% / FPR 20%** — so the frozen-set "FPR 0%" was
+      **in-sample** (the map was tuned on the same 9 cases it was scored on).
+      Production `/api/health` is unaffected (it correlates synthetic
+      `symptomText` that fires via regex); the weakness is free-text paraphrase
+      recall. Rule encoded: `cases` = train (ok to tune), `heldout` = report-only.
 - [x] `quirks` threshold tuned: `matchIssues` default 0.15 → **0.5** (the sweep
       knee — 0.5 and 1.0 predict identically), cutting frozen-set free-text FPR
       67% → 44% while every production synthetic symptom still fires via regex
