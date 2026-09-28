@@ -65,6 +65,15 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] `quirks` threshold tuned: `matchIssues` default 0.15 → **0.5** (the sweep
+      knee — 0.5 and 1.0 predict identically), cutting frozen-set free-text FPR
+      67% → 44% while every production synthetic symptom still fires via regex
+      (≥1.0); honest typo test (combination form) + a `levenshtein === 1`
+      primitive assertion + a `real FPR ≤ 44%` gate. Residual 4/9 FPs are
+      regex-driven → next session = keyword/regex surgery (its own segment).
+- [x] `ensure-env.sh` backup names now carry microseconds — the behavior test
+      exposed a real same-second collision that silently dropped a backup
+      (flake → bug). 18/18, stable across reruns.
 - [x] `ensure-env.sh` made safe to run unattended: a no-change rerun is a
       strict no-op (no write/backup/password); `OPENCODE_SERVER_PASSWORD`
       regenerates only when missing/empty or `--rotate` (short-but-present now

@@ -139,7 +139,9 @@ changed = text != before
 print("changed: " + ("yes" if changed else "no"))
 if changed:
     if env.exists():
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        # Microsecond precision: two changes in the same second must not
+        # collide and silently drop a backup (observed as a flaky behavior test).
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         backup = repo / (".env.local.bak." + ts)
         backup.write_text(before if before is not None else "")
         os.chmod(backup, 0o600)
