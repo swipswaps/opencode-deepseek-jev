@@ -65,6 +65,15 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] capability registry + evidence levels (from the attached LifeOS
+      methodology; all these concepts existed only in `notes/6ab95225-…089.txt`):
+      `scripts/capabilities.json` + `capabilities.mjs` check the four links that
+      can silently diverge — implementation / registration / test / evidence —
+      and emit GREEN / DEGRADED / MISSING with an evidence level. `RULES.md`
+      gains "Evidence levels" (E0–E5; nothing confirmed below E3). The
+      falsifiable case is the guard incident: it is GREEN now and would be
+      DEGRADED if its global symlink were absent. A checker bug (`expand(~)`
+      applied after rooting the path) was caught by running it against reality.
 - [x] held-out validation of the matcher (the honest counterweight to Step 3):
       added an out-of-sample `heldout` block to `quirks-eval.json` and measured
       it. Result: **recall 40% / FPR 20%** — so the frozen-set "FPR 0%" was

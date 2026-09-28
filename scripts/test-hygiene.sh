@@ -226,6 +226,17 @@ main() {
         bad 'test-ensure-env.sh present'
     fi
 
+    if have node && [ -f "$REPO/scripts/capabilities.mjs" ]; then
+        if node "$REPO/scripts/capabilities.mjs" --self-test > "$work/cap_st.txt" 2>&1; then
+            ok 'capabilities: self-test (GREEN/DEGRADED/MISSING)'
+        else
+            bad 'capabilities: self-test (GREEN/DEGRADED/MISSING)'
+            cat "$work/cap_st.txt"
+        fi
+    else
+        bad 'capabilities.mjs present + node'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

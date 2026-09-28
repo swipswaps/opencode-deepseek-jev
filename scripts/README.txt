@@ -315,6 +315,17 @@ ensure-env.sh
     caller can say "re-login") when it generates. --repo <dir> is the test seam.
     Behavior gate: scripts/test-ensure-env.sh (in test-hygiene.sh).
 
+capabilities.mjs
+    Read-only capability registry checker. For each declared capability in
+    scripts/capabilities.json it checks the four links that can silently
+    diverge (the guard-was-configured-but-inert class): IMPLEMENTATION (file
+    exists), REGISTRATION (wired in — symlink/exists/contains), TEST, and
+    EVIDENCE (an observed-execution marker). GREEN needs impl+registration+test;
+    DEGRADED means impl present but wiring/tests missing; MISSING means no impl.
+    Evidence level per RULES.md "Evidence levels" (E5 = test+marker, E3 = one,
+    E2 = impl only, E0 = nothing). --json, --self-test (offline fixtures).
+    Gated in test-hygiene.sh.
+
 web.sh
     Starts the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD;
     refuses to start an unauthenticated server unless --insecure is

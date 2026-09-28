@@ -83,6 +83,26 @@ Two security practices that are testable and repeatedly relevant here:
   `test-hygiene.sh`. This is defence in depth for a value already in the
   transcript, not a substitute for not leaking it.
 
+## Evidence levels
+
+A claim's strength is its evidence, not its confidence. Use this taxonomy
+(adapted from the LifeOS audit methodology; see `notes/6ab95225-…089.txt`):
+
+| Level | Meaning |
+| ----- | ------- |
+| E0 | model/agent assertion |
+| E1 | source/document assertion (a doc or issue says so) |
+| E2 | repository/file evidence (the code/symbol exists) |
+| E3 | executed or observed behaviour (a run, a log line, a reproduced result) |
+| E4 | independent reproduction (someone/something else reproduces it) |
+| E5 | reproducible automated test/gate |
+
+**No finding may be called "confirmed" below E3.** "I did not find it" is not
+"it does not exist" — the correct phrasing is "not located within the examined
+scope" (E1). "Configured" is not "executing": a capability is only GREEN with
+its implementation **and** registration **and** a test/observed marker
+(`scripts/capabilities.json` + `scripts/capabilities.mjs`).
+
 ## Model cost policy
 
 Model choice is a rule, not a preference. `models.policy.json` sets the

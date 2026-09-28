@@ -1,0 +1,45 @@
+{
+  "_comment": "Vendored capability registry for scripts/capabilities.mjs. For each declared capability it records the four links the LifeOS incident proved can silently diverge: IMPLEMENTATION (the file exists), REGISTRATION (it is actually wired in), TEST (a self-test exists), EVIDENCE (it has been observed executing). GREEN requires impl+registration+test; evidence level E3 needs an executed/observed marker, E5 needs test+marker. Read-only, offline. A capability with impl but no registration is DEGRADED — the guard-was-configured-but-inert class.",
+  "capabilities": [
+    {
+      "id": "blacklist-guard",
+      "purpose": "block sed/rm -rf/subprocess.run, fix 2>/dev/null, warn echo in Thinking",
+      "impl": ".opencode/plugins/blacklist-guard.js",
+      "registration": { "kind": "symlink", "path": "~/.config/opencode/plugins/blacklist-guard.js", "target": ".opencode/plugins/blacklist-guard.js" },
+      "test": "scripts/blacklist-guard-self-test.mjs",
+      "evidence": { "path": "data/observability/guard.log", "marker": "\"verdict\":\"loaded\"" }
+    },
+    {
+      "id": "session-health",
+      "purpose": "detect stalled/blank turns from the DB without a browser",
+      "impl": "scripts/session-health.mjs",
+      "registration": { "kind": "contains", "path": "scripts/dashboard.mjs", "marker": "session-health.mjs" },
+      "test": "scripts/session-health.mjs",
+      "evidence": { "path": "data/observability/guard.log", "marker": "\"verdict\":\"loaded\"" }
+    },
+    {
+      "id": "quirks",
+      "purpose": "symptom -> known-issue correlation + per-model ledger",
+      "impl": "scripts/quirks.mjs",
+      "registration": { "kind": "contains", "path": "scripts/dashboard.mjs", "marker": "./quirks.mjs" },
+      "test": "scripts/quirks.mjs",
+      "evidence": { "path": "scripts/quirks-eval.json", "marker": "\"cases\"" }
+    },
+    {
+      "id": "redact",
+      "purpose": "strip secrets at every egress boundary",
+      "impl": "scripts/redact.mjs",
+      "registration": { "kind": "contains", "path": "scripts/dashboard.mjs", "marker": "./redact.mjs" },
+      "test": "scripts/redact.mjs",
+      "evidence": { "path": "scripts/redact.mjs", "marker": "--self-test" }
+    },
+    {
+      "id": "ensure-env",
+      "purpose": "idempotent .env.local self-heal (no silent rotate, atomic write)",
+      "impl": "scripts/ensure-env.sh",
+      "registration": { "kind": "contains", "path": "scripts/web.sh", "marker": "ensure-env.sh" },
+      "test": "scripts/test-ensure-env.sh",
+      "evidence": { "path": "scripts/test-ensure-env.sh", "marker": "PASS" }
+    }
+  ]
+}
