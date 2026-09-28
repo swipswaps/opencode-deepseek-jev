@@ -8,7 +8,7 @@
       "title": "Chat produces blank output after sending messages (free models too)",
       "url": "https://github.com/anomalyco/opencode/issues/48623",
       "severity": "high",
-      "match": ["blank", "no (text|answer|output|response)", "empty (response|message|pane)"],
+      "match": ["blank (output|response|message|pane|screen|page)", "no (text|answer|output|response)", "empty (response|message|pane)"],
       "keywords": ["blank", "empty response", "no answer", "no text part"]
     },
     {
@@ -32,7 +32,7 @@
       "title": "TUI screen goes black when agent starts working (render loop stalls)",
       "url": "https://github.com/anomalyco/opencode/issues/37803",
       "severity": "high",
-      "match": ["black screen", "render loop", "stall", "freeze during processing"],
+      "match": ["black screen", "render loop", "\\bstall", "freeze during processing"],
       "keywords": ["black screen", "render", "stall", "freeze"]
     },
     {
@@ -48,7 +48,7 @@
       "title": "Plugin host behaviour that provider plugins rely on has no runtime tests",
       "url": "https://github.com/anomalyco/opencode/issues/51614",
       "severity": "medium",
-      "match": ["plugin", "hook.*not.*(run|fire|wire)", "tool\\.execute", "loaded"],
+      "match": ["hook.*not.*(run|fire|wire)", "tool\\.execute", "loaded"],
       "keywords": ["plugin", "tool.execute.before", "hook", "loaded"]
     },
     {
@@ -56,7 +56,7 @@
       "title": "plugins: local plugins cannot resolve @opencode/plugin import",
       "url": "https://github.com/anomalyco/opencode/issues/50434",
       "severity": "medium",
-      "match": ["plugin", "cannot resolve", "@opencode/plugin", "import"],
+      "match": ["cannot resolve", "@opencode/plugin", "import"],
       "keywords": ["plugin", "resolve", "@opencode/plugin", "import"]
     },
     {
@@ -64,7 +64,7 @@
       "title": "plugins for V2: local plugin paths fail to load (file entries rejected)",
       "url": "https://github.com/anomalyco/opencode/issues/49608",
       "severity": "medium",
-      "match": ["plugin", "file://", "fail.*load", "path.*reject"],
+      "match": ["file://", "fail.*load", "path.*reject"],
       "keywords": ["plugin", "file://", "load", "path"]
     },
     {
