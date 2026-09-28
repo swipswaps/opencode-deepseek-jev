@@ -298,7 +298,7 @@ PY
         curl -s "http://$HOST:$PORT/api/guard" > "$work/guard.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
         curl -s "http://$HOST:$PORT/api/health" > "$work/health.json"
-        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("counts") or {}; h=d.get("handoff") or {}; sys.exit(0 if isinstance(d.get("findings"),list) and "running_tools" in c and "blank_tails" in c and isinstance(d.get("known_issues"),list) and isinstance(d.get("by_model"),dict) and isinstance(d.get("per_model"),list) and h.get("level") in ("ok","warn","over") else 1)' "$work/health.json" && ok 'api/health' || bad 'api/health'
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("counts") or {}; h=d.get("handoff") or {}; sys.exit(0 if isinstance(d.get("findings"),list) and "running_tools" in c and "blank_tails" in c and isinstance(d.get("known_issues"),list) and isinstance(d.get("by_model"),dict) and isinstance(d.get("per_model"),list) and isinstance(d.get("live"),dict) and h.get("level") in ("ok","warn","over") else 1)' "$work/health.json" && ok 'api/health' || bad 'api/health'
         curl -s "http://$HOST:$PORT/api/health" > "$work/health2.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/health2.json" && ok 'api/health served from cache (does not block the event loop)' || bad 'api/health served from cache (does not block the event loop)'
         curl -s "http://$HOST:$PORT/api/patterns" > "$work/pat.json"
