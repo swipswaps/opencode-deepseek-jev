@@ -1240,11 +1240,12 @@ async function renderHealth(){
   var d=await j('/api/health');
   if(!d||d.available===false||!d.findings){el.text('no session-health data');return;}
   var c=d.counts||{};
-  var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+'</div>';
+  var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+(c.dead_tools?' · dead '+esc(String(c.dead_tools)):'')+'</div>';
   if(d.handoff&&d.handoff.available){h+='<div class="item"><span class="tag'+(d.handoff.level==='ok'?'':' ERR')+'">handoff '+esc(d.handoff.level||'?')+'</span>'+esc(String(d.handoff.in_tok))+'/'+esc(String(d.handoff.budget))+' in ('+esc(String(Math.round((d.handoff.ratio||0)*100)))+'%) — '+esc(d.handoff.action||'')+'</div>';}
   if(!d.findings.length){h+='<div class="item">no stalls or blank turns — the web view lagging is a client issue, not an agent stall</div>';}
   for(var i=0;i<d.findings.length;i++){var f=d.findings[i];
     if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}
+    else if(f.kind==='dead_tool'){h+='<div class="item"><span class="tag">dead</span>'+esc(f.session)+' '+esc(f.tool)+' <span class="muted">dead tool — server idle/absent, running '+esc(String(f.age_s))+'s is archival, not a live stall</span></div>';}
     else {h+='<div class="item"><span class="tag">blank</span>'+esc(f.session)+' '+esc(f.model)+' — no text '+esc(String(f.age_s))+'s after last tool</div>';}
   }
   if(d.by_model){var bm=[];for(var mk in d.by_model){bm.push(esc(mk)+'='+esc(String(d.by_model[mk])));}

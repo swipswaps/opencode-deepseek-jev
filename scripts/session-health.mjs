@@ -346,6 +346,23 @@ async function selfTest() {
   checks.push(["handoff within budget", hoOk.level === "ok" && hoOk.ratio === 0.1]);
   checks.push(["handoff over action names a fresh session", typeof hoOver.action === "string" && hoOver.action.includes("fresh session")]);
 
+  // dead-tool adjudication: same old running tool under three live states.
+  // No network — live payloads are passed directly (fail-safe default needs
+  // no server at all).
+  const deadReport = () => ({
+    counts: { running_tools: 1 },
+    findings: [{ kind: "running_tool", session: "s_old", tool: "bash", age_s: 439103, command: "sleep 999" }],
+  });
+  const dIdle = applyLiveAdjudication(deadReport(), { available: true, statuses: { s_old: { type: "idle" } } });
+  checks.push(["dead: old running + idle server -> dead_tool, out of running_tools",
+    dIdle.findings[0].kind === "dead_tool" && dIdle.counts.running_tools === 0 && dIdle.counts.dead_tools === 1]);
+  const dBusy = applyLiveAdjudication(deadReport(), { available: true, statuses: { s_old: { type: "busy" } } });
+  checks.push(["dead: old running + busy server -> stays stall",
+    dBusy.findings[0].kind === "running_tool" && dBusy.counts.running_tools === 1]);
+  const dOff = applyLiveAdjudication(deadReport(), { available: false, reason: "http 000" });
+  checks.push(["dead: no live data -> stays stall (fail-safe)",
+    dOff.findings[0].kind === "running_tool"]);
+
   let fail = 0;
   console.log("=== session-health.mjs --self-test ===");
   for (const [name, ok] of checks) {
@@ -356,6 +373,29 @@ async function selfTest() {
   return fail ? 1 : 0;
 }
 
+// DEAD-TOOL ADJUDICATION — reclassify `running_tool` findings the server has
+// demonstrably outlived: older than DEAD_AFTER_S *and* the session idle/absent
+// in live /session/status. Without live data the verdict stays `stall`
+// (fail-safe: never auto-exonerate offline). Mutates the report only; the DB
+// is never touched — cleanup happens at report time, not in storage.
+export const DEAD_AFTER_S = 21600; // 6h: past any legitimate tool run
+export function applyLiveAdjudication(report, live, opts = {}) {
+  const deadAfterS = opts.deadAfterS ?? DEAD_AFTER_S;
+  if (!live || live.available !== true || !live.statuses) return report;
+  for (const f of report.findings || []) {
+    if (f.kind !== "running_tool" || !(f.age_s > deadAfterS)) continue;
+    const st = live.statuses[f.session];
+    if (!st || st.type !== "busy") {
+      f.kind = "dead_tool";
+      f.verdict = "dead (server idle/absent)";
+    }
+  }
+  const kinds = (k) => (report.findings || []).filter((f) => f.kind === k).length;
+  report.counts.running_tools = kinds("running_tool");
+  report.counts.dead_tools = kinds("dead_tool");
+  return report;
+}
+
 // --- CLI ------------------------------------------------------------------
 async function main() {
   const argv = process.argv.slice(2);
@@ -364,6 +404,7 @@ async function main() {
     argv.find((a) => !a.startsWith("--")) || "/workspace/data/opencode/opencode.db";
   const report = healthReport(dbPath, { includeGaps: argv.includes("--include-gaps") });
   if (argv.includes("--live")) report.live = await liveStatus();
+  if (argv.includes("--live")) applyLiveAdjudication(report, report.live);
   try {
     report.handoff = handoffAdvice(dbPath);
   } catch {
@@ -384,6 +425,8 @@ async function main() {
     for (const f of report.findings) {
       if (f.kind === "running_tool")
         console.log(`  [stall] ${f.session} ${f.tool} running ${f.age_s}s :: ${f.command}`);
+      else if (f.kind === "dead_tool")
+        console.log(`  [dead] ${f.session} ${f.tool} ran ${f.age_s}s, server idle/absent :: archival, not a live stall`);
       else console.log(`  [blank] ${f.session} ${f.model} no text ${f.age_s}s after tool`);
     }
   }

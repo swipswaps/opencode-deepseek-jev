@@ -184,6 +184,10 @@ ts=<ISO-8601 UTC> level=<INFO|WARN|ERROR> phase=<phase> status=<PASS|FAIL|SKIP> 
 ```
 
 `push_notes_v18.sh` uses a compatible `[timestamp] [SUCCESS|FAILURE] op :: detail`
+
+Telemetry quoted in-chat or in reports carries its ISO date and age
+(archival vs live) — 5-day-old Jev errors re-rendered in the TUI read as
+live alarms without it.
 form. Either way the rules are the same: UTC timestamps (#41), explicit
 level and pass/fail status, and no silent suppression of a failed step (#37,
 #8).
