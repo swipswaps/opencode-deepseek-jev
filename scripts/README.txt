@@ -315,6 +315,16 @@ ensure-env.sh
     caller can say "re-login") when it generates. --repo <dir> is the test seam.
     Behavior gate: scripts/test-ensure-env.sh (in test-hygiene.sh).
 
+watch.sh
+    Read-only live problem monitor (no daemon, no model call). One sweep by
+    default; --loop SEC repeats. Reports the gate state, the session-health
+    verdicts (running / dead / blank), and only NEW guard block/fix/advisory
+    and NEW opencode.log ERROR/WARN lines since the last sweep. The FIRST sweep
+    initialises the cursor at EOF, so historical lines are never echoed as if
+    live (the archival-as-alarm failure it exists to stop). State is two byte
+    offsets under data/observability/.watch/ (gitignored); the DB is never
+    written. --self-test is offline. Gated in test-hygiene.sh.
+
 capabilities.mjs
     Read-only capability registry checker. For each declared capability in
     scripts/capabilities.json it checks the four links that can silently

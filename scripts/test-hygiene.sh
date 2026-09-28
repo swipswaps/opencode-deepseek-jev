@@ -237,6 +237,17 @@ main() {
         bad 'capabilities.mjs present + node'
     fi
 
+    if [ -f "$REPO/scripts/watch.sh" ]; then
+        if bash "$REPO/scripts/watch.sh" --self-test > "$work/wt.txt" 2>&1; then
+            ok 'watch: self-test (cursor init + new-detection)'
+        else
+            bad 'watch: self-test (cursor init + new-detection)'
+            cat "$work/wt.txt"
+        fi
+    else
+        bad 'watch.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

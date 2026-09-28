@@ -65,6 +65,18 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] `watch.sh` — the missing live monitor (repeatedly requested; only
+      `thinking.sh`/`session-health` existed). Read-only, cursor-based: reports
+      the gate + session-health verdicts + only NEW guard actions and NEW app
+      ERROR/WARN lines. The first sweep initialises the cursor at EOF so
+      historical lines are never echoed as live — fixing the exact
+      archival-as-alarm failure that confused the TUI. 7 self-test assertions;
+      gated in test-hygiene.
+- [x] session-health dead-tool adjudication: a running tool older than 6h whose
+      session is idle/absent in live `/session/status` becomes `dead_tool`
+      (excluded from stalls, rendered apart); with no live data it stays a
+      stall (fail-safe). Live: the three tombstones adjudicated dead (running
+      3→0). RULES: pasted telemetry carries ISO date + age (archival vs live).
 - [x] capability registry + evidence levels (from the attached LifeOS
       methodology; all these concepts existed only in `notes/6ab95225-…089.txt`):
       `scripts/capabilities.json` + `capabilities.mjs` check the four links that
