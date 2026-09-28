@@ -325,7 +325,27 @@ function apiDuplicates() {
   return out.slice(0, 30);
 }
 
+// Generic TTL wrapper for heavy read-only endpoints (same pattern as
+// apiHealth's cache): first call computes, repeats within ttlMs serve from
+// memory with cached/age_ms observability. DB is never written.
+const TTL_CACHE = {};
+function ttlCached(key, ttlMs, fn) {
+  const now = Date.now();
+  const hit = TTL_CACHE[key];
+  if (hit && hit.value && now - hit.at < ttlMs) {
+    return Object.assign({}, hit.value, { cached: true, age_ms: now - hit.at });
+  }
+  const value = fn();
+  value.cached = false;
+  value.age_ms = 0;
+  TTL_CACHE[key] = { at: now, value };
+  return value;
+}
+const SIGNALS_TTL_MS = Number(process.env.SIGNALS_TTL_MS || 30000);
 function apiSignals() {
+  return ttlCached("signals", SIGNALS_TTL_MS, apiSignalsFresh);
+}
+function apiSignalsFresh() {
   const errors = query(
     "SELECT s.id sid, s.title title, p.time_created ts, json_extract(p.data,'$.tool') tool, " +
     "COALESCE(json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.state.input.filePath'), json_extract(p.data,'$.tool'), '') detail " +
