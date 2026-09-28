@@ -247,7 +247,7 @@ export async function liveStatus(opts = {}) {
       headers: {
         Authorization: "Basic " + Buffer.from("opencode:" + pass).toString("base64"),
       },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 6000),
     });
     if (!res.ok) return { available: false, reason: "http " + res.status };
     return { available: true, statuses: await res.json() };

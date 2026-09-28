@@ -20,7 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { healthReport, handoffAdvice } from "./session-health.mjs";
+import { healthReport, handoffAdvice, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
 import { redact } from "./redact.mjs";
 
@@ -432,9 +432,9 @@ function apiGuard(limit) {
 // gateable. TTL is tunable via HEALTH_TTL_MS.
 let HEALTH_CACHE = { at: 0, value: null };
 const HEALTH_TTL_MS = Number(process.env.HEALTH_TTL_MS || 15000);
-function apiHealth() {
+async function apiHealth() {
   const now = Date.now();
-  if (HEALTH_CACHE.value && now - HEALTH_CACHE.at < HEALTH_TTL_MS) {
+  if (HEALTH_CACHE.value && now - HEALTH_CACHE.at < (HEALTH_CACHE.ttl || HEALTH_TTL_MS)) {
     return Object.assign({}, HEALTH_CACHE.value, { cached: true, age_ms: now - HEALTH_CACHE.at });
   }
   try {
@@ -446,9 +446,23 @@ function apiHealth() {
     } catch {
       r.handoff = { available: false };
     }
+    // Adjudicate against the live server (dead_tool / dead_blank). Fail-safe:
+    // if live status is unavailable (no password / server down / timeout) the
+    // report is returned unchanged, so a finding stays a stall/blank rather than
+    // being silently exonerated. A longer timeout survives a loaded host.
+    try {
+      r.live = await liveStatus({ timeoutMs: 8000 });
+    } catch {
+      r.live = { available: false, reason: "liveStatus threw" };
+    }
+    applyLiveAdjudication(r, r.live);
     r.cached = false;
     r.age_ms = 0;
-    HEALTH_CACHE = { at: now, value: r };
+    // If live status was unavailable, do NOT poison the cache for the full TTL:
+    // retry soon (5s) so the panel picks up the adjudication once the server
+    // answers, instead of showing stale tombstones for 15s.
+    const ttl = r.live && r.live.available ? HEALTH_TTL_MS : 5000;
+    HEALTH_CACHE = { at: now, value: r, ttl };
     return r;
   } catch (e) {
     return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [], cached: false };
@@ -1935,7 +1949,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/guard") {
     send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/health") {
-    send(res, 200, JSON.stringify(apiHealth()), "application/json");
+    send(res, 200, JSON.stringify(await apiHealth()), "application/json");
   } else if (url === "/api/patterns") {
     send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {

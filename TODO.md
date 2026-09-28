@@ -65,6 +65,14 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] dashboard now adjudicates (the gap from cc85d95): `apiHealth` is async and
+      awaits `liveStatus()` + `applyLiveAdjudication()`, so `/api/health` and the
+      signals panel carry real `dead_tool`/`dead_blank` (panel: `running 0 ·
+      blank 0 · dead 3 · dead-blank 6`). Fixed the flakiness the Playwright
+      panel exposed: `liveStatus` timeout 3s→8s (`opts.timeoutMs`) and a **5s**
+      cache TTL when live is unavailable, so a single timeout no longer poisons
+      the 15s window with unadjudicated data. Playwright-confirmed
+      (`logs/ux/signals-fixed.png`, 0 page errors).
 - [x] dead **blank** adjudication + in-container Playwright proof. `--live` now
       reclassifies old blank tails whose session is idle/absent as `dead_blank`
       (out of `blank_tails`, like `dead_tool`), fail-safe without live data; CLI
