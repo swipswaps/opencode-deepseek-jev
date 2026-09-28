@@ -105,8 +105,15 @@ PY
     [ "$(stat -c '%a' "$d/.env.local")" = "600" ] && ok 'mode 0600 after write' || bad 'mode 0600 after write'
     [ "$(nlines "$d")" = "1" ] && ok 'a real change creates exactly one backup' || bad "a real change creates exactly one backup (n=$(nlines "$d"))"
 
+    # 5. explicit --rotate forces a new password even when one is present.
+    local h2; h2=$(hash_of "$d/.env.local")
+    bash "$sh" --repo "$d" --rotate > "$d/out4.txt" 2>&1
+    has 'PASSWORD_ROTATED' "$d/out4.txt" && ok '--rotate forces rotation' || bad '--rotate forces rotation'
+    [ "$(hash_of "$d/.env.local")" != "$h2" ] && ok '--rotate changes the file' || bad '--rotate changes the file'
+    [ "$(nlines "$d")" = "2" ] && ok '--rotate makes another backup' || bad "second change makes another backup (n=$(nlines "$d"))"
+
     rm -f "$d"/.env.local "$d"/.env.local.bak.* "$d"/.env.local.tmp.* \
-          "$d"/out1.txt "$d"/out2.txt "$d"/out3.txt "$d"/opencode.json "$d"/docker/Dockerfile
+          "$d"/out1.txt "$d"/out2.txt "$d"/out3.txt "$d"/out4.txt "$d"/opencode.json "$d"/docker/Dockerfile
     rmdir "$d/docker" "$d"
     printf 'result: %s (%d pass, %d fail)\n' "$([ "$FAIL" -eq 0 ] && printf PASS || printf FAIL)" "$PASS" "$FAIL"
     [ "$FAIL" -eq 0 ]

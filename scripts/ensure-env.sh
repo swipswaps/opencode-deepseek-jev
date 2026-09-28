@@ -150,7 +150,9 @@ if changed:
     os.replace(tmp, env)  # atomic
     print("wrote: " + env.name)
 
-os.chmod(env, 0o600) if env.exists() else None
+# Only touch the mode if it is actually wrong, so a no-op really is a no-op.
+if env.exists() and (env.stat().st_mode & 0o777) != 0o600:
+    os.chmod(env, 0o600)
 
 for k in wanted:
     v = merged.get(k, "")
