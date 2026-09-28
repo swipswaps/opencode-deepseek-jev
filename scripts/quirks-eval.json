@@ -1,0 +1,30 @@
+{
+  "_comment": "Labeled eval set for scripts/quirks.mjs matchIssues(). This is the ANSWER KEY: do not edit it to tune the matcher. `kind`: constructive = text built from the issue's own keywords (assert recall 1.0); decoy = text with no issue keyword (assert it matches nothing); real = a redacted snippet sampled from opencode.db (report precision/recall/FPR; labels are the human ground truth by the rule below).",
+  "method": "Sample query: DISTINCT substr(json_extract(data,'$.text'),1,200) FROM part WHERE type IN ('text','reasoning') AND data LIKE '%blank%'|'%black screen%'|'%plugin%'|'%image%'|'%stall%'|'%freeze%'|'%not render%'. Text redacted with scripts/redact.mjs before committing. Label rule: a row is positive for issue X iff it names the same failure mode as X, else null. Labels are blind to matchIssues output (authored before scoring).",
+  "sampled_at": "2026-09-28",
+  "cases": [
+    { "kind": "constructive", "expect": "anomalyco/opencode#48623", "text": "the chat produced blank output and no text part after the last tool" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#46419", "text": "a huge base64 image attachment with no client-side optimization" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#40231", "text": "black screen when running from source outside the repo directory, wrong session directory" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#37803", "text": "the render loop stalls and the screen goes black when the agent starts working" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#37339", "text": "the screen goes black during processing; a zombie session responds in new tabs" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#51614", "text": "plugin host behaviour: the tool.execute hook did not fire, plugins lack runtime tests" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#50434", "text": "a local plugin cannot resolve the @opencode/plugin import" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#49608", "text": "local plugin file:// path fails to load, the path is rejected" },
+    { "kind": "constructive", "expect": "anomalyco/opencode#51503", "text": "reasoning degenerates into a repetitive loop on a long session" },
+
+    { "kind": "decoy", "expect": null, "text": "grep -n function send scripts/dashboard.mjs | head" },
+    { "kind": "decoy", "expect": null, "text": "the quarterly report is due on Friday and the budget is tight" },
+    { "kind": "decoy", "expect": null, "text": "risk-management and disk-usage are ordinary words in this sentence" },
+
+    { "kind": "real", "expect": null, "text": "python3 not available either. Need another way to count sessions. sqlite3 not installed. Maybe node is available?" },
+    { "kind": "real", "expect": null, "text": "No rule definitions in the workspace. Rules live in /notes presumably. So /notes not visible, cannot grep." },
+    { "kind": "real", "expect": null, "text": "The rule grep over *.txt returned nothing. That's because notes is absent and no rules in workspace txt files." },
+    { "kind": "real", "expect": null, "text": "ip is not installed. Available alternatives: hostname -I ifconfig" },
+    { "kind": "real", "expect": null, "text": "there was a prompt injection warning from the jev-guard plugin in the read of a notes file; the system injected a warning" },
+    { "kind": "real", "expect": null, "text": "The sqlite_master query returned nothing? Odd - earlier count worked. Maybe the query returned rows but map on all() was blank." },
+    { "kind": "real", "expect": null, "text": "The existing sidebar-audit.md claims /notes is not visible, but in THIS environment /notes IS visible." },
+    { "kind": "real", "expect": null, "text": "Key facts: Project identity OpenCode + DeepSeek V4.1 Flash + Jev, Docker-based, keys in .env.local, managed by Dockge." },
+    { "kind": "real", "expect": null, "text": "bash -n and shellcheck the scripts, then py_compile the python files and node --check the mjs files" }
+  ]
+}

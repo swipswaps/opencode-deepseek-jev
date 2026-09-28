@@ -34,6 +34,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const HERE = new URL(".", import.meta.url);
 const KNOWN_ISSUES = fileURLToPath(new URL("./known-issues.json", import.meta.url));
+const QUIRKS_EVAL = fileURLToPath(new URL("./quirks-eval.json", import.meta.url));
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
 export function loadIssues(path = KNOWN_ISSUES) {
@@ -79,6 +80,52 @@ export function checkIssues(path = KNOWN_ISSUES, { maxAgeDays = 180, now = Date.
   return { path, count: issues.length, errors, verified, age_days: ageDays, max_age_days: maxAgeDays, stale };
 }
 
+// Measure matchIssues() against a LABELED eval set (scripts/quirks-eval.json —
+// the frozen answer key; never edit it to tune the matcher). Reports
+// precision/recall/FPR on real samples and asserts deterministic invariants:
+// constructive positives must all match (recall 1.0), decoys must match
+// nothing (FPR 0). The real-data numbers may be low — this measures; a later
+// session tunes the threshold. Offline, no network, no model call.
+export function runEval(path = QUIRKS_EVAL, issues = loadIssues()) {
+  const j = JSON.parse(readFileSync(path, "utf8"));
+  const cases = j.cases || [];
+  const top = (text) => (matchIssues(text, issues)[0] || {}).id || null;
+  const byKind = { constructive: [], decoy: [], real: [] };
+  for (const c of cases) (byKind[c.kind] || byKind.real).push({ expect: c.expect, got: top(c.text), text: c.text });
+  const rate = (rows, f) => (rows.length ? rows.filter(f).length / rows.length : null);
+  const realPos = byKind.real.filter((r) => r.expect);
+  const realPred = byKind.real.filter((r) => r.got);
+  const real = {
+    n: byKind.real.length,
+    positives: realPos.length,
+    recall: rate(realPos, (r) => r.got === r.expect),
+    precision: realPred.length ? realPred.filter((r) => r.got === r.expect).length / realPred.length : null,
+    fpr: rate(byKind.real.filter((r) => !r.expect), (r) => r.got !== null),
+    table: byKind.real.map((r) => ({ expect: r.expect, got: r.got, text: r.text })),
+  };
+  // Threshold sweep on the real cases, so the next session tunes with data
+  // (this session does NOT change the default 0.15).
+  const sweep = {};
+  for (const th of [0.15, 0.5, 1.0]) {
+    const pred = byKind.real.map((r) => ({ expect: r.expect, got: ((matchIssues(r.text, issues, th)[0] || {}).id) || null }));
+    const P = pred.filter((x) => x.got);
+    sweep[th] = {
+      predicted: P.length,
+      precision: P.length ? P.filter((x) => x.got === x.expect).length / P.length : null,
+      fpr: rate(pred.filter((x) => !x.expect), (x) => x.got !== null),
+    };
+  }
+  return {
+    method: j.method,
+    sampled_at: j.sampled_at,
+    n: cases.length,
+    constructive_recall: rate(byKind.constructive, (r) => r.got === r.expect),
+    decoy_fpr: rate(byKind.decoy, (r) => r.got !== null),
+    real,
+    sweep,
+  };
+}
+
 // --- fuzzy text primitives -------------------------------------------------
 function tokens(s) {
   return String(s || "").toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1);
@@ -118,8 +165,10 @@ function typoSim(toks, kw) {
     for (const x of kw) {
       if (t.length < 4 || x.length < 4) continue;
       const d = levenshtein(t, x);
+      // Only edit-distance 1 is a typo. Distance 2 on short tokens matched
+      // unrelated words (measured: "report" ~ "import"), a false positive the
+      // eval caught — so the "d===2" bonus was removed.
       if (d === 1) best = Math.max(best, 1);
-      else if (d === 2 && t.length >= 6) best = Math.max(best, 0.5);
     }
   }
   return best;
@@ -307,9 +356,24 @@ async function selfTest() {
     })()],
   ];
   rmSync(dir, { recursive: true, force: true });
+
+  // Measured eval on the frozen labeled set (real samples report; invariants gate).
+  const ev = runEval(QUIRKS_EVAL, issues);
+  checks.push(["eval: constructive recall 1.0", ev.constructive_recall === 1]);
+  checks.push(["eval: decoy FPR 0", ev.decoy_fpr === 0]);
+
   let fail = 0;
   console.log("=== quirks.mjs --self-test ===");
   for (const [name, ok] of checks) { if (!ok) fail++; console.log((ok ? "  PASS " : "  FAIL ") + name); }
+  const pct = (x) => (x === null ? "n/a" : (x * 100).toFixed(0) + "%");
+  console.log("--- matchIssues eval (frozen key: quirks-eval.json) ---");
+  console.log("  constructive recall: " + pct(ev.constructive_recall) + "  decoy FPR: " + pct(ev.decoy_fpr));
+  console.log("  real: n=" + ev.real.n + " positives=" + ev.real.positives +
+    " recall=" + pct(ev.real.recall) + " precision=" + pct(ev.real.precision) + " FPR=" + pct(ev.real.fpr));
+  for (const th of Object.keys(ev.sweep).map(Number).sort((a, b) => a - b)) {
+    const s = ev.sweep[th];
+    console.log("  sweep th=" + th + ": predicted=" + s.predicted + " precision=" + pct(s.precision) + " FPR=" + pct(s.fpr));
+  }
   console.log("result: " + (fail ? "FAIL" : "PASS"));
   return fail ? 1 : 0;
 }
@@ -322,6 +386,16 @@ async function main() {
     console.log(JSON.stringify(r, null, 2));
     if (r.stale) console.log("WARN: known-issues.json verified " + r.age_days + " days ago (> " + r.max_age_days + ") — re-verify the issue list");
     return r.errors.length ? 1 : 0;
+  }
+  if (argv.includes("--eval")) {
+    const ev = runEval();
+    try {
+      const { writeFileSync, mkdirSync } = await import("node:fs");
+      mkdirSync(REPO + "/data/observability", { recursive: true });
+      writeFileSync(REPO + "/data/observability/quirks-eval.json", JSON.stringify(ev, null, 2) + "\n");
+    } catch { /* best effort */ }
+    console.log(JSON.stringify(ev, null, 2));
+    return 0;
   }
   const issues = loadIssues();
   if (argv.includes("--query")) {
