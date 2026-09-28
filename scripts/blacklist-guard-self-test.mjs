@@ -98,9 +98,16 @@ console.log((sedOk ? "  PASS " : "  FAIL ") + "sed substitute names python3 -> a
 
 // Anchored log path: with no options.logDir the heartbeat must land in the
 // repo's data/observability, regardless of the `directory` opencode passes.
-const anchoredHooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: "/nonexistent/session/dir" });
+const anchoredHooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: "/nonexistent/session/dir" }, { force: true });
 if (typeof anchoredHooks["tool.execute.before"] !== "function") fail++;
 console.log((typeof anchoredHooks["tool.execute.before"] === "function" ? "  PASS " : "  FAIL ") + "factory survives a bogus session directory");
+
+// Deduplication: a second non-forced load must return no hooks (so the
+// global + project double-registration does not run the hook twice).
+const dupHooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp });
+const dedupOk = dupHooks["tool.execute.before"] === undefined;
+if (!dedupOk) fail++;
+console.log((dedupOk ? "  PASS " : "  FAIL ") + "second non-forced load is a no-op (dedupe)");
 
 console.log("result: " + (fail ? "FAIL" : "PASS"));
 process.exit(fail ? 1 : 0);

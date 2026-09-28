@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { healthReport } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
+import { redact } from "./redact.mjs";
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -156,7 +157,7 @@ function apiExportPatterns() {
   let body = "kind,key,n\n";
   for (const g of p.ngrams) body += '"bigram","' + String(g.gram).replace(/"/g, '""') + '",' + g.n + "\n";
   for (const e of p.errorTools) body += '"error_tool","' + String(e.tool).replace(/"/g, '""') + '",' + e.n + "\n";
-  return body;
+  return redact(body);
 }
 
 function apiExportGuard() {
@@ -167,7 +168,7 @@ function apiExportGuard() {
       String((a.patterns || []).join(" ")).replace(/"/g, '""') + '","' +
       String(a.command || "").replace(/"/g, '""').replace(/\s+/g, " ") + '"\n';
   }
-  return body;
+  return redact(body);
 }
 
 function apiSolutions() {
@@ -515,7 +516,7 @@ function apiExportSession(id, format) {
   if (!s) return null;
   const turns = transcript(id);
   const spanS = Math.max(0, Math.round((Number(s.time_updated || 0) - Number(s.time_created || 0)) / 1000));
-  if (format === "json") return JSON.stringify({ session: s, turns }, null, 2);
+  if (format === "json") return redact(JSON.stringify({ session: s, turns }, null, 2));
   const head =
     "# " + (s.title || "(untitled)") + "\n" +
     "session: " + s.id + "\n" +
@@ -530,8 +531,9 @@ function apiExportSession(id, format) {
     else if (x.kind === "tool") body += "_[tool: " + x.tool + "]_ `" + String(x.cmd || "").replace(/`/g, "'") + "`\n\n";
     else if (x.kind === "patch") body += "_[patch]_ " + (x.files || []).join(", ") + "\n\n";
   }
-  if (format === "md") return head + body;
-  return head + body.replace(/^### /gm, "").replace(/^_\(reasoning\)_\n/gm, "[reasoning] ").replace(/^_\[/gm, "[");
+  // Redact at the egress boundary: the transcript can contain a leaked value.
+  if (format === "md") return redact(head + body);
+  return redact(head + body.replace(/^### /gm, "").replace(/^_\(reasoning\)_\n/gm, "[reasoning] ").replace(/^_\[/gm, "["));
 }
 
 function apiSearch(q, limit) {
@@ -660,7 +662,7 @@ function apiExport() {
     const iso = new Date(r.time_created).toISOString();
     body += '"' + title + '",' + r.cost + "," + r.tokens_input + "," + r.tokens_output + "," + r.tokens_reasoning + "," + dur + "," + iso + "\n";
   }
-  return body;
+  return redact(body);
 }
 
 let balanceCache = { at: 0, data: { available: false } };

@@ -130,6 +130,14 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] A1/A2/A3 residuals: `scripts/redact.mjs` redacts secrets at every export
+      boundary (`/api/export/session` + sessions/patterns/guard CSVs; stdin
+      filter; self-test gated) — verified live on the leaked session (0
+      secret-pattern hits, 38 [REDACTED]); guard **dedupe** (second non-forced
+      registration is a no-op — it was double-loading via the global symlink +
+      project plugin); `web-entrypoint.sh` now also symlinks the **skill** into
+      the global config dir (interactive sessions at $HOME/.opencode were
+      missing `jev-harness`)
 - [x] doc trim (budget): removed superseded/duplicated prose from HANDOFF
       (48.2k→38.5k bytes) and README (29.3k→26.2k); corpus 33 451 → 30 165
       tokens, budget 35 000 (≈4.8k headroom). Kept all load-bearing facts; the

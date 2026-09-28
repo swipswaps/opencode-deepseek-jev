@@ -274,8 +274,17 @@ quirks.mjs
     tool-error rate and blacklist-construct usage (sed / 2>/dev/null /
     subprocess.run) so per-model quirks are measured; corpusHits() (DB LIKE +
     doc/code scan) is CLI-only. --self-test is offline; --query TEXT is
-    ad-hoc; --report annotates the live session-health report. Offline, no
+    ad-hoc;     --report annotates the live session-health report. Offline, no
     network.
+
+redact.mjs
+    Strips secrets at egress: key shapes (sk-, apikey_, JWT, Bearer) and
+    NAME=value assignments (API_KEY / PASSWORD / SECRET / TOKEN). Imported by
+    dashboard.mjs and applied to /api/export/session and the sessions/patterns/
+    guard CSVs; `node scripts/redact.mjs` also filters stdin->stdout. It is
+    defence in depth (a value already in the transcript) and never replaces
+    not leaking. Conservative: ordinary prose is untouched. `--self-test` is
+    offline and gated in test-hygiene.sh.
 
 test-patterns.sh
     Read-only proof of the tool-sequence substrate behind the "patterns

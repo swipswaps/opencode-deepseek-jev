@@ -147,9 +147,10 @@ Secrets hygiene
   line, then firewall the CIDR; see HANDOFF "Exposing 4096 to the LAN". Never
   widen the port alone.
 - data/opencode/ and data/observability/ are gitignored, so session text and
-  telemetry are never pushed. Session EXPORTS (/api/export/session,
-  chatlog.sh) can embed secrets that appeared in the transcript — treat any
-  exported session as secret-bearing.
+  telemetry are never pushed. Session EXPORTS (/api/export/session, the sessions
+  CSV) are **redacted** at the boundary by `scripts/redact.mjs` (key shapes and
+  `NAME=value` assignments), so a leaked value in the transcript does not leave
+  the system; `node scripts/redact.mjs` also filters stdin.
 - Stale *.bak.* snapshots (including old .env.local.bak.* key copies)
   are removed with ./scripts/cleanup-baks.sh --apply.
 

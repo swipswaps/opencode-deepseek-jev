@@ -77,6 +77,11 @@ Two security practices that are testable and repeatedly relevant here:
   open, because a token fragment can cross (demonstrated: a Jev-key tail
   survived a masking pass). "Thinking" tool calls also obey `#7`/`#8`, and
   `blacklist-guard.js` enforces them at execution time.
+- **Redact at egress.** Every serialisation boundary strips key shapes and
+  `NAME=value` assignments via `scripts/redact.mjs` (`/api/export/session`, the
+  sessions/patterns/guard CSVs); its `--self-test` is gated in
+  `test-hygiene.sh`. This is defence in depth for a value already in the
+  transcript, not a substitute for not leaking it.
 
 ## Model cost policy
 

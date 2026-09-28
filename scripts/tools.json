@@ -117,5 +117,12 @@
     "where": "container",
     "purpose": "Correlate a symptom with a vendored map of known upstream issues (fuzzy text + typo tolerant), fuzzily search the chat DB, repo code and docs, and show a per-model quirk ledger (tool-error rate + sed/2>/dev/null/subprocess usage). Offline, no network. /api/health carries the correlations and per-model ledger.",
     "commands": ["node --experimental-sqlite scripts/quirks.mjs --self-test", "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'", "node --experimental-sqlite scripts/quirks.mjs --report"]
+  },
+  {
+    "id": "redact",
+    "title": "Redact secrets at egress",
+    "where": "container",
+    "purpose": "Strips key shapes (sk-, apikey_, JWT, Bearer) and NAME=value secrets from exports (/api/export/session, sessions/patterns/guard CSVs); also a stdin filter. Defence in depth for a value already in the transcript.",
+    "commands": ["node scripts/redact.mjs --self-test", "printf 'text' | node scripts/redact.mjs"]
   }
 ]

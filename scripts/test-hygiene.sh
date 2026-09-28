@@ -179,6 +179,33 @@ main() {
         ok 'global guard symlink not present yet (entrypoint creates it at start)'
     fi
 
+    if grep -qF 'SKILL_DIR' "$REPO/docker/web-entrypoint.sh"; then
+        ok 'web-entrypoint installs the skill globally'
+    else
+        bad 'web-entrypoint installs the skill globally'
+    fi
+    local slink="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/jev-harness/SKILL.md"
+    if [ -e "$slink" ]; then
+        if [ "$(readlink -f "$slink")" = "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
+            ok 'global skill symlink resolves to the repo skill'
+        else
+            bad 'global skill symlink resolves to the repo skill'
+        fi
+    else
+        ok 'global skill symlink not present yet (entrypoint creates it at start)'
+    fi
+
+    if have node && [ -f "$REPO/scripts/redact.mjs" ]; then
+        if node "$REPO/scripts/redact.mjs" --self-test > "$work/rd_st.txt" 2>&1; then
+            ok 'redact: self-test (egress redaction)'
+        else
+            bad 'redact: self-test (egress redaction)'
+            cat "$work/rd_st.txt"
+        fi
+    else
+        bad 'redact.mjs present + node'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

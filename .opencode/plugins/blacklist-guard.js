@@ -145,6 +145,16 @@ function mode() {
 }
 
 export const BlacklistGuard = async ({ client, directory }, options) => {
+  // Deduplicate double-loading. For a $HOME-rooted session the same file is
+  // registered twice (the global plugin dir symlink AND /workspace/opencode.json
+  // auto-appending the project plugin), and /config lists both. Without this,
+  // every hook runs twice (double warns, wasted work). `options.force` lets the
+  // self-test build a second, independent instance.
+  if (globalThis.__opencodeBlacklistGuardRegistered && !(options && options.force)) {
+    return {};
+  }
+  globalThis.__opencodeBlacklistGuardRegistered = true;
+
   // Durable flag: every verdict is appended to data/observability/guard.log
   // (JSONL) so the dashboard and `scripts/logs.sh --source guard` can surface
   // it. This is how blacklisted code used during "Thinking" becomes visible

@@ -63,6 +63,19 @@ if [ -f "$GUARD_SRC" ]; then
     printf '[web-entrypoint] blacklist-guard linked into %s\n' "$GUARD_DIR" >&2
 fi
 
+# Same root-cause fix for the process SKILL: interactive sessions open at
+# $HOME/.opencode, so the project-scoped `{skill,skills}/**/SKILL.md` glob
+# misses /workspace/.opencode/skills. opencode scans the global config dir, so
+# symlink the repo skill there — otherwise the jev-harness skill silently does
+# not load for the sessions the operator actually uses.
+SKILL_SRC="/workspace/.opencode/skills/jev-harness"
+SKILL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
+if [ -d "$SKILL_SRC" ]; then
+    mkdir -p "$SKILL_DIR"
+    ln -sfn "$SKILL_SRC" "$SKILL_DIR/jev-harness"
+    printf '[web-entrypoint] skill linked into %s\n' "$SKILL_DIR" >&2
+fi
+
 # Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;
 # bypass only with an explicit OPENCODE_ALLOW_INSECURE=1.
 if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && [ "${OPENCODE_ALLOW_INSECURE:-0}" != "1" ]; then

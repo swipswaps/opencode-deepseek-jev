@@ -264,6 +264,11 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("session") and isinstance(d.get("parts"),list) else 1)' "$work/sd.json" && ok 'api/session detail' || bad 'api/session detail'
         curl -s "http://$HOST:$PORT/api/export/session?id=$sid&format=md" > "$work/exp.md"
         has '# ' "$work/exp.md" && ok 'api/export/session md' || bad 'api/export/session md'
+        if grep -qE '(OPENCODE_SERVER_PASSWORD|API_KEY|PASSWORD|Bearer)[[:space:]:=]+[A-Za-z0-9_-]{16,}' "$work/exp.md"; then
+            bad 'api/export/session redacts secrets'
+        else
+            ok 'api/export/session redacts secrets'
+        fi
         curl -s "http://$HOST:$PORT/api/search?q=the&limit=3" > "$work/search.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
         curl -s "http://$HOST:$PORT/api/semantic?q=the&limit=3" > "$work/sem.json"
