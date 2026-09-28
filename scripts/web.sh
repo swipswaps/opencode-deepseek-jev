@@ -64,11 +64,20 @@ main() {
 
     # ---- Self-heal .env.local (merge, never overwrite) ----
     if [ -x "$REPO_DIR/scripts/ensure-env.sh" ]; then
-        "$REPO_DIR/scripts/ensure-env.sh"
-        if [ "$?" -ne 0 ]; then
+        local envout="" rc=0
+        envout=$("$REPO_DIR/scripts/ensure-env.sh" 2>&1)
+        rc=$?
+        printf '%s\n' "$envout"
+        if [ "$rc" -ne 0 ]; then
             printf 'GATE FAIL: ensure-env.sh refused; fix .env.local before starting\n'
             return 1
         fi
+        case "$envout" in
+            *PASSWORD_ROTATED*)
+                printf '\n!! OPENCODE_SERVER_PASSWORD was regenerated (it was missing/empty).\n'
+                printf '!! Re-login to the web UI — the previous password is now invalid.\n\n'
+                ;;
+        esac
     else
         printf 'WARN: scripts/ensure-env.sh missing; skipping self-heal\n'
     fi

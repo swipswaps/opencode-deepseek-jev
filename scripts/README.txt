@@ -266,7 +266,10 @@ quirks.mjs
     doc/code scan) is CLI-only. --self-test is offline; --query TEXT is
     ad-hoc; --report annotates the live session-health report; --check-issues
     validates the vendored map offline (structural errors fail; a stale
-    `verified` date only warns). Offline, no network.
+    `verified` date only warns); --eval scores matchIssues() against a frozen
+    labeled set (`scripts/quirks-eval.json`, the answer key — do not tune it)
+    and prints precision/recall/FPR plus a threshold sweep, persisting
+    data/observability/quirks-eval.json. Offline, no network.
 
 redact.mjs
     Strips secrets at egress: key shapes (sk-, apikey_, JWT, Bearer) and
@@ -295,6 +298,17 @@ cleanup-baks.sh
     List or remove the *.bak.* snapshot files that accumulate during
     script iteration (including stale .env.local.bak.* key backups).
     List-only by default; --apply gitignores *.bak.* and removes them.
+
+ensure-env.sh
+    Idempotent .env.local self-heal (run by web.sh on every start). A rerun
+    with nothing to change is a strict no-op (no write, no backup, no password
+    on stdout). Preserves every key already present — including unknown keys,
+    comments and blank lines. Regenerates OPENCODE_SERVER_PASSWORD only when it
+    is missing/empty or --rotate is passed; a short-but-present password only
+    warns. Writes atomically (temp + rename) and makes one backup per actual
+    change; prints names/lengths only, and announces PASSWORD_ROTATED (so the
+    caller can say "re-login") when it generates. --repo <dir> is the test seam.
+    Behavior gate: scripts/test-ensure-env.sh (in test-hygiene.sh).
 
 web.sh
     Starts the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD;

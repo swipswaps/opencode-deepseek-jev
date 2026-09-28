@@ -65,6 +65,24 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] `ensure-env.sh` made safe to run unattended: a no-change rerun is a
+      strict no-op (no write/backup/password); `OPENCODE_SERVER_PASSWORD`
+      regenerates only when missing/empty or `--rotate` (short-but-present now
+      warns, never replaces); atomic temp+rename write; preserves unknown
+      keys/comments; `PASSWORD_ROTATED` marker surfaced by `web.sh` as a
+      "re-login" notice. New gated behavior test `scripts/test-ensure-env.sh`
+      (15/15, in `test-hygiene.sh`). Drive-by: HANDOFF documented the
+      non-existent `verify-password-drift.sh` (never in this repo) — stale row
+      removed.
+- [x] `quirks` fuzzy precision measured on a frozen labeled set
+      (`scripts/quirks-eval.json`): constructive recall 100%, decoy FPR 0%
+      (asserted invariants); on 9 real redacted samples the free-text matcher
+      over-fires — FPR 67% at the default threshold 0.15, 44% at 0.5 (sweep
+      reported). Caught + fixed a real bug (`report` ~ `import` at edit-distance
+      2; the `d===2` fuzzy bonus was removed). This session measures; the next
+      tunes the threshold armed with the sweep. Note: production `/api/health`
+      correlates *synthetic* symptom strings (which match correctly); the FPR
+      applies to the free-text/`--query` path.
 - [x] recurring `edit` failure root-caused from the DB (13/13 `edit` errors are
       `oldString` mismatch; 15 `Aborted` turns in `opencode.log`) and resolved
       deterministically: the guard pre-checks `oldString` against the file and

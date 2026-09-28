@@ -215,6 +215,17 @@ main() {
         bad 'redact.mjs present + node'
     fi
 
+    if [ -f "$REPO/scripts/test-ensure-env.sh" ]; then
+        if bash "$REPO/scripts/test-ensure-env.sh" > "$work/ee.txt" 2>&1; then
+            ok 'ensure-env: behavior test (no-op / warn / rotate / preserve)'
+        else
+            bad 'ensure-env: behavior test (no-op / warn / rotate / preserve)'
+            tail -6 "$work/ee.txt"
+        fi
+    else
+        bad 'test-ensure-env.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

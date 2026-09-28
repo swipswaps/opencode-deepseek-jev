@@ -102,7 +102,6 @@ widened to the LAN.
 | `audit-config.sh [--json]` | actual-vs-expected settings audit + remediation hints |
 | `test-jev-functional.sh` | behavioral Jev proof (invokes jev_review) |
 | `verify-from-inside.sh [--full]` | in-container self-check (no docker) |
-| `verify-password-drift.sh` | 4-gate password consistency check |
 | `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya; persists each run (latency + parsed `correctness`/`safe_to_merge` scores) to `data/observability/observability.db` (served at `/api/ab`) |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
 | `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
