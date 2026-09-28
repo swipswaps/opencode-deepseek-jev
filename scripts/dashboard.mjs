@@ -381,7 +381,19 @@ function apiGuard(limit) {
   }
 }
 
+// /api/health is the panel's hot path and does ~7s of synchronous work
+// (healthReport + modelLedger over the DB). Because the dashboard is a single
+// Node process, that blocks EVERY other request too (a trivial /api/rev was
+// measured at 4.8s while health computed). So cache the payload for a TTL and
+// serve repeats from memory; a `cached`/`age_ms` pair makes it observable and
+// gateable. TTL is tunable via HEALTH_TTL_MS.
+let HEALTH_CACHE = { at: 0, value: null };
+const HEALTH_TTL_MS = Number(process.env.HEALTH_TTL_MS || 15000);
 function apiHealth() {
+  const now = Date.now();
+  if (HEALTH_CACHE.value && now - HEALTH_CACHE.at < HEALTH_TTL_MS) {
+    return Object.assign({}, HEALTH_CACHE.value, { cached: true, age_ms: now - HEALTH_CACHE.at });
+  }
   try {
     const r = healthReport(dbPath);
     Object.assign(r, annotateReport(r));
@@ -391,9 +403,12 @@ function apiHealth() {
     } catch {
       r.handoff = { available: false };
     }
+    r.cached = false;
+    r.age_ms = 0;
+    HEALTH_CACHE = { at: now, value: r };
     return r;
   } catch (e) {
-    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [] };
+    return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [], cached: false };
   }
 }
 

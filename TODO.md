@@ -65,6 +65,14 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] dashboard latency: `/api/health` is now TTL-cached (`HEALTH_TTL_MS`,
+      default 15s) with `cached`/`age_ms` surfaced — measured **6.8s → 0.011s**
+      on repeat. Root cause: ~7s of synchronous aggregation (healthReport 4.7s +
+      modelLedger 2.1s) on a single-threaded Node blocks *every* request (a
+      trivial `/api/rev` measured 4.8s during a health compute). Also bounded
+      the running-tool scan to recent sessions. Gated (second call must be
+      `cached:true`). Host-level contention (litellm crash-loop, load ~14) is
+      separate and not ours.
 - [x] `watch.sh` — the missing live monitor (repeatedly requested; only
       `thinking.sh`/`session-health` existed). Read-only, cursor-based: reports
       the gate + session-health verdicts + only NEW guard actions and NEW app

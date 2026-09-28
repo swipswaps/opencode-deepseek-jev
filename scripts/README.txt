@@ -46,6 +46,10 @@ dashboard.sh
     DASH_HOST override); reads the DB read-only, no docker/external deps.
     Cost cards + live activity + todos; /api/session?id= (detail + parts) and
     /api/export/session?id=&format=txt|md|json (redacted download); /api/search.
+    /api/health is CACHED (HEALTH_TTL_MS, default 15s): it does ~7s of
+    synchronous aggregation (healthReport + modelLedger) and, in a single Node
+    process, that would block every other request (a trivial /api/rev measured
+    4.8s while it computed). Repeats are served from memory with cached/age_ms.
     /explore (alias /viz) is the visual layer: cost treemap, brushable burn-down
     (linked views), latency×cost scatter, part timeline, and a pattern bigram
     pivot — d3 + Observable Plot vendored under scripts/vendor/, served at

@@ -77,10 +77,11 @@ export function healthReport(dbPath, opts = {}) {
         WHERE json_extract(p.data,'$.type') = 'tool'
           AND json_extract(p.data,'$.state.status') = 'running'
           AND p.time_created < ?
+          AND p.session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)
         ORDER BY p.time_created DESC
         LIMIT 20`,
     )
-    .all(now - runMs);
+    .all(now - runMs, recent);
 
   // S1 — blank tails among recent sessions. The extra `< now - runMs` bound
   // removes the transient "a tool is legitimately in progress right now" case
