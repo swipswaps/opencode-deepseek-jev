@@ -65,6 +65,15 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] dead **blank** adjudication + in-container Playwright proof. `--live` now
+      reclassifies old blank tails whose session is idle/absent as `dead_blank`
+      (out of `blank_tails`, like `dead_tool`), fail-safe without live data; CLI
+      + dashboard render branches added. Kicked off **Playwright in-container**
+      (chromium headless + locally-extracted system libs, no root): all 7 pages
+      render, **0 console/page errors**, screenshots in `logs/ux/progress*.png`.
+      **Known gap:** the *dashboard*'s `/api/health` does **not** adjudicate
+      (CLI-only; it would need async live status) — the panel still lists
+      tombstones. Next session.
 - [x] `/api/semantic` FTS debounce: `FTS_MIN_REBUILD_MS` (default 30s) — the
       in-memory index was rebuilt (~3s) on nearly every search because the agent
       keeps writing the DB and advancing `sourceMax`; now results are at most

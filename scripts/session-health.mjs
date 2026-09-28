@@ -364,6 +364,22 @@ async function selfTest() {
   checks.push(["dead: no live data -> stays stall (fail-safe)",
     dOff.findings[0].kind === "running_tool"]);
 
+  // Same adjudication for blank tails (a stale blank whose session is idle is
+  // an archival tombstone, not a live "no answer").
+  const blankReport = () => ({
+    counts: { blank_tails: 1 },
+    findings: [{ kind: "blank_tail", session: "s_old", model: "x", age_s: 439103 }],
+  });
+  const bIdle = applyLiveAdjudication(blankReport(), { available: true, statuses: { s_old: { type: "idle" } } });
+  checks.push(["dead: old blank + idle server -> dead_blank, out of blank_tails",
+    bIdle.findings[0].kind === "dead_blank" && bIdle.counts.blank_tails === 0 && bIdle.counts.dead_blanks === 1]);
+  const bBusy = applyLiveAdjudication(blankReport(), { available: true, statuses: { s_old: { type: "busy" } } });
+  checks.push(["dead: old blank + busy server -> stays blank_tail",
+    bBusy.findings[0].kind === "blank_tail" && bBusy.counts.blank_tails === 1]);
+  const bOff = applyLiveAdjudication(blankReport(), { available: false });
+  checks.push(["dead: no live data -> blank stays (fail-safe)",
+    bOff.findings[0].kind === "blank_tail" && bOff.counts.blank_tails === 1]);
+
   let fail = 0;
   console.log("=== session-health.mjs --self-test ===");
   for (const [name, ok] of checks) {
@@ -384,16 +400,27 @@ export function applyLiveAdjudication(report, live, opts = {}) {
   const deadAfterS = opts.deadAfterS ?? DEAD_AFTER_S;
   if (!live || live.available !== true || !live.statuses) return report;
   for (const f of report.findings || []) {
-    if (f.kind !== "running_tool" || !(f.age_s > deadAfterS)) continue;
+    if (!(f.age_s > deadAfterS)) continue;
     const st = live.statuses[f.session];
-    if (!st || st.type !== "busy") {
+    const idle = !st || st.type !== "busy";
+    if (!idle) continue;
+    // A tool still `running` long past its stride, server idle/absent -> dead.
+    if (f.kind === "running_tool") {
       f.kind = "dead_tool";
+      f.verdict = "dead (server idle/absent)";
+    } else if (f.kind === "blank_tail") {
+      // A blank tail that is merely old and whose session is idle is the same
+      // archival tombstone: not a live "no answer" event. Keep it visible but
+      // out of the blank count so the panel does not desensitize.
+      f.kind = "dead_blank";
       f.verdict = "dead (server idle/absent)";
     }
   }
   const kinds = (k) => (report.findings || []).filter((f) => f.kind === k).length;
   report.counts.running_tools = kinds("running_tool");
   report.counts.dead_tools = kinds("dead_tool");
+  report.counts.blank_tails = kinds("blank_tail");
+  report.counts.dead_blanks = kinds("dead_blank");
   return report;
 }
 
@@ -428,6 +455,8 @@ async function main() {
         console.log(`  [stall] ${f.session} ${f.tool} running ${f.age_s}s :: ${f.command}`);
       else if (f.kind === "dead_tool")
         console.log(`  [dead] ${f.session} ${f.tool} ran ${f.age_s}s, server idle/absent :: archival, not a live stall`);
+      else if (f.kind === "dead_blank")
+        console.log(`  [dead] ${f.session} ${f.model} blank ${f.age_s}s, server idle/absent :: archival, not a live no-answer`);
       else console.log(`  [blank] ${f.session} ${f.model} no text ${f.age_s}s after tool`);
     }
   }
