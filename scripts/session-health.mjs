@@ -27,6 +27,7 @@
 //
 // CONTRACT
 //   export healthReport(dbPath, opts) -> { ts, counts, findings, ... }
+//   export handoffAdvice(dbPath, opts) -> { level ok|warn|over, action }
 //   CLI:  node --experimental-sqlite session-health.mjs [db] [--json]
 //         [--include-gaps] [--self-test] [--live]
 //   Read-only. No model calls. No network unless --live (then only :4096).
@@ -185,6 +186,40 @@ export function healthReport(dbPath, opts = {}) {
   return report;
 }
 
+// HANDOFF ADVISOR — mirror cost-bottlenecks.sh's "context budget (latest
+// session)" (CONTEXT_BUDGET, default 200k input tokens) so the operator is
+// told *in the UI* when a fresh session would protect cost and quality. The
+// number already existed; this surfaces it. Read-only.
+export function handoffAdvice(dbPath, opts = {}) {
+  const budget = Number(opts.budgetTokens ?? process.env.CONTEXT_BUDGET ?? 200000);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const s = db
+    .prepare(
+      "SELECT id, title, tokens_input, tokens_output, tokens_reasoning, time_created " +
+        "FROM session ORDER BY time_created DESC LIMIT 1",
+    )
+    .get();
+  if (!s) return { available: false };
+  const inTok = Number(s.tokens_input) || 0;
+  const ratio = budget > 0 ? inTok / budget : 0;
+  const level = inTok > budget ? "over" : ratio >= 0.8 ? "warn" : "ok";
+  return {
+    available: true,
+    session: s.id,
+    title: s.title,
+    in_tok: inTok,
+    budget,
+    ratio: Number(ratio.toFixed(2)),
+    level,
+    action:
+      level === "over"
+        ? "start a fresh session (read HANDOFF first)"
+        : level === "warn"
+          ? "plan to hand off soon"
+          : "within budget",
+  };
+}
+
 // LIVE enrichment: ask the server which sessions are busy. This is the one
 // place the detector may touch the network, and only :4096 with basic auth.
 // Offline callers (the gate) never hit this; `--live` is explicit.
@@ -285,6 +320,32 @@ async function selfTest() {
   srv.close();
   checks.push(["liveStatus parses /session/status", live.available === true && !!live.statuses && live.statuses.ses_1 && live.statuses.ses_1.type === "busy"]);
 
+  // handoff advisor: latest session input vs budget -> over / warn / ok.
+  // Separate fixture (token columns), same fixed clock domain idea.
+  const hoDir = mkdtempSync(join(tmpdir(), "sess-ho-"));
+  const hoFile = join(hoDir, "ho.db");
+  const hoDb = new DatabaseSync(hoFile);
+  hoDb.exec(
+    "CREATE TABLE session(id TEXT PRIMARY KEY, title TEXT, tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, time_created INTEGER);",
+  );
+  const hoIns = hoDb.prepare("INSERT INTO session VALUES(?,?,?,?,?,?)");
+  hoIns.run("s_over", "over", 1200, 0, 0, NOW);
+  hoDb.close();
+  const hoOver = handoffAdvice(hoFile, { budgetTokens: 1000 });
+  const hoDb2 = new DatabaseSync(hoFile, { readOnly: false });
+  hoDb2.exec("UPDATE session SET tokens_input=850 WHERE id='s_over'");
+  hoDb2.close();
+  const hoWarn = handoffAdvice(hoFile, { budgetTokens: 1000 });
+  const hoDb3 = new DatabaseSync(hoFile, { readOnly: false });
+  hoDb3.exec("UPDATE session SET tokens_input=100 WHERE id='s_over'");
+  hoDb3.close();
+  const hoOk = handoffAdvice(hoFile, { budgetTokens: 1000 });
+  rmSync(hoDir, { recursive: true, force: true });
+  checks.push(["handoff over budget", hoOver.level === "over" && hoOver.ratio === 1.2]);
+  checks.push(["handoff warn band", hoWarn.level === "warn"]);
+  checks.push(["handoff within budget", hoOk.level === "ok" && hoOk.ratio === 0.1]);
+  checks.push(["handoff over action names a fresh session", typeof hoOver.action === "string" && hoOver.action.includes("fresh session")]);
+
   let fail = 0;
   console.log("=== session-health.mjs --self-test ===");
   for (const [name, ok] of checks) {
@@ -303,6 +364,11 @@ async function main() {
     argv.find((a) => !a.startsWith("--")) || "/workspace/data/opencode/opencode.db";
   const report = healthReport(dbPath, { includeGaps: argv.includes("--include-gaps") });
   if (argv.includes("--live")) report.live = await liveStatus();
+  try {
+    report.handoff = handoffAdvice(dbPath);
+  } catch {
+    report.handoff = { available: false };
+  }
   if (argv.includes("--json")) {
     console.log(JSON.stringify(report, null, 2));
   } else {
@@ -310,6 +376,11 @@ async function main() {
       `session-health: ${report.counts.sessions_scanned} scanned · ` +
         `${report.counts.running_tools} running · ${report.counts.blank_tails} blank`,
     );
+    if (report.handoff && report.handoff.available) {
+      console.log(
+        `handoff: ${report.handoff.level} (${report.handoff.in_tok}/${report.handoff.budget} in) — ${report.handoff.action}`,
+      );
+    }
     for (const f of report.findings) {
       if (f.kind === "running_tool")
         console.log(`  [stall] ${f.session} ${f.tool} running ${f.age_s}s :: ${f.command}`);

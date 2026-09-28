@@ -100,6 +100,17 @@ main() {
          FROM session ORDER BY time_created DESC LIMIT 1;"
     printf 'budget: %s input tokens (CONTEXT_BUDGET) · compaction auto+prune, tail_turns=20 (opencode.json)\n' "$CTX_BUDGET"
     printf 'read: over budget → start a fresh session; long sessions re-send history every turn.\n'
+    local latest=0 ho_level="ok"
+    latest=$(sqlite3 "$DB" "SELECT COALESCE((SELECT tokens_input FROM session ORDER BY time_created DESC LIMIT 1),0);")
+    case "${latest:-0}" in
+        ''|*[!0-9]*) latest=0 ;;
+    esac
+    if [ "$latest" -ge "$CTX_BUDGET" ]; then ho_level="over";
+    elif [ "$latest" -ge "$((CTX_BUDGET * 8 / 10))" ]; then ho_level="warn"; fi
+    printf 'handoff: %s (%s/%s in) — ' "$ho_level" "$latest" "$CTX_BUDGET"
+    if [ "$ho_level" = "over" ]; then printf 'start a fresh session (read HANDOFF first)\n';
+    elif [ "$ho_level" = "warn" ]; then printf 'plan to hand off soon\n';
+    else printf 'within budget\n'; fi
 
     section "worst effective \$/1k input (>=1000 in)"
     q "SELECT substr(title,1,44) title,

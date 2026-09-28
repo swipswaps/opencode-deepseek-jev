@@ -269,7 +269,10 @@ n-grams)" candidate — no new capture needed.**
 - **Compaction is on.** `opencode.json` sets `compaction: { auto, prune,
   tail_turns: 20 }` (ECC `strategic-compact`) to bound replayed context, and
   `cost-bottlenecks.sh` prints a "context budget (latest session)" check
-  (`CONTEXT_BUDGET`, default 200k input tokens). Over budget → fresh session.
+  (`CONTEXT_BUDGET`, default 200k input tokens) plus a `handoff:` verdict
+  line (ok/warn/over + action). The same verdict rides `/api/health` and
+  banners on `/explore ▸ signals` (via `handoffAdvice()` in
+  `session-health.mjs`). Over budget → fresh session.
 - **Model mix is the #1 cost lever — check it before anything else.**
   `deepseek-v4-pro` was ~94% of *lifetime* spend at its peak (3 long
   "audit/handoff" sessions, long since ended); as `deepseek-flash` sessions

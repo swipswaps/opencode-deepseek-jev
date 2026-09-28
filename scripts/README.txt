@@ -263,7 +263,11 @@ session-health.mjs
     signal is deliberately NOT a finding (~100% user-idle false positives).
     Exports healthReport() to dashboard.mjs (/api/health, /explore ▸
     signals panel); --json, --live (adds GET /session/status), and
-    --self-test (offline fixtures) run from the CLI.
+    --self-test (offline fixtures) run from the CLI. Exports
+    handoffAdvice() too (latest input vs CONTEXT_BUDGET: ok / warn /
+    over with an action; carried on /api/health, bannered on the
+    signals panel, and printed as a handoff: verdict line by
+    cost-bottlenecks.sh).
 
 quirks.mjs
     Correlates a symptom with a vendored map of known upstream issues

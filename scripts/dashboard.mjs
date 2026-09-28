@@ -20,7 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { healthReport } from "./session-health.mjs";
+import { healthReport, handoffAdvice } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
 import { redact } from "./redact.mjs";
 
@@ -386,6 +386,11 @@ function apiHealth() {
     const r = healthReport(dbPath);
     Object.assign(r, annotateReport(r));
     r.per_model = modelLedger(dbPath);
+    try {
+      r.handoff = handoffAdvice(dbPath);
+    } catch {
+      r.handoff = { available: false };
+    }
     return r;
   } catch (e) {
     return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [] };
@@ -1236,6 +1241,7 @@ async function renderHealth(){
   if(!d||d.available===false||!d.findings){el.text('no session-health data');return;}
   var c=d.counts||{};
   var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+'</div>';
+  if(d.handoff&&d.handoff.available){h+='<div class="item"><span class="tag'+(d.handoff.level==='ok'?'':' ERR')+'">handoff '+esc(d.handoff.level||'?')+'</span>'+esc(String(d.handoff.in_tok))+'/'+esc(String(d.handoff.budget))+' in ('+esc(String(Math.round((d.handoff.ratio||0)*100)))+'%) — '+esc(d.handoff.action||'')+'</div>';}
   if(!d.findings.length){h+='<div class="item">no stalls or blank turns — the web view lagging is a client issue, not an agent stall</div>';}
   for(var i=0;i<d.findings.length;i++){var f=d.findings[i];
     if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}

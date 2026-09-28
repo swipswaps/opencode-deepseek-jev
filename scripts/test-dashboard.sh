@@ -286,7 +286,7 @@ PY
         curl -s "http://$HOST:$PORT/api/guard" > "$work/guard.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
         curl -s "http://$HOST:$PORT/api/health" > "$work/health.json"
-        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("counts") or {}; sys.exit(0 if isinstance(d.get("findings"),list) and "running_tools" in c and "blank_tails" in c and isinstance(d.get("known_issues"),list) and isinstance(d.get("by_model"),dict) and isinstance(d.get("per_model"),list) else 1)' "$work/health.json" && ok 'api/health' || bad 'api/health'
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("counts") or {}; h=d.get("handoff") or {}; sys.exit(0 if isinstance(d.get("findings"),list) and "running_tools" in c and "blank_tails" in c and isinstance(d.get("known_issues"),list) and isinstance(d.get("by_model"),dict) and isinstance(d.get("per_model"),list) and h.get("level") in ("ok","warn","over") else 1)' "$work/health.json" && ok 'api/health' || bad 'api/health'
         curl -s "http://$HOST:$PORT/api/patterns" > "$work/pat.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); g=d.get("ngrams") or []; sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d and (not g or ("from" in g[0] and "to" in g[0])) else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
         curl -s "http://$HOST:$PORT/api/solutions" > "$work/sol.json"

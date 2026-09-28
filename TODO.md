@@ -130,6 +130,13 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] handoff advice surfaced (was dead code): `handoffAdvice()` (latest
+      input vs `CONTEXT_BUDGET` → ok/warn/over + action) now rides
+      `/api/health`, banners on `/explore ▸ signals`, prints as a
+      `handoff:` verdict line in `cost-bottlenecks.sh` and the
+      `session-health.mjs` CLI; 4 self-test assertions + the `/api/health`
+      gate assert it. Evidence: self-test 12/12 PASS, `handoff: ok
+      (232/200000 in)` live
 - [x] A-items proven from the DB/logs: session-health `--live` tested (stub
       `/session/status` in the suite) and exercised against the live server
       (`available:true`); `quirks --check-issues` validates the vendored map
