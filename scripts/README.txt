@@ -42,22 +42,14 @@ cost.sh
     using your effective blended $/token rate.
 
 dashboard.sh
-    Thin read-only observability sidecar. Serves cost cards, live activity
-    (step/tool/reasoning/text), and todos on http://127.0.0.1:5099
-    (DASH_PORT/DASH_HOST override). Reads the database read-only; no
-    docker, no external deps. Runs on the host or in the container.
-    Sessions are clickable: /api/session?id= returns the detail + parts,
-    and /api/export/session?id=&format=txt|md|json downloads one session's
-    chat history. /api/search?q= searches titles, text, and commands.
-    /explore (alias /viz) is the visual layer: a cost treemap, a brushable
-    cumulative-spend-vs-budget burn-down (linked views), a latency x cost
-    scatter, and the part timeline. d3 is vendored at
-    scripts/vendor/d3.min.js and served at /vendor/d3.min.js.
-    /explore ▸ patterns adds a declarative tool→tool bigram pivot
-    (Observable Plot v0.6.17 UMD, vendored at
-    scripts/vendor/plot.umd.min.js; it reads the global d3, so load
-    order is d3 → d3-sankey → Plot).
-    /runbooks renders the operational runbooks; /api/runbooks is the data.
+    Read-only observability sidecar on http://127.0.0.1:5099 (DASH_PORT/
+    DASH_HOST override); reads the DB read-only, no docker/external deps.
+    Cost cards + live activity + todos; /api/session?id= (detail + parts) and
+    /api/export/session?id=&format=txt|md|json (redacted download); /api/search.
+    /explore (alias /viz) is the visual layer: cost treemap, brushable burn-down
+    (linked views), latency×cost scatter, part timeline, and a pattern bigram
+    pivot — d3 + Observable Plot vendored under scripts/vendor/, served at
+    /vendor/*. /runbooks renders the runbooks (/api/runbooks is the data).
 
 cost-bottlenecks.sh
     Ranks where API cost goes: totals + effective $/1k-input, top sessions
@@ -210,21 +202,15 @@ ux-test.py
 
 ux-trace.py
     Host-side Playwright UX trace that proves the journey, not just asserts
-    it. Injects a recorder before navigation so EVERY click, drag and scroll
-    is logged (element + coordinates) alongside a screenshot per step, then
-    enumerates every interactive element as a "hotspot" (bounding box) and
-    draws a numbered overlay onto a screenshot. Persists runs/events/hotspots/
-    findings to data/observability/ux.db (ux_run/ux_event/ux_hotspot/
-    ux_finding) and writes a handoff report (logs/ux/report.md) so a handoff
-    reads the database instead of re-running. Findings surface pain points:
-    console/page errors, 390px overflow, page-wall height, click targets
-    < 24px, overlapping targets. --check reports prerequisites; --self-test
-    runs offline (no browser, wired into test-hygiene.sh); --json emits a
-    machine summary. --ocr additionally reads each screenshot back to text
-    (tesseract CLI, else tesseract.js from receipts-ocr) into the ux_shot
-    table, so a text-only reader can see the UI (opt-in: tesseract is ~65s
-    per 1440x900 shot here; the text is untrusted data). There is a "ux-trace"
-    runbook (host).
+    it: injects a recorder before navigation so every click/drag/scroll is
+    logged (element + coords) with a per-step screenshot, then enumerates every
+    interactive element as a "hotspot" (bounding box + numbered overlay).
+    Persists runs/events/hotspots/findings to data/observability/ux.db and a
+    handoff report to logs/ux/report.md (a handoff reads the DB, not a re-run).
+    Findings: console/page errors, 390px overflow, page-wall height, click
+    targets <24px, overlaps. --check prerequisites; --self-test offline (gated
+    in test-hygiene.sh); --json; --ocr reads each shot back to text (tesseract)
+    into the `ux_shot` table — text is untrusted data. Runbook "ux-trace" (host).
 
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
