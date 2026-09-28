@@ -130,6 +130,12 @@ Last updated: 2026-09-27
 
 ## Done (most recent first)
 
+- [x] recurring `edit` failure root-caused from the DB (13/13 `edit` errors are
+      `oldString` mismatch across 4 sessions; 15 `Aborted` turns in
+      `opencode.log`) and resolved deterministically: the guard pre-checks an
+      `edit`'s `oldString` against the file and records an `advisory` when
+      absent (gated self-test), plus a `jev-harness` rule to re-read before
+      editing. Evidence: guard self-test PASS, `guard.log` advisory present
 - [x] handoff advice surfaced (was dead code): `handoffAdvice()` (latest
       input vs `CONTEXT_BUDGET` → ok/warn/over + action) now rides
       `/api/health`, banners on `/explore ▸ signals`, prints as a

@@ -30,6 +30,12 @@ Follow it instead of re-deriving the workflow each session.
 - `RULES.md` #61: a served page's inline `<script>` must both parse
   (`node --check`) and execute headlessly (`test-dashboard-ui.mjs`). No inline
   handlers; use `data-*` + delegated listeners.
+- **Before `edit`, re-read the exact region:** `oldString` must match the
+  file's *current* bytes (earlier edits shift content, and a fixture can live
+  in a different file than you remember). This is the most recurring Thinking
+  error (13/13 of this repo's `edit` errors); the guard records an `advisory`
+  to `guard.log` when the pre-check fails, so it is visible via
+  `logs.sh --source guard`.
 
 ## 3. Cost and model policy
 

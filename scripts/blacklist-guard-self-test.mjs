@@ -109,5 +109,24 @@ const dedupOk = dupHooks["tool.execute.before"] === undefined;
 if (!dedupOk) fail++;
 console.log((dedupOk ? "  PASS " : "  FAIL ") + "second non-forced load is a no-op (dedupe)");
 
+// edit pre-check: an `edit` whose oldString is absent must be recorded as an
+// advisory (the recurring "Could not find oldString" class), and a present
+// oldString must NOT add one.
+const guardLogPath = tmp + "/data/observability/guard.log";
+const countAdvisory = () => (readFileSync(guardLogPath, "utf8").match(/"verdict":"advisory"/g) || []).length;
+const editTarget = tmp + "/edit-target.txt";
+writeFileSync(editTarget, "hello world\n");
+const adv0 = countAdvisory();
+await before({ tool: "edit", sessionID: "s" }, { args: { filePath: editTarget, oldString: "NOPE", newString: "x" } });
+const advMiss = countAdvisory();
+await before({ tool: "edit", sessionID: "s" }, { args: { filePath: editTarget, oldString: "hello", newString: "hi" } });
+const advHit = countAdvisory();
+const editMissOk = advMiss === adv0 + 1;
+const editHitOk = advHit === advMiss;
+if (!editMissOk) fail++;
+if (!editHitOk) fail++;
+console.log((editMissOk ? "  PASS " : "  FAIL ") + "edit oldString pre-check records an advisory when absent");
+console.log((editHitOk ? "  PASS " : "  FAIL ") + "edit pre-check is silent when oldString is present");
+
 console.log("result: " + (fail ? "FAIL" : "PASS"));
 process.exit(fail ? 1 : 0);

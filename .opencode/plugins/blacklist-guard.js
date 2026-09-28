@@ -234,6 +234,25 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
       try { await learnedAdvisory(input, output); } catch { /* advisory only */ }
 
       if (input.tool === "write" || input.tool === "edit") {
+        // Deterministic pre-check for the most recurring Thinking error: an
+        // `edit` whose oldString does not occur in the target file (13/13 of
+        // this repo's edit errors are this). The model proposes oldString from
+        // *modelled* context; edits shift content. Record an advisory (never
+        // block — the tool already fails safe) so it becomes durable telemetry
+        // for logs.sh --source guard and learn-rules.py.
+        if (input.tool === "edit") {
+          try {
+            const fp = output && output.args && output.args.filePath;
+            const old = output && output.args && output.args.oldString;
+            if (typeof fp === "string" && typeof old === "string" && old) {
+              const content = readFileSync(fp, "utf8");
+              if (!content.includes(old)) {
+                record("advisory", "edit oldString not found — re-read the region (edits shift content)", { file: fp, session: input.sessionID });
+                await log("warn", "edit oldString pre-check failed (re-read the region)", { file: fp });
+              }
+            }
+          } catch { /* fail open: unreadable file / missing args */ }
+        }
         // subprocess.run is Python source, so in bash it is always inside a
         // quoted heredoc/`-c` and invisible to quote-stripping. Catch it where
         // it is actually written. Warn only — a file may legitimately mention
