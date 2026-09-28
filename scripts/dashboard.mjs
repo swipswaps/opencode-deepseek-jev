@@ -184,13 +184,22 @@ if (!dbPath) {
   process.exit(2);
 }
 
+// Module-level read-only handle for the opencode.db read path (query()).
+// WAL mode permits concurrent readers; one handle removes per-call
+// open/close churn across query()'s call sites. Never written — the DB stays
+// read-only for the whole session. Observability/code.db call sites keep
+// their own handles (untouched).
+const READ_DB = new DatabaseSync(dbPath, { readOnly: true });
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, () => {
+    try {
+      READ_DB.close();
+    } catch {}
+    process.exit(0);
+  });
+}
 function query(sql, ...args) {
-  const db = new DatabaseSync(dbPath, { readOnly: true });
-  try {
-    return db.prepare(sql).all(...args);
-  } finally {
-    db.close();
-  }
+  return READ_DB.prepare(sql).all(...args);
 }
 
 function apiCost() {
@@ -353,20 +362,23 @@ function apiSignalsFresh() {
     "WHERE json_extract(p.data,'$.type')='tool' AND json_extract(p.data,'$.state.status')='error' " +
     "ORDER BY p.time_created DESC LIMIT 40"
   );
+  // ONE full scan for all 10 terms (was 10 scans): COUNT(*) under a WHERE
+  // condition equals SUM(CASE WHEN condition) over the same rows, and OR is
+  // commutative, so per-term counts are identical to the old loop. NULL text
+  // matches nothing in both forms.
+  const terms = ["SyntaxError", "Unexpected token", "EADDRINUSE", "FAIL:", "ReferenceError", "Traceback",
+    "sed ", "2>/dev/null", "echo ", "rm -rf"];
+  const sums = terms.map((_, i) => "SUM(CASE WHEN t LIKE ? OR c LIKE ? THEN 1 ELSE 0 END) AS n" + i).join(", ");
+  const likeArgs = [];
+  for (const t of terms) likeArgs.push("%" + t + "%", "%" + t + "%");
+  const counts = query(
+    "SELECT " + sums + " FROM (SELECT json_extract(data,'$.text') t, json_extract(data,'$.state.input.command') c FROM part)",
+    ...likeArgs
+  )[0];
   const signatures = {};
-  for (const sig of ["SyntaxError", "Unexpected token", "EADDRINUSE", "FAIL:", "ReferenceError", "Traceback"]) {
-    signatures[sig] = query(
-      "SELECT COUNT(*) c FROM part WHERE json_extract(data,'$.text') LIKE ? OR json_extract(data,'$.state.input.command') LIKE ?",
-      "%" + sig + "%", "%" + sig + "%"
-    )[0].c;
-  }
+  terms.slice(0, 6).forEach((s, i) => { signatures[s] = counts["n" + i]; });
   const ruleMentions = {};
-  for (const r of ["sed ", "2>/dev/null", "echo ", "rm -rf"]) {
-    ruleMentions[r] = query(
-      "SELECT COUNT(*) c FROM part WHERE json_extract(data,'$.state.input.command') LIKE ? OR json_extract(data,'$.text') LIKE ?",
-      "%" + r + "%", "%" + r + "%"
-    )[0].c;
-  }
+  terms.slice(6).forEach((r, i) => { ruleMentions[r] = counts["n" + (6 + i)]; });
   const patches = query(
     "SELECT json_extract(data,'$.files') files, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='patch' GROUP BY files ORDER BY n DESC LIMIT 20"
   );

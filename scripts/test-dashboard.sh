@@ -283,6 +283,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and isinstance(d.get("summary"),dict) else 1)' "$work/ab.json" && ok 'api/ab' || bad 'api/ab'
         curl -s "http://$HOST:$PORT/api/signals" > "$work/sig.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "signatures" in d else 1)' "$work/sig.json" && ok 'api/signals' || bad 'api/signals'
+        curl -s "http://$HOST:$PORT/api/signals" > "$work/sig2.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/sig2.json" && ok 'api/signals served from cache' || bad 'api/signals served from cache'
         curl -s "http://$HOST:$PORT/api/guard" > "$work/guard.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "count" in d and isinstance(d.get("actions"),list) else 1)' "$work/guard.json" && ok 'api/guard' || bad 'api/guard'
         curl -s "http://$HOST:$PORT/api/health" > "$work/health.json"
