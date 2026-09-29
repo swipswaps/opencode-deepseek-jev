@@ -56,7 +56,11 @@ Last updated: 2026-09-28
 
 ## Queue (ranked, top first)
 
-- [ ] G3: migrate the hand-rolled d3 charts to Plot specs (one at a time)
+- [~] G3: migrate the hand-rolled d3 charts to Plot specs — scatter done
+  (`Plot.dot`, contract-preserving: log scales, sqrt radius, model
+  colors, click-drill, tooltips, brush re-render, empty text; 42/42
+  dots wired, 0 errors); next gantt/timeline (`barX`), burn last
+  (linked); treemap/sankey/cloud stay d3 (no Plot marks in v0.6)
 - [ ] G4: wire `docker/litellm.config.yaml` `max_budget` into routing (needs proxy)
 - [ ] G5: Laya self-host (cuts Jev only, ~11 calls); embeddings rerank over FTS5
       + redaction + hard request cap

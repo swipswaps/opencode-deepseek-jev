@@ -569,8 +569,15 @@ already exists.
    **global `d3`** — load order d3 → d3-sankey → Plot; no WASM, no CSP
    change, no build step). The first spec is the **tool→tool bigram pivot**
    (`Plot.cell` + band x/y + quantile `greens`) in `/explore ▸ patterns`
-   (`renderPivot`). Remaining: migrate the hand-rolled d3 charts
-   (treemap/burn/scatter/sankey/gantt) to Plot specs one at a time.
+   (`renderPivot`). **Scatter migrated second** (`Plot.dot` + log scales +
+   sqrt radius + model colors; click-drill, tooltip strings, brush-filter
+   re-render and empty text preserved bit-for-bit; one delegated
+   container listener per RULES #61). Measured verdicts for the rest:
+   **treemap / sankey / word-cloud stay hand-rolled** — Plot v0.6 has no
+   treemap, sankey, or cloud marks (d3.hierarchy / d3-sankey / custom
+   spiral have no declarative equivalent). Remaining order: gantt +
+   timeline (`Plot.barX` fits) then burn last (brush-linked to four
+   views — highest regression surface).
 3. **finos/perspective pivot grid** — **deferred, low fit.** The full viewer
    stack is ~28 MB unpacked plus WASM, needs `'wasm-unsafe-eval'` added to
    the dashboard CSP, and cannot be exercised by the in-container headless

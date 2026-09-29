@@ -1102,6 +1102,7 @@ const exploreHtml = `<!doctype html>
  .tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:40px;z-index:25;background:#0d1117;padding:6px 0;margin:6px 0;border-bottom:1px solid #30363d}
  .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
  .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
+ #scatter circle{cursor:pointer}
  .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
  .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
  .stat b{display:block;font-size:16px}
@@ -1558,36 +1559,66 @@ async function renderBurn(){
 }
 
 async function renderScatter(){
+  // Declarative Plot spec (G3 migration 1/6): same filtered data, domains,
+  // colors, empty text, drill-down and tooltip strings as the hand-rolled
+  // d3 version it replaces. Clicks/tooltips ride ONE delegated listener
+  // bound to the container (RULES #61: data-* + delegation, no inline
+  // handlers); re-renders only rebuild the row map, never re-bind.
+  var host=document.getElementById('scatter');
+  if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.dot!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
   var data=DATA.filter(inFilter);
-  var el=d3.select('#scatter');el.selectAll('*').remove();
-  if(!data.length){el.text('(no sessions in range)');return;}
-  var margin={top:12,right:18,bottom:34,left:70};
-  var W=1000,H=300,w=W-margin.left-margin.right,h=H-margin.top-margin.bottom;
-  var xmin=Math.max(1000,d3.min(data,function(d){return span(d);})/2);
-  var xmax=Math.max(xmin*2,d3.max(data,function(d){return span(d);})*1.5);
-  var ymax=Math.max(0.0002,d3.max(data,function(d){return +d.cost||0;})*1.5);
-  var x=d3.scaleLog().domain([xmin,xmax]).range([0,w]);
-  var y=d3.scaleLog().domain([0.0001,ymax]).range([h,0]);
-  var r=d3.scaleSqrt().domain([0,d3.max(data,function(d){return (+d.tokens_input||0)+(+d.tokens_output||0);})||1]).range([1.5,13]);
-  var svg=el.append('svg').attr('width',W).attr('height',H).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
-  var xticks=[1000,10000,60000,600000,3600000,86400000].filter(function(v){return v>=x.domain()[0]&&v<=x.domain()[1];});
-  var yticks=[0.0001,0.001,0.01,0.1,1,10].filter(function(v){return v>=y.domain()[0]&&v<=y.domain()[1];});
+  if(!data.length){host.textContent='(no sessions in range)';return;}
+  var minS=Infinity,maxS=0,maxC=0,maxTok=0,i,d,sp,cs,tk;
+  for(i=0;i<data.length;i++){d=data[i];
+    sp=span(d);if(sp<minS)minS=sp;if(sp>maxS)maxS=sp;
+    cs=+d.cost||0;if(cs>maxC)maxC=cs;
+    tk=(+d.tokens_input||0)+(+d.tokens_output||0);if(tk>maxTok)maxTok=tk;}
+  var xmin=Math.max(1000,minS/2),xmax=Math.max(xmin*2,maxS*1.5),ymax=Math.max(0.0002,maxC*1.5);
+  if(!(maxTok>0))maxTok=1;
+  var xticks=[1000,10000,60000,600000,3600000,86400000].filter(function(v){return v>=xmin&&v<=xmax;});
+  var yticks=[0.0001,0.001,0.01,0.1,1,10].filter(function(v){return v>=0.0001&&v<=ymax;});
   var fmtSpan=function(v){var s=v/1000;return s<60?(s+'s'):(s<3600?(Math.round(s/60)+'m'):(Math.round(s/3600)+'h'));};
-  svg.append('g').attr('class','grid').call(d3.axisLeft(y).tickValues(yticks).tickSize(-w).tickFormat(''));
-  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).tickValues(xticks).tickFormat(fmtSpan));
-  svg.append('g').attr('class','axis').call(d3.axisLeft(y).tickValues(yticks).tickFormat(function(v){return '$'+(+v).toPrecision(2);}));
-  svg.append('text').attr('class','lbl').attr('x',w).attr('y',h+30).attr('text-anchor','end').text('span (log)');
-  svg.append('text').attr('class','lbl').attr('transform','rotate(-90)').attr('x',-h).attr('y',-54).attr('text-anchor','end').text('cost (log)');
-  svg.selectAll('circle').data(data).enter().append('circle')
-    .attr('cx',function(d){return x(Math.max(xmin,span(d)));})
-    .attr('cy',function(d){return y(Math.max(0.0001,+d.cost||0.0001));})
-    .attr('r',function(d){return r((+d.tokens_input||0)+(+d.tokens_output||0));})
-    .attr('fill',function(d){return MODEL_COLOR(modelId(d.model));})
-    .attr('fill-opacity',0.45)
-    .style('cursor','pointer')
-    .on('click',function(ev,d){location.href='/?session='+encodeURIComponent(d.id);})
-    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.title)+'<br>$'+(+d.cost).toFixed(4)+' · '+(span(d)/1000).toFixed(0)+'s · in '+fmt(d.tokens_input)+' · '+esc(modelId(d.model)));})
-    .on('mouseleave',function(){tip(null);});
+  var fmtCost=function(v){return '$'+(+v).toPrecision(2);};
+  var tipText=function(d){return d.title+' — $'+(+d.cost).toFixed(4)+' · '+(span(d)/1000).toFixed(0)+'s · in '+fmt(d.tokens_input)+' · '+modelId(d.model);};
+  var byId={};
+  for(i=0;i<data.length;i++){byId[data[i].id]=data[i];}
+  host.SCATT_ROWS=byId;
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:1000,height:300,marginTop:12,marginRight:18,marginBottom:34,marginLeft:70,
+    x:{type:'log',domain:[xmin,xmax],label:'span (log)',ticks:xticks,tickFormat:fmtSpan,grid:true},
+    y:{type:'log',domain:[0.0001,ymax],label:'cost (log)',ticks:yticks,tickFormat:fmtCost,grid:true},
+    marks:[
+      Plot.dot(data,{
+        x:function(d){return Math.max(xmin,span(d));},
+        y:function(d){return Math.max(0.0001,+d.cost||0.0001);},
+        r:function(d){return (+d.tokens_input||0)+(+d.tokens_output||0);},
+        fill:function(d){return MODEL_COLOR(modelId(d.model));},
+        fillOpacity:0.45,
+        title:tipText
+      })
+    ],
+    r:{type:'sqrt',domain:[0,maxTok],range:[1.5,13]}
+  }));
+  var dots=host.querySelectorAll('circle');
+  if(dots.length===data.length){
+    for(i=0;i<dots.length;i++){dots[i].setAttribute('data-id',data[i].id);}
+  }
+  if(!host.SCATT_WIRED){
+    host.SCATT_WIRED=1;
+    host.addEventListener('click',function(ev){
+      var c=ev.target&&ev.target.closest?ev.target.closest('[data-id]'):null;
+      if(c){location.href='/?session='+encodeURIComponent(c.getAttribute('data-id'));}
+    });
+    host.addEventListener('mousemove',function(ev){
+      var c=ev.target&&ev.target.closest?ev.target.closest('[data-id]'):null;
+      var r=c&&host.SCATT_ROWS?host.SCATT_ROWS[c.getAttribute('data-id')]:null;
+      if(r){moveTip(ev);tip(esc(r.title)+'<br>$'+(+r.cost).toFixed(4)+' · '+(span(r)/1000).toFixed(0)+'s · in '+fmt(r.tokens_input)+' · '+esc(modelId(r.model)));}
+      else{tip(null);}
+    });
+    host.addEventListener('mouseleave',function(){tip(null);});
+  }
 }
 
 async function renderSankey(){
