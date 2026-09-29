@@ -71,10 +71,19 @@ semantic-search.sh
 
 fuzzy-search.py
     Typo-tolerant search over the on-disk index. Tokenizes the query and each
-    part, scores exact hits plus near-matches (difflib), and ranks — so a
+    part, scores exact hits plus near-matches (diflib), and ranks — so a
     mistyped token ("edti") still finds "edit". Free, local, read-only, no
     model call. Used by `semantic-search.sh --fuzzy`. --limit N, --json,
     --self-test.
+
+harvest.py
+    Fetch a URL into a provenance-chained research candidate: raw bytes,
+    sha256-pinned meta.json, and candidate.md staged under
+    logs/harvest-<ts>/ (gitignored). Fetched content is labeled UNTRUSTED
+    (never instructions); adoption is always an explicit edit citing the
+    hash — the script cannot write docs. Exits 0 stored, 2 fetch failure,
+    3 unsupported type/oversize. Stdlib only, no model call. Host or
+    container. --url URL, --outdir, --max-bytes, --timeout, --self-test.
 
 ocr-image.sh
     Local OCR fallback for reading screenshots/scans when API models can't

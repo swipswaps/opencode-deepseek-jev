@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -69,6 +69,15 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] harvest (LifeOS §15 pattern, repo-native code — no LifeOS code was
+      imported; the text contained none). scripts/harvest.py: URL ->
+      normalize -> sha256 -> staged candidate under logs/harvest-<ts>/
+      (raw.bin, meta.json, candidate.md with UNTRUSTED banner + review
+      checklist); structurally incapable of writing docs. Proven:
+      --self-test 15/15 offline, local-fixture hash match, 404->2,
+      non-html/oversize->3, real-URL E3 (example.com). tools.json (19th
+      entry) + scripts/README.txt registered; lint 109, test-dashboard
+      116 (api/tools valid).
 - [x] backend overload resolved (best-practice pass, measured E3).
       Disease: single-threaded server + multi-second sync aggregation =
       head-of-line blocking (cold /api/health ~10s; trivial /api/rev

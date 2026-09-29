@@ -1,5 +1,12 @@
 [
   {
+    "id": "harvest",
+    "title": "URL harvest with provenance",
+    "where": "container",
+    "purpose": "Fetch -> normalize -> sha256 -> staged candidate under logs/harvest-<ts>/ (raw.bin, meta.json, candidate.md). External content stays UNTRUSTED; adoption is always an explicit edit citing the hash. Never writes docs.",
+    "commands": ["python3 scripts/harvest.py --url https://example.com", "python3 scripts/harvest.py --self-test"]
+  },
+  {
     "id": "harness",
     "title": "Whole-state check",
     "where": "container",
