@@ -282,6 +282,20 @@ exports: `/api/export` (sessions CSV), `/api/export/session`, `/api/export/ocr`,
 `/api/export/patterns`, `/api/export/guard`. The **signals** tab also carries a
 **session-health** panel (`/api/health`) that flags stalled/blank turns from the
 database alone — the route-around when the interactive web view freezes.
+Async panels never render blank: each carries a `loading...` skeleton that
+is replaced on render (`data-error` on failure), and the signals pane
+re-renders on every tab activation so live adjudication converges without
+a reload. Proof screenshots (all captured with Playwright against a
+scratch dashboard build, none retouched):
+
+- docs/ux/signals-adjudicated.png — /explore ▸ signals showing
+  `running 0 · blank 0 · dead 3 · dead-blank 6` (live-adjudicated;
+  scratch :5225 serving this HEAD).
+- docs/ux/loading-runbooks.png — /runbooks mid-fetch with the
+  `loading...` skeleton visible (Playwright route-delayed /api/runbooks
+  by 4 s; asserted `list == "loading..."` before capture).
+- docs/ux/explore-sessions.png — /explore overview sessions table
+  (42 sessions, same scratch build).
 
 Session health (stalls / blank turns)
 -------------------------------------

@@ -3,9 +3,9 @@
 ux-audit.py — measure /explore usability with Playwright (host-side).
 
 Reports objective signals: page height vs viewport, panel/tab counts, tab
-toggle behaviour, and page errors, then writes a full-page screenshot. This
-is the counterpart to the in-container gates (test-dashboard.sh) that the
-agent itself cannot run because the container has no browser.
+toggle behaviour, async-panel resolution, and page errors, then writes a
+full-page screenshot. Runs wherever Playwright's bundled chromium is
+installed (in-container and host-side).
 
 Usage (host, requires playwright):
     pip install playwright && playwright install chromium
@@ -17,11 +17,13 @@ verdict. Screenshots land in outdir (default logs/ux/).
 
 import os
 import sys
+import time
 
 from playwright.sync_api import sync_playwright
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5099/explore"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "logs/ux"
+READY_TIMEOUT_MS = 60000
 
 FAIL = 0
 
@@ -40,8 +42,24 @@ def main():
         pg = b.new_page(viewport={"width": 1200, "height": 900})
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
-        pg.goto(URL, wait_until="networkidle")
-        pg.wait_for_timeout(1500)
+        pg.goto(URL, wait_until="domcontentloaded", timeout=20000)
+        # Never networkidle (2 s polling + ~10 s cold single-threaded
+        # /api/health = timeouts on healthy pages) and never
+        # page.wait_for_function with a string expression: it compiles via
+        # an eval-like call on every poll tick, tripping the dashboard's
+        # own CSP (no unsafe-eval) as a pageerror — a harness artifact
+        # (proven 2026-09-29). Poll with evaluate (CSP-clean) instead.
+        deadline = time.monotonic() + READY_TIMEOUT_MS / 1000
+        while time.monotonic() < deadline:
+            left = pg.evaluate("document.querySelectorAll('[data-loading]').length")
+            if left == 0:
+                break
+            pg.wait_for_timeout(2000)
+        pg.wait_for_timeout(800)
+
+        loading_left = pg.evaluate("document.querySelectorAll('[data-loading]').length")
+        print("loading_left=%d" % loading_left)
+        check(loading_left == 0, "async panels resolved", "left=%d" % loading_left)
 
         height = pg.evaluate("() => document.body.scrollHeight")
         vh = pg.evaluate("() => window.innerHeight")

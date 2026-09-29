@@ -398,6 +398,19 @@ PY
     kill -TERM "$srv" || true
     wait "$srv" || true
 
+    # Failure-only forensics: a red gate must be learnable. Preserve the
+    # whole work dir (server log + every fetched artifact) under logs/
+    # (gitignored) so the next flake keeps its evidence instead of
+    # vanishing into /tmp. Passes need no forensics (last-gate.json).
+    if [ "$FAIL" -gt 0 ]; then
+        local faildir="$REPO/logs/test-dashboard-fail-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+        if mkdir -p "$faildir" && cp -r "$work/." "$faildir/" 2>"$faildir/cp-stderr.log"; then
+            printf 'forensics preserved: %s\n' "$faildir"
+        else
+            printf 'forensics FAILED to preserve (work kept at %s)\n' "$work"
+        fi
+    fi
+
     if [ -n "$SLOW_MSG" ]; then
         printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
     fi

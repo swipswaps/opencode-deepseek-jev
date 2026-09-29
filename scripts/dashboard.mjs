@@ -202,7 +202,15 @@ function query(sql, ...args) {
   return READ_DB.prepare(sql).all(...args);
 }
 
+// Poll-endpoint TTL: the home page refreshes cost/activity/todos every
+// 2 s. Uncached, apiCost (~24 correlated scans) and apiActivity (full
+// part-table sort) recompute on every tick and saturate the
+// single-threaded loop. 10 s staleness is invisible on glanceable panels.
+const POLL_TTL_MS = Number(process.env.POLL_TTL_MS || 10000);
 function apiCost() {
+  return ttlCached("cost", POLL_TTL_MS, apiCostFresh);
+}
+function apiCostFresh() {
   const totals = query(
     "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
   )[0];
@@ -347,17 +355,53 @@ function apiDuplicates() {
 // Generic TTL wrapper for heavy read-only endpoints (same pattern as
 // apiHealth's cache): first call computes, repeats within ttlMs serve from
 // memory with cached/age_ms observability. DB is never written.
+//
+// Stale-while-revalidate + singleflight (backend-overload doctrine): the
+// aggregations below are synchronous and multi-second, and this process is
+// single-threaded — a recompute on the request path blocks EVERY other
+// request (measured: cold /api/health ~10 s, /api/signals ~5 s,
+// /api/words ~4.7 s). Past the TTL we therefore serve the stale payload
+// immediately (stale:true) and recompute once in the background; a refresh
+// already in flight is never duplicated. Only a true-cold start (no stale
+// value yet) computes inline. The boot pre-warm fills the health entry so
+// the first visitor rarely pays cold.
+//
+// List payloads (apiActivity) bypass the cached/age_ms/stale flags: extra
+// props on an array do not survive JSON.stringify, and wrapping the payload
+// would change the API shape clients parse. Dict payloads keep the flags.
 const TTL_CACHE = {};
+const TTL_REFRESHING = {};
 function ttlCached(key, ttlMs, fn) {
   const now = Date.now();
   const hit = TTL_CACHE[key];
   if (hit && hit.value && now - hit.at < ttlMs) {
+    if (Array.isArray(hit.value)) return hit.value.slice();
     return Object.assign({}, hit.value, { cached: true, age_ms: now - hit.at });
   }
+  if (hit && hit.value) {
+    if (!TTL_REFRESHING[key]) {
+      TTL_REFRESHING[key] = true;
+      // Deferred past this tick: fn() is synchronous multi-second work and
+      // an async wrapper would still run its sync prefix inline, blocking
+      // THIS response. Set the flag now (singleflight), compute next tick.
+      setImmediate(() => {
+        try {
+          const value = fn();
+          if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
+          TTL_CACHE[key] = { at: Date.now(), value };
+        } catch {
+          // keep serving stale on refresh failure; next miss retries
+        }
+        TTL_REFRESHING[key] = false;
+      });
+    }
+    if (Array.isArray(hit.value)) return hit.value.slice();
+    return Object.assign({}, hit.value, { cached: true, age_ms: now - hit.at, stale: true });
+  }
   const value = fn();
-  value.cached = false;
+  if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
   value.age_ms = 0;
-  TTL_CACHE[key] = { at: now, value };
+  TTL_CACHE[key] = { at: Date.now(), value };
   return value;
 }
 const SIGNALS_TTL_MS = Number(process.env.SIGNALS_TTL_MS || 30000);
@@ -397,6 +441,9 @@ function apiSignalsFresh() {
 }
 
 function apiPatterns(limit) {
+  return ttlCached("patterns:" + (Number(limit) || 30), CACHE_TTL_MS, () => apiPatternsFresh(limit));
+}
+function apiPatternsFresh(limit) {
   const ngrams = query(
     "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n FROM (" +
     "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
@@ -432,11 +479,36 @@ function apiGuard(limit) {
 // gateable. TTL is tunable via HEALTH_TTL_MS.
 let HEALTH_CACHE = { at: 0, value: null };
 const HEALTH_TTL_MS = Number(process.env.HEALTH_TTL_MS || 15000);
+let HEALTH_REFRESHING = false;
 async function apiHealth() {
   const now = Date.now();
-  if (HEALTH_CACHE.value && now - HEALTH_CACHE.at < (HEALTH_CACHE.ttl || HEALTH_TTL_MS)) {
-    return Object.assign({}, HEALTH_CACHE.value, { cached: true, age_ms: now - HEALTH_CACHE.at });
+  const v = HEALTH_CACHE.value;
+  if (v && now - HEALTH_CACHE.at < (HEALTH_CACHE.ttl || HEALTH_TTL_MS)) {
+    return Object.assign({}, v, { cached: true, age_ms: now - HEALTH_CACHE.at });
   }
+  if (v) {
+    // Stale-while-revalidate (see ttlCached doctrine): serve stale now,
+    // refresh once in the background. A cold /api/health blocks the loop
+    // ~10 s; without this every TTL expiry replays that stall onto a live
+    // request and everything queued behind it.
+    if (!HEALTH_REFRESHING) {
+      HEALTH_REFRESHING = true;
+      // Deferred past this tick: refreshHealthCache is async, but an async
+      // call still runs its synchronous prefix (multi-second aggregation)
+      // inline, which would block THIS stale response. Flag now for
+      // singleflight, compute next tick.
+      setImmediate(() => {
+        refreshHealthCache().then(
+          () => { HEALTH_REFRESHING = false; },
+          () => { HEALTH_REFRESHING = false; }
+        );
+      });
+    }
+    return Object.assign({}, v, { cached: true, age_ms: now - HEALTH_CACHE.at, stale: true });
+  }
+  return refreshHealthCache(); // true-cold: no stale value exists yet
+}
+async function refreshHealthCache() {
   try {
     const r = healthReport(dbPath);
     Object.assign(r, annotateReport(r));
@@ -458,11 +530,11 @@ async function apiHealth() {
     applyLiveAdjudication(r, r.live);
     r.cached = false;
     r.age_ms = 0;
-    // If live status was unavailable, do NOT poison the cache for the full TTL:
-    // retry soon (5s) so the panel picks up the adjudication once the server
-    // answers, instead of showing stale tombstones for 15s.
+    // Validity starts when the value lands, not when the compute started:
+    // a shorter TTL than the compute time would otherwise birth an
+    // already-expired entry (permanent recompute storm saturating the loop).
     const ttl = r.live && r.live.available ? HEALTH_TTL_MS : 5000;
-    HEALTH_CACHE = { at: now, value: r, ttl };
+    HEALTH_CACHE = { at: Date.now(), value: r, ttl };
     return r;
   } catch (e) {
     return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [], cached: false };
@@ -470,6 +542,9 @@ async function apiHealth() {
 }
 
 function apiActivity() {
+  return ttlCached("activity", POLL_TTL_MS, apiActivityFresh);
+}
+function apiActivityFresh() {
   const rows = query("SELECT time_created, data FROM part ORDER BY time_created DESC LIMIT 80");
   const items = [];
   for (const row of rows) {
@@ -720,6 +795,9 @@ function apiSemantic(q, limit) {
 const STOP = new Set(("the a an and or but if then else of to in on for with is are was were be been this that these those it its as at by from we you i he she they not no do does did can could will would should may might about into over under out up down so very just than what when where which who how all any more most other some only own same your our").split(" "));
 
 function apiWords(limit) {
+  return ttlCached("words:" + (Number(limit) || 80), CACHE_TTL_MS, () => apiWordsFresh(limit));
+}
+function apiWordsFresh(limit) {
   const rows = query(
     "SELECT data FROM part WHERE json_extract(data, '$.type') IN ('reasoning','text') ORDER BY time_created DESC LIMIT 4000"
   );
@@ -817,19 +895,20 @@ const html = `<!doctype html>
 </style></head>
 <body>
 ${nav("dashboard")}
-<div id="session" class="muted"></div>
-<div class="row" id="stats"></div>
+<div id="session" class="muted"><span class="muted" data-loading>loading...</span></div>
+<div class="row" id="stats"><span class="muted" data-loading>loading...</span></div>
 <div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
-<div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"></div></div>
-<div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"></div></div>
+<div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
-<div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"></div></div>
-<div class="card"><h3>Todos</h3><div id="todos"></div></div>
+<div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h3>Todos</h3><div id="todos"><span class="muted" data-loading>loading...</span></div></div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
 function ts(t){return new Date(t).toISOString().slice(11,23);}
 async function j(u){try{var r=await fetch(u);return r.ok?r.json():null;}catch(e){return null;}}
+function failIfPristine(id,msg){var el=document.getElementById(id);if(el&&el.querySelector('[data-loading]'))el.innerHTML='<span class="muted" data-error>'+msg+'</span>';}
 var expanded={};
 function item(x){
   var cls=String(x.type||'').toUpperCase();
@@ -883,17 +962,19 @@ async function refreshCost(){
     var sel=document.getElementById('sessions');
     sel.innerHTML=sh;
     if(drillId){var row=sel.querySelector('tr[data-id="'+drillId+'"]');if(row){row.style.background='#1f6feb33';}}
-  }
+  }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
 async function refreshActivity(){
   var a=await j('/api/activity');
   if(a){var h='';for(var i=0;i<a.length;i++){h+=item(a[i]);}
     document.getElementById('activity').innerHTML=h||'<div class="item">(no activity)</div>';}
+  else{failIfPristine('activity','(activity unavailable)');}
 }
 async function refreshTodos(){
   var td=await j('/api/todos');
   if(td){var h2='';for(var k=0;k<td.length;k++){h2+='<div class="item"><span class="tag">'+esc(td[k].status)+'</span>'+esc(td[k].content)+'</div>';}
     document.getElementById('todos').innerHTML=h2||'<div class="item">(no todos)</div>';}
+  else{failIfPristine('todos','(todos unavailable)');}
 }
 async function refreshBalance(){
   bal=await j('/api/balance');
@@ -979,6 +1060,7 @@ document.getElementById('sessions').addEventListener('click',function(ev){
 var want=new URLSearchParams(location.search).get('session');
 if(want){drill(want);}
 refreshBalance();
+refreshConfig();
 setInterval(refreshCost,2000);
 setInterval(refreshActivity,2000);
 setInterval(refreshTodos,2000);
@@ -1041,55 +1123,55 @@ ${nav("explore")}
 <div class="pane" data-pane="overview">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
-<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"></div></div>
+<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
 </div>
 <div class="pane" data-pane="code" style="display:none">
 <h2>Code — repo files flagged by the database (scripts/code-index.py)</h2>
-<div class="chart" id="code"></div>
+<div class="chart" id="code"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="pane" data-pane="data" style="display:none">
 <h2>Duplicates — near-identical sessions</h2>
-<div class="chart" id="dupes"></div>
+<div class="chart" id="dupes"><span class="muted" data-loading>loading...</span></div>
 <h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>
-<div class="chart" id="integrations"></div>
+<div class="chart" id="integrations"><span class="muted" data-loading>loading...</span></div>
 <h2>Jev vs Laya — A/B runs (persisted)</h2>
-<div class="chart" id="ab"></div>
+<div class="chart" id="ab"><span class="muted" data-loading>loading...</span></div>
 <h2>Database map — tables sized by rows, edges = foreign keys</h2>
-<div class="chart" id="dmap"></div>
+<div class="chart" id="dmap"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="pane" data-pane="charts" style="display:none">
 <h2>Where the money goes — sessions sized by cost, grouped by model</h2>
-<div class="chart" id="treemap"></div>
+<div class="chart" id="treemap"><span class="muted" data-loading>loading...</span></div>
 <h2>Cumulative spend vs budget — drag to filter the views below</h2>
-<div class="chart" id="burn"></div>
+<div class="chart" id="burn"><span class="muted" data-loading>loading...</span></div>
 <h2>Latency x cost — radius = tokens, colour = model (outliers are bottlenecks)</h2>
-<div class="chart" id="scatter"></div>
+<div class="chart" id="scatter"><span class="muted" data-loading>loading...</span></div>
 <h2>Token flow — where the tokens go, by model</h2>
-<div class="chart" id="sankey"></div>
+<div class="chart" id="sankey"><span class="muted" data-loading>loading...</span></div>
 <h2>Sessions over time — bar colour = cost (click to load the part timeline)</h2>
-<div class="chart" id="gantt"></div>
+<div class="chart" id="gantt"><span class="muted" data-loading>loading...</span></div>
 <h2>Part timeline — <span id="tl-title">latest session</span> <button id="tl-reset">reset</button></h2>
-<div class="chart" id="timeline"></div>
+<div class="chart" id="timeline"><span class="muted" data-loading>loading...</span></div>
 <h2>Word cloud — recurring terms in reasoning &amp; text</h2>
-<div class="chart" id="cloud"></div>
+<div class="chart" id="cloud"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="pane" data-pane="signals" style="display:none">
 <h2>Session health — stalled / blank turns (read-only, browser-independent)</h2>
-<div class="chart" id="health"></div>
+<div class="chart" id="health"><span class="muted" data-loading>loading...</span></div>
 <h2>Signals — mistakes, rule mentions, churn</h2>
-<div class="chart" id="signals"></div>
+<div class="chart" id="signals"><span class="muted" data-loading>loading...</span></div>
 <h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard">[csv]</a></h2>
-<div class="chart" id="guard"></div>
+<div class="chart" id="guard"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="pane" data-pane="patterns" style="display:none">
 <h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns">[csv]</a></h2>
-<div class="chart" id="patterns"></div>
+<div class="chart" id="patterns"><span class="muted" data-loading>loading...</span></div>
 <h2>Pivot — from tool &times; to tool (bigram matrix, Observable Plot)</h2>
-<div class="chart" id="pivot"></div>
+<div class="chart" id="pivot"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="pane" data-pane="ocr" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
-<div class="chart" id="ocr"></div>
+<div class="chart" id="ocr"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="tip" id="tip"></div>
 <script>
@@ -1380,6 +1462,16 @@ function activateTab(name,setHash){
   var panes=document.querySelectorAll('.pane');
   for(var j=0;j<panes.length;j++){panes[j].style.display=(panes[j].getAttribute('data-pane')===name)?'block':'none';}
   if(setHash){try{location.hash=name;}catch(e){}}
+  // Self-healing signals: live adjudication (dead_tool/dead_blank) can
+  // change between loads, and a load that raced a live-unavailable window
+  // paints fail-safe tombstones with no later correction. Re-render the
+  // signals pane on activation so the panel converges without a reload.
+  // Markers first (renderers clear-then-fetch, which would flash blank).
+  if(name==='signals'){
+    var ids=['health','signals','guard'];
+    for(var k=0;k<ids.length;k++){var c=document.getElementById(ids[k]);if(c)c.innerHTML='<span class="muted" data-loading>loading...</span>';}
+    renderHealth();renderSignals();renderGuard();
+  }
 }
 document.getElementById('tabs').addEventListener('click',function(ev){
   var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
@@ -1390,7 +1482,7 @@ activateTab((location.hash||'').slice(1)||'overview',false);
 async function load(){
   if(typeof d3==='undefined'){var el=document.getElementById('treemap');if(el){el.textContent='d3 failed to load (/vendor/d3.min.js)';}return;}
   var o=await j('/api/overview?limit=500');
-  if(!o||!o.sessions){d3.select('#treemap').text('(no data)');return;}
+  if(!o||!o.sessions){d3.select('#treemap').text('(no data)');d3.selectAll('[data-loading]').text('(overview unavailable)');return;}
   BUDGET=o.budget;DATA=o.sessions;setFilterText();
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
@@ -1667,7 +1759,7 @@ ${nav("runbooks")}
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
 <div id="count" class="muted count"></div>
-<div id="list"></div>
+<div id="list"><span class="muted" data-loading>loading...</span></div>
 <script>
 var RUNBOOKS=[];
 function render(){
@@ -1700,6 +1792,7 @@ function render(){
     el.appendChild(card);
   }
   document.getElementById('count').textContent=shown+' of '+RUNBOOKS.length+' runbooks';
+  if(!shown){el.innerHTML='<div class="muted" data-empty>No runbooks match this filter.</div>';}
 }
 function copy(text,btn){
   function done(){btn.textContent='copied';setTimeout(function(){btn.textContent='copy';},1200);}
@@ -1712,7 +1805,7 @@ function copy(text,btn){
   else{fallback();}
 }
 document.getElementById('f').addEventListener('change',render);
-fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNBOOKS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted">(runbooks unavailable)</div>';});
+fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNBOOKS=d;render();}).catch(function(){document.getElementById('list').innerHTML='<div class="muted" data-error>(runbooks unavailable)</div>';});
 </script></body></html>`;
 
 const managedHtml = `<!doctype html>
@@ -1829,15 +1922,18 @@ const modelsHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("models")}
-<div id="banner" class="banner"></div>
+<div id="banner" class="banner"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="policy"></div>
-<h2>Catalog</h2><div id="cat"></div>
+<h2>Catalog</h2><div id="cat"><span class="muted" data-loading>loading...</span></div>
 <div class="muted">This is the cost policy, not a guarantee. Switch with /models (TUI) or opencode run -m &lt;id&gt;.</div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 async function load(){
-  var r=await fetch('/api/models'); var d=await r.json();
+  var d=null;
+  try{var r=await fetch('/api/models');d=r.ok?await r.json():null;}
+  catch(e){d=null;}
   var b=document.getElementById('banner');
+  if(!d){b.innerHTML='<span class="muted" data-error>(models unavailable)</span>';document.getElementById('cat').innerHTML='';return;}
   if(!d||d.available===false||!d.models||!d.models.length){b.textContent='no catalog yet - run ./scripts/models.sh --write (or ./scripts/harness.sh)';return;}
   var v=d.verdict||'?';
   b.className='banner '+(v==='ALLOW'?'ok':(v==='ASK'?'ask':'block'));
@@ -2008,4 +2104,15 @@ server.on("error", (err) => {
 
 server.listen(port, host, () => {
   console.log("opencode observability: http://" + host + ":" + port + "  (db: " + dbPath + ")");
+  // Pre-warm the slowest cache off the critical path: a cold /api/health
+  // runs ~10 s of synchronous aggregation that blocks the event loop and
+  // serialises every concurrent fetch (measured ~18 s explore tails).
+  // setImmediate keeps listen prompt; the first visitor gets a warm cache.
+  setImmediate(() => {
+    console.log("pre-warming /api/health cache...");
+    Promise.resolve(apiHealth()).then(
+      () => console.log("pre-warm /api/health ready"),
+      (e) => console.log("pre-warm /api/health failed: " + (e && e.message ? e.message : e))
+    );
+  });
 });

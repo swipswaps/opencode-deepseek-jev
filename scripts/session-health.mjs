@@ -86,25 +86,27 @@ export function healthReport(dbPath, opts = {}) {
   // S1 — blank tails among recent sessions. The extra `< now - runMs` bound
   // removes the transient "a tool is legitimately in progress right now" case
   // that would otherwise look blank on every active session.
+  // Single grouped pass (was 2 correlated full-table scans per session):
+  // MAX over the same per-session sets, so results are identical. The part
+  // table grows without bound while recent sessions hold most of it; 80
+  // correlated scans turned this into the dashboard's slowest sync query
+  // (~5 s, blocking the single-threaded server on every /api/health miss).
   const blank = db
     .prepare(
-      `SELECT * FROM (
-         SELECT s.id    AS id,
-                s.title AS title,
-                s.model AS model,
-                (SELECT MAX(p.time_created) FROM part p
-                   WHERE p.session_id = s.id
-                     AND json_extract(p.data,'$.type') = 'text') AS last_text,
-                (SELECT MAX(p.time_created) FROM part p
-                   WHERE p.session_id = s.id
-                     AND json_extract(p.data,'$.type') = 'tool') AS last_tool
-           FROM session s
-          WHERE s.id IN (SELECT id FROM session
-                          ORDER BY time_created DESC LIMIT ?)
-       )
-       WHERE last_tool IS NOT NULL
-         AND last_tool < ?
-         AND (last_text IS NULL OR last_text < last_tool)`,
+      `SELECT s.id    AS id,
+              s.title AS title,
+              s.model AS model,
+              MAX(CASE WHEN json_extract(p.data,'$.type') = 'text'
+                       THEN p.time_created END) AS last_text,
+              MAX(CASE WHEN json_extract(p.data,'$.type') = 'tool'
+                       THEN p.time_created END) AS last_tool
+         FROM session s LEFT JOIN part p ON p.session_id = s.id
+        WHERE s.id IN (SELECT id FROM session
+                        ORDER BY time_created DESC LIMIT ?)
+        GROUP BY s.id
+       HAVING last_tool IS NOT NULL
+          AND last_tool < ?
+          AND (last_text IS NULL OR last_text < last_tool)`,
     )
     .all(recent, now - runMs);
 

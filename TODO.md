@@ -65,6 +65,51 @@ Last updated: 2026-09-28
 
 ## Done (most recent first)
 
+- [x] backend overload resolved (best-practice pass, measured E3).
+      Disease: single-threaded server + multi-second sync aggregation =
+      head-of-line blocking (cold /api/health ~10s; trivial /api/rev
+      measured 4.8-6.1s during recomputes). Fixes, each proven: (1) S1
+      blank-tail query rewritten 80 correlated scans -> 1 grouped pass
+      (healthReport 4.9s->1.2s; self-test PASS; real-DB output identical);
+      a ledger subquery rewrite was REVERTED (identical output, no
+      measured gain — unproven optimisations don't ship). (2)
+      Stale-while-revalidate + singleflight on ttlCached and apiHealth:
+      post-TTL serves stale instantly + one background refresh; validity
+      measured from landing time (an entry-time `at` birthed
+      already-expired entries -> permanent recompute storm — root-caused
+      live via age time-series). (3) boot pre-warm of apiHealth (first
+      view 0.2s cached vs 7.2s cold; listen still ~2.5s). (4) poll
+      endpoints cached (activity 1.47s->0.01s, cost 0.25s->0.02s, 10s
+      TTL) with array-shape preservation (Object.assign on arrays
+      corrupts JSON shape — caught by probing). (5) uncached
+      aggregations wrapped (patterns, words). (6) signals pane
+      re-renders on tab activation (a load racing a live-unavailable
+      window painted tombstones with no later correction — caught by
+      panel-vs-curl divergence, proven to self-heal). Result: rev
+      during recomputes 0.07s (was 4.8s). Remaining: sync refreshes
+      still freeze the loop ~seconds (worker-thread cure = own segment);
+      failure-only gate forensics added (a blacklisted `2>/dev/null`
+      of mine was caught by the guard mid-work — fixed per RULES #8).
+- [x] UX loading states + deterministic UX gates (P2 slice): every async
+      container on `/`, `/explore`, `/runbooks`, `/models` now carries a
+      `data-loading` skeleton (replaced on render; `data-error` on failure
+      only if still pristine, so 2s polls never clobber good data);
+      runbooks gained an empty-filter state, models a try/catch error
+      state, home calls `refreshConfig()` at boot (was 30s-stale marker).
+      `ux-test.py`/`ux-audit.py` dropped `networkidle` (timeouts on
+      healthy polling pages) for domcontentloaded + marker polling, with
+      progress-not-stall semantics and post-resize re-settle. Proven:
+      ux-test 26/0 x3, ux-audit PASS x2, throttled-fetch probe
+      (`loading...` through a 4s stall -> 19 cards,
+      `logs/ux/loading-runbooks.png`), lint 108, test-dashboard 116/0
+      x5 (+1 unidentified cold-start flake in 6 runs, failing line lost
+      to log overwrite). Two artifacts killed on the way:
+      `wait_for_function(string)` trips the dashboard CSP as a pageerror
+      (poll via `evaluate` instead); cold `/api/health` ~10s blocks the
+      single-threaded loop, serialising ~20 explore fetches to ~18s tails
+      (markers honest throughout). Follow-ups: boot pre-warm for cold
+      health, d3 `new Function` (csvParse path) vs CSP if ever used,
+      per-run gate logs.
 - [x] dashboard now adjudicates (the gap from cc85d95): `apiHealth` is async and
       awaits `liveStatus()` + `applyLiveAdjudication()`, so `/api/health` and the
       signals panel carry real `dead_tool`/`dead_blank` (panel: `running 0 ·

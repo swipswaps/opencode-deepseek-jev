@@ -82,6 +82,17 @@ inline image, so a client-side fix (upstream), not a repo transform, is the
 honest scope; guidance only. (4) Rotate keys/password only if 4096 is ever
 widened to the LAN.
 
+**2026-09-29 backend addendum (serves after host restarts :5099).**
+Single-threaded server + multi-second sync aggregation = head-of-line
+blocking (rev 4.8–6.1 s during recomputes). Now: SWR + singleflight on all
+cached endpoints, validity from landing time, boot pre-warm, poll/cost/
+activity/patterns/words cached, S1 query 80 scans → 1 grouped pass
+(healthReport 4.9 s → 1.2 s, output identical), signals pane re-renders on
+tab activation, failure-only gate forensics, `docs/ux/` proof shots
+referenced from README.txt. Result: rev during recomputes 0.07 s. Residual:
+background refreshes still freeze the loop for seconds (worker-thread cure
+is its own segment); TTLs (`HEALTH_TTL_MS`, `POLL_TTL_MS`, …) are the knobs.
+
 ## Current state (2026-09-25) — historical
 - Audits green; balance healthy (read the live figure from `./scripts/cost.sh`;
   never hard-code it). Everything committed and pushed (`main`).
