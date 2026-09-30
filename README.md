@@ -280,9 +280,12 @@ scratch dashboard build, none retouched):
 
 ## Usage guide (step by step, with screenshots)
 
-Video walkthrough (33 s, 11 captioned steps with pan/zoom into each
+Video walkthrough (36 s, 12 captioned steps with pan/zoom into each
 feature, captured live against the served build with scripted
-Playwright): `docs/ux/usage-tour.mp4`.
+Playwright): `docs/ux/usage-tour.mp4`. Keyboard users: Tab reaches
+every control, arrows switch explore tabs, Enter sorts table columns,
+`/` focuses search, Escape blurs — step 12 of the video shows the
+focus ring in action.
 
 Session-resume tour (33 s): when the upstream web UI cannot list old
 sessions, resume via transcript — `docs/ux/resume-tour.mp4` demonstrates

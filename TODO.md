@@ -94,6 +94,18 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] keyboard + screen-reader operability (WCAG 2.1 AA essentials per
+      W3C APG, ArcGIS/Tableau/Cognos practices). Explore tabs are a
+      real tablist (roles, aria-selected, arrow/Home/End automatic
+      activation); sortable headers keyboard-operable with aria-sort;
+      captions + scope on tables; list roles on runbooks; labels on
+      all filters/search; '/' focuses search (home; explore keeps
+      legacy #q2), Escape blurs; :focus-visible rings everywhere.
+      Proven: scripted zero-mouse walkthrough 18/18 via Selenium,
+      lint 112, dashboard 116, ux-test 26/0; tour +12th keyboard
+      segment (36 s video). Design note: a pre-existing global '/'
+      handler already claimed explore's shortcut — kept legacy,
+      removed the conflict instead of forking behavior.
 - [x] attach driven via tmux pty (TUI automation without browser tools).
       `opencode attach -s ses_f1d2` lands inside the session (title,
       context 857K/$1.38, todos visible) — resume path fully proven.

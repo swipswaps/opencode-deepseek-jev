@@ -899,12 +899,13 @@ const html = `<!doctype html>
  .card a{font-size:12px;margin-right:6px}
  .live{color:#3fb950}.idle{color:#8b949e}
  #session{font-size:13px;margin-bottom:4px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("dashboard")}
 <div id="session" class="muted"><span class="muted" data-loading>loading...</span></div>
 <div class="row" id="stats"><span class="muted" data-loading>loading...</span></div>
-<div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..."><div id="searchres"></div></div>
+<div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres"></div></div>
 <div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
@@ -1068,6 +1069,13 @@ var want=new URLSearchParams(location.search).get('session');
 if(want){drill(want);}
 refreshBalance();
 refreshConfig();
+// Keyboard: '/' focuses search, Escape blurs. Never hijacks typing.
+document.addEventListener('keydown',function(ev){
+  var t=ev.target&&(ev.target.tagName||'').toLowerCase();
+  if(t==='input'||t==='textarea'||t==='select')return;
+  if(ev.key==='/'){var q=document.getElementById('q');if(q){ev.preventDefault();q.focus();}}
+  else if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
+});
 setInterval(refreshCost,2000);
 setInterval(refreshActivity,2000);
 setInterval(refreshTodos,2000);
@@ -1115,30 +1123,31 @@ const exploreHtml = `<!doctype html>
  .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
  .stat b{display:block;font-size:16px}
  .stat span{color:#8b949e;font-size:11px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("explore")}
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
-<div class="tabs" id="tabs">
-  <button class="tab active" data-tab="overview">overview</button>
-  <button class="tab" data-tab="charts">charts</button>
-  <button class="tab" data-tab="signals">signals</button>
-  <button class="tab" data-tab="patterns">patterns</button>
-  <button class="tab" data-tab="code">code</button>
-  <button class="tab" data-tab="data">data</button>
-  <button class="tab" data-tab="ocr">ocr</button>
+<div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
+  <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview</button>
+  <button class="tab" data-tab="charts" role="tab" id="tab-charts" aria-selected="false" aria-controls="pane-charts">charts</button>
+  <button class="tab" data-tab="signals" role="tab" id="tab-signals" aria-selected="false" aria-controls="pane-signals">signals</button>
+  <button class="tab" data-tab="patterns" role="tab" id="tab-patterns" aria-selected="false" aria-controls="pane-patterns">patterns</button>
+  <button class="tab" data-tab="code" role="tab" id="tab-code" aria-selected="false" aria-controls="pane-code">code</button>
+  <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data</button>
+  <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr</button>
 </div>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
-<div class="pane" data-pane="overview">
-<div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)"><div id="sres"></div></div>
+<div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+<div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)" aria-label="Search everything"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
-<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
+<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." aria-label="Filter sessions by title or model" style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
 </div>
-<div class="pane" data-pane="code" style="display:none">
+<div class="pane" data-pane="code" id="pane-code" role="tabpanel" aria-labelledby="tab-code" tabindex="0" style="display:none">
 <h2>Code — repo files flagged by the database (scripts/code-index.py)</h2>
 <div class="chart" id="code"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="data" style="display:none">
+<div class="pane" data-pane="data" id="pane-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" style="display:none">
 <h2>Duplicates — near-identical sessions</h2>
 <div class="chart" id="dupes"><span class="muted" data-loading>loading...</span></div>
 <h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>
@@ -1148,7 +1157,7 @@ ${nav("explore")}
 <h2>Database map — tables sized by rows, edges = foreign keys</h2>
 <div class="chart" id="dmap"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="charts" style="display:none">
+<div class="pane" data-pane="charts" id="pane-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" style="display:none">
 <h2>Where the money goes — sessions sized by cost, grouped by model</h2>
 <div class="chart" id="treemap"><span class="muted" data-loading>loading...</span></div>
 <h2>Cumulative spend vs budget — drag to filter the views below</h2>
@@ -1164,7 +1173,7 @@ ${nav("explore")}
 <h2>Word cloud — recurring terms in reasoning &amp; text</h2>
 <div class="chart" id="cloud"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="signals" style="display:none">
+<div class="pane" data-pane="signals" id="pane-signals" role="tabpanel" aria-labelledby="tab-signals" tabindex="0" style="display:none">
 <h2>Session health — stalled / blank turns (read-only, browser-independent)</h2>
 <div class="chart" id="health"><span class="muted" data-loading>loading...</span></div>
 <h2>Signals — mistakes, rule mentions, churn</h2>
@@ -1172,13 +1181,13 @@ ${nav("explore")}
 <h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard">[csv]</a></h2>
 <div class="chart" id="guard"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="patterns" style="display:none">
+<div class="pane" data-pane="patterns" id="pane-patterns" role="tabpanel" aria-labelledby="tab-patterns" tabindex="0" style="display:none">
 <h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns">[csv]</a></h2>
 <div class="chart" id="patterns"><span class="muted" data-loading>loading...</span></div>
 <h2>Pivot — from tool &times; to tool (bigram matrix, Observable Plot)</h2>
 <div class="chart" id="pivot"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="ocr" style="display:none">
+<div class="pane" data-pane="ocr" id="pane-ocr" role="tabpanel" aria-labelledby="tab-ocr" tabindex="0" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
 <div class="chart" id="ocr"><span class="muted" data-loading>loading...</span></div>
 </div>
@@ -1280,10 +1289,16 @@ function renderTable(){
   var tc=document.getElementById('tcount');if(tc)tc.textContent=rows.length+' of '+DATA.length+' sessions';
   var cols=[['title','title'],['model','model'],['cost','cost $'],['tokens_input','in'],['tokens_output','out'],['tokens_reasoning','reason'],['tokens_cache_read','cache'],['_span','span']];
   var table=el.append('table');
+  table.append('caption').text('sessions — activate a column header to sort');
+  var sortBy=function(c){if(SORT.col===c)SORT.dir=-SORT.dir;else{SORT.col=c;SORT.dir=-1;}renderTable();};
   table.append('tr').selectAll('th').data(cols).enter().append('th')
     .text(function(d){return (d[0]===SORT.col?'▾ ':'')+d[1];})
+    .attr('scope','col')
+    .attr('tabindex','0')
+    .attr('aria-sort',function(d){return d[0]===SORT.col?(SORT.dir===-1?'descending':'ascending'):null;})
     .style('text-decoration',function(d){return d[0]===SORT.col?'underline':'none';})
-    .on('click',function(ev,d){if(SORT.col===d[0])SORT.dir=-SORT.dir;else{SORT.col=d[0];SORT.dir=-1;}renderTable();});
+    .on('click',function(ev,d){sortBy(d[0]);})
+    .on('keydown',function(ev,d){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();sortBy(d[0]);}});
   var tr=table.selectAll('tr.row').data(rows).enter().append('tr').attr('class','row')
     .attr('data-od-id',function(d){return 'session:'+d.id;})
     .on('click',function(ev,d){detail(d.id);});
@@ -1443,6 +1458,14 @@ async function renderGuard(){
   el.html(h);
 }
 document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();});
+// Keyboard: Escape blurs. Never hijacks typing. (Note: '/' is already
+// claimed on this page by the Search-everything box #q2 — one shortcut,
+// one target; the home page claims '/' for its own #q instead.)
+document.addEventListener('keydown',function(ev){
+  var t=ev.target&&(ev.target.tagName||'').toLowerCase();
+  if(t==='input'||t==='textarea'||t==='select')return;
+  if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
+});
 document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 async function renderOcr(){
@@ -1466,7 +1489,7 @@ function activateTab(name,setHash){
   if(!name)return;
   var tabs=document.querySelectorAll('.tab');
   for(var i=0;i<tabs.length;i++){
-    if(tabs[i].getAttribute('data-tab')===name){tabs[i].classList.add('active');}else{tabs[i].classList.remove('active');}
+    if(tabs[i].getAttribute('data-tab')===name){tabs[i].classList.add('active');tabs[i].setAttribute('aria-selected','true');}else{tabs[i].classList.remove('active');tabs[i].setAttribute('aria-selected','false');}
   }
   var panes=document.querySelectorAll('.pane');
   for(var j=0;j<panes.length;j++){panes[j].style.display=(panes[j].getAttribute('data-pane')===name)?'block':'none';}
@@ -1485,6 +1508,24 @@ function activateTab(name,setHash){
 document.getElementById('tabs').addEventListener('click',function(ev){
   var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
   if(b){activateTab(b.getAttribute('data-tab'),true);}
+});
+// APG tabs keyboard pattern (automatic activation): arrows move between
+// tabs in DOM order, Home/End jump. Buttons are natively focusable and
+// Enter/Space already activates via click.
+document.getElementById('tabs').addEventListener('keydown',function(ev){
+  if(ev.key!=='ArrowLeft'&&ev.key!=='ArrowRight'&&ev.key!=='Home'&&ev.key!=='End')return;
+  var tabs=document.querySelectorAll('.tab');
+  var cur=document.querySelector('.tab.active');
+  var curName=cur?cur.getAttribute('data-tab'):null;
+  var at=-1,i;
+  for(i=0;i<tabs.length;i++){if(tabs[i].getAttribute('data-tab')===curName)at=i;}
+  if(at<0)at=0;
+  if(ev.key==='Home')at=0;
+  else if(ev.key==='End')at=tabs.length-1;
+  else at=(at+(ev.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  ev.preventDefault();
+  if(tabs[at].focus)tabs[at].focus();
+  activateTab(tabs[at].getAttribute('data-tab'),true);
 });
 if(typeof window!=='undefined'&&window.addEventListener){window.addEventListener('hashchange',function(){activateTab((location.hash||'').slice(1),false);});}
 activateTab((location.hash||'').slice(1)||'overview',false);
@@ -1867,13 +1908,14 @@ const runbooksHtml = `<!doctype html>
  button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
  button:hover{background:#2f81f7}
  .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("runbooks")}
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
-<div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
+<div class="bar"><label class="muted" for="f">filter</label><select id="f" aria-label="Filter runbooks by tag"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
 <div id="count" class="muted count"></div>
-<div id="list"><span class="muted" data-loading>loading...</span></div>
+<div id="list" role="list" aria-label="Runbooks"><span class="muted" data-loading>loading...</span></div>
 <script>
 var RUNBOOKS=[];
 function render(){
@@ -1885,7 +1927,7 @@ function render(){
     if(f==='manual'){if(!r.manual)continue;}
     else if(f!=='all'&&r.where!==f)continue;
     shown++;
-    var card=document.createElement('div');card.className='card';
+    var card=document.createElement('div');card.className='card';card.setAttribute('role','listitem');
     var head=document.createElement('div');head.className='rb-head';
     var t=document.createElement('span');t.className='rb-title';t.textContent=r.title;
     var b=document.createElement('span');b.className='badge '+(r.where==='host'?'HOST':'CONTAINER');b.textContent=r.where.toUpperCase();
@@ -1941,6 +1983,7 @@ const managedHtml = `<!doctype html>
  .cmd code{flex:1;white-space:pre-wrap;word-break:break-word;font-size:12px}
  button{background:#1f6feb;color:#fff;border:0;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
  .count{font-size:11px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("manage")}
@@ -2001,6 +2044,7 @@ const docsHtml = `<!doctype html>
  select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;margin:0 0 10px}
  pre{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:14px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;max-height:75vh;overflow:auto}
  .muted{color:#8b949e;font-size:12px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("docs")}
@@ -2033,6 +2077,7 @@ const modelsHtml = `<!doctype html>
  .banner{padding:10px 14px;border-radius:8px;margin:8px 0;border:1px solid #30363d}
  .banner.ok{border-color:#2ea043}.banner.ask{border-color:#d29922}.banner.block{border-color:#ff7b72}
  #cat{overflow-x:auto}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("models")}
@@ -2054,7 +2099,7 @@ async function load(){
   b.innerHTML='<b>'+esc(v)+'</b> - '+esc(d.reason||'')+'<br>current: <b>'+esc(d.current||'?')+'</b> - recommended: <b>'+esc((d.recommended&&d.recommended.id)||'?')+'</b>';
   document.getElementById('policy').textContent='policy: max_input=$'+(d.policy&&d.policy.max_input_per_m_usd)+'/1M  allow='+JSON.stringify((d.policy&&d.policy.allow)||[])+'  deny='+JSON.stringify((d.policy&&d.policy.deny)||[]);
   var allow={};(d.allowed||[]).forEach(function(x){allow[x]=1;});
-  var h='<table><tr><th></th><th>model</th><th class="num">in $/1M</th><th class="num">out</th><th class="num">ctx</th><th>img</th><th>tool</th></tr>';
+  var h='<table><caption>model catalog with cost policy verdicts</caption><tr><th scope="col"></th><th scope="col">model</th><th scope="col" class="num">in $/1M</th><th scope="col" class="num">out</th><th scope="col" class="num">ctx</th><th scope="col">img</th><th scope="col">tool</th></tr>';
   for(var i=0;i<d.models.length;i++){var m=d.models[i];var ok=allow[m.id];
     h+='<tr><td class="'+(ok?'ok':'no')+'">'+(ok?'ok':'no')+'</td><td>'+esc(m.id)+'</td><td class="num">'+m.input+'</td><td class="num">'+m.output+'</td><td class="num">'+m.context+'</td><td>'+(m.attachment?'yes':'')+'</td><td>'+(m.toolcall?'yes':'')+'</td></tr>';}
   document.getElementById('cat').innerHTML=h+'</table>';
