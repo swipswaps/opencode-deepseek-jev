@@ -444,17 +444,24 @@ function apiPatterns(limit) {
   return ttlCached("patterns:" + (Number(limit) || 30), CACHE_TTL_MS, () => apiPatternsFresh(limit));
 }
 function apiPatternsFresh(limit) {
+  // Recent-40 session window (same as health/ledger/activity): the full-log
+  // window function + two full scans cost ~5s sync on the single-threaded
+  // loop per TTL expiry. Values are now recent-windowed like every other
+  // panel (shape unchanged; counts reflect current behavior, not history).
+  const recent = 40;
+  const win = "session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)";
   const ngrams = query(
     "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n FROM (" +
     "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
     "lead(json_extract(data,'$.tool')) OVER (PARTITION BY session_id ORDER BY time_created) next_tool " +
-    "FROM part WHERE json_extract(data,'$.type')='tool') " +
-    "WHERE next_tool IS NOT NULL GROUP BY tool, next_tool ORDER BY n DESC LIMIT ?", limit);
+    "FROM part WHERE json_extract(data,'$.type')='tool' AND " + win + ") " +
+    "WHERE next_tool IS NOT NULL GROUP BY tool, next_tool ORDER BY n DESC LIMIT ?", recent, limit);
   const errorTools = query(
     "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part " +
     "WHERE json_extract(data,'$.type')='tool' AND json_extract(data,'$.state.status')='error' " +
-    "GROUP BY tool ORDER BY n DESC LIMIT 10");
-  const d = query("SELECT COUNT(DISTINCT json_extract(data,'$.tool')) n FROM part WHERE json_extract(data,'$.type')='tool'")[0];
+    "AND " + win + " " +
+    "GROUP BY tool ORDER BY n DESC LIMIT 10", recent);
+  const d = query("SELECT COUNT(DISTINCT json_extract(data,'$.tool')) n FROM part WHERE json_extract(data,'$.type')='tool' AND " + win, recent)[0];
   return { ngrams, errorTools, distinct: d ? d.n : 0 };
 }
 

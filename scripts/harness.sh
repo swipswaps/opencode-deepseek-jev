@@ -101,6 +101,13 @@ main() {
     fi
     REPORT_BODY=""
 
+    # Ledger: bracket the run. Telemetry is non-fatal by explicit handling —
+    # a ledger failure must never fail the gate. LEDGER_DB override is the
+    # test seam (point it somewhere unwritable to prove this path).
+    if have python3 && [ -f "$REPO/scripts/ledger.py" ]; then
+        LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" python3 "$REPO/scripts/ledger.py" record --type GATE_START --actor harness.sh --rev "$REV" --source harness.sh --key "gate-$TS-start" 2>&1 || printf 'ledger: GATE_START record failed (telemetry non-fatal)\n'
+    fi
+
     if [ "$JSON" -eq 0 ]; then
         printf '=== harness.sh ===\n'
         printf 'repo: %s\n' "$REPO"
@@ -152,6 +159,10 @@ main() {
     mkdir -p "$REPO/data/observability"
     printf '{"ts":"%s","passed":%d,"failed":%d}\n' "$TS" "$PASS_GATES" "$FAILED_GATES" \
         > "$REPO/data/observability/last-gate.json"
+    if [ "$FAILED_GATES" -eq 0 ]; then LEDGER_VERDICT="PASS"; else LEDGER_VERDICT="FAIL"; fi
+    if have python3 && [ -f "$REPO/scripts/ledger.py" ]; then
+        LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" python3 "$REPO/scripts/ledger.py" record --type GATE --actor harness.sh --verdict "$LEDGER_VERDICT" --detail "passed=$PASS_GATES failed=$FAILED_GATES" --rev "$REV" --source harness.sh --key "gate-$TS" 2>&1 || printf 'ledger: GATE record failed (telemetry non-fatal)\n'
+    fi
 
     if [ "$JSON" -eq 1 ]; then
         printf '{"ts":"%s","rev":"%s","passed":%d,"failed":%d,"end":true,"gates":[%s]}\n' \

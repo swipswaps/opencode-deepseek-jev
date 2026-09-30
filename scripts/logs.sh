@@ -46,7 +46,7 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
-    printf 'usage: %s [--source guard|error|event|app|system|packet|all|signal] [--since MIN] [--tail N] [--grep RE]\n' "$0"
+    printf 'usage: %s [--source guard|error|event|app|system|packet|ledger|all|signal] [--since MIN] [--tail N] [--grep RE]\n' "$0"
 }
 
 section() { printf '\n=== %s ===\n' "$1"; }
@@ -61,6 +61,18 @@ show_guard() {
         return 0
     fi
     tail -n "$TAIL" "$f"
+}
+
+show_ledger() {
+    section "event ledger (observability.db ledger)"
+    if ! have python3 || [ ! -f "$REPO/scripts/ledger.py" ]; then
+        printf 'ledger unavailable (needs python3 + scripts/ledger.py)\n'
+        return 0
+    fi
+    local args="show --tail $TAIL"
+    [ -n "$SINCE" ] && args="$args --since $SINCE"
+    [ -n "$GREP" ] && args="$args --grep $GREP"
+    python3 "$REPO/scripts/ledger.py" $args
 }
 
 show_error() {
@@ -165,6 +177,7 @@ main() {
         app)    show_app ;;
         system) show_system ;;
         packet) show_packet ;;
+        ledger) show_ledger ;;
         signal) show_signal ;;
         all)    show_guard; show_error; show_event; show_app; show_system ;;
         *) usage; return 2 ;;

@@ -85,6 +85,16 @@ harvest.py
     3 unsupported type/oversize. Stdlib only, no model call. Host or
     container. --url URL, --outdir, --max-bytes, --timeout, --self-test.
 
+ledger.py
+    Append-only event ledger in data/observability/observability.db
+    (table ledger): harness GATE_START/GATE rows (wired non-fatally in
+    harness.sh; LEDGER_DB overrides the path), guard.log verdicts via
+    ingest-guard (offset-tracked), history via backfill (guard.log +
+    last-gate.json + harness exports; idempotent through
+    UNIQUE(source,source_key)). Read with `logs.sh --source ledger`
+    or `ledger.py show --tail/--since/--type/--grep/--json`.
+    Stdlib only. --self-test.
+
 ocr-image.sh
     Local OCR fallback for reading screenshots/scans when API models can't
     ingest images. Tries tesseract CLI (apt, in the image), then

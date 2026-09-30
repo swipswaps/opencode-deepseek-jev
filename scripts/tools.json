@@ -7,6 +7,13 @@
     "commands": ["python3 scripts/harvest.py --url https://example.com", "python3 scripts/harvest.py --self-test"]
   },
   {
+    "id": "ledger",
+    "title": "Event ledger (gates + guard verdicts)",
+    "where": "container",
+    "purpose": "Append-only rows in observability.db ledger (harness GATE_START/GATE, guard.log verdicts, backfill). Queryable history; read via logs.sh --source ledger. Idempotent backfill.",
+    "commands": ["python3 scripts/ledger.py show --tail 20", "python3 scripts/ledger.py backfill", "python3 scripts/ledger.py --self-test"]
+  },
+  {
     "id": "harness",
     "title": "Whole-state check",
     "where": "container",

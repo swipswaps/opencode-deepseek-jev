@@ -69,6 +69,21 @@ Last updated: 2026-09-29
 
 ## Done (most recent first)
 
+- [x] event ledger with writers + patterns bound (E2E-UX-audit follow-ups).
+      ledger.py (stdlib+sqlite3): ledger table in observability.db;
+      record (UNIQUE(source,source_key) idempotent), ingest-guard
+      (offset-tracked), backfill (guard.log + last-gate.json + harness
+      exports; +76 then +0 proven), show (--tail/--since/--type/--grep/
+      --json), --self-test 6/6. harness.sh emits GATE_START+GATE
+      (guarded non-fatal; LEDGER_DB seam — an env-clobber bug + an
+      unwritable-path gap were both caught by the negative test and
+      fixed). logs.sh --source ledger. tools.json 20th entry + README.
+      apiPatterns bound to recent-40 (5.5s->2.5s; output identical on
+      this DB; semantic note in code). Pivot CSS-text leak: no
+      reproduction on current code (stale-only/transient) — no change
+      shipped without reproduction. Gates: lint 110, hygiene 37,
+      dashboard 116, ux-test 26/0; e2e sweep 20/21 (1 fixed-wait
+      artifact, product verified draining + adjudicated).
 - [x] harvest (LifeOS §15 pattern, repo-native code — no LifeOS code was
       imported; the text contained none). scripts/harvest.py: URL ->
       normalize -> sha256 -> staged candidate under logs/harvest-<ts>/
