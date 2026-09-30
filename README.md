@@ -284,6 +284,11 @@ Video walkthrough (33 s, 11 captioned steps with pan/zoom into each
 feature, captured live against the served build with scripted
 Playwright): `docs/ux/usage-tour.mp4`.
 
+Session-resume tour (33 s): when the upstream web UI cannot list old
+sessions, resume via transcript — `docs/ux/resume-tour.mp4` demonstrates
+the empty list, the data proof, the resume pointer, the agent
+continuing, and two upstream API defects with repro lines.
+
 All shots captured with Playwright against a scratch dashboard build;
 see `docs/ux/` for the files. The served revision banner (top right)
 tells you whether you are looking at current code.

@@ -56,6 +56,19 @@ Last updated: 2026-09-30
 
 ## Queue (ranked, top first)
 
+- [ ] G8: host TUI reads the server store (structural resume fix).
+      Objective: the TUI session picker lists :4096 sessions so resume
+      works without the transcript workaround. Options: (a) TUI attach
+      flag / env pointing at the server DB or API, (b) document the
+      split + transcript-resume flow as the supported path, (c) sync
+      job host-local <- server store. Acceptance: picker lists a
+      server-side session by id; deep link renders its messages;
+      no secret material leaves .env.local; split documented either
+      way. Evidence: Playwright captures of picker + rendered
+      messages, or explicit accept-defer note. (Proven background:
+      host-local 2 sessions vs server 44; web UI renders neither list
+      nor messages on hard load; transcript resume works end to end
+      for $0.0004 — see docs/ux/resume-tour.mp4.)
 - [x] G3: hand-rolled d3 charts migrated to Plot specs — scatter
   (`Plot.dot`), gantt (`Plot.barX`), timeline (`Plot.rect` lane
   strip), burn last as Plot+d3-brush hybrid (drag->FILTER->4 views
@@ -72,6 +85,15 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] resume-tour video (session-recovery session). Demonstrated
+      end to end in Playwright, all visible: empty :4096 root,
+      dashboard proof of ses_f1d2, dead +/picker/search paths,
+      API serving all data, offset-ignored + full-dump-hang defects
+      with repro, resume pointer sent verbatim to a new API-created
+      session, agent continuing accurately ($0.0004). 11x3s
+      zoompan segments, 960x540 H.264 33s 0.9MB
+      (`docs/ux/resume-tour.mp4`); transcript vehicle at
+      logs/transcript-ses_f1d27512.md (715 msgs, 1.2MB). G8 queued.
 - [x] pan/zoom usage-tour (video-review follow-up). Static frames
       showed no in-section motion: rebuilt as 11x3s zoompan segments
       (zooms into stats/search/scatter/brush/pivot/cards, pans down
