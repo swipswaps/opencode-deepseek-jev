@@ -74,6 +74,10 @@ Last updated: 2026-09-30
       background: host-local 2 sessions vs server 44; web UI renders
       neither list nor messages on hard load; transcript resume works
       end to end for $0.0004 — see docs/ux/resume-tour.mp4.)
+      UPDATE 2026-09-30: bare `attach` 401s (server needs Basic auth)
+      — README documents `set -a; source .env.local; set +a` first;
+      upstream drafts at docs/upstream-opencode-issues.md (offset
+      ignored, unbounded dump hangs, silent blanks).
 - [x] G3: hand-rolled d3 charts migrated to Plot specs — scatter
   (`Plot.dot`), gantt (`Plot.barX`), timeline (`Plot.rect` lane
   strip), burn last as Plot+d3-brush hybrid (drag->FILTER->4 views

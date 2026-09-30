@@ -289,6 +289,29 @@ sessions, resume via transcript — `docs/ux/resume-tour.mp4` demonstrates
 the empty list, the data proof, the resume pointer, the agent
 continuing, and two upstream API defects with repro lines.
 
+### Resume a session (read this — two stores exist)
+
+The host TUI reads your **host-local** session store (2 sessions);
+the `:4096` server holds **44 sessions**. A bare `opencode attach`
+fails with `401 Unauthorized` because the server requires the
+password and the command sends none — load it from `.env.local`
+first (this prints nothing secret):
+
+```bash
+cd /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
+set -a; source .env.local; set +a
+opencode attach http://localhost:4096 -s ses_f1d27512affeO4Z3ZoeWK9noI6
+```
+
+Variants: `--continue` resumes the last session, `--fork` copies
+instead of continuing, `-p/-u` pass credentials explicitly (avoid:
+they land in shell history). If the web UI shows "Nothing here yet"
+or a deep link renders only the title, that is an upstream client
+hydration gap, not data loss — verify with
+`opencode session list` (local) vs `/api/session` (server), then
+resume via transcript: start a new session and point it at
+`logs/transcript-ses_f1d27512.md` (see `docs/ux/resume-tour.mp4`).
+
 All shots captured with Playwright against a scratch dashboard build;
 see `docs/ux/` for the files. The served revision banner (top right)
 tells you whether you are looking at current code.
