@@ -92,7 +92,7 @@ function nav(active) {
 }
 
 // Docs reachable from the UI. Whitelisted — never read arbitrary paths.
-const DOC_FILES = ["HANDOFF.md", "RULES.md", "README.txt", "scripts/README.txt", "HANDOFF-PROMPT.txt"];
+const DOC_FILES = ["HANDOFF.md", "RULES.md", "README.md", "scripts/README.txt", "HANDOFF-PROMPT.txt"];
 function apiDoc(name) {
   if (!DOC_FILES.includes(name)) return null;
   try {
@@ -1538,32 +1538,45 @@ async function renderTreemap(){
 }
 
 async function renderBurn(){
-  var el=d3.select('#burn');el.selectAll('*').remove();
-  if(!DATA.length){el.text('(no data)');return;}
+  // Hybrid Plot spec (G3 migration 4/6, completes chart rendering):
+  // Plot renders the step-after area/line + budget rule (same data,
+  // BUDGET line, labels, empty text); a d3.brushX overlay keeps the
+  // filter linkage bit-for-bit (drag -> FILTER + setFilterText + 4
+  // re-renders; clear -> full range). Plot has no brush mark, so the
+  // overlay is the honest shape — rendering migrates, interaction
+  // stays on the proven d3 brush.
+  var host=document.getElementById('burn');
+  if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.areaY!=='function'||typeof Plot.line!=='function'||typeof Plot.ruleY!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
+  if(!DATA.length){host.textContent='(no data)';return;}
   var data=DATA.slice().sort(function(a,b){return a.time_created-b.time_created;});
-  var cum=0,pts=data.map(function(d){cum+=(+d.cost||0);return {t:d.time_updated||d.time_created,v:cum};});
+  var cum=0,pts=data.map(function(d){cum+=(+d.cost||0);return {t:new Date(d.time_updated||d.time_created),v:cum};});
   var total=cum;
-  var margin={top:12,right:16,bottom:26,left:64};
-  var W=1000,H=220,w=W-margin.left-margin.right,h=H-margin.top-margin.bottom;
+  var marginTop=12,marginRight=16,marginBottom=26,marginLeft=64;
+  var W=1000,H=220,w=W-marginLeft-marginRight,h=H-marginTop-marginBottom;
   var t0=data[0].time_created,t1=Math.max(data[data.length-1].time_updated||data[data.length-1].time_created,t0+1);
-  var x=d3.scaleTime().domain([t0,t1]).range([0,w]);
-  var y=d3.scaleLinear().domain([0,Math.max(BUDGET,total||0)*1.08]).nice().range([h,0]);
-  var svg=el.append('svg').attr('width',W).attr('height',H).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
-  svg.append('g').attr('class','grid').call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
-  var area=d3.area().x(function(d){return x(d.t);}).y0(h).y1(function(d){return y(d.v);}).curve(d3.curveStepAfter);
-  var line=d3.line().x(function(d){return x(d.t);}).y(function(d){return y(d.v);}).curve(d3.curveStepAfter);
-  svg.append('path').datum(pts).attr('fill','#1f6feb22').attr('d',area);
-  svg.append('path').datum(pts).attr('fill','none').attr('stroke','#58a6ff').attr('stroke-width',1.5).attr('d',line);
-  svg.append('line').attr('x1',0).attr('x2',w).attr('y1',y(BUDGET)).attr('y2',y(BUDGET)).attr('stroke','#ff7b72').attr('stroke-dasharray','4 3');
-  svg.append('text').attr('x',w).attr('y',y(BUDGET)-4).attr('text-anchor','end').attr('class','lbl').text('budget $'+BUDGET);
-  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(6).tickFormat(d3.timeFormat('%b %d %H:%M')));
-  svg.append('g').attr('class','axis').call(d3.axisLeft(y).ticks(5).tickFormat(function(v){return '$'+v;}));
-  var brush=d3.brushX().extent([[0,0],[w,h]]).on('brush end',function(ev){
-    if(!ev.selection){FILTER=[0,Infinity];}
-    else{FILTER=[+x.invert(ev.selection[0]),+x.invert(ev.selection[1])];}
-    setFilterText();renderTreemap();renderScatter();renderSankey();renderGantt();
-  });
-  svg.append('g').call(brush);
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:W,height:H,marginTop:marginTop,marginRight:marginRight,marginBottom:marginBottom,marginLeft:marginLeft,
+    x:{type:'time',domain:[new Date(t0),new Date(t1)],ticks:6,tickFormat:function(d){return d3.timeFormat('%b %d %H:%M')(d);}},
+    y:{domain:[0,Math.max(BUDGET,total||0)*1.08],nice:true,ticks:5,tickFormat:function(v){return '$'+v;},grid:true},
+    marks:[
+      Plot.areaY(pts,{x:'t',y:'v',curve:'step-after',fill:'#1f6feb22'}),
+      Plot.line(pts,{x:'t',y:'v',curve:'step-after',stroke:'#58a6ff',strokeWidth:1.5}),
+      Plot.ruleY([BUDGET],{stroke:'#ff7b72',strokeDasharray:'4 3'}),
+      Plot.text([{v:BUDGET,label:'budget $'+BUDGET}],{y:'v',text:'label',textAnchor:'end',dx:w,dy:-4,fill:'#8b949e',fontSize:11})
+    ]
+  }));
+  var svg=host.querySelector('svg');
+  if(svg&&typeof d3!=='undefined'&&typeof d3.brushX==='function'&&typeof d3.scaleTime==='function'){
+    var x=d3.scaleTime().domain([t0,t1]).range([0,w]);
+    var brush=d3.brushX().extent([[0,0],[w,h]]).on('brush end',function(ev){
+      if(!ev.selection){FILTER=[0,Infinity];}
+      else{FILTER=[+x.invert(ev.selection[0]),+x.invert(ev.selection[1])];}
+      setFilterText();renderTreemap();renderScatter();renderSankey();renderGantt();
+    });
+    d3.select(svg).append('g').attr('transform','translate('+marginLeft+','+marginTop+')').call(brush);
+  }
 }
 
 async function renderScatter(){
@@ -1987,7 +2000,7 @@ ${nav("docs")}
 <select id="docsel"></select>
 <pre id="docbody">loading...</pre>
 <script>
-var DOCS=["HANDOFF.md","RULES.md","README.txt","scripts/README.txt","HANDOFF-PROMPT.txt"];
+var DOCS=["HANDOFF.md","RULES.md","README.md","scripts/README.txt","HANDOFF-PROMPT.txt"];
 var sel=document.getElementById('docsel');
 for(var i=0;i<DOCS.length;i++){var o=document.createElement('option');o.value=DOCS[i];o.textContent=DOCS[i];sel.appendChild(o);}
 async function loadDoc(name){

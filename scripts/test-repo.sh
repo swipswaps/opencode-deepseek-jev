@@ -21,7 +21,7 @@
 #   .git/
 #   .gitignore
 #   QUICKSTART.txt
-#   README.txt
+#   README.md
 #   docker/                   (Dockerfile, docker-compose.yml, build.sh, run.sh)
 #   opencode.json
 #   requirements.txt
@@ -241,14 +241,14 @@ gate_dockerfile() {
 # G5 — repo root cleanliness
 # ----------------------------------------------------------------------------
 # Expected non-hidden entries at repo root:
-#   docker, scripts, opencode.json, README.txt, QUICKSTART.txt,
+#   docker, scripts, opencode.json, README.md, QUICKSTART.txt,
 #   requirements.txt, .env.local, .gitignore, .dockerignore, .git
 #
 # Anything else is drift.
 # ----------------------------------------------------------------------------
 gate_root_cleanliness() {
     printf '\nG5 repo root cleanliness\n'
-    local expected='docker scripts opencode.json README.txt QUICKSTART.txt requirements.txt .env.local .gitignore .dockerignore .git'
+    local expected='docker scripts opencode.json README.md QUICKSTART.txt requirements.txt .env.local .gitignore .dockerignore .git'
     local found=0
     local entry base
     for entry in "$REPO_DIR"/* "$REPO_DIR"/.[!.]*; do

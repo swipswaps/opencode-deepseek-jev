@@ -5,7 +5,7 @@ Open a fresh session (a large one re-sends its whole history every turn and
 spikes cost — see HANDOFF.md "Cost model"), then paste everything between the
 two RULE markers below. It is written as an interface contract: outcome,
 constraints, deliverables, checkable acceptance, evidence. Read HANDOFF.md,
-RULES.md and README.txt in-repo for the full context; do not re-derive it.
+RULES.md and README.md in-repo for the full context; do not re-derive it.
 
 RULE-OUTER-BEGIN
 --------------------------------------------------------------------------------

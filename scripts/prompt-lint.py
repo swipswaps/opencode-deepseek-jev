@@ -4,7 +4,7 @@ prompt-lint.py — fuzzy classifier + preference linter for user prompts.
 
 Prompts and replies repeat: the same requests recur, and the same mistakes
 recur. This tool reads the opencode database (read-only) and the repo's own
-preference sources (RULES.md, HANDOFF.md, README.txt, opencode.json) to:
+preference sources (RULES.md, HANDOFF.md, README.md, opencode.json) to:
 
   1. classify the prompt into a repo topic (cost / viz / handoff / audit / ...);
   2. fuzzy-match it against past user prompts (token Jaccard) and show the
@@ -278,7 +278,7 @@ def report_text(r: dict) -> None:
         print("  (none)")
     for e in r["recurring_errors"]:
         print(f"  x{e['n']:<4} {e['tool']}")
-    print("\nnote: advisory. preferences cited from RULES.md, HANDOFF.md, README.txt.")
+    print("\nnote: advisory. preferences cited from RULES.md, HANDOFF.md, README.md.")
 
 
 def main(argv: list[str] | None = None) -> int:

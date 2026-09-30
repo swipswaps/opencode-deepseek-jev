@@ -315,7 +315,7 @@ function dbHits(keywords, dbPath) {
   }
 }
 export function corpusHits(keywords, { dbPath, docs } = {}) {
-  const docList = docs || ["HANDOFF.md", "README.txt", "RULES.md", "TODO.md", "scripts/README.txt"].map((p) => REPO + "/" + p);
+  const docList = docs || ["HANDOFF.md", "README.md", "RULES.md", "TODO.md", "scripts/README.txt"].map((p) => REPO + "/" + p);
   return { db_parts: dbHits(keywords, dbPath || REPO + "/data/opencode/opencode.db"), docs: docHits(keywords, docList), code: codeHits(keywords, REPO + "/scripts") };
 }
 

@@ -1,10 +1,8 @@
-OpenCode + DeepSeek V4.1 Flash + Jev
-=====================================
+# OpenCode + DeepSeek V4.1 Flash + Jev
 
 Docker-based setup. All project code stays inside this repository.
 
-Prerequisites
--------------
+## Prerequisites
 - Docker Engine (daemon reachable by current user)
 - gh (GitHub CLI), authenticated
 - DeepSeek API key (prefix sk-)
@@ -12,16 +10,14 @@ Prerequisites
 - Jev API key (prefix apikey_)
   https://console.typesafe.ai/keys
 
-Quick Start
------------
+## Quick Start
 cd docker
 ./build.sh
 ./run.sh
 
 Keys are cached in ../.env.local (mode 0600, gitignored).
 
-Vision / image input
---------------------
+## Vision / image input
 DeepSeek V4.1 Flash natively ingests images. `opencode.json` declares this
 (`attachment: true` + `modalities.input: ["text","image"]`), so OpenCode
 sends screenshots to DeepSeek directly — no separate provider needed.
@@ -45,8 +41,7 @@ downscaled before OCR so very tall screenshots don't stall. `tesseract-ocr`
 is also baked into the image. PaddleOCR is available with
 `pip install paddleocr paddlepaddle`.
 
-Linting
--------
+## Linting
     ./scripts/lint.sh
 
 Static gate over the repo: `bash -n` on every script, `shellcheck` (baked
@@ -66,8 +61,7 @@ If tool output looks empty, suspect suppressed streams: the blacklist guard
 exists so `2>/dev/null` cannot hide the diagnostic. Audit with
 `./scripts/audit-tool-calls.py` — it reports exactly which commands hid stderr.
 
-Blacklist enforcement (three layers)
-------------------------------------
+## Blacklist enforcement (three layers)
 The blacklist (`sed`, `2>/dev/null`, `subprocess.run`, `rm -rf`, `echo`) is
 enforced at three points: files (`lint.sh` + `scan-constraints.py` fail the
 build), runtime detection (`scripts/audit-tool-calls.py` reports what the agent
@@ -82,8 +76,7 @@ unset/`block` | `warn` | `off`; reload with
 `docker compose -f docker/docker-compose.yml restart opencode-web`. Full detail:
 HANDOFF "Hygiene enforcement"; unit test: `blacklist-guard-self-test.mjs`.
 
-Writing prompts
----------------
+## Writing prompts
 A prompt is an interface contract: state the falsifiable outcome, the
 constraints, and the evidence. This keeps the work checkable without
 re-reading the whole chat — which is also what keeps context (and cost)
@@ -92,7 +85,7 @@ down. Template:
     ## Objective
     <one sentence: the falsifiable outcome>
     ## Context (read first)
-    HANDOFF.md, RULES.md, README.txt; <specific files / endpoints>
+    HANDOFF.md, RULES.md, README.md; <specific files / endpoints>
     ## Constraints (non-negotiable)
     RULES.md; blacklist enforced by .opencode/plugins/blacklist-guard.js;
     read-only over data/opencode/opencode.db.
@@ -115,27 +108,23 @@ To use a *different* vision model (e.g. Muse Spark via OpenCode Zen), on a
 host terminal with browser access run `opencode`, `/connect` → OpenCode Zen,
 `/models`. Avoid pasting secret-bearing screenshots to Free-tier models.
 
-Telemetry policy
-----------------
+## Telemetry policy
 Smoke tests stream stdout and stderr live via process substitution
 (> >(tee file)). No buffering. The user sees the model's response
 as it arrives. The safety timeout (120s) fires only if the process
 genuinely makes no progress.
 
-Smoke test methodology
----------------------
+## Smoke test methodology
 opencode 1.18.31 exits non-zero after a successful non-TTY response.
 The staging script asserts on response text ("OK") instead of exit
 code. Elapsed time and exit code are reported for diagnostic purposes
 but do not determine pass/fail.
 
-UID handling
-------------
+## UID handling
 Container runs with --user $(id -u):$(id -g). /home/node is chmod 777
 at build time.
 
-Secrets hygiene
----------------
+## Secrets hygiene
 - Keys never appear on docker CLI argv (bare -e VAR).
 - curl Authorization headers written to mode-0600 temp files.
 - .env.local is gitignored and mode 0600.
@@ -154,12 +143,10 @@ Secrets hygiene
 - Stale *.bak.* snapshots (including old .env.local.bak.* key copies)
   are removed with ./scripts/cleanup-baks.sh --apply.
 
-Logs
-----
+## Logs
 Full staging output captured to ../staging.log.
 
-Verification (V1 command surface)
----------------------------------
+## Verification (V1 command surface)
 opencode V1 has no "mcp list" subcommand. MCP servers are read from
 opencode.json. The staging script verifies:
 - opencode --help loads the binary
@@ -168,8 +155,7 @@ opencode.json. The staging script verifies:
 - DeepSeek smoke test returns response text "OK"
 - plugin list returns output (exit code informational)
 
-Cost monitoring
----------------
+## Cost monitoring
     ./scripts/cost.sh
     ./scripts/cost-bottlenecks.sh --top N
 
@@ -188,8 +174,7 @@ spend at their peak; the live share drifts, so read it from
 `cost-bottlenecks.sh` "model mix check" (or the /models page), not from a
 hard-coded number. The ceiling is `models.policy.json`.
 
-Live activity ("thinking")
---------------------------
+## Live activity ("thinking")
     ./scripts/thinking.sh            (terminal)
     ./scripts/dashboard.sh           (web: http://127.0.0.1:5099)
 
@@ -214,8 +199,7 @@ top-up, and the log miner below. Note the dashboard on :5099 runs inside the
 opencode-web container (web-entrypoint.sh starts it), so restarting that
 container takes :5099 down for a few seconds.
 
-Learning from the logs
-----------------------
+## Learning from the logs
     ./scripts/issue-solutions.py [--top N]        # issues -> proven fixes
     ./scripts/logs.sh [--source S] [--since MIN]  # raw telemetry
 
@@ -236,8 +220,7 @@ opencode.log), `system` (docker logs; host only), `packet` (the exact
 tcpdump command). Use it when a step is slow or output looks empty — the
 `ms=` telemetry names the slow check; `logs.sh` shows why.
 
-Repo code index
----------------
+## Repo code index
     ./scripts/code-index.py            # assemble + flag the repo's own code
     ./scripts/code-index.py --flags    # file:line flag list
     ./scripts/code-index.py --grep RE  # files whose path/symbols match
@@ -247,8 +230,7 @@ into data/observability/code.db and flags blacklist patterns plus TODO/FIXME —
 so code can be inspected alongside the chat database and, later, classified by
 Jev/Laya/DeepSeek. Surfaced at /api/code and /explore ▸ code.
 
-Duplicate prompts (dedup / semantic cache)
-------------------------------------------
+## Duplicate prompts (dedup / semantic cache)
 `prompt-lint.py` flags a prompt that is >= 0.9 similar to a prior user prompt
 (token Jaccard): reuse the prior answer instead of spending another session.
 That is the local, deterministic form of a semantic cache.
@@ -264,14 +246,13 @@ RULES.md / the guard's fixed blacklist. Learn → review → codify → enforce.
 `TODO.md` is the running backlog: HANDOFF.md is the durable state, TODO.md is
 the queue. Update both at the end of a session.
 
-Navigating the observability UI
--------------------------------
+## Navigating the observability UI
 Every page (/ dashboard, /explore, /runbooks, /docs) shares one sticky nav:
 `dashboard · explore · models · runbooks · manage · docs · csv`. The /explore tabs
 (overview · charts · signals · ocr) are linkable and restore from the URL
 hash, so `http://127.0.0.1:5099/explore#charts` opens the charts tab and the
 browser back/forward buttons work. /docs renders this repo's own HANDOFF.md,
-RULES.md, README.txt, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
+RULES.md, README.md, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
 (read-only, whitelisted names via /api/doc), so the rules are reachable
 without leaving the browser. /manage (API /api/tools, source scripts/tools.json)
 surfaces the repo's tools — purpose, host/container, copyable commands — so the
@@ -297,8 +278,56 @@ scratch dashboard build, none retouched):
 - docs/ux/explore-sessions.png — /explore overview sessions table
   (42 sessions, same scratch build).
 
-Session health (stalls / blank turns)
--------------------------------------
+## Usage guide (step by step, with screenshots)
+
+All shots captured with Playwright against a scratch dashboard build;
+see `docs/ux/` for the files. The served revision banner (top right)
+tells you whether you are looking at current code.
+
+### 1. Dashboard — costs, sessions, live activity
+
+Open `http://127.0.0.1:5099/`. The stat cards show total cost, session
+count and token use; the sessions table (click a row) drills into one
+session; live activity streams tool calls as they happen.
+
+![](docs/ux/guide-dashboard.png)
+
+### 2. Explore — overview, charts, signals
+
+`/explore` has seven tabs. The overview table sorts/filters all
+sessions by cost and tokens:
+
+![](docs/ux/explore-sessions.png)
+
+The charts tab carries cumulative spend (drag to brush-filter every
+view below it), latency-x-cost scatter, token flow, sessions-over-time
+and the word cloud:
+
+![](docs/ux/guide-charts.png)
+
+The signals tab adjudicates stalls against the live server — dead
+findings are archival, not live stalls:
+
+![](docs/ux/signals-adjudicated.png)
+
+### 3. Runbooks — filter, read, copy
+
+`/runbooks` lists the 19 operational runbooks with host/container
+tags. Filter by tag, read the steps inline, copy commands with the
+copy button. Async panels show a `loading...` skeleton while fetching,
+never a blank shell:
+
+![](docs/ux/guide-runbooks.png)
+![](docs/ux/loading-runbooks.png)
+
+### 4. Models — catalog and policy
+
+`/models` shows the model catalog, the cost policy verdict
+(ALLOW/ASK/BLOCK) and per-model tool-error ledgers:
+
+![](docs/ux/guide-models.png)
+
+## Session health (stalls / blank turns)
 The interactive web view can freeze ("Shell" stuck, blank message pane) while
 the agent is not actually stalled; the server's store is still complete.
 `scripts/session-health.mjs` reads data/opencode/opencode.db read-only and
@@ -320,8 +349,7 @@ elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on
 surfaces and 999px pills. The tokens + overrides live in `THEME_CSS` in
 scripts/dashboard.mjs and are injected on every page.
 
-One command for the whole state
--------------------------------
+## One command for the whole state
     ./scripts/harness.sh [--fast] [--export]
 
 Runs every gate (lint, test-hygiene, test-patterns, test-dashboard), then the
@@ -364,8 +392,7 @@ Jev/TypeSafe calls — small here (11 jev-review invocations total). It does not
 cut DeepSeek: Laya is a Jev-compatible classifier, not a chat model. The big
 lever is pinning `deepseek-flash` (v4-pro was 75% of spend).
 
-Choosing a model
-----------------
+## Choosing a model
     ./scripts/models.sh              # catalog + cost policy verdict
     ./scripts/models.sh --write      # persist data/observability/models.json
 
@@ -378,8 +405,7 @@ user rather than silently stop. The interactive chooser is the /models page in
 the observer UI (dashboard · explore · models · runbooks · manage · docs · csv); switch
 from the TUI with /models or `opencode run -m <id>`.
 
-Adding a provider (Google Gemini)
----------------------------------
+## Adding a provider (Google Gemini)
 Gemini is not a native provider in this opencode build (`opencode models
 google` → "Provider not found"), so it is wired exactly like DeepSeek: an
 OpenAI-compatible provider block in opencode.json.
@@ -396,8 +422,7 @@ The block points at https://generativelanguage.googleapis.com/v1beta/openai/.
 models.policy.json (Flash input ~$0.30/1M is above the $0.20 ceiling, so it is
 explicitly allowed). The same steps are a "connect-gemini" runbook at /runbooks.
 
-Working process (project skill + command)
------------------------------------------
+## Working process (project skill + command)
 .opencode/skills/jev-harness/SKILL.md is auto-loaded by opencode and codifies
 the loop for this repo: search-first (read HANDOFF/RULES/TODO + run preflight),
 respect the enforced blacklist, keep the model on policy, gate every change
@@ -430,8 +455,7 @@ absent), `ux-trace.py [url]` (records every click/drag/scroll + hotspots into
 `data/observability/ux.db` + `logs/ux/report.md`; `--ocr` reads each shot back
 to text; `--self-test` offline). Runbooks: "ux-test", "ux-trace" (host).
 
-Search from the terminal
-------------------------
+## Search from the terminal
     ./scripts/semantic-search.sh <query...>     # ranked, across sessions
     ./scripts/semantic-search.sh --rebuild      # rebuild the on-disk index
     ./scripts/semantic-search.sh --fuzzy <q...> # typo-tolerant ("edti" -> "edit")
@@ -442,8 +466,7 @@ from memory; this on-disk copy is the substrate for a future Laya/Jev
 semantic reranker. `--fuzzy` (or `fuzzy-search.py`) adds a local `difflib`
 rerank over the index so a mistyped token still finds the right material.
 
-Cost bottlenecks
-----------------
+## Cost bottlenecks
     ./scripts/cost-bottlenecks.sh [--top N]
 
 Ranks the cost drivers in the database: effective $/1k-input, top sessions
@@ -455,8 +478,7 @@ It also prints a "context budget (latest session)" line (`CONTEXT_BUDGET`,
 default 200k input tokens); `opencode.json` sets `compaction` (auto + prune,
 `tail_turns: 20`) to bound replayed context.
 
-Session database & tool-use methods
------------------------------------
+## Session database & tool-use methods
 Everything the agent does — including every tool call — is one SQLite
 database at data/opencode/opencode.db. The dashboard and scripts read it
 read-only (node:sqlite / --experimental-sqlite); nothing is ever written
@@ -484,8 +506,7 @@ PARTITION BY session_id). ./scripts/test-patterns.sh proves this substrate
 read-only (tool parts, distinct tools, bigrams, error chains) and gates the
 deferred "patterns view" candidate.
 
-Next candidates (deferred, not started)
----------------------------------------
+## Next candidates (deferred, not started)
    1. finos/perspective pivot grid    new /explore tab (vendored like d3)
    2. Observable Plot / Vega-Lite     declarative charts (largest refactor)
    3. Patterns view (tool-sequence    /api/patterns + /explore tab, mined
@@ -495,23 +516,20 @@ Attack order: 3 → 1 → 2. See HANDOFF.md "Next candidates" for the scope,
 and HANDOFF-PROMPT.txt for the verbatim prompt to paste into the next
 session.
 
-Jev functional proof
---------------------
+## Jev functional proof
     ./scripts/test-jev-functional.sh
 
 Invokes the jev-review MCP tool for real and fails (non-zero) unless the
 tool fires and returns at least one applicable metric with a score. Runs
 from the host. doctor.sh --full (Tier 9) runs it automatically.
 
-Image tooling
--------------
+## Image tooling
 The image includes python3 and sqlite3 (docker/Dockerfile apt install).
 The database lives at data/opencode/opencode.db, mounted from
 ../data/opencode into the container. The base image is pinned by digest
 and the opencode installer is pinned to 1.18.32 for reproducible builds.
 
-Two modes (operator vs. agent)
-------------------------------
+## Two modes (operator vs. agent)
 There are two distinct surfaces and the scripts do not cross over.
 
     Operator (host terminal)     docker, docker compose, the scripts
@@ -530,8 +548,7 @@ To confirm a session streams into the sidebar while it processes:
 
     ./scripts/test-sidebar-streaming.sh [--insecure]
 
-Troubleshooting
----------------
+## Troubleshooting
 EACCES on /workspace: host UID mismatch. Script uses --user $(id -u).
 HTTP 401 from DeepSeek: verbatim body printed by the script.
 HTTP 422 from TypeSafe: request body format issue.

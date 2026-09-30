@@ -89,7 +89,7 @@ cached endpoints, validity from landing time, boot pre-warm, poll/cost/
 activity/patterns/words cached, S1 query 80 scans → 1 grouped pass
 (healthReport 4.9 s → 1.2 s, output identical), signals pane re-renders on
 tab activation, failure-only gate forensics, `docs/ux/` proof shots
-referenced from README.txt. Result: rev during recomputes 0.07 s. Residual:
+referenced from README.md. Result: rev during recomputes 0.07 s. Residual:
 background refreshes still freeze the loop for seconds (worker-thread cure
 is its own segment); TTLs (`HEALTH_TTL_MS`, `POLL_TTL_MS`, …) are the knobs.
 
@@ -457,7 +457,7 @@ the whole chat (which is also what keeps context cost down).
 <one sentence: the falsifiable outcome>
 
 ## Context (read first)
-HANDOFF.md, RULES.md, README.txt; <specific files / endpoints>
+HANDOFF.md, RULES.md, README.md; <specific files / endpoints>
 
 ## Constraints (non-negotiable)
 RULES.md; the blacklist is enforced by .opencode/plugins/blacklist-guard.js;
@@ -575,7 +575,10 @@ already exists.
    container listener per RULES #61). **Gantt third, timeline fourth**
    (`Plot.barX` / `Plot.rect` lane strip; COST/type colors, 7px rows,
    click-to-timeline, tips, empty states preserved; delegation maps
-   rebuilt per render with count guards). Measured verdicts for the rest:
+   rebuilt per render with count guards). **Burn last** as a hybrid:
+   Plot renders area/line/budget rule, a d3.brushX overlay keeps the
+   drag-to-filter linkage (Plot has no brush mark) — G3 rendering
+   migration complete. Measured verdicts for the rest:
    **treemap / sankey / word-cloud stay hand-rolled** — Plot v0.6 has no
    treemap, sankey, or cloud marks (d3.hierarchy / d3-sankey / custom
    spiral have no declarative equivalent). Remaining order: gantt +

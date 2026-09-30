@@ -55,7 +55,7 @@ main() {
 
     local budget="${DOC_BUDGET_TOKENS:-35000}"
     local files=() f
-    for f in RULES.md TODO.md README.txt HANDOFF.md DESIGN.md scripts/README.txt; do
+    for f in RULES.md TODO.md README.md HANDOFF.md DESIGN.md scripts/README.txt; do
         [ -f "$REPO/$f" ] && files+=("$REPO/$f")
     done
     for f in "$REPO"/.opencode/skills/*/SKILL.md; do
