@@ -58,17 +58,22 @@ Last updated: 2026-09-30
 
 - [ ] G8: host TUI reads the server store (structural resume fix).
       Objective: the TUI session picker lists :4096 sessions so resume
-      works without the transcript workaround. Options: (a) TUI attach
-      flag / env pointing at the server DB or API, (b) document the
-      split + transcript-resume flow as the supported path, (c) sync
-      job host-local <- server store. Acceptance: picker lists a
-      server-side session by id; deep link renders its messages;
-      no secret material leaves .env.local; split documented either
-      way. Evidence: Playwright captures of picker + rendered
-      messages, or explicit accept-defer note. (Proven background:
-      host-local 2 sessions vs server 44; web UI renders neither list
-      nor messages on hard load; transcript resume works end to end
-      for $0.0004 — see docs/ux/resume-tour.mp4.)
+      works without the transcript workaround. VERIFIED 2026-09-30
+      from official docs + installed 1.18.33 binary: `opencode attach
+      http://localhost:4096 -s ses_<id>` resumes a server session
+      directly (`--continue` last, `--fork` to copy, `--dir`, `-p/-u`
+      auth); `opencode session list/export` are local-store only
+      (hence the empty picker: host-local 2 sessions vs server 44).
+      So option (a) EXISTS — remaining work is (i) verify attach -s
+      end to end against ses_f1d2, (ii) document it as THE resume path,
+      (iii) decide doc-vs-sync for the picker gap. Acceptance: picker
+      or attach lists a server-side session by id; deep link renders
+      its messages; no secret material leaves .env.local; split
+      documented either way. Evidence: Playwright captures of picker
+      + rendered messages, or explicit accept-defer note. (Proven
+      background: host-local 2 sessions vs server 44; web UI renders
+      neither list nor messages on hard load; transcript resume works
+      end to end for $0.0004 — see docs/ux/resume-tour.mp4.)
 - [x] G3: hand-rolled d3 charts migrated to Plot specs — scatter
   (`Plot.dot`), gantt (`Plot.barX`), timeline (`Plot.rect` lane
   strip), burn last as Plot+d3-brush hybrid (drag->FILTER->4 views
