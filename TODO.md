@@ -72,6 +72,15 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] usage-tour presentation (E2E session). Restarted opencode-web
+      (serves 4e78fcf, stale:false; panel adjudicated live, 0 errors).
+      browser-use uninstallable here (pip deps timeout) and wrong tool
+      for a deterministic tour (LLM-driven, non-repeatable) — used
+      scripted Playwright + ffmpeg 7.1 instead. 11-step captioned tour
+      (dashboard, search, overview, charts, live brush-filter,
+      signals, patterns, runbooks, models, loading skeleton, docs),
+      1280x720, 2 s/frame, 22 s H.264 (`docs/ux/usage-tour.mp4`,
+      760KB); referenced from README.md guide header.
 - [x] litellm crash-loop fixed (restart-count 4396, ~30s cycle). Root
       cause: the image update added boot-time master-key enforcement
       (`UnsafeMasterKeyError`: neither general_settings.master_key nor

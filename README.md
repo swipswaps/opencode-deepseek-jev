@@ -280,6 +280,9 @@ scratch dashboard build, none retouched):
 
 ## Usage guide (step by step, with screenshots)
 
+Video walkthrough (22 s, 11 captioned steps, captured live against the
+served build with scripted Playwright): `docs/ux/usage-tour.mp4`.
+
 All shots captured with Playwright against a scratch dashboard build;
 see `docs/ux/` for the files. The served revision banner (top right)
 tells you whether you are looking at current code.
