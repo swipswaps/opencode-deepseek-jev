@@ -1110,6 +1110,7 @@ const exploreHtml = `<!doctype html>
  .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
  .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
  #scatter circle{cursor:pointer}
+ #gantt rect{cursor:pointer}
  .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
  .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
  .stat b{display:block;font-size:16px}
@@ -1677,53 +1678,107 @@ async function renderSankey(){
 }
 
 async function renderGantt(){
+  // Declarative Plot spec (G3 migration 2/6): same filtered data, time
+  // domain, 7px rows / 5px bars, COST colors, empty text, click-to-timeline
+  // and tooltip strings as the hand-rolled d3 version. One delegated
+  // container listener (RULES #61); re-renders rebuild the row map only.
+  var host=document.getElementById('gantt');
+  if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.barX!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
   var data=DATA.filter(inFilter);
-  var el=d3.select('#gantt');el.selectAll('*').remove();
-  if(!data.length){el.text('(no sessions in range)');return;}
-  var margin={top:8,right:16,bottom:24,left:8};
-  var W=1000,w=W-margin.left-margin.right,h=Math.max(160,data.length*7);
-  var minT=d3.min(data,function(d){return d.time_created;});
-  var maxT=d3.max(data,function(d){return d.time_updated||d.time_created;});
+  if(!data.length){host.textContent='(no sessions in range)';return;}
+  var minT=Infinity,maxT=0,i,d;
+  for(i=0;i<data.length;i++){d=data[i];
+    if(d.time_created<minT)minT=d.time_created;
+    var te=d.time_updated||d.time_created;if(te>maxT)maxT=te;}
   if(maxT<=minT)maxT=minT+1000;
-  var x=d3.scaleLinear().domain([minT,maxT]).range([0,w]);
-  var svg=el.append('svg').attr('width',W).attr('height',h+margin.top+margin.bottom).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
-  svg.selectAll('rect').data(data).enter().append('rect')
-    .attr('x',function(d){return x(d.time_created);})
-    .attr('y',function(d,i){return i*7;})
-    .attr('width',function(d){return Math.max(2,x(d.time_updated||d.time_created)-x(d.time_created));})
-    .attr('height',5).attr('rx',1)
-    .attr('fill',function(d){return COST(+d.cost||0);})
-    .style('cursor','pointer')
-    .on('click',function(ev,d){renderTimeline(d.id,d.title);})
-    .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.title)+'<br>$'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning));})
-    .on('mouseleave',function(){tip(null);});
-  svg.append('g').attr('class','axis').attr('transform','translate(0,'+h+')').call(d3.axisBottom(x).ticks(6).tickFormat(timeFmt));
+  var pad=(maxT-minT)/500; // >=2px minimum bar like the legacy version
+  var byId={};
+  for(i=0;i<data.length;i++){byId[data[i].id]=data[i];}
+  host.GANTT_ROWS=byId;
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:1000,height:32+Math.max(160,data.length*7),marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
+    x:{domain:[minT,maxT],ticks:6,tickFormat:timeFmt},
+    y:{axis:null,domain:data.map(function(_,j){return j;})},
+    marks:[
+      Plot.barX(data,{
+        x1:function(d){return d.time_created;},
+        x2:function(d){return Math.max(d.time_updated||d.time_created,(d.time_created||0)+pad);},
+        y:function(d,j){return j;},
+        fill:function(d){return COST(+d.cost||0);},
+        insetTop:1,insetBottom:1,
+        title:function(d){return d.title+' — $'+(+d.cost).toFixed(4)+' · in '+fmt(d.tokens_input)+' / out '+fmt(d.tokens_output)+' / reas '+fmt(d.tokens_reasoning);}
+      })
+    ]
+  }));
+  var rects=host.querySelectorAll('rect');
+  if(rects.length===data.length){
+    for(i=0;i<rects.length;i++){rects[i].setAttribute('data-id',data[i].id);}
+  }
+  if(!host.GANTT_WIRED){
+    host.GANTT_WIRED=1;
+    host.addEventListener('click',function(ev){
+      var c=ev.target&&ev.target.closest?ev.target.closest('[data-id]'):null;
+      if(c){var r=host.GANTT_ROWS?host.GANTT_ROWS[c.getAttribute('data-id')]:null;if(r)renderTimeline(r.id,r.title);}
+    });
+    host.addEventListener('mousemove',function(ev){
+      var c=ev.target&&ev.target.closest?ev.target.closest('[data-id]'):null;
+      var r=c&&host.GANTT_ROWS?host.GANTT_ROWS[c.getAttribute('data-id')]:null;
+      if(r){moveTip(ev);tip(esc(r.title)+'<br>$'+(+r.cost).toFixed(4)+' · in '+fmt(r.tokens_input)+' / out '+fmt(r.tokens_output)+' / reas '+fmt(r.tokens_reasoning));}
+      else{tip(null);}
+    });
+    host.addEventListener('mouseleave',function(){tip(null);});
+  }
 }
 
 async function renderTimeline(id,title){
+  // Declarative Plot spec (G3 migration 3/6): same parts fetch, time
+  // domain, lane geometry, type colors, empty text and tooltip strings as
+  // the hand-rolled d3 version. Tooltip rides one delegated listener
+  // (RULES #61); re-renders rebuild the row map only.
   var url='/api/parts?limit=600'+(id?'&session='+encodeURIComponent(id):'');
   var data=await j(url);
-  var el=d3.select('#timeline');
-  d3.select('#tl-title').text(title||'latest session');
-  if(!data||!data.length){el.text('(no parts)');return;}
-  var margin={top:8,right:16,bottom:24,left:8};
-  var w=1000-margin.left-margin.right, h=120;
-  var minT=d3.min(data,function(d){return d.ts;});
-  var maxT=d3.max(data,function(d){return d.te;});
+  var host=document.getElementById('timeline');
+  if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.rect!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
+  document.getElementById('tl-title').textContent=title||'latest session';
+  if(!data||!data.length){host.textContent='(no parts)';return;}
+  var minT=Infinity,maxT=0,i,d;
+  for(i=0;i<data.length;i++){d=data[i];
+    if(d.ts<minT)minT=d.ts;if(d.te>maxT)maxT=d.te;}
   if(maxT<=minT)maxT=minT+1000;
-  var x=d3.scaleLinear().domain([minT,maxT]).range([0,w]);
-  el.selectAll('*').remove();
-  var svg=el.append('svg').attr('width',1000).attr('height',h+margin.top+margin.bottom).append('g').attr('transform','translate('+margin.left+','+margin.top+')');
-  svg.selectAll('rect').data(data).enter().append('rect')
-    .attr('x',function(d){return x(d.ts);})
-    .attr('y',30)
-    .attr('width',function(d){return Math.max(2,x(d.te)-x(d.ts));})
-    .attr('height',16)
-    .attr('rx',2)
-    .attr('fill',function(d){return colors[d.type]||'#8b949e';})
-    .on('mousemove',function(ev,d){moveTip(ev);tip(d.type+(d.tool?' '+d.tool:'')+(d.status?' ['+d.status+']':'')+'<br>'+String(d.cmd||d.text||'').slice(0,140));})
-    .on('mouseleave',function(){tip(null);});
-  svg.append('g').attr('transform','translate(0,50)').call(d3.axisBottom(x).ticks(6).tickFormat(timeFmt));
+  var pad=(maxT-minT)/500; // >=2px minimum bar like the legacy version
+  host.TL_ROWS=data;
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:1000,height:152,marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
+    x:{domain:[minT,maxT],ticks:6,tickFormat:timeFmt},
+    y:{axis:null,domain:[0,120]},
+    marks:[
+      Plot.rect(data,{
+        x1:function(d){return d.ts;},
+        x2:function(d){return Math.max(d.te,(d.ts||0)+pad);},
+        y1:30,y2:46,
+        fill:function(d){return colors[d.type]||'#8b949e';},
+        title:function(d){return d.type+(d.tool?' '+d.tool:'')+(d.status?' ['+d.status+']':'')+' — '+String(d.cmd||d.text||'').slice(0,140);}
+      })
+    ]
+  }));
+  var rects=host.querySelectorAll('rect');
+  if(rects.length===data.length){
+    for(i=0;i<rects.length;i++){rects[i].setAttribute('data-i',i);}
+  }
+  if(!host.TL_WIRED){
+    host.TL_WIRED=1;
+    host.addEventListener('mousemove',function(ev){
+      var c=ev.target&&ev.target.closest?ev.target.closest('[data-i]'):null;
+      var r=c&&host.TL_ROWS?host.TL_ROWS[+c.getAttribute('data-i')]:null;
+      if(r){moveTip(ev);tip(r.type+(r.tool?' '+r.tool:'')+(r.status?' ['+r.status+']':'')+'<br>'+String(r.cmd||r.text||'').slice(0,140));}
+      else{tip(null);}
+    });
+    host.addEventListener('mouseleave',function(){tip(null);});
+  }
 }
 
 function cloud(words,W,H){

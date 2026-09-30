@@ -572,7 +572,10 @@ already exists.
    (`renderPivot`). **Scatter migrated second** (`Plot.dot` + log scales +
    sqrt radius + model colors; click-drill, tooltip strings, brush-filter
    re-render and empty text preserved bit-for-bit; one delegated
-   container listener per RULES #61). Measured verdicts for the rest:
+   container listener per RULES #61). **Gantt third, timeline fourth**
+   (`Plot.barX` / `Plot.rect` lane strip; COST/type colors, 7px rows,
+   click-to-timeline, tips, empty states preserved; delegation maps
+   rebuilt per render with count guards). Measured verdicts for the rest:
    **treemap / sankey / word-cloud stay hand-rolled** — Plot v0.6 has no
    treemap, sankey, or cloud marks (d3.hierarchy / d3-sankey / custom
    spiral have no declarative equivalent). Remaining order: gantt +
