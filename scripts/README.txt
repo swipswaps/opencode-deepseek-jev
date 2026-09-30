@@ -370,6 +370,12 @@ web.sh
     refuses to start an unauthenticated server unless --insecure is
     passed.
 
+web-restart.sh
+    Restarts the opencode-web container so :5099 serves the current
+    checkout (`opencode-web` is a compose service name, not a command
+    — this script is the command). Polls /api/rev until served==HEAD
+    or fails loudly. Host-side; needs the docker daemon.
+
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json,
     key env vars, opencode.json parse, jev-review server.js. --full adds

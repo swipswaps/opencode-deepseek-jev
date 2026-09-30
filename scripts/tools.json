@@ -7,6 +7,13 @@
     "commands": ["python3 scripts/harvest.py --url https://example.com", "python3 scripts/harvest.py --self-test"]
   },
   {
+    "id": "web-restart",
+    "title": "Restart the :5099 dashboard container",
+    "where": "host",
+    "purpose": "opencode-web is a compose service, not a command. Restarts it so :5099 serves the current checkout, then polls /api/rev until served==HEAD (stale=False) or fails loudly.",
+    "commands": ["./scripts/web-restart.sh"]
+  },
+  {
     "id": "ledger",
     "title": "Event ledger (gates + guard verdicts)",
     "where": "container",
