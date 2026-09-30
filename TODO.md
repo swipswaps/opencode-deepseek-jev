@@ -72,6 +72,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] pan/zoom usage-tour (video-review follow-up). Static frames
+      showed no in-section motion: rebuilt as 11x3s zoompan segments
+      (zooms into stats/search/scatter/brush/pivot/cards, pans down
+      charts/signals/runbooks/models), drawtext captions per step,
+      960x540 H.264 33s 1.8MB (motion proven: ~15-20% pixels/segment;
+      end-frames spot-checked legible). browser-use still skipped
+      (uninstallable + non-deterministic); Playwright + ffmpeg.
 - [x] chart elegance fixes (video-review follow-ups). Word cloud cut
       words off at the container edge (spiral outgrows W/H): layout
       now returns w/h per word and renderCloud fits a viewBox over
