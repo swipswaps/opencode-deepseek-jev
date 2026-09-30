@@ -80,6 +80,11 @@ gate_evidence() {
 
     local scored=0
     grep -q '"applicable":true' "$LOG" && grep -q '"score"' "$LOG" && scored=1
+    if [ "$scored" -eq 0 ]; then
+        # The model may relay scores as human-readable lines instead of raw
+        # JSON ("readability: score 8.2, confidence 0.65"). Same evidence.
+        grep -qE '[a-zA-Z]+: score [0-9.]+, confidence [0-9.]+' "$LOG" && scored=1
+    fi
 
     if [ "$fired" -eq 1 ]; then
         printf 'PASS: jev_review was invoked\n'
@@ -91,8 +96,14 @@ gate_evidence() {
         printf 'PASS: tool returned a metrics result with >=1 applicable metric\n'
         printf 'applicable metrics:\n'
         grep -oE '"[a-zA-Z]+":\{"applicable":true[^}]*\}' "$LOG" | head -20 | indent
+        grep -oE '[a-zA-Z]+: score [0-9.]+, confidence [0-9.]+' "$LOG" | head -20 | indent
     else
         printf 'FAIL: no applicable metric with a score in the tool result\n'
+        if grep -qi 'rejected.*JEV_API_KEY\|JEV_API_KEY.*reject' "$LOG"; then
+            printf 'cause: Jev rejected JEV_API_KEY (key invalid/rotated, not a harness bug)\n'
+            printf 'fix (host): rotate the key, verify it reaches the MCP env, restart opencode-web;\n'
+            printf 'see the rotate-api-keys runbook, then re-run this script\n'
+        fi
         printf '\ntool-call markers:\n'
         grep -inIE 'jev_review|tool call|toolcall|mcp|tool_|metrics' "$LOG" | head -30 | indent
         printf '(end)\n'
