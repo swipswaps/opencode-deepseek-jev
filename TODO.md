@@ -94,6 +94,17 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] attach driven via tmux pty (TUI automation without browser tools).
+      `opencode attach -s ses_f1d2` lands inside the session (title,
+      context 857K/$1.38, todos visible) — resume path fully proven.
+      Root cause of the follow-on 401-confusion: unquoted
+      `GEMINI_API_KEY=<your-key>` placeholder aborted `source
+      .env.local`, so later keys never exported. ensure-env.sh now
+      single-quotes placeholder values on write (real tokens never
+      contain <>); proven on live file (source rc=0, password intact
+      by hash). test-ensure-env 18/18, lint 112. Honest accounting:
+      a mistyped shell line submitted into the user session before
+      interrupt — +1.1K tokens, +$0.13, no side effects.
 - [x] resume-tour video (session-recovery session). Demonstrated
       end to end in Playwright, all visible: empty :4096 root,
       dashboard proof of ses_f1d2, dead +/picker/search paths,

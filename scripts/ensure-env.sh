@@ -117,6 +117,15 @@ if (not pw) or rotate:
 
 # Rebuild the file: keep every existing line verbatim except that a known key
 # gets its (possibly updated) value; append any known key that is absent.
+# Placeholder values containing shell metacharacters (<your-key>) are
+# single-quoted on write: an unquoted placeholder breaks `source .env.local`
+# (observed: abort at GEMINI line, later keys like OPENCODE_SERVER_PASSWORD
+# never exported -> confusing 401s downstream). Real tokens never contain
+# <>, so quoting applies to placeholders only.
+def emit(k, v):
+    if ("<" in v or ">" in v) and not (v.startswith("'") and v.endswith("'")):
+        v = "'" + v.replace("'", "") + "'"
+    return k + "=" + v
 out_lines, seen = [], set()
 for line in cur_lines:
     stripped = line.lstrip()
@@ -124,13 +133,13 @@ for line in cur_lines:
         k = line.split("=", 1)[0].strip()
         if k in known:
             if merged.get(k, ""):
-                out_lines.append(k + "=" + merged[k])
+                out_lines.append(emit(k, merged[k]))
             seen.add(k)
             continue
     out_lines.append(line)  # comments, blank lines, unknown keys: verbatim
 for k in wanted:
     if k not in seen and merged.get(k, ""):
-        out_lines.append(k + "=" + merged[k])
+        out_lines.append(emit(k, merged[k]))
 text = ("\n".join(out_lines) + "\n") if out_lines else ""
 
 before = env.read_text() if env.exists() else None
