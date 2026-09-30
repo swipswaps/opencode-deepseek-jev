@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -69,6 +69,18 @@ Last updated: 2026-09-29
 
 ## Done (most recent first)
 
+- [x] litellm crash-loop fixed (restart-count 4396, ~30s cycle). Root
+      cause: the image update added boot-time master-key enforcement
+      (`UnsafeMasterKeyError`: neither general_settings.master_key nor
+      LITELLM_MASTER_KEY set). Fix: generated
+      `LITELLM_MASTER_KEY=sk-<rand>` appended to .env.local (mode 0600
+      kept, value never displayed), removed the stale same-named
+      container blocking recreate, `up -d` on
+      docker-compose.litellm.yml. Proof: restart-count 0, Up 5+ min,
+      proxy initialized with deepseek-flash, /health 401 without key
+      (auth enforced). Note: image is main-latest (new boot
+      requirements can recur); routing the agent through :4000 (G4)
+      still a separate decision.
 - [x] event ledger with writers + patterns bound (E2E-UX-audit follow-ups).
       ledger.py (stdlib+sqlite3): ledger table in observability.db;
       record (UNIQUE(source,source_key) idempotent), ingest-guard
