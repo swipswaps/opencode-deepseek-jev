@@ -200,6 +200,36 @@ def run(base: str, outdir: Path) -> int:
                     '.pane[data-pane="overview"] h2', "els => els.length")
                 r.ok(f"explore: overview compact ({ov_h2} sections)") if ov_h2 <= 3 else r.bad(
                     f"explore: overview is a wall ({ov_h2} sections)")
+                # row-click drill-down must render (regression: missing ts()
+                # helper left #detail stuck at loading... with zero errors).
+                # Poll via evaluate (never wait_for_function: its string
+                # expression trips the dashboard CSP as a pageerror).
+                # NOTE: re-activate overview first — the tab loop above
+                # leaves another pane visible.
+                try:
+                    page.click('button.tab[data-tab="overview"]')
+                    page.wait_for_timeout(1500)
+                    page.eval_on_selector(
+                        '#stable tr.row',
+                        "el => el.scrollIntoView({block:'center'})")
+                    page.wait_for_timeout(400)
+                    page.click("#stable tr.row td")
+                    resolved = False
+                    for _ in range(10):
+                        page.wait_for_timeout(2000)
+                        if page.evaluate(
+                                "document.getElementById('detail').innerText.length") > 100:
+                            resolved = True
+                            break
+                    if not resolved:
+                        r.bad("explore: row click drill-down never resolved")
+                    else:
+                        drill_errs = page.evaluate(
+                            "document.querySelectorAll('#detail [data-error]').length")
+                        r.ok("explore: row click drills down") if drill_errs == 0 else r.bad(
+                            "explore: drill-down rendered an error state")
+                except Exception as e:
+                    r.bad(f"explore: row click drill-down failed ({str(e)[:80]})")
             page.close()
         browser.close()
 

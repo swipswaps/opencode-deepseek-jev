@@ -1200,6 +1200,7 @@ function tip(html){var t=d3.select('#tip');if(html==null){t.style('opacity',0);r
 function moveTip(ev){d3.select('#tip').style('left',(ev.clientX+14)+'px').style('top',(ev.clientY+14)+'px');}
 function timeFmt(d){var x=new Date(d);return x.toISOString().slice(11,16);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function ts(t){return new Date(t).toISOString().slice(11,23);}
 function modelId(m){if(!m)return '(none)';try{var o=JSON.parse(m);return o.id||o.modelID||m;}catch(e){return String(m);}}
 function span(d){var a=Number(d.p_start||0),b=Number(d.p_end||0);if(b>a)return b-a;return Math.max(0,Number(d.time_updated||0)-Number(d.time_created||0));}
 var MODEL_COLOR=null,COST=null;

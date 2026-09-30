@@ -94,6 +94,18 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] drill-down resurrection + browser-use verdict (title-click audit).
+      Clicking any session title stuck #detail at `loading...` forever
+      with zero errors: `detail()` called `ts()` which exists only on
+      the home page (one-line helper added; drill renders, 0 errors).
+      Gates never clicked rows, so it shipped — ux-test.py now
+      asserts row-click drill-down (27/0). browser-use 0.13.10 DID
+      install and drives Chromium, but its LLM loop requires
+      structured-output response_format which DeepSeek rejects
+      (proven: request ids + direct API matrix) — no other model key
+      here, so the agentic pass stays blocked on model capability;
+      Playwright + Selenium remain the instruments. (pip left harmless
+      version-conflict notices; no repo imports affected.)
 - [x] keyboard + screen-reader operability (WCAG 2.1 AA essentials per
       W3C APG, ArcGIS/Tableau/Cognos practices). Explore tabs are a
       real tablist (roles, aria-selected, arrow/Home/End automatic
