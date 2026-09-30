@@ -94,6 +94,18 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] ops tab: hotspots/bottlenecks/failures/successes as visualized
+      data with drill-down (deterministic-probes segment). /api/ops
+      serves errors_by_tool (+example_sid drill targets), gate_runs,
+      guard_blocks, slow_endpoints (PERF ring: compute-only timings,
+      200-cap, ~zero overhead by construction), ledger_summary.
+      8th explore tab renders 4 panels; error rows drill via
+      detail(). Supporting fixes: S1-class win on patterns already
+      banked; errorTools gained MAX(session_id); validity-from-landing
+      doctrine held. Proven: panels populated, drill lands on example
+      session, cached-hit p99 dominated by loop contention not ring
+      cost; lint 112, dashboard 117 (new asserts), ux-test 27/0.
+      worker-thread cure + per-model panel remain follow-ups.
 - [x] drill-down resurrection + browser-use verdict (title-click audit).
       Clicking any session title stuck #detail at `loading...` forever
       with zero errors: `detail()` called `ts()` which exists only on

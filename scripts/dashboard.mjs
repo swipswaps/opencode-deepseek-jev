@@ -371,6 +371,16 @@ function apiDuplicates() {
 // would change the API shape clients parse. Dict payloads keep the flags.
 const TTL_CACHE = {};
 const TTL_REFRESHING = {};
+// Latency ring for the ops view: Date.now() deltas around expensive cache
+// computations only (hits are ~0ms by definition and already visible via
+// the cached flag). Capped at 200 entries; two syscalls per recorded call
+// is unmeasurable overhead by construction. Records COMPUTE cost, not
+// queueing — a request answered from cache never touches this path.
+const PERF_RING = [];
+function perfNote(path, ms) {
+  PERF_RING.push({ path, ms, at: Date.now() });
+  if (PERF_RING.length > 200) PERF_RING.splice(0, PERF_RING.length - 200);
+}
 function ttlCached(key, ttlMs, fn) {
   const now = Date.now();
   const hit = TTL_CACHE[key];
@@ -386,7 +396,9 @@ function ttlCached(key, ttlMs, fn) {
       // THIS response. Set the flag now (singleflight), compute next tick.
       setImmediate(() => {
         try {
+          const t0 = Date.now();
           const value = fn();
+          perfNote(key, Date.now() - t0);
           if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
           TTL_CACHE[key] = { at: Date.now(), value };
         } catch {
@@ -398,7 +410,9 @@ function ttlCached(key, ttlMs, fn) {
     if (Array.isArray(hit.value)) return hit.value.slice();
     return Object.assign({}, hit.value, { cached: true, age_ms: now - hit.at, stale: true });
   }
+  const t0 = Date.now();
   const value = fn();
+  perfNote(key, Date.now() - t0);
   if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
   value.age_ms = 0;
   TTL_CACHE[key] = { at: Date.now(), value };
@@ -443,6 +457,33 @@ function apiSignalsFresh() {
 function apiPatterns(limit) {
   return ttlCached("patterns:" + (Number(limit) || 30), CACHE_TTL_MS, () => apiPatternsFresh(limit));
 }
+// Ops aggregate for the 8th explore tab: failures, successes, bottlenecks
+// as visualized data. Cheap by construction: signals via its TTL cache,
+// ledger via indexed read-only queries, timings from the PERF ring.
+// Never throws (a missing observability db yields empty sections).
+function apiOps() {
+  let errors_by_tool = [];
+  try {
+    // errorTools lives in apiPatterns (grouped by tool); the limit only
+    // caps ngrams, and key "patterns:30" shares the UI's own cache entry.
+    const pat = apiPatterns(30);
+    errors_by_tool = (pat.errorTools || []).map(e => ({ tool: e.tool, n: e.n, example_sid: e.example_sid || null }));
+  } catch { errors_by_tool = []; }
+  let gate_runs = [], guard_n = 0, guard_top = [], ledger_summary = {};
+  try {
+    const odb = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
+    gate_runs = odb.prepare("SELECT ts, verdict, detail FROM ledger WHERE type IN ('GATE','GATE_REPORT') ORDER BY id DESC LIMIT 20").all();
+    const gb = odb.prepare("SELECT COUNT(*) n FROM ledger WHERE type='GUARD' AND verdict='block'").get();
+    guard_n = gb ? gb.n : 0;
+    guard_top = odb.prepare("SELECT tool pattern, COUNT(*) n FROM ledger WHERE type='GUARD' AND verdict='block' GROUP BY tool ORDER BY n DESC LIMIT 5").all();
+    for (const r of odb.prepare("SELECT type, COUNT(*) n FROM ledger GROUP BY type").all()) ledger_summary[r.type] = r.n;
+    odb.close();
+  } catch { /* observability db absent: sections stay empty */ }
+  const latest = {};
+  for (const e of PERF_RING) latest[e.path] = e;
+  const slow_endpoints = Object.values(latest).map(e => ({ path: e.path, ms: e.ms })).sort((a, b) => b.ms - a.ms).slice(0, 10);
+  return { errors_by_tool, gate_runs, guard_blocks: { n: guard_n, top: guard_top }, slow_endpoints, ledger_summary };
+}
 function apiPatternsFresh(limit) {
   // Recent-40 session window (same as health/ledger/activity): the full-log
   // window function + two full scans cost ~5s sync on the single-threaded
@@ -457,7 +498,7 @@ function apiPatternsFresh(limit) {
     "FROM part WHERE json_extract(data,'$.type')='tool' AND " + win + ") " +
     "WHERE next_tool IS NOT NULL GROUP BY tool, next_tool ORDER BY n DESC LIMIT ?", recent, limit);
   const errorTools = query(
-    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part " +
+    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n, MAX(session_id) example_sid FROM part " +
     "WHERE json_extract(data,'$.type')='tool' AND json_extract(data,'$.state.status')='error' " +
     "AND " + win + " " +
     "GROUP BY tool ORDER BY n DESC LIMIT 10", recent);
@@ -517,6 +558,9 @@ async function apiHealth() {
 }
 async function refreshHealthCache() {
   try {
+    // Sync-portion timing only: the liveStatus await below is network wait,
+    // not loop-blocking work, and must never read as compute cost.
+    const t0 = Date.now();
     const r = healthReport(dbPath);
     Object.assign(r, annotateReport(r));
     r.per_model = modelLedger(dbPath);
@@ -525,6 +569,7 @@ async function refreshHealthCache() {
     } catch {
       r.handoff = { available: false };
     }
+    perfNote("health", Date.now() - t0);
     // Adjudicate against the live server (dead_tool / dead_blank). Fail-safe:
     // if live status is unavailable (no password / server down / timeout) the
     // report is returned unchanged, so a finding stays a stall/blank rather than
@@ -1136,6 +1181,7 @@ ${nav("explore")}
   <button class="tab" data-tab="code" role="tab" id="tab-code" aria-selected="false" aria-controls="pane-code">code</button>
   <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data</button>
   <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr</button>
+  <button class="tab" data-tab="ops" role="tab" id="tab-ops" aria-selected="false" aria-controls="pane-ops">ops</button>
 </div>
 <div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
 <div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
@@ -1190,6 +1236,10 @@ ${nav("explore")}
 <div class="pane" data-pane="ocr" id="pane-ocr" role="tabpanel" aria-labelledby="tab-ocr" tabindex="0" style="display:none">
 <h2>OCR — screenshot text (searchable)</h2>
 <div class="chart" id="ocr"><span class="muted" data-loading>loading...</span></div>
+</div>
+<div class="pane" data-pane="ops" id="pane-ops" role="tabpanel" aria-labelledby="tab-ops" tabindex="0" style="display:none">
+<h2>Ops — hotspots, bottlenecks, failures, successes (click a row to drill down)</h2>
+<div class="chart" id="ops"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="tip" id="tip"></div>
 <script>
@@ -1486,6 +1536,35 @@ async function renderDupes(){
   for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
   el.html(h);
 }
+async function renderOps(){
+  // Failures, successes, bottlenecks from /api/ops. Error rows carry
+  // data-go with an example session and drill via detail() (same
+  // delegation contract as the signals pane). Gate strip is display-only.
+  var el=d3.select('#ops');el.selectAll('*').remove();
+  var d=await j('/api/ops');
+  if(!d){el.text('(ops unavailable)');return;}
+  var h='';
+  h+='<div class="muted" style="font-size:12px">failures by tool (click a row to drill into an example session)</div>';
+  if(d.errors_by_tool&&d.errors_by_tool.length){
+    for(var i=0;i<d.errors_by_tool.length;i++){var e=d.errors_by_tool[i];
+      h+='<div class="item"'+(e.example_sid?' data-go="'+esc(e.example_sid)+'"':'')+'><span class="tag">error</span>'+esc(e.tool||'?')+' x'+e.n+'</div>';}
+  }else{h+='<div class="item">no error tool calls in window</div>';}
+  h+='<div class="muted" style="font-size:12px;margin-top:10px">gate history (latest first)</div>';
+  if(d.gate_runs&&d.gate_runs.length){
+    for(var k=0;k<d.gate_runs.length;k++){var g=d.gate_runs[k];
+      h+='<div class="item"><span class="tag">'+esc(g.verdict||'?')+'</span><span class="muted">'+esc(g.ts||'')+'</span> '+esc(g.detail||'')+'</div>';}
+  }else{h+='<div class="item">no gate runs recorded</div>';}
+  var gb=d.guard_blocks||{n:0,top:[]};
+  h+='<div class="muted" style="font-size:12px;margin-top:10px">guard blocks: '+gb.n+'</div>';
+  for(var m=0;m<gb.top.length;m++){h+='<div class="item"><span class="tag">block</span>'+esc(String(gb.top[m].pattern||'').slice(0,80))+' x'+gb.top[m].n+'</div>';}
+  h+='<div class="muted" style="font-size:12px;margin-top:10px">slowest recent computations (sync ms; cached hits cost nothing)</div>';
+  if(d.slow_endpoints&&d.slow_endpoints.length){
+    for(var s=0;s<d.slow_endpoints.length;s++){var se=d.slow_endpoints[s];
+      h+='<div class="item"><span class="tag">'+se.ms+'ms</span>'+esc(se.path)+'</div>';}
+  }else{h+='<div class="item">no computations recorded yet</div>';}
+  el.html(h);
+}
+document.getElementById('ops').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 function activateTab(name,setHash){
   if(!name)return;
   var tabs=document.querySelectorAll('.tab');
@@ -1538,7 +1617,7 @@ async function load(){
   DATA.forEach(function(d){d._span=span(d);});
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
-  renderTable();renderDupes();renderSignals();renderGuard();renderHealth();renderPatterns();renderPivot();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
+  renderTable();renderDupes();renderOps();renderSignals();renderGuard();renderHealth();renderPatterns();renderPivot();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
   renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
@@ -2206,6 +2285,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/health") {
     send(res, 200, JSON.stringify(await apiHealth()), "application/json");
+  } else if (url === "/api/ops") {
+    send(res, 200, JSON.stringify(apiOps()), "application/json");
   } else if (url === "/api/patterns") {
     send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {
