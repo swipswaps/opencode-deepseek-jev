@@ -9,6 +9,10 @@ model_list:
     litellm_params:
       model: deepseek/deepseek-chat          # verify exact DeepSeek model id
       api_key: os.environ/DEEPSEEK_API_KEY
+      # Absorb transient upstream congestion (429/503 "backend
+      # temporarily overloaded") at the proxy instead of failing
+      # every client on the first blip.
+      num_retries: 3
 
 litellm_settings:
   # Hard cap in USD. 30d = rolling 30 days; also: 1d, 1h.
