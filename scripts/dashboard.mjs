@@ -1607,7 +1607,7 @@ async function renderScatter(){
   host.SCATT_ROWS=byId;
   host.innerHTML='';
   host.appendChild(Plot.plot({
-    width:1000,height:300,marginTop:12,marginRight:18,marginBottom:34,marginLeft:70,
+    width:1000,height:300,marginTop:12,marginRight:34,marginBottom:34,marginLeft:84,
     x:{type:'log',domain:[xmin,xmax],label:'span (log)',ticks:xticks,tickFormat:fmtSpan,grid:true},
     y:{type:'log',domain:[0.0001,ymax],label:'cost (log)',ticks:yticks,tickFormat:fmtCost,grid:true},
     marks:[
@@ -1809,7 +1809,7 @@ function cloud(words,W,H){
     }
     if(!ok){x=cx+rad*Math.cos(ang);y=cy+rad*Math.sin(ang)*0.62;}
     placed.push({x:x,y:y,w:ww,h:hh});
-    out.push({text:words[i].text,size:s,x:x,y:y});
+    out.push({text:words[i].text,size:s,x:x,y:y,w:ww,h:hh});
     rad+=s*0.4; ang+=0.8;
   }
   return out;
@@ -1822,7 +1822,15 @@ async function renderCloud(){
   var W=1000,H=300;
   var placed=cloud(words,W,H);
   el.selectAll('*').remove();
-  el.append('svg').attr('width',W).attr('height',H).append('g').attr('transform','translate('+W/2+','+H/2+')')
+  // Fit, don't clip: the spiral can outgrow W/H, which cut words off at
+  // the container edge. viewBox over the placed bounds keeps every term
+  // visible at any container width.
+  var x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,i,q;
+  for(i=0;i<placed.length;i++){q=placed[i];
+    if(q.x-q.w/2<x0)x0=q.x-q.w/2;if(q.x+q.w/2>x1)x1=q.x+q.w/2;
+    if(q.y-q.h/2<y0)y0=q.y-q.h/2;if(q.y+q.h/2>y1)y1=q.y+q.h/2;}
+  var vb=(x1>x0&&y1>y0)?(' '+x0+' '+y0+' '+(x1-x0)+' '+(y1-y0)):' 0 0 '+W+' '+H;
+  el.append('svg').attr('width','100%').attr('height',H).attr('viewBox',vb.slice(1)).append('g').attr('transform','translate('+W/2+','+H/2+')')
     .selectAll('text').data(placed).enter().append('text')
     .style('font-size',function(d){return d.size+'px';})
     .style('fill',function(d){return d3.interpolateViridis(d.size/64);})

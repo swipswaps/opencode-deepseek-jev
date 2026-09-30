@@ -72,6 +72,15 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] chart elegance fixes (video-review follow-ups). Word cloud cut
+      words off at the container edge (spiral outgrows W/H): layout
+      now returns w/h per word and renderCloud fits a viewBox over
+      placed bounds (complete + legible, 0 errors). Plot scatter
+      clipped y-tick labels and the x-axis label: margins widened
+      (left 70->84, right 18->34), verified readable. Not shipped:
+      sankey label overlap (data-dependent), degenerate single-part
+      timeline axis (edge case). Gates: lint 110, dashboard 116,
+      ux-test 26/0.
 - [x] usage-tour presentation (E2E session). Restarted opencode-web
       (serves 4e78fcf, stale:false; panel adjudicated live, 0 errors).
       browser-use uninstallable here (pip deps timeout) and wrong tool
