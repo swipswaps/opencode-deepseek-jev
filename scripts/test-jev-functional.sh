@@ -81,9 +81,11 @@ gate_evidence() {
     local scored=0
     grep -q '"applicable":true' "$LOG" && grep -q '"score"' "$LOG" && scored=1
     if [ "$scored" -eq 0 ]; then
-        # The model may relay scores as human-readable lines instead of raw
-        # JSON ("readability: score 8.2, confidence 0.65"). Same evidence.
-        grep -qE '[a-zA-Z]+: score [0-9.]+, confidence [0-9.]+' "$LOG" && scored=1
+        # The model relays metrics in varying human-readable shapes
+        # ("readability: score 8.2, confidence 0.65" or
+        # "cognitiveComplexity: 8.4 confidence 0.56") instead of raw
+        # JSON. Same evidence: a metric name, a number, a confidence.
+        grep -qE '[a-zA-Z]+: (score )?[0-9.]+,? confidence [0-9.]+' "$LOG" && scored=1
     fi
 
     if [ "$fired" -eq 1 ]; then
@@ -96,7 +98,7 @@ gate_evidence() {
         printf 'PASS: tool returned a metrics result with >=1 applicable metric\n'
         printf 'applicable metrics:\n'
         grep -oE '"[a-zA-Z]+":\{"applicable":true[^}]*\}' "$LOG" | head -20 | indent
-        grep -oE '[a-zA-Z]+: score [0-9.]+, confidence [0-9.]+' "$LOG" | head -20 | indent
+        grep -oE '[a-zA-Z]+: (score )?[0-9.]+,? confidence [0-9.]+' "$LOG" | head -20 | indent
     else
         printf 'FAIL: no applicable metric with a score in the tool result\n'
         if grep -qi 'rejected.*JEV_API_KEY\|JEV_API_KEY.*reject' "$LOG"; then
