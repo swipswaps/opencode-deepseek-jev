@@ -80,6 +80,10 @@ gate_evidence() {
 
     local scored=0
     grep -q '"applicable":true' "$LOG" && grep -q '"score"' "$LOG" && scored=1
+    # DeepSeek JSON mode reference: https://api-docs.deepseek.com/guides/json_mode
+    # (measured 2026-09-30: deepseek-chat AND deepseek-reasoner accept plain
+    # and json_object but 400 on json_schema strict — which is why browser-use,
+    # whose action loop requires json_schema, cannot run on either tier).
     if [ "$scored" -eq 0 ]; then
         # The model relays metrics in varying human-readable shapes
         # ("score 8.2, confidence 0.65" / "8.4 confidence 0.56" /

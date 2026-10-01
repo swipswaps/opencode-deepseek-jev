@@ -53,7 +53,9 @@ export function apiSignalsFresh(dbPath) {
 export function apiPatternsFresh(dbPath, limit) {
   // Recent-40 session window (same as health/ledger/activity): the full-log
   // window function + two full scans cost ~5s sync on the single-threaded
-  // loop per TTL expiry. Values are now recent-windowed like every other
+  // loop per TTL expiry. SQLite window functions:
+  // https://www.sqlite.org/windowfunctions.html (lead() partitions tool
+  // calls per session in one pass instead of N correlated subqueries). Values are now recent-windowed like every other
   // panel (shape unchanged; counts reflect current behavior, not history).
   const recent = 40;
   const win = "session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)";

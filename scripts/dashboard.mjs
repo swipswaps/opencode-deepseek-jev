@@ -187,8 +187,9 @@ if (!dbPath) {
 }
 
 // Module-level read-only handle for the opencode.db read path (query()).
-// WAL mode permits concurrent readers; one handle removes per-call
-// open/close churn across query()'s call sites. Never written — the DB stays
+// WAL mode permits concurrent readers without blocking writers; one handle
+// removes per-call open/close churn across query()'s call sites. SQLite WAL:
+// https://www.sqlite.org/wal.html. Never written — the DB stays
 // read-only for the whole session. Observability/code.db call sites keep
 // their own handles (untouched).
 const READ_DB = new DatabaseSync(dbPath, { readOnly: true });
@@ -357,15 +358,25 @@ function apiDuplicates() {
 // Generic TTL wrapper for heavy read-only endpoints (same pattern as
 // apiHealth's cache): first call computes, repeats within ttlMs serve from
 // memory with cached/age_ms observability. DB is never written.
+// Derived-data caching in the sense of Kleppmann, Designing Data-Intensive
+// Applications (O'Reilly, 2017, ISBN 978-1449373320), ch. 11: the served
+// payloads are materialized views over the opencode.db log, refreshed on a
+// TTL because recomputation is cheaper than invalidation here (small DB,
+// idempotent aggregations, staleness measured in seconds is acceptable).
 //
-// Stale-while-revalidate + singleflight (backend-overload doctrine): the
-// aggregations below are synchronous and multi-second, and this process is
-// single-threaded — a recompute on the request path blocks EVERY other
-// request (measured: cold /api/health ~10 s, /api/signals ~5 s,
-// /api/words ~4.7 s). Past the TTL we therefore serve the stale payload
-// immediately (stale:true) and recompute once in the background; a refresh
-// already in flight is never duplicated. Only a true-cold start (no stale
-// value yet) computes inline. The boot pre-warm fills the health entry so
+// Stale-while-revalidate, RFC 5861 (https://httpwg.org/specs/rfc5861.html):
+// serve the stale payload immediately with a freshness warning (here the
+// stale:true flag + age_ms), refresh once in the background. Singleflight
+// deduplication follows Go's x/sync (https://pkg.go.dev/golang.org/x/sync/singleflight):
+// concurrent misses share one in-flight recompute instead of stampeding.
+// Why it matters here: the aggregations below are synchronous and
+// multi-second, and this process is single-threaded — a recompute on the
+// request path blocks EVERY other request (measured: cold /api/health
+// ~10 s, /api/signals ~5 s, /api/words ~4.7 s). Past the TTL we therefore
+// serve the stale payload immediately (stale:true) and recompute once in
+// the background; a refresh already in flight is never duplicated. Only
+// a true-cold start (no stale value yet) computes inline. The boot
+// pre-warm fills the health entry so
 // the first visitor rarely pays cold.
 //
 // List payloads (apiActivity) bypass the cached/age_ms/stale flags: extra
@@ -1626,6 +1637,12 @@ function activateTab(name,setHash){
     renderHealth();renderSignals();renderGuard();
   }
 }
+// APG tabs pattern (W3C ARIA Authoring Practices Guide):
+// https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ — tablist/tab/tabpanel
+// roles, aria-selected synced here, arrow/Home/End keyboard with automatic
+// activation. Buttons are natively focusable so Tab/Enter need no extras.
+// Keyboard operability follows WCAG 2.1 guideline 2.1:
+// https://www.w3.org/TR/WCAG21/
 document.getElementById('tabs').addEventListener('click',function(ev){
   var b=ev.target&&ev.target.closest?ev.target.closest('.tab'):null;
   if(b){activateTab(b.getAttribute('data-tab'),true);}
@@ -1730,6 +1747,7 @@ async function renderBurn(){
     ]
   }));
   var svg=host.querySelector('svg');
+  // d3-brush overlay (Plot has no brush mark): https://github.com/d3/d3-brush
   if(svg&&typeof d3!=='undefined'&&typeof d3.brushX==='function'&&typeof d3.scaleTime==='function'){
     var x=d3.scaleTime().domain([t0,t1]).range([0,w]);
     var brush=d3.brushX().extent([[0,0],[w,h]]).on('brush end',function(ev){
@@ -1744,7 +1762,9 @@ async function renderBurn(){
 async function renderScatter(){
   // Declarative Plot spec (G3 migration 1/6): same filtered data, domains,
   // colors, empty text, drill-down and tooltip strings as the hand-rolled
-  // d3 version it replaces. Clicks/tooltips ride ONE delegated listener
+  // d3 version it replaces. Plot marks/scales reference:
+  // https://github.com/observablehq/plot (marks: dot/cell/text/barX/rect;
+  // scales: log/sqrt/band; the vendored UMD build is scripts/vendor/). Clicks/tooltips ride ONE delegated listener
   // bound to the container (RULES #61: data-* + delegation, no inline
   // handlers); re-renders only rebuild the row map, never re-bind.
   var host=document.getElementById('scatter');
@@ -1824,6 +1844,8 @@ async function renderSankey(){
   models.forEach(function(m){cats.forEach(function(c){var v=agg[c+'|'+m]||0;if(v>0)links.push({source:idx['model|'+m],target:idx['cat|'+c],value:v});});});
   if(!links.length){el.text('(no token data)');return;}
   var W=1000,H=Math.max(200,models.length*80);
+  // Sankey layout (stays hand-rolled: Plot v0.6 has no sankey mark):
+  // https://github.com/d3/d3-sankey
   var layout=d3.sankey().nodeWidth(12).nodePadding(16).nodeAlign(d3.sankeyJustify).extent([[2,14],[W-160,H-14]]);
   var graph=layout({nodes:nodes.map(function(n){return {name:n.name,kind:n.kind};}),links:links.map(function(l){return {source:l.source,target:l.target,value:l.value};})});
   var catColor={'cache read':'#8b949e','reasoning':'#d2a8ff','output':'#7ee787'};

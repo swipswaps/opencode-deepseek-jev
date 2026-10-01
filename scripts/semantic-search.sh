@@ -4,6 +4,8 @@
 # across every session from the terminal. Same substrate the dashboard's
 # /api/semantic builds in memory; this persists under data/search/ so it
 # can be reused (for example as input to a future Laya/Jev reranker).
+# FTS5 + BM25 ranking: https://www.sqlite.org/fts5.html (see especially
+# the bm25() ranking function used for result ordering).
 #
 # Usage:
 #   ./scripts/semantic-search.sh <query...>        # build if needed, then search

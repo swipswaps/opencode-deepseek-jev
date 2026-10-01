@@ -601,3 +601,52 @@ Smoke test FAIL despite OK response: known opencode exit-code bug.
 Silent stall during smoke test: process substitution ensures live
   streaming. If this recurs, check that bash is version 4+ (process
   substitution is a bash feature).
+
+## References (every link verified 200 on 2026-09-30)
+
+Specs and standards the code depends on:
+
+- W3C ARIA Authoring Practices, tabs pattern (explore tablist):
+  https://www.w3.org/WAI/ARIA/apg/patterns/tabs/
+- WCAG 2.1 (keyboard operability, labels, focus, tables):
+  https://www.w3.org/TR/WCAG21/
+- RFC 5861, stale-while-revalidate (TTL cache doctrine):
+  https://httpwg.org/specs/rfc5861.html
+- Go x/sync singleflight (recompute deduplication):
+  https://pkg.go.dev/golang.org/x/sync/singleflight
+- Content Security Policy 3, script-src (why the harness never
+  `wait_for_function`s a string): https://www.w3.org/TR/CSP3/
+- SQLite WAL mode: https://www.sqlite.org/wal.html
+- SQLite JSON1: https://www.sqlite.org/json1.html
+- SQLite window functions: https://www.sqlite.org/windowfunctions.html
+- SQLite FTS5 + BM25: https://www.sqlite.org/fts5.html
+
+API and library docs:
+
+- Observable Plot (vendored specs): https://github.com/observablehq/plot
+- d3-brush (chart filter overlay): https://github.com/d3/d3-brush
+- d3-sankey (token-flow layout): https://github.com/d3/d3-sankey
+- LiteLLM retries: https://docs.litellm.ai/docs/completion/reliable_completions
+- LiteLLM budgets: https://docs.litellm.ai/docs/proxy/virtual_keys
+- DeepSeek JSON mode (json_schema rejected on both tiers, measured):
+  https://api-docs.deepseek.com/guides/json_mode
+- Meta structured output (Muse Spark JSON Schema support, documented):
+  https://ai.developer.meta.com/docs/features/structured-output
+- Playwright evaluating (poll via evaluate, never string waits):
+  https://playwright.dev/docs/evaluating
+- opencode CLI attach/session (the resume path):
+  https://dev.opencode.ai/docs/cli
+- opencode MCP servers: https://opencode.ai/docs/mcp-servers
+- GitHub REST pagination (per_page + cursors):
+  https://docs.github.com/en/rest/using-the-rest-api
+- Stripe pagination (cursor + hard limit, fail fast):
+  https://stripe.com/docs/api/pagination
+
+Books (ISBNs):
+
+- Raymond, The Art of Unix Programming (Addison-Wesley, 2003),
+  ISBN 978-0131429017 — cited in scripts/README.txt (clarity,
+  pasteability, Rule of Clarity §1.6.2).
+- Kleppmann, Designing Data-Intensive Applications (O'Reilly,
+  2017), ISBN 978-1449373320 — derived-data caching, ch. 11
+  (dashboard TTL doctrine).

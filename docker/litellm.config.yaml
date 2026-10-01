@@ -11,11 +11,16 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       # Absorb transient upstream congestion (429/503 "backend
       # temporarily overloaded") at the proxy instead of failing
-      # every client on the first blip.
+      # every client on the first blip. num_retries semantics:
+      # https://docs.litellm.ai/docs/completion/reliable_completions
       num_retries: 3
 
 litellm_settings:
   # Hard cap in USD. 30d = rolling 30 days; also: 1d, 1h.
+  # Budgets / virtual keys: https://docs.litellm.ai/docs/proxy/virtual_keys
+  # NOTE (measured 2026-09-30): the proxy logs that a proxy-wide budget is
+  # NOT enforced without DATABASE_URL — max_budget below is currently
+  # decorative. Wiring spend persistence is queued (G4 follow-up).
   max_budget: 5.0
   budget_duration: 30d
   request_timeout: 120

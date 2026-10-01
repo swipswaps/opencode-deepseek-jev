@@ -2,6 +2,11 @@
 // session-health.mjs — READ-ONLY, browser-independent detection of stalled and
 // blank assistant turns in opencode's session store.
 //
+// Query substrate: SQLite JSON1 (json_extract over the part.data JSON blob:
+// https://www.sqlite.org/json1.html) plus GROUP BY aggregation. All scans
+// are bounded to recent sessions — the part log grows without bound while
+// recent sessions hold nearly all of it.
+//
 // WHY (the "screen-blindness" problem)
 // ------------------------------------
 // The opencode server is the single writer of `opencode.db`; every tool call,

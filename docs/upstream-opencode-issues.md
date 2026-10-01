@@ -22,6 +22,12 @@ curl -H "Authorization: Basic ..." \
 
 Expected (GitHub/Stripe convention): honor offset (or document cursor
 pagination), so a full transcript is retrievable in bounded pages.
+GitHub paginates with per_page caps + Link cursors:
+https://docs.github.com/en/rest/using-the-rest-api;
+Stripe uses cursor + hard limit with fail-fast errors:
+https://stripe.com/docs/api/pagination. Either shape beats silent
+misbehavior. CLI attach path (the working resume route) is documented at
+https://dev.opencode.ai/docs/cli (`opencode attach [url]`, `-s/--session`).
 
 ## Issue 2: unbounded `GET /session/:id/message` never returns
 

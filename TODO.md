@@ -94,6 +94,20 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] verified citation references (PhD audit). Every external claim
+      in code now carries a live-verified URL (all curl-checked 200
+      on 2026-09-30; dead paths replaced: litellm retry->reliable_
+      completions, Plot site (429)->github repo, opencode sessions
+      (404)->dev CLI docs, GitHub/Stripe pagination corrected) plus
+      a README References section (specs, API docs, 2 ISBNs — incl.
+      a self-caught TAOP/DDIA ISBN duplication before commit).
+      Covers: APG tabs, WCAG 2.1, RFC 5861, singleflight, CSP3, WAL,
+      JSON1, window fns, FTS5/BM25, Plot, d3-brush/sankey, litellm
+      retries+budgets, DeepSeek/Meta JSON modes, Playwright
+      evaluating, opencode CLI/MCP, pagination. Gates: lint 114,
+      hygiene 37, dashboard 117 (one cold-scratch #session flake on
+      first run, green on re-run — balance-endpoint latency, not the
+      change).
 - [x] edge-case elegance (deferred items, closed). Sankey node labels
       overlapped on thin nodes: labels now render only on nodes >=14px
       tall, every node carries a native <title> (6/6 titled, hover

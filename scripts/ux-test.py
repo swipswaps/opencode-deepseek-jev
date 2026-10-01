@@ -16,7 +16,13 @@ Wait strategy (deliberate, measured 2026-09-29): domcontentloaded + a
 `[data-loading]`-marker ready wait, NEVER networkidle. The app polls
 /api/* every 2 s and a cold /api/health blocks the single-threaded server
 ~10 s, so networkidle times out on healthy pages (4/6 FAILed spuriously
-before this fix). READY_TIMEOUT_S=60 covers a cold start; a marker that
+before this fix). Polling uses page.evaluate in Python, NEVER
+page.wait_for_function with a string: the latter compiles via an
+eval-like call per poll tick, tripping the dashboard's own CSP
+(script-src without 'unsafe-eval'; CSP3
+https://www.w3.org/TR/CSP3/#directive-script-src) as a pageerror —
+a harness artifact proven 2026-09-29. evaluate is CSP-clean.
+Playwright evaluating reference: https://playwright.dev/docs/evaluating READY_TIMEOUT_S=60 covers a cold start; a marker that
 survives it is a hung fetch and correctly FAILs.
 
 Playwright needs a browser: bundled chromium works in-container and on the
