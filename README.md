@@ -287,6 +287,14 @@ every control, arrows switch explore tabs, Enter sorts table columns,
 `/` focuses search, Escape blurs — step 12 of the video shows the
 focus ring in action.
 
+Short interaction clips (real usage, ~8 s each — click a thumbnail
+to play):
+
+[![Drill down](docs/ux/thumb-drill.png)](docs/ux/clip-drill.mp4)
+[![Brush to filter](docs/ux/thumb-brush.png)](docs/ux/clip-brush.mp4)
+[![Ops drill](docs/ux/thumb-ops.png)](docs/ux/clip-ops.mp4)
+[![Keyboard first](docs/ux/thumb-kbd.png)](docs/ux/clip-kbd.mp4)
+
 Session-resume tour (33 s): when the upstream web UI cannot list old
 sessions, resume via transcript — `docs/ux/resume-tour.mp4` demonstrates
 the empty list, the data proof, the resume pointer, the agent

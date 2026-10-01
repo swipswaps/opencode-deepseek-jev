@@ -94,6 +94,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] interaction clips for README (usage-guide session). Four ~8 s
+      captioned clips of real usage captured live via Playwright
+      video (drill-down, brush-filter 42->1, ops drill-down, keyboard
+      travel), 1280px H.264 + thumbnail links in README guide.
+      Total media ~0.6MB clips + ~0.5MB thumbs (two thumbs ~125KB:
+      dense-UI floor, readability kept over the 100KB guideline).
 - [x] worker-thread cure + per-model panel (residuals, measured E3).
       query-worker.mjs + query-lib.mjs: health/signals/patterns/words
       compute off-thread (single shared worker, 60s guard, inline
