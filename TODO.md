@@ -94,6 +94,17 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] worker-thread cure + per-model panel (residuals, measured E3).
+      query-worker.mjs + query-lib.mjs: health/signals/patterns/words
+      compute off-thread (single shared worker, 60s guard, inline
+      fallback); wrappers async with same TTL keys/shapes; per-model
+      errors via own 60s TTL into apiOps + ops UI. Proofs: endpoint
+      outputs byte-identical modulo volatile fields; rev 0.06s during
+      4-refresh storm (was 4-6s queued); refreshes land (~6s);
+      unknown-fn rejects cleanly. Hard-won: importing dashboard.mjs
+      in-worker fatals (module-scope usage exit) — pure query-lib
+      instead; entry-time `at` caused born-expired storms; async sync
+      prefix runs inline (defer past tick). Harness 4/0, ux-test 27/0.
 - [x] ops tab: hotspots/bottlenecks/failures/successes as visualized
       data with drill-down (deterministic-probes segment). /api/ops
       serves errors_by_tool (+example_sid drill targets), gate_runs,

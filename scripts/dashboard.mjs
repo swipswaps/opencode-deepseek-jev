@@ -20,8 +20,10 @@ import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
+import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
 
 const dbPath = process.argv[2];
@@ -152,8 +154,8 @@ function apiRev() {
   return data;
 }
 
-function apiExportPatterns() {
-  const p = apiPatterns(500);
+async function apiExportPatterns() {
+  const p = await apiPatterns(500);
   let body = "kind,key,n\n";
   for (const g of p.ngrams) body += '"bigram","' + String(g.gram).replace(/"/g, '""') + '",' + g.n + "\n";
   for (const e of p.errorTools) body += '"error_tool","' + String(e.tool).replace(/"/g, '""') + '",' + e.n + "\n";
@@ -418,57 +420,113 @@ function ttlCached(key, ttlMs, fn) {
   TTL_CACHE[key] = { at: Date.now(), value };
   return value;
 }
+// Worker-thread cure for sync aggregations (backend-overload doctrine):
+// the scans above are multi-second and single-threaded — every TTL expiry
+// froze ALL concurrent requests. Heavy computes now run in query-worker.mjs
+// (same query-lib bodies, own read-only handles); this thread only awaits.
+// Single shared worker (singleflight already serializes refreshes); 60 s
+// timeout; every failure path falls back or keeps stale — a dead worker
+// degrades to the old inline behavior, never to a failed request.
+let QWORKER = null, QSEQ = 0;
+const QPEND = {};
+function workerCall(fn, ...args) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!QWORKER) {
+        QWORKER = new Worker(new URL("./query-worker.mjs", import.meta.url),
+          { env: { ...process.env } });
+        QWORKER.on("message", (m) => {
+          const p = QPEND[m.id];
+          if (!p) return;
+          delete QPEND[m.id];
+          if (m.ok) p.res(m.value); else p.rej(new Error(m.error));
+        });
+        const failAll = (e) => {
+          for (const k of Object.keys(QPEND)) {
+            try { QPEND[k].rej(e); } catch { /* settle once */ }
+            delete QPEND[k];
+          }
+          QWORKER = null;
+        };
+        QWORKER.on("error", failAll);
+        QWORKER.on("exit", () => { failAll(new Error("worker exited")); });
+      }
+      const id = ++QSEQ;
+      const to = setTimeout(() => {
+        if (QPEND[id]) { delete QPEND[id]; reject(new Error("worker timeout")); }
+      }, 60000);
+      QPEND[id] = {
+        res: (v) => { clearTimeout(to); resolve(v); },
+        rej: (e) => { clearTimeout(to); reject(e); },
+      };
+      QWORKER.postMessage({ id, fn, dbPath, args });
+    } catch (e) { reject(e); }
+  });
+}
+// Async SWR shell mirroring ttlCached semantics (fresh/cached/stale +
+// singleflight), but compute happens off-thread. Cold path falls back to
+// the inline body when the worker is unavailable — same values, main
+// thread pays (rare: pre-warmed; observable via missing stale flag).
+const ACACHE = {};
+const AREFRESH = {};
+async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
+  const now = Date.now();
+  const hit = ACACHE[key];
+  if (hit && hit.value && now - hit.at < ttlMs) {
+    const v = hit.value;
+    return Array.isArray(v) ? v.slice() : Object.assign({}, v, { cached: true, age_ms: now - hit.at });
+  }
+  if (hit && hit.value) {
+    if (!AREFRESH[key]) {
+      AREFRESH[key] = true;
+      workerCall(workerFn, ...workerArgs).then((value) => {
+        if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
+        ACACHE[key] = { at: Date.now(), value };
+        AREFRESH[key] = false;
+      }, () => { AREFRESH[key] = false; });
+    }
+    const v = hit.value;
+    return Array.isArray(v) ? v.slice() : Object.assign({}, v, { cached: true, age_ms: now - hit.at, stale: true });
+  }
+  try {
+    const value = await workerCall(workerFn, ...workerArgs);
+    if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
+    ACACHE[key] = { at: now, value };
+    return value;
+  } catch {
+    const value = inlineFn();
+    if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
+    ACACHE[key] = { at: now, value };
+    return value;
+  }
+}
 const SIGNALS_TTL_MS = Number(process.env.SIGNALS_TTL_MS || 30000);
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 15000);
-function apiSignals() {
-  return ttlCached("signals", SIGNALS_TTL_MS, apiSignalsFresh);
+async function apiSignals() {
+  return asyncCached("signals", SIGNALS_TTL_MS, "signals", [], () => signalsFresh(dbPath));
 }
-function apiSignalsFresh() {
-  const errors = query(
-    "SELECT s.id sid, s.title title, p.time_created ts, json_extract(p.data,'$.tool') tool, " +
-    "COALESCE(json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.state.input.filePath'), json_extract(p.data,'$.tool'), '') detail " +
-    "FROM part p JOIN session s ON s.id=p.session_id " +
-    "WHERE json_extract(p.data,'$.type')='tool' AND json_extract(p.data,'$.state.status')='error' " +
-    "ORDER BY p.time_created DESC LIMIT 40"
-  );
-  // ONE full scan for all 10 terms (was 10 scans): COUNT(*) under a WHERE
-  // condition equals SUM(CASE WHEN condition) over the same rows, and OR is
-  // commutative, so per-term counts are identical to the old loop. NULL text
-  // matches nothing in both forms.
-  const terms = ["SyntaxError", "Unexpected token", "EADDRINUSE", "FAIL:", "ReferenceError", "Traceback",
-    "sed ", "2>/dev/null", "echo ", "rm -rf"];
-  const sums = terms.map((_, i) => "SUM(CASE WHEN t LIKE ? OR c LIKE ? THEN 1 ELSE 0 END) AS n" + i).join(", ");
-  const likeArgs = [];
-  for (const t of terms) likeArgs.push("%" + t + "%", "%" + t + "%");
-  const counts = query(
-    "SELECT " + sums + " FROM (SELECT json_extract(data,'$.text') t, json_extract(data,'$.state.input.command') c FROM part)",
-    ...likeArgs
-  )[0];
-  const signatures = {};
-  terms.slice(0, 6).forEach((s, i) => { signatures[s] = counts["n" + i]; });
-  const ruleMentions = {};
-  terms.slice(6).forEach((r, i) => { ruleMentions[r] = counts["n" + (6 + i)]; });
-  const patches = query(
-    "SELECT json_extract(data,'$.files') files, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='patch' GROUP BY files ORDER BY n DESC LIMIT 20"
-  );
-  return { errorCount: errors.length, errors, signatures, ruleMentions, patches };
-}
-
-function apiPatterns(limit) {
-  return ttlCached("patterns:" + (Number(limit) || 30), CACHE_TTL_MS, () => apiPatternsFresh(limit));
+async function apiPatterns(limit) {
+  limit = Number(limit) || 30;
+  return asyncCached("patterns:" + limit, CACHE_TTL_MS, "patterns", [limit], () => patternsFresh(dbPath, limit));
 }
 // Ops aggregate for the 8th explore tab: failures, successes, bottlenecks
 // as visualized data. Cheap by construction: signals via its TTL cache,
 // ledger via indexed read-only queries, timings from the PERF ring.
 // Never throws (a missing observability db yields empty sections).
-function apiOps() {
+async function apiOps() {
   let errors_by_tool = [];
   try {
     // errorTools lives in apiPatterns (grouped by tool); the limit only
     // caps ngrams, and key "patterns:30" shares the UI's own cache entry.
-    const pat = apiPatterns(30);
+    const pat = await apiPatterns(30);
     errors_by_tool = (pat.errorTools || []).map(e => ({ tool: e.tool, n: e.n, example_sid: e.example_sid || null }));
   } catch { errors_by_tool = []; }
+  let per_model_errors = [];
+  try {
+    // Own 60 s TTL via apiModelErrors (not coupled to the health recompute).
+    const rows = await apiModelErrors();
+    per_model_errors = (Array.isArray(rows) ? rows : []).map(r => ({ model: r.model, sessions: r.sessions, tool_parts: r.tool_parts, errors: r.errors, error_rate: r.error_rate ?? null }));
+  } catch { per_model_errors = []; }
   let gate_runs = [], guard_n = 0, guard_top = [], ledger_summary = {};
   try {
     const odb = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
@@ -482,30 +540,8 @@ function apiOps() {
   const latest = {};
   for (const e of PERF_RING) latest[e.path] = e;
   const slow_endpoints = Object.values(latest).map(e => ({ path: e.path, ms: e.ms })).sort((a, b) => b.ms - a.ms).slice(0, 10);
-  return { errors_by_tool, gate_runs, guard_blocks: { n: guard_n, top: guard_top }, slow_endpoints, ledger_summary };
+  return { errors_by_tool, per_model_errors, gate_runs, guard_blocks: { n: guard_n, top: guard_top }, slow_endpoints, ledger_summary };
 }
-function apiPatternsFresh(limit) {
-  // Recent-40 session window (same as health/ledger/activity): the full-log
-  // window function + two full scans cost ~5s sync on the single-threaded
-  // loop per TTL expiry. Values are now recent-windowed like every other
-  // panel (shape unchanged; counts reflect current behavior, not history).
-  const recent = 40;
-  const win = "session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)";
-  const ngrams = query(
-    "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n FROM (" +
-    "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
-    "lead(json_extract(data,'$.tool')) OVER (PARTITION BY session_id ORDER BY time_created) next_tool " +
-    "FROM part WHERE json_extract(data,'$.type')='tool' AND " + win + ") " +
-    "WHERE next_tool IS NOT NULL GROUP BY tool, next_tool ORDER BY n DESC LIMIT ?", recent, limit);
-  const errorTools = query(
-    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n, MAX(session_id) example_sid FROM part " +
-    "WHERE json_extract(data,'$.type')='tool' AND json_extract(data,'$.state.status')='error' " +
-    "AND " + win + " " +
-    "GROUP BY tool ORDER BY n DESC LIMIT 10", recent);
-  const d = query("SELECT COUNT(DISTINCT json_extract(data,'$.tool')) n FROM part WHERE json_extract(data,'$.type')='tool' AND " + win, recent)[0];
-  return { ngrams, errorTools, distinct: d ? d.n : 0 };
-}
-
 function apiGuard(limit) {
   try {
     const lines = readFileSync(new URL("../data/observability/guard.log", import.meta.url), "utf8")
@@ -558,17 +594,27 @@ async function apiHealth() {
 }
 async function refreshHealthCache() {
   try {
-    // Sync-portion timing only: the liveStatus await below is network wait,
-    // not loop-blocking work, and must never read as compute cost.
+    // Heavy sync prefix runs in the worker (same query-lib/pure bodies);
+    // inline fallback keeps the old behavior when the worker is down.
+    // perfNote measures the sync portion only: the liveStatus await below
+    // is network wait, not loop-blocking work.
     const t0 = Date.now();
-    const r = healthReport(dbPath);
-    Object.assign(r, annotateReport(r));
-    r.per_model = modelLedger(dbPath);
+    let r;
     try {
-      r.handoff = handoffAdvice(dbPath);
+      r = await workerCall("healthSync");
     } catch {
-      r.handoff = { available: false };
+      r = healthReport(dbPath);
+      Object.assign(r, annotateReport(r));
+      r.per_model = modelLedger(dbPath);
+      try {
+        r.handoff = handoffAdvice(dbPath);
+      } catch {
+        r.handoff = { available: false };
+      }
     }
+    // perfNote measures aggregation cost, not loop blockage: on the worker
+    // path the loop stays free (only the inline fallback blocks).
+    // liveStatus below is network wait in both cases.
     perfNote("health", Date.now() - t0);
     // Adjudicate against the live server (dead_tool / dead_blank). Fail-safe:
     // if live status is unavailable (no password / server down / timeout) the
@@ -844,30 +890,17 @@ function apiSemantic(q, limit) {
   };
 }
 
-const STOP = new Set(("the a an and or but if then else of to in on for with is are was were be been this that these those it its as at by from we you i he she they not no do does did can could will would should may might about into over under out up down so very just than what when where which who how all any more most other some only own same your our").split(" "));
 
-function apiWords(limit) {
-  return ttlCached("words:" + (Number(limit) || 80), CACHE_TTL_MS, () => apiWordsFresh(limit));
-}
-function apiWordsFresh(limit) {
-  const rows = query(
-    "SELECT data FROM part WHERE json_extract(data, '$.type') IN ('reasoning','text') ORDER BY time_created DESC LIMIT 4000"
-  );
-  const counts = {};
-  for (const r of rows) {
-    let d;
-    try { d = JSON.parse(r.data); } catch { continue; }
-    const words = String(d.text || "").toLowerCase().split(/[^a-z0-9_]+/);
-    for (const w of words) {
-      if (w.length < 3 || STOP.has(w)) continue;
-      counts[w] = (counts[w] || 0) + 1;
-    }
-  }
-  const arr = Object.entries(counts).map(([text, size]) => ({ text, size }));
-  arr.sort((a, b) => b.size - a.size);
-  return arr.slice(0, limit);
-}
 
+async function apiWords(limit) {
+  limit = Number(limit) || 80;
+  return asyncCached("words:" + limit, CACHE_TTL_MS, "words", [limit], () => wordsFresh(dbPath, limit));
+}
+// Per-model error rates for the ops tab. Own 60 s TTL (not coupled to the
+// health recompute): modelLedger is read-only over the recent window.
+async function apiModelErrors() {
+  return asyncCached("models", 60000, "models", [], () => modelLedger(dbPath));
+}
 function apiExport() {
   const rows = query("SELECT title, cost, tokens_input, tokens_output, tokens_reasoning, time_created, time_updated FROM session ORDER BY time_created ASC");
   let body = "title,cost_usd,tokens_input,tokens_output,tokens_reasoning,duration_ms,created_iso\n";
@@ -1557,6 +1590,11 @@ async function renderOps(){
   var gb=d.guard_blocks||{n:0,top:[]};
   h+='<div class="muted" style="font-size:12px;margin-top:10px">guard blocks: '+gb.n+'</div>';
   for(var m=0;m<gb.top.length;m++){h+='<div class="item"><span class="tag">block</span>'+esc(String(gb.top[m].pattern||'').slice(0,80))+' x'+gb.top[m].n+'</div>';}
+  h+='<div class="muted" style="font-size:12px;margin-top:10px">per-model errors (recent window)</div>';
+  if(d.per_model_errors&&d.per_model_errors.length){
+    for(var pm=0;pm<d.per_model_errors.length;pm++){var r=d.per_model_errors[pm];
+      h+='<div class="item"><span class="tag">'+esc(String(r.errors??'?'))+'</span>'+esc(r.model||'?')+' <span class="muted">'+r.sessions+' sessions · '+(r.tool_parts||0)+' tools · rate '+(r.error_rate==null?'?':r.error_rate)+'</span></div>';}
+  }else{h+='<div class="item">no per-model data</div>';}
   h+='<div class="muted" style="font-size:12px;margin-top:10px">slowest recent computations (sync ms; cached hits cost nothing)</div>';
   if(d.slow_endpoints&&d.slow_endpoints.length){
     for(var s=0;s<d.slow_endpoints.length;s++){var se=d.slow_endpoints[s];
@@ -2275,20 +2313,20 @@ const server = http.createServer(async (req, res) => {
     res.end(body);
   } else if (url === "/api/export/patterns") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-patterns.csv" });
-    res.end(apiExportPatterns());
+    res.end(await apiExportPatterns());
   } else if (url === "/api/export/guard") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-guard.csv" });
     res.end(apiExportGuard());
   } else if (url === "/api/signals") {
-    send(res, 200, JSON.stringify(apiSignals()), "application/json");
+    send(res, 200, JSON.stringify(await apiSignals()), "application/json");
   } else if (url === "/api/guard") {
     send(res, 200, JSON.stringify(apiGuard(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/health") {
     send(res, 200, JSON.stringify(await apiHealth()), "application/json");
   } else if (url === "/api/ops") {
-    send(res, 200, JSON.stringify(apiOps()), "application/json");
+    send(res, 200, JSON.stringify(await apiOps()), "application/json");
   } else if (url === "/api/patterns") {
-    send(res, 200, JSON.stringify(apiPatterns(Number(params.limit) || 30)), "application/json");
+    send(res, 200, JSON.stringify(await apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {
@@ -2321,7 +2359,7 @@ const server = http.createServer(async (req, res) => {
       res.end(body);
     }
   } else if (url === "/api/words") {
-    send(res, 200, JSON.stringify(apiWords(Number(params.limit) || 80)), "application/json");
+    send(res, 200, JSON.stringify(await apiWords(Number(params.limit) || 80)), "application/json");
   } else if (url === "/api/export") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-sessions.csv" });
     res.end(apiExport());

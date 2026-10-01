@@ -95,6 +95,18 @@ ledger.py
     or `ledger.py show --tail/--since/--type/--grep/--json`.
     Stdlib only. --self-test.
 
+query-lib.mjs
+    Pure read-only aggregations (signals/patterns/words query bodies)
+    shared by dashboard.mjs and query-worker.mjs: single source of
+    truth so the worker cannot drift. Every function is
+    (dbPath, ...) -> plain JSON with its own read-only handle.
+
+query-worker.mjs
+    node:worker_threads entry running query-lib (plus health/model
+    bundles) off the dashboard event loop. Protocol: {id, fn,
+    dbPath, args} in, {id, ok, value|error} out. Spawned by URL from
+    dashboard.mjs with a 60 s guard; all failures fall back inline.
+
 ocr-image.sh
     Local OCR fallback for reading screenshots/scans when API models can't
     ingest images. Tries tesseract CLI (apt, in the image), then
