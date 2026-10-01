@@ -94,6 +94,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] drill-down feedback (video-review follow-ups). Clicking a row
+      gave no visible link between table and panel: the clicked row
+      now highlights (.selected, cleared on close/next click) and the
+      detail card scrolls into view on every drill path.
+      Screenshot-verified. Gates: lint 114, dashboard 117,
+      ux-test 27/0.
 - [x] interaction clips for README (usage-guide session). Four ~8 s
       captioned clips of real usage captured live via Playwright
       video (drill-down, brush-filter 42->1, ops drill-down, keyboard

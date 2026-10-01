@@ -1186,8 +1186,9 @@ const exploreHtml = `<!doctype html>
  th,td{text-align:left;padding:3px 8px;border-bottom:1px solid #21262d;white-space:nowrap}
  th{color:#8b949e;font-weight:600;cursor:pointer;user-select:none}
  .num{text-align:right;font-variant-numeric:tabular-nums}
- tr.row{cursor:pointer}
- tr.row:hover{background:#1f6feb22}
+  tr.row{cursor:pointer}
+  tr.row:hover{background:#1f6feb22}
+  tr.row.selected{background:#1f6feb33}
  .item{padding:4px 0;border-bottom:1px solid #21262d;font-size:12px;cursor:pointer}
  .item:hover{background:#1f6feb22}
  .tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;margin-right:6px;background:#30363d;color:#8b949e}
@@ -1385,7 +1386,7 @@ function renderTable(){
     .on('keydown',function(ev,d){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();sortBy(d[0]);}});
   var tr=table.selectAll('tr.row').data(rows).enter().append('tr').attr('class','row')
     .attr('data-od-id',function(d){return 'session:'+d.id;})
-    .on('click',function(ev,d){detail(d.id);});
+    .on('click',function(ev,d){document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});if(ev.currentTarget&&ev.currentTarget.classList)ev.currentTarget.classList.add('selected');detail(d.id);});
   tr.append('td').text(function(d){return d.title||'(untitled)';});
   tr.append('td').text(function(d){return modelId(d.model);});
   tr.append('td').attr('class','num').text(function(d){return '$'+(+d.cost).toFixed(4);});
@@ -1431,6 +1432,8 @@ async function detail(id){
     h+='<div class="item"><span class="tag">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';}
   h+='</div>';
   el.innerHTML=h;
+  var card=document.getElementById('detail');
+  if(card&&card.scrollIntoView)card.scrollIntoView({block:'nearest'});
 }
 async function renderSignals(){
   var el=d3.select('#signals');el.selectAll('*').remove();
@@ -1550,7 +1553,7 @@ document.addEventListener('keydown',function(ev){
   if(t==='input'||t==='textarea'||t==='select')return;
   if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
 });
-document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';});
+document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 async function renderOcr(){
   var el=d3.select('#ocr');el.selectAll('*').remove();
