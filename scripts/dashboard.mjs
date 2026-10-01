@@ -1849,7 +1849,9 @@ async function renderSankey(){
     .attr('dy','0.35em')
     .attr('text-anchor',function(d){return d.x0<W/2?'start':'end';})
     .attr('class','lbl')
-    .text(function(d){return d.name+'  '+fmt(d.value);});
+    .text(function(d){return (d.y1-d.y0)>=14?d.name+'  '+fmt(d.value):'';});
+  node.append('title')
+    .text(function(d){return d.name+' — '+fmt(d.value)+' tokens';});
 }
 
 async function renderGantt(){
@@ -1924,11 +1926,14 @@ async function renderTimeline(id,title){
     if(d.ts<minT)minT=d.ts;if(d.te>maxT)maxT=d.te;}
   if(maxT<=minT)maxT=minT+1000;
   var pad=(maxT-minT)/500; // >=2px minimum bar like the legacy version
+  // Degenerate span (single-part session): HH:MM ticks would all read the
+  // same; fall back to HH:MM:SS so the axis stays informative.
+  var tlTick=function(d){var s=new Date(d).toISOString();return (maxT-minT)<60000?s.slice(11,19):s.slice(11,16);};
   host.TL_ROWS=data;
   host.innerHTML='';
   host.appendChild(Plot.plot({
     width:1000,height:152,marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
-    x:{domain:[minT,maxT],ticks:6,tickFormat:timeFmt},
+    x:{domain:[minT,maxT],ticks:6,tickFormat:tlTick},
     y:{axis:null,domain:[0,120]},
     marks:[
       Plot.rect(data,{

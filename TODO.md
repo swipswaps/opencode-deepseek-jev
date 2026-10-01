@@ -94,6 +94,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] edge-case elegance (deferred items, closed). Sankey node labels
+      overlapped on thin nodes: labels now render only on nodes >=14px
+      tall, every node carries a native <title> (6/6 titled, hover
+      works); degenerate single-part timeline axis showed N identical
+      HH:MM ticks: sub-60s spans fall back to HH:MM:SS (proven
+      15:52:02..16 on a 4-part session). Gates: lint 114, dashboard
+      117, targeted probes 0 errors.
 - [x] drill-down feedback (video-review follow-ups). Clicking a row
       gave no visible link between table and panel: the clicked row
       now highlights (.selected, cleared on close/next click) and the
