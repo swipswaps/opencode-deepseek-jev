@@ -282,7 +282,10 @@ scratch dashboard build, none retouched):
 
 Video walkthrough (36 s, 12 captioned steps with pan/zoom into each
 feature, captured live against the served build with scripted
-Playwright): `docs/ux/usage-tour.mp4`. Keyboard users: Tab reaches
+Playwright): `docs/ux/usage-tour.mp4`. Full-site walkthrough (39 s,
+13 captioned steps across every page and all eight explore tabs,
+pans down long pages, zooms into panes): `docs/ux/fullsite-tour.mp4`.
+Keyboard users: Tab reaches
 every control, arrows switch explore tabs, Enter sorts table columns,
 `/` focuses search, Escape blurs — step 12 of the video shows the
 focus ring in action.

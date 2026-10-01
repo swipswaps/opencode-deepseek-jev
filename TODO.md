@@ -94,6 +94,10 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] full-site walkthrough video. 13 captioned pan/zoom segments
+      across every page + all eight explore tabs (39 s, 960x540
+      H.264, 1.7MB `docs/ux/fullsite-tour.mp4`), referenced in README
+      guide. Motion proven per segment; captions em-dash-consistent.
 - [x] verified citation references (PhD audit). Every external claim
       in code now carries a live-verified URL (all curl-checked 200
       on 2026-09-30; dead paths replaced: litellm retry->reliable_
