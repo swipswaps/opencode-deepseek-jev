@@ -435,16 +435,29 @@ function ttlCached(key, ttlMs, fn) {
 // the scans above are multi-second and single-threaded — every TTL expiry
 // froze ALL concurrent requests. Heavy computes now run in query-worker.mjs
 // (same query-lib bodies, own read-only handles); this thread only awaits.
+// Worker threads reference: https://nodejs.org/api/worker_threads.html
+// (dedicated V8 isolate + event loop; node:sqlite handles cannot cross
+// threads, hence per-call read-only opens inside the worker).
 // Single shared worker (singleflight already serializes refreshes); 60 s
 // timeout; every failure path falls back or keeps stale — a dead worker
 // degrades to the old inline behavior, never to a failed request.
+// Results cross the boundary by structured clone (plain JSON shapes only):
+// https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
 let QWORKER = null, QSEQ = 0;
+let QWARNED = false;
+function workerWarn(msg) {
+  if (!QWARNED) { QWARNED = true; console.log("worker: " + msg); }
+}
 const QPEND = {};
 function workerCall(fn, ...args) {
   return new Promise((resolve, reject) => {
     try {
       if (!QWORKER) {
-        QWORKER = new Worker(new URL("./query-worker.mjs", import.meta.url),
+        // QUERY_WORKER_PATH overrides the worker entry (operability knob
+        // and fault-injection seam: point it at a missing file to prove
+        // the inline fallback keeps every request at 200).
+        const qurl = process.env.QUERY_WORKER_PATH || "./query-worker.mjs";
+        QWORKER = new Worker(new URL(qurl, import.meta.url),
           { env: { ...process.env } });
         QWORKER.on("message", (m) => {
           const p = QPEND[m.id];
@@ -504,7 +517,11 @@ async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
     if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
     ACACHE[key] = { at: now, value };
     return value;
-  } catch {
+  } catch (e) {
+    // Inline fallback (same query-lib bodies the worker runs): slower on
+    // this thread, but byte-identical values. Logged once per process so
+    // a dead worker is visible in logs instead of silent.
+    workerWarn("cold compute fell back inline (" + String((e && e.message) || e).slice(0, 100) + ")");
     const value = inlineFn();
     if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
     ACACHE[key] = { at: now, value };

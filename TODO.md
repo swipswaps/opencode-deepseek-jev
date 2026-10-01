@@ -94,6 +94,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] worker fault seam + fallback proof (resilience close-out). New
+      QUERY_WORKER_PATH override (operability knob + test seam);
+      cold-path fallback logs once with cause. Proven against a
+      broken path: 200s on signals+health, fallback output
+      byte-identical to worker output, warn logged. Every new block
+      carries verified citations (worker_threads, structured clone).
+      Gates: lint 116, dashboard 117.
 - [x] ops video segments (tour extension). usage-tour + fullsite-tour
       each gain an ops drill chapter (13 and 14 segments, 39/42 s,
       both under the 2MB media gate); captions renumbered
