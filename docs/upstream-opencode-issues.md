@@ -61,3 +61,37 @@ Suggested rule (standard empty-state practice): every empty state
 should state what is empty, why, and the one next action — e.g.
 "44 sessions loaded, 0 match this filter" instead of "No sessions
 found". Happy to split into separate issues on request.
+
+## Root causes (monitored 2026-10-01, opencode 1.18.32 server + UI)
+
+Monitored the live instance (browser network trace + served-bundle
+analysis + direct endpoint probes). The UI is client/server-skewed
+*within the same shipped version*:
+
+1. **Search box calls a nonexistent route.** The search path calls
+   `experimental.session.list({roots, search, limit})`, but the
+   server implements no `/api/experimental/*` route — it returns
+   200 with the SPA shell HTML, JSON parsing throws, the catch
+   swallows it, and the UI prints "No sessions found". Meanwhile
+   plain `/api/session?search=Explore` returns 200 with 1 match and
+   `/api/session?directory=/workspace` returns 30 rows. Variants
+   probed (`/experimental/...`, `/api/experimental/.../search`,
+   `/api/session/search`): shell, shell, HTTP 400.
+2. **Sidebar lists are project-scoped to state that never hydrates
+   on hard load.** Rendering reads `projectSessions()` /
+   `workspaceSessions()`, but with no selected project and an empty
+   workspace registry both yield nothing — while the data sits one
+   fetch away.
+3. **Deep-link session view reads messages from a client store**
+   (`session.get(id)` + `data.message[id]`) fed by a subscription
+   that never starts on hard load: exactly one API call fires
+   (`GET /session/:id`, 200) and zero message fetches follow.
+4. **Unbounded message dump hangs; `offset` is ignored** (Issues 1-2
+   above) — so even a working client could not page a 715-message
+   session over REST.
+
+Net: data plane healthy (44 sessions, 715 msgs on the target),
+control/API plane healthy (200s, sub-second paginated reads),
+presentation plane broken in four independent, all-silent ways.
+Nothing below the UI layer needs fixing; everything below it
+already works (see transcript-resume flow).
