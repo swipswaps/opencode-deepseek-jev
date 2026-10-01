@@ -468,6 +468,38 @@ The block points at https://generativelanguage.googleapis.com/v1beta/openai/.
 models.policy.json (Flash input ~$0.30/1M is above the $0.20 ceiling, so it is
 explicitly allowed). The same steps are a "connect-gemini" runbook at /runbooks.
 
+## Configuration reference (all tunable settings)
+
+Default model: `opencode.json` field `"model": "deepseek/deepseek-flash"`.
+Change it for one run (`opencode run -m <id>`), interactively (`/models`
+in the TUI), or permanently (edit the field, restart the server).
+
+`.env.local` keys (mode 0600, never printed; values with shell
+metacharacters must be single-quoted or `source` aborts partway):
+
+- `DEEPSEEK_API_KEY` — execution model billing.
+- `JEV_API_KEY` — Jev review MCP + guard plugin auth.
+- `GEMINI_API_KEY` — optional second provider (placeholder ok if unused).
+- `OPENCODE_SERVER_PASSWORD` — Basic auth for :4096 and the dashboard.
+- `LITELLM_MASTER_KEY` — LiteLLM proxy admin (generated on setup).
+
+Ports (all loopback-only): `4096` opencode web/API, `5099`
+observability dashboard (override with `DASH_PORT`), `4000` LiteLLM
+proxy. Test scratch ports default to 5196+ (`TEST_DASH_PORT`).
+
+Performance TTLs (env overrides, defaults in parentheses): cache
+freshness windows, not correctness knobs — raise them to trade
+staleness for less recompute: `HEALTH_TTL_MS` (15000),
+`POLL_TTL_MS` (10000), `CACHE_TTL_MS` (15000), `SIGNALS_TTL_MS`
+(30000); per-model ledger is fixed at 60 s. `QUERY_WORKER_PATH`
+overrides the aggregation worker entry (fault-injection seam);
+`LEDGER_DB` overrides the event-ledger path (test seam).
+
+Budgets: `models.policy.json` gates model choice pre-flight
+(deny-list wins); `docker/litellm.config.yaml` `max_budget: 5.0`
+covers proxy-routed traffic only, and is unenforced without
+`DATABASE_URL` — direct `api.deepseek.com` callers bypass it.
+
 ## Working process (project skill + command)
 .opencode/skills/jev-harness/SKILL.md is auto-loaded by opencode and codifies
 the loop for this repo: search-first (read HANDOFF/RULES/TODO + run preflight),

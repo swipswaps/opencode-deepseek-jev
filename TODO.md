@@ -85,6 +85,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] configuration reference (settings audit). README gained a full
+      settings section: default model field + change paths, all five
+      .env.local keys, ports, every perf TTL (verified against code
+      defaults), worker/ledger seams, budget semantics incl. the
+      unenforced-max_budget caveat. One self-caught error fixed
+      pre-commit (TEST_DASH_PORT default is 5196, not 5199).
 - [x] user preferences compiled + treemap keyboard (fix-all session).
       docs/user-preferences.md records chat-spanning directives P1-P15
       (evidence-first, prompt+audit, test-to-done, visibility,
