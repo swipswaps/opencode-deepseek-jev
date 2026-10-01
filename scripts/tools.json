@@ -14,6 +14,13 @@
     "commands": ["./scripts/web-restart.sh"]
   },
   {
+    "id": "media-budget",
+    "title": "Committed-media size gate",
+    "where": "container",
+    "purpose": "Fail-closed budgets for tracked media (video <=2MiB, images <=150KiB). Wired into test-hygiene.sh.",
+    "commands": ["./scripts/media-budget.sh"]
+  },
+  {
     "id": "ledger",
     "title": "Event ledger (gates + guard verdicts)",
     "where": "container",

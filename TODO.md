@@ -94,6 +94,14 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] media budgets + screenshot hardening (flakes made structural).
+      Full-page capture hung once on document.fonts.ready: ux-test
+      screenshots now carry a 60 s timeout with viewport fallback
+      (downgrade recorded as SKIP, never silent). media-budget.sh
+      fail-closes committed media (video <=2MiB, images <=150KiB —
+      the guideline is now enforced, not argued per file), wired
+      into test-hygiene (38/0) + tools.json + README. Gates: lint
+      116, hygiene 38.
 - [x] full-site walkthrough video. 13 captioned pan/zoom segments
       across every page + all eight explore tabs (39 s, 960x540
       H.264, 1.7MB `docs/ux/fullsite-tour.mp4`), referenced in README

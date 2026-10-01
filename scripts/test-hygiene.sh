@@ -81,6 +81,13 @@ main() {
         tail -6 "$work/sc.txt"
     fi
 
+    if "$REPO/scripts/media-budget.sh" > "$work/mb.txt" 2>&1; then
+        ok 'media-budget: tracked media within budget'
+    else
+        bad 'media-budget: tracked media within budget'
+        tail -6 "$work/mb.txt"
+    fi
+
     if [ -f "$db" ]; then
         if python3 "$REPO/scripts/audit-tool-calls.py" --json > "$work/atc.json" 2>&1; then
             ok 'audit-tool-calls: runs'

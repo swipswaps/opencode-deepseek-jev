@@ -46,6 +46,25 @@ PAGES = ["/", "/explore", "/runbooks", "/models", "/manage", "/docs"]
 DESKTOP = {"width": 1440, "height": 900}
 PHONE = {"width": 390, "height": 844}
 GOTO_TIMEOUT_MS = 20000
+SHOT_TIMEOUT_MS = 60000
+
+
+def shoot(page, path, r, label):
+    """Screenshot with a hard timeout and viewport fallback. Full-page
+    capture waits on document.fonts.ready, which stalled indefinitely once
+    on a tall page and hung the whole run; the fallback keeps evidence
+    flowing and records the downgrade instead of hanging or lying."""
+    try:
+        page.screenshot(path=str(path), full_page=True, timeout=SHOT_TIMEOUT_MS)
+        return True
+    except Exception as e:
+        try:
+            page.screenshot(path=str(path), full_page=False, timeout=SHOT_TIMEOUT_MS)
+            r.skip(f"{label} full-page hung ({str(e)[:60]}); viewport fallback kept")
+            return True
+        except Exception as e2:
+            r.bad(f"{label} screenshot failed ({str(e2)[:80]})")
+            return False
 READY_TIMEOUT_S = 60
 SETTLE_MS = 800
 READY_JS = "document.querySelectorAll('[data-loading]').length === 0"
@@ -171,10 +190,10 @@ def run(base: str, outdir: Path) -> int:
             scroll_w = page.evaluate("document.documentElement.scrollWidth")
             inner_w = page.evaluate("window.innerWidth")
             height = page.evaluate("document.documentElement.scrollHeight")
-            page.screenshot(path=str(outdir / f"ux-{name}-390.png"), full_page=True)
+            shoot(page, outdir / f"ux-{name}-390.png", r, f"{path} 390px")
             page.set_viewport_size(DESKTOP)
             resettle(page)
-            page.screenshot(path=str(outdir / f"ux-{name}-1440.png"), full_page=True)
+            shoot(page, outdir / f"ux-{name}-1440.png", r, f"{path} 1440px")
 
             if errors:
                 r.bad(f"{path} console errors: {errors[:2]}")

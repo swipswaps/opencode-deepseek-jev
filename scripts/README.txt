@@ -95,6 +95,11 @@ ledger.py
     or `ledger.py show --tail/--since/--type/--grep/--json`.
     Stdlib only. --self-test.
 
+media-budget.sh
+    Fail-closed size gate for committed media: video <= 2 MiB, images
+    <= 150 KiB (tracked files only via git ls-files, so scratch and
+    logs never trip it). Wired into test-hygiene.sh.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies)
     shared by dashboard.mjs and query-worker.mjs: single source of
