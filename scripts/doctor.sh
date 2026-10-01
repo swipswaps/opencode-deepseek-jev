@@ -360,26 +360,25 @@ printf "rc=%s\n" "$?"
 }
 
 # ----------------------------------------------------------------------------
-# Tier 7 — plugin status (needs --full)
+# Tier 7 — guard plugin active in production (needs --full)
 # ----------------------------------------------------------------------------
 tier7() {
-    printf 'Tier 7: plugin status\n'
+    printf 'Tier 7: guard plugin active\n'
     if [ "$FULL" -ne 1 ]; then skip "run with --full to enable"; return; fi
-    if ! docker image inspect "$IMAGE" > /dev/null 2>&1; then
-        skip "image not built"
+    # NOTE (measured 2026-10-01): `opencode plugin list` is not a list
+    # command — the CLI takes only an npm module name, so it tried to
+    # install a package literally named "list" (and wrote stray config).
+    # Production truth is guard.log itself: the running server records
+    # `loaded` at boot and `hook` on every tool call. Assert that.
+    local log="$REPO_DIR/data/observability/guard.log"
+    if [ ! -f "$log" ]; then
+        fail "guard.log missing at $log"
         return
     fi
-
-    local out
-    out=$(timeout 60 docker run --rm \
-        --user "$(id -u):$(id -g)" \
-        --entrypoint sh "$IMAGE" -c 'opencode plugin list; :' 2>&1)
-
-    if printf '%s' "$out" | grep -q jev-guard; then
-        pass "plugin list shows jev-guard"
+    if grep -q '"verdict":"loaded"' "$log" && grep -q '"verdict":"hook"' "$log"; then
+        pass "guard.log shows loaded + hook (guard active in production)"
     else
-        fail "plugin list does not show jev-guard"
-        print_lines '        ' "$out"
+        fail "guard.log lacks loaded/hook verdicts"
     fi
 }
 

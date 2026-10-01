@@ -94,6 +94,11 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] doctor Tier 7 fixed (was the only --full FAIL). `opencode plugin
+      list` is not a list command (takes only an npm module name) — it
+      tried to install a package named "list" and wrote stray config
+      (removed). Tier 7 now asserts production truth instead:
+      guard.log shows loaded + hook. doctor --full: OK.
 - [x] media budgets + screenshot hardening (flakes made structural).
       Full-page capture hung once on document.fonts.ready: ux-test
       screenshots now carry a 60 s timeout with viewport fallback
