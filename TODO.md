@@ -94,6 +94,10 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] ops video segments (tour extension). usage-tour + fullsite-tour
+      each gain an ops drill chapter (13 and 14 segments, 39/42 s,
+      both under the 2MB media gate); captions renumbered
+      consistently across both videos.
 - [x] doctor Tier 7 fixed (was the only --full FAIL). `opencode plugin
       list` is not a list command (takes only an npm module name) — it
       tried to install a package named "list" and wrote stray config
