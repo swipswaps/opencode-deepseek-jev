@@ -56,28 +56,19 @@ Last updated: 2026-09-30
 
 ## Queue (ranked, top first)
 
-- [ ] G8: host TUI reads the server store (structural resume fix).
-      Objective: the TUI session picker lists :4096 sessions so resume
-      works without the transcript workaround. VERIFIED 2026-09-30
-      from official docs + installed 1.18.33 binary: `opencode attach
-      http://localhost:4096 -s ses_<id>` resumes a server session
-      directly (`--continue` last, `--fork` to copy, `--dir`, `-p/-u`
-      auth); `opencode session list/export` are local-store only
-      (hence the empty picker: host-local 2 sessions vs server 44).
-      So option (a) EXISTS — remaining work is (i) verify attach -s
-      end to end against ses_f1d2, (ii) document it as THE resume path,
-      (iii) decide doc-vs-sync for the picker gap. Acceptance: picker
-      or attach lists a server-side session by id; deep link renders
-      its messages; no secret material leaves .env.local; split
-      documented either way. Evidence: Playwright captures of picker
-      + rendered messages, or explicit accept-defer note. (Proven
-      background: host-local 2 sessions vs server 44; web UI renders
-      neither list nor messages on hard load; transcript resume works
-      end to end for $0.0004 — see docs/ux/resume-tour.mp4.)
-      UPDATE 2026-09-30: bare `attach` 401s (server needs Basic auth)
-      — README documents `set -a; source .env.local; set +a` first;
-      upstream drafts at docs/upstream-opencode-issues.md (offset
-      ignored, unbounded dump hangs, silent blanks).
+- [x] G8: host TUI reads the server store — CLOSED as document path.
+      Decision (2026-10-01): `attach -s` proven end to end via tmux
+      pty; README documents auth-carrying attach + transcript fallback;
+      sync job REJECTED (writing to opencode-owned host-local DB risks
+      corruption across versions; no safe merge key exists). The
+      remaining picker/deep-link gaps are upstream UI bugs with filed
+      repros (docs/upstream-opencode-issues.md).
+      Record: `opencode attach http://localhost:4096 -s ses_<id>`
+      (`--continue` last, `--fork` to copy; needs OPENCODE_SERVER_PASSWORD
+      exported — bare attach 401s); `session list/export` are local-store
+      only (host-local 2 vs server 44); transcript resume $0.0004
+      (docs/ux/resume-tour.mp4).
+- [ ] G4: wire `docker/litellm.config.yaml` `max_budget` into routing (needs proxy)
 - [x] G3: hand-rolled d3 charts migrated to Plot specs — scatter
   (`Plot.dot`), gantt (`Plot.barX`), timeline (`Plot.rect` lane
   strip), burn last as Plot+d3-brush hybrid (drag->FILTER->4 views
@@ -94,6 +85,14 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] user preferences compiled + treemap keyboard (fix-all session).
+      docs/user-preferences.md records chat-spanning directives P1-P15
+      (evidence-first, prompt+audit, test-to-done, visibility,
+      paste-ready instructions, secrets hygiene, scope discipline).
+      G8 closed as document path (sync job rejected: opencode-owned
+      DB writes risk corruption). Treemap tiles keyboard-operable
+      (tabindex/link/labels, Enter drills — 51 tiles proven).
+      Gates: lint 116, dashboard 117.
 - [x] worker fault seam + fallback proof (resilience close-out). New
       QUERY_WORKER_PATH override (operability knob + test seam);
       cold-path fallback logs once with cause. Proven against a

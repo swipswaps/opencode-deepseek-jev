@@ -1720,8 +1720,12 @@ async function renderTreemap(){
     .attr('fill',function(d){return MODEL_COLOR(modelId(d.data.model));})
     .attr('fill-opacity',function(d){return 0.30+0.6*Math.min(1,(+d.data.cost||0)/maxCost);})
     .attr('stroke','#0d1117')
+    .attr('tabindex','0')
+    .attr('role','link')
+    .attr('aria-label',function(d){return d.data.title+' ($'+(+d.data.cost).toFixed(4)+')';})
     .style('cursor','pointer')
     .on('click',function(ev,d){location.href='/?session='+encodeURIComponent(d.data.id);})
+    .on('keydown',function(ev,d){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();location.href='/?session='+encodeURIComponent(d.data.id);}})
     .on('mousemove',function(ev,d){moveTip(ev);tip(esc(d.data.title)+'<br>$'+(+d.data.cost).toFixed(4)+' · in '+fmt(d.data.tokens_input)+' · '+esc(modelId(d.data.model))+'<br>click to open transcript');})
     .on('mouseleave',function(){tip(null);});
   leaf.append('text').attr('x',5).attr('y',14).style('font-size','10px').style('fill','#e6edf3').style('pointer-events','none')
