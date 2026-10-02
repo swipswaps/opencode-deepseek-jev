@@ -85,6 +85,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] v2.0 inaugural run on HEAD (23f4347). First full execution of
+      the upgraded contract, all new invariants exercised: served-rev
+      equality on bare-metal scratch (docker ports down host-wide),
+      secrets by name only, timeouts on every probe, no single FAIL
+      across lint 116, dashboard 117, hygiene 38, ux-test 27;
+      live probes (landing, adjudication, ops+per-model, 40K drill,
+      zero errors). Docs-only close-out.
 - [x] G1 wayfinding (landing strip + badges + collapsible detail).
       /explore answers "where do I start": one-line strip (sessions
       · cost · health · filter, no new fetches), count badges on all
