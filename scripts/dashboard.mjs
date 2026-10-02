@@ -1279,6 +1279,10 @@ const exploreHtml = `<!doctype html>
  .tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:40px;z-index:25;background:#0d1117;padding:6px 0;margin:6px 0;border-bottom:1px solid #30363d}
  .tab{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 14px;font-size:12px;color:#8b949e;cursor:pointer}
  .tab.active{background:#1f6feb;color:#fff;border-color:#1f6feb}
+ .tbadge{display:inline-block;min-width:18px;text-align:center;font-size:10px;background:#30363d;color:#e6edf3;border-radius:9px;padding:0 5px;margin-left:5px}
+ .tbadge:empty{display:none}
+ #detail-card.collapsed #detail{display:none}
+ #detail-head{cursor:pointer}
  #scatter circle{cursor:pointer}
  #gantt rect{cursor:pointer}
  .row{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
@@ -1291,16 +1295,17 @@ const exploreHtml = `<!doctype html>
 ${nav("explore")}
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
-  <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview</button>
-  <button class="tab" data-tab="charts" role="tab" id="tab-charts" aria-selected="false" aria-controls="pane-charts">charts</button>
-  <button class="tab" data-tab="signals" role="tab" id="tab-signals" aria-selected="false" aria-controls="pane-signals">signals</button>
-  <button class="tab" data-tab="patterns" role="tab" id="tab-patterns" aria-selected="false" aria-controls="pane-patterns">patterns</button>
-  <button class="tab" data-tab="code" role="tab" id="tab-code" aria-selected="false" aria-controls="pane-code">code</button>
-  <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data</button>
-  <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr</button>
-  <button class="tab" data-tab="ops" role="tab" id="tab-ops" aria-selected="false" aria-controls="pane-ops">ops</button>
+  <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview <span class="tbadge" data-badge="overview"></span></button>
+  <button class="tab" data-tab="charts" role="tab" id="tab-charts" aria-selected="false" aria-controls="pane-charts">charts <span class="tbadge" data-badge="charts"></span></button>
+  <button class="tab" data-tab="signals" role="tab" id="tab-signals" aria-selected="false" aria-controls="pane-signals">signals <span class="tbadge" data-badge="signals"></span></button>
+  <button class="tab" data-tab="patterns" role="tab" id="tab-patterns" aria-selected="false" aria-controls="pane-patterns">patterns <span class="tbadge" data-badge="patterns"></span></button>
+  <button class="tab" data-tab="code" role="tab" id="tab-code" aria-selected="false" aria-controls="pane-code">code <span class="tbadge" data-badge="code"></span></button>
+  <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data <span class="tbadge" data-badge="data"></span></button>
+  <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr <span class="tbadge" data-badge="ocr"></span></button>
+  <button class="tab" data-tab="ops" role="tab" id="tab-ops" aria-selected="false" aria-controls="pane-ops">ops <span class="tbadge" data-badge="ops"></span></button>
 </div>
-<div class="card" style="border-color:#d29922"><h2 style="margin-top:0">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
+<div class="muted" id="landing" style="margin:2px 0 8px"><span class="muted" data-loading>loading...</span></div>
+<div class="card" id="detail-card" style="border-color:#d29922"><h2 style="margin-top:0" id="detail-head">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
 <div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)" aria-label="Search everything"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
@@ -1377,6 +1382,18 @@ function setFilterText(){
   var el=document.getElementById('filter');
   if(!el)return;
   el.textContent=(FILTER[1]===Infinity)?'filter: all time':('filter: '+new Date(FILTER[0]).toISOString().slice(0,16)+' to '+new Date(FILTER[1]).toISOString().slice(0,16));
+}
+var HEALTH_SUMMARY='';
+function setBadge(name,text){var el=document.querySelector('[data-badge="'+name+'"]');if(el)el.textContent=text;}
+function renderLanding(){
+  // One-line answer to "where do I start": totals from already-loaded
+  // DATA, health verdict from the last /api/health render, filter state
+  // from #filter. No new fetches — called after table/health renders
+  // and on every filter change.
+  var el=document.getElementById('landing');if(!el||!DATA)return;
+  var cost=0,i;for(i=0;i<DATA.length;i++){cost+=(+DATA[i].cost||0);}
+  var f=document.getElementById('filter');
+  el.textContent=DATA.length+' sessions · $'+cost.toFixed(2)+' total'+(HEALTH_SUMMARY?' · '+HEALTH_SUMMARY:'')+(f&&f.textContent?' · '+f.textContent:'');
 }
 var SORT={col:'cost',dir:-1},TFILTER='';
 async function renderIntegrations(){
@@ -1455,6 +1472,7 @@ function renderTable(){
   var el=d3.select('#stable');el.selectAll('*').remove();
   var rows=tableRows();
   var tc=document.getElementById('tcount');if(tc)tc.textContent=rows.length+' of '+DATA.length+' sessions';
+  setBadge('overview',rows.length);renderLanding();
   var cols=[['title','title'],['model','model'],['cost','cost $'],['tokens_input','in'],['tokens_output','out'],['tokens_reasoning','reason'],['tokens_cache_read','cache'],['_span','span']];
   var table=el.append('table');
   table.append('caption').text('sessions — activate a column header to sort');
@@ -1493,6 +1511,7 @@ document.getElementById('q2').addEventListener('keydown',function(ev){if(ev.key=
 document.getElementById('sres').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 document.getElementById('tfilter').addEventListener('input',function(){TFILTER=this.value;renderTable();});
 async function detail(id){
+  var card=document.getElementById('detail-card');if(card)card.classList.remove('collapsed');
   var el=document.getElementById('detail');
   el.innerHTML='<span class="muted">loading...</span>';
   var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=300');
@@ -1534,6 +1553,7 @@ async function renderSignals(){
 async function renderPatterns(){
   var el=d3.select('#patterns');el.selectAll('*').remove();
   var d=await j('/api/patterns?limit=30');
+  setBadge('patterns',d&&d.ngrams?d.ngrams.length:0);
   if(!d||!d.ngrams||!d.ngrams.length){el.text('no tool sequences yet');return;}
   var max=d.ngrams[0].n||1;
   var h='<div class="muted" style="font-size:12px">'+d.distinct+' distinct tools · top tool-sequence bigrams</div>';
@@ -1584,6 +1604,7 @@ async function renderPivot(){
 async function renderCode(){
   var el=d3.select('#code');el.selectAll('*').remove();
   var d=await j('/api/code?limit=400');
+  setBadge('code',d&&d.files?d.files.length:0);
   if(!d||d.available===false||!d.files||!d.files.length){el.text('no code index yet - run ./scripts/code-index.py');return;}
   var parts=[];for(var i=0;i<d.flags.length;i++){parts.push(esc(d.flags[i].name)+'='+d.flags[i].n);}
   var h='<div class="muted" style="font-size:12px">'+d.files.length+' files · '+parts.join(', ')+'</div>';
@@ -1616,6 +1637,9 @@ async function renderHealth(){
     for(var q=0;q<d.per_model.length;q++){var pm=d.per_model[q];
       h+='<div class="item"><span class="tag'+(pm.quirk_hits>0?' ERR':'')+'">model</span>'+esc(pm.model)+' — '+esc(String(pm.tool_parts))+' tools, errors '+esc(String(pm.errors))+' ('+esc(String(Math.round((pm.error_rate||0)*1000)/10))+'%) · sed '+esc(String(pm.used_sed||0))+' · 2>/dev/null '+esc(String(pm.used_devnull||0))+'</div>';}}
   el.html(h);
+  setBadge('signals',d.findings.length);
+  HEALTH_SUMMARY=c.running_tools+' running · '+c.blank_tails+' blank'+(c.dead_tools?' · '+c.dead_tools+' dead':'');
+  renderLanding();
 }
 async function renderGuard(){
   var el=d3.select('#guard');el.selectAll('*').remove();
@@ -1627,7 +1651,7 @@ async function renderGuard(){
     h+='<div class="item"><span class="tag">'+esc(a.verdict||'?')+'</span>'+esc((a.patterns||[]).join(','))+' <span class="muted">'+esc(String(a.command||'').slice(0,90))+'</span></div>';}
   el.html(h);
 }
-document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();});
+document.getElementById('brush-reset').addEventListener('click',function(){FILTER=[0,Infinity];setFilterText();renderBurn();renderTreemap();renderScatter();renderSankey();renderGantt();renderLanding();});
 // Keyboard: Escape blurs. Never hijacks typing. (Note: '/' is already
 // claimed on this page by the Search-everything box #q2 — one shortcut,
 // one target; the home page claims '/' for its own #q instead.)
@@ -1636,11 +1660,13 @@ document.addEventListener('keydown',function(ev){
   if(t==='input'||t==='textarea'||t==='select')return;
   if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
 });
-document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});});
+document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});document.getElementById('detail-card').classList.add('collapsed');});
+document.getElementById('detail-head').addEventListener('click',function(ev){if(ev.target&&ev.target.id==='detail-close')return;document.getElementById('detail-card').classList.toggle('collapsed');});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 async function renderOcr(){
   var el=d3.select('#ocr');el.selectAll('*').remove();
   var d=await j('/api/ocr?limit=20');
+  setBadge('ocr',d&&d.runs?d.runs.length:0);
   if(!d||!d.runs||!d.runs.length){el.text('no OCR yet — run ./scripts/ocr-image.sh <image> to read a screenshot locally');return;}
   var h='<div class="muted" style="font-size:12px">'+d.count+' OCR runs · also searchable from the search box</div>';
   for(var i=0;i<d.runs.length;i++){var r=d.runs[i];
@@ -1650,6 +1676,7 @@ async function renderOcr(){
 async function renderDupes(){
   var el=d3.select('#dupes');el.selectAll('*').remove();
   var d=await j('/api/duplicates');
+  setBadge('data',d&&d.length?d.length:0);
   if(!d||!d.length){el.text('no duplicate sessions');return;}
   var h='<div class="muted" style="font-size:12px">'+d.length+' duplicate groups (normalized title)</div>';
   for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
@@ -1661,6 +1688,7 @@ async function renderOps(){
   // delegation contract as the signals pane). Gate strip is display-only.
   var el=d3.select('#ops');el.selectAll('*').remove();
   var d=await j('/api/ops');
+  setBadge('ops',d&&d.errors_by_tool?d.errors_by_tool.length:0);
   if(!d){el.text('(ops unavailable)');return;}
   var h='';
   h+='<div class="muted" style="font-size:12px">failures by tool (click a row to drill into an example session)</div>';
@@ -1805,6 +1833,7 @@ async function renderBurn(){
   if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.areaY!=='function'||typeof Plot.line!=='function'||typeof Plot.ruleY!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
   if(!DATA.length){host.textContent='(no data)';return;}
   var data=DATA.slice().sort(function(a,b){return a.time_created-b.time_created;});
+  setBadge('charts',data.length);
   var cum=0,pts=data.map(function(d){cum+=(+d.cost||0);return {t:new Date(d.time_updated||d.time_created),v:cum};});
   var total=cum;
   var marginTop=12,marginRight=16,marginBottom=26,marginLeft=64;
@@ -1829,7 +1858,7 @@ async function renderBurn(){
     var brush=d3.brushX().extent([[0,0],[w,h]]).on('brush end',function(ev){
       if(!ev.selection){FILTER=[0,Infinity];}
       else{FILTER=[+x.invert(ev.selection[0]),+x.invert(ev.selection[1])];}
-      setFilterText();renderTreemap();renderScatter();renderSankey();renderGantt();
+      setFilterText();renderTreemap();renderScatter();renderSankey();renderGantt();renderLanding();
     });
     d3.select(svg).append('g').attr('transform','translate('+marginLeft+','+marginTop+')').call(brush);
   }

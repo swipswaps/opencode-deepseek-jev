@@ -85,6 +85,15 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] G1 wayfinding (landing strip + badges + collapsible detail).
+      /explore answers "where do I start": one-line strip (sessions
+      · cost · health · filter, no new fetches), count badges on all
+      8 tabs (set by owning renderers, hidden when unknown),
+      detail card collapses via header and auto-expands on drill.
+      Screenshot-verified; brush/reset refresh the strip. Gates:
+      lint 116, dashboard 117 (one cold #activity flake on first
+      run, green on re-run — 20s shim vs slow cold API, not the
+      change), ux-test 27/0, 0 errors.
 - [x] command palette (navigation UX, researched). Ctrl+K/Cmd+K fuzzy
       jump across 6 pages + 8 explore tabs (hash deep-links) + reset
       action; label-first ranking, arrows/Enter/Esc/click-outside,
