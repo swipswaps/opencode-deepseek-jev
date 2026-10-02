@@ -85,6 +85,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] command palette (navigation UX, researched). Ctrl+K/Cmd+K fuzzy
+      jump across 6 pages + 8 explore tabs (hash deep-links) + reset
+      action; label-first ranking, arrows/Enter/Esc/click-outside,
+      dialog semantics, focus in + return. Proven keyboard-only incl.
+      landing on signals-active; label-ranking bug caught by test
+      (hint text outranked labels). Gates: lint 116, dashboard 117,
+      ux-test 27/0, 0 errors.
 - [x] configuration reference (settings audit). README gained a full
       settings section: default model field + change paths, all five
       .env.local keys, ports, every perf TTL (verified against code

@@ -58,6 +58,20 @@ const NAV_CSS =
   "color:#8b949e;text-decoration:none}" +
   ".nav a:hover{border-color:#58a6ff;color:#58a6ff}" +
   ".nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}";
+const CMDK_CSS =
+  "#cmdk{display:none;position:fixed;inset:0;z-index:100;background:rgba(1,4,9,0.7);" +
+  "align-items:flex-start;justify-content:center;padding-top:12vh}" +
+  "#cmdk.open{display:flex}" +
+  "#cmdk-box{width:min(560px,92vw);background:#0d1117;border:1px solid #30363d;" +
+  "border-radius:10px;overflow:hidden}" +
+  "#cmdk-input{width:100%;box-sizing:border-box;background:#0d1117;color:#e6edf3;" +
+  "border:0;border-bottom:1px solid #30363d;padding:12px 14px;font-size:14px;outline:none}" +
+  "#cmdk-list{max-height:300px;overflow:auto;padding:6px}" +
+  ".cmdk-group{font-size:11px;color:#8b949e;padding:8px 10px 2px}" +
+  ".cmdk-item{padding:8px 10px;border-radius:6px;font-size:13px;color:#e6edf3;cursor:pointer}" +
+  ".cmdk-item .muted{font-size:11px}" +
+  ".cmdk-item.active{background:#1f6feb33}" +
+  ".cmdk-empty{padding:12px 10px;color:#8b949e;font-size:13px}";
 const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/models", "models"],
                    ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
                    ["/api/export", "csv"]];
@@ -84,12 +98,53 @@ const THEME_CSS =
   ".card{overflow-x:auto}";
 
 function nav(active) {
-  let h = "<style>" + NAV_CSS + THEME_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
+  let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\"" : "") + ">" + it[1] + "</a>";
   }
   h += "<span id=\"rev\" class=\"muted\" style=\"margin-left:auto;font-size:11px\"></span>";
   h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
+  h += "<div id=\"cmdk\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Command palette\"><div id=\"cmdk-box\"><input id=\"cmdk-input\" placeholder=\"jump to a page or tab... (Esc closes)\" aria-label=\"Command palette\" autocomplete=\"off\"><div id=\"cmdk-list\" role=\"listbox\"></div></div></div>";
+  h += "<script>(function(){if(typeof document==='undefined')return;";
+  h += "var overlay=document.getElementById('cmdk');if(!overlay)return;";
+  h += "var input=document.getElementById('cmdk-input');var list=document.getElementById('cmdk-list');";
+  h += "if(!input||!list)return;";
+  h += "var invoker=null,shown=[],sel=0;";
+  h += "function items(){var it=[";
+  h += "{label:'dashboard',hint:'home · stats · sessions',href:'/'},";
+  h += "{label:'explore',hint:'sessions · charts · signals',href:'/explore'},";
+  h += "{label:'models',hint:'catalog · policy',href:'/models'},";
+  h += "{label:'runbooks',hint:'procedures · filter',href:'/runbooks'},";
+  h += "{label:'manage',hint:'tools · agents',href:'/manage'},";
+  h += "{label:'docs',hint:'guides · readme',href:'/docs'}];";
+  h += "var tabs=[['overview','sessions table'],['charts','burn · scatter'],['signals','health · stalls'],['patterns','ngrams · pivot'],['code','files'],['data','dupes · ab'],['ocr','screenshots'],['ops','failures · gates']];";
+  h += "for(var i=0;i<tabs.length;i++){it.push({label:'explore: '+tabs[i][0],hint:tabs[i][1],href:'/explore#'+tabs[i][0]});}";
+  h += "if(document.getElementById('brush-reset')){it.push({label:'reset filter',hint:'clear brush selection',act:'reset'});}";
+  h += "return it;}";
+  h += "function render(q){q=(q||'').toLowerCase();shown=[];var all=items();";
+  h += "var i,t,lbl,hnt;";
+  h += "for(i=0;i<all.length;i++){lbl=all[i].label.toLowerCase();if(!q||lbl.indexOf(q)>=0)shown.push(all[i]);}";
+  h += "for(i=0;i<all.length;i++){lbl=all[i].label.toLowerCase();hnt=(all[i].hint||'').toLowerCase();if(q&&lbl.indexOf(q)<0&&hnt.indexOf(q)>=0)shown.push(all[i]);}";
+  h += "sel=0;var h='';var lastGroup='';";
+  h += "for(var j=0;j<shown.length;j++){var it2=shown[j];var g=it2.href?'Navigation':'Actions';";
+  h += "if(g!==lastGroup){h+='<div class=\"cmdk-group\">'+g+'</div>';lastGroup=g;}";
+  h += "h+='<div class=\"cmdk-item'+(j===0?' active':'')+'\" role=\"option\" aria-selected=\"'+(j===0?'true':'false')+'\" data-idx=\"'+j+'\">'+it2.label+' <span class=\"muted\">'+it2.hint+'</span></div>';}";
+  h += "if(!shown.length)h='<div class=\"cmdk-empty\">no matches</div>';";
+  h += "list.innerHTML=h;}";
+  h += "function mark(){var rows=list.querySelectorAll('.cmdk-item');for(var i=0;i<rows.length;i++){var on=i===sel;if(on){rows[i].classList.add('active');rows[i].setAttribute('aria-selected','true');}else{rows[i].classList.remove('active');rows[i].setAttribute('aria-selected','false');}}}";
+  h += "function open(){invoker=document.activeElement;overlay.classList.add('open');input.value='';render('');if(input.focus)input.focus();}";
+  h += "function close(){overlay.classList.remove('open');if(invoker&&invoker.focus)invoker.focus();}";
+  h += "function go(){var it=shown[sel];if(!it)return;close();if(it.act==='reset'){var b=document.getElementById('brush-reset');if(b)b.click();return;}location.href=it.href;}";
+  h += "document.addEventListener('keydown',function(ev){var k=(ev.key||'').toLowerCase();if((ev.ctrlKey||ev.metaKey)&&k==='k'){ev.preventDefault();if(overlay.classList.contains('open'))close();else open();}});";
+  h += "input.addEventListener('input',function(){render(input.value);});";
+  h += "input.addEventListener('keydown',function(ev){";
+  h += "if(ev.key==='ArrowDown'){ev.preventDefault();sel=(sel+1)%Math.max(1,shown.length);mark();}";
+  h += "else if(ev.key==='ArrowUp'){ev.preventDefault();sel=(sel-1+Math.max(1,shown.length))%Math.max(1,shown.length);mark();}";
+  h += "else if(ev.key==='Enter'){ev.preventDefault();go();}";
+  h += "else if(ev.key==='Escape'){ev.preventDefault();close();}});";
+  h += "list.addEventListener('click',function(ev){var c=ev.target&&ev.target.closest?ev.target.closest('[data-idx]'):null;if(!c)return;sel=+c.getAttribute('data-idx');go();});";
+  h += "overlay.addEventListener('click',function(ev){if(ev.target===overlay)close();});";
+  h += "})();</script>";
   return h;
 }
 
