@@ -85,6 +85,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] user-side recovery + routing scripts (blocker tooling). New
+      fix-docker-network.sh (sudo; probes ports, restarts daemon on
+      typed YES, re-probes) for the host firewall/NAT path nothing
+      in-repo can touch. New route-via-proxy.sh (G4 opt-in: backup,
+      provider swap to :4000, restart, --revert; transform proven on
+      a copy). Registered + lint 120.
 - [x] v2.0 inaugural run on HEAD (23f4347). First full execution of
       the upgraded contract, all new invariants exercised: served-rev
       equality on bare-metal scratch (docker ports down host-wide),

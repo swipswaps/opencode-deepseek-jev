@@ -112,6 +112,17 @@ query-worker.mjs
     dbPath, args} in, {id, ok, value|error} out. Spawned by URL from
     dashboard.mjs with a 60 s guard; all failures fall back inline.
 
+fix-docker-network.sh
+    Host-side recovery for a broken host->docker port path (RUN WITH
+    SUDO): probes mapped ports, restarts the daemon after typed YES,
+    re-probes. Nothing in-repo can fix that path; this is the button.
+
+route-via-proxy.sh
+    G4 opt-in switch: backs up opencode.json, points the deepseek
+    provider at the :4000 proxy (model id unchanged), restarts web.
+    --revert restores the newest backup. Typed YES required; never
+    prints secrets.
+
 ocr-image.sh
     Local OCR fallback for reading screenshots/scans when API models can't
     ingest images. Tries tesseract CLI (apt, in the image), then

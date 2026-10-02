@@ -21,6 +21,20 @@
     "commands": ["./scripts/media-budget.sh"]
   },
   {
+    "id": "fix-docker-network",
+    "title": "Recover host->docker port path (sudo)",
+    "where": "host",
+    "purpose": "Probes mapped ports; if down, restarts the docker daemon after typed YES. Nothing in-repo can fix this path.",
+    "commands": ["sudo ./scripts/fix-docker-network.sh"]
+  },
+  {
+    "id": "route-via-proxy",
+    "title": "G4 opt-in proxy routing switch",
+    "where": "host",
+    "purpose": "Backs up opencode.json, swaps deepseek provider to :4000 proxy, restarts web. --revert restores. Typed YES required.",
+    "commands": ["./scripts/route-via-proxy.sh", "./scripts/route-via-proxy.sh --revert"]
+  },
+  {
     "id": "ledger",
     "title": "Event ledger (gates + guard verdicts)",
     "where": "container",
