@@ -93,6 +93,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] tool-census.sh + HANDOFF multi-agent section. Evaluated Strands
+      Decider 2B (real, 2026-10-01, Apache-2.0; needs runner+weights —
+      ollama 0.32.1 present, no weights), Nimble (rejected: commercial
+      cloud, egress/cost policy), Tev (unidentified, no action), Laya
+      (already in-repo via test-jev-laya-ab.sh). Census is executable
+      evidence for the next evaluation. Coordination protocol installed
+      (relay-drop + single committer, 5 rules, empty collision log).
 - [x] re-extract-session.sh installed + gated. Browser extraction of a
       session log (cdp-tab openauth, chunked API-behind-UI pull, verify
       before write: parse, id uniformity, length + sha256, growth

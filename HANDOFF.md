@@ -445,7 +445,48 @@ container is rooted at `/workspace`. Project-scoped config/plugins therefore
 differ between them; anything that must apply everywhere (the guard) belongs in
 the global config dir or the global plugin dir, not only `.opencode/`.
 
+## Multi-agent coordination (two writers, one tree)
 
+Evidence (2026-10-03): a 314-line `scripts/re-extract-session.sh` plus
+edits to `test-hygiene.sh`, `scripts/README.txt`, `HANDOFF.md` appeared in
+this tree uncommitted (mtimes 18:53–19:00), committed 19:24 as `5cd5de9`
+after a full read plus `bash -n`, `scan-constraints`, `--self-test` 8/8,
+lint 125, hygiene 39, dashboard 117. The other writer works from a path
+invisible here (`/workspace` does not exist in this environment) — whether
+the transport is filesystem sync or user relay is unknown and irrelevant.
+No collision has occurred; history is linear. This section exists so the
+first collision meets a protocol, not improvisation.
+
+Model: relay-drop + single committer. Nobody owns the tree; the committer
+owns the gate. Files arrive unattributed and untrusted; they leave as
+commits only through the checks below.
+
+Rules (all checkable, none new beyond the transfer itself):
+
+1. `git status --short` before every `git add`. Foreign files (anything you
+   did not write this turn) are staged only after a full read.
+2. Audit plus gates before commit: `bash -n`, `scan-constraints.py`,
+   the file's own `--self-test`, then `lint.sh` + `test-hygiene.sh`.
+   This round is the reference case (`5cd5de9`).
+3. Provenance in the commit message or TODO Done line: whose drop, which
+   turn, what verification ran. Attribution lives in prose — the FS does
+   not provide it.
+4. `git pull --rebase` before every push. A non-fast-forward is the tripwire:
+   stop, read their commits, rebase, re-run gates, then push.
+5. Docs that describe shared surface (`HANDOFF.md`, `scripts/README.txt`,
+   `scripts/runbooks.json` counts) are edited in the same commit as the
+   code they describe — never left for "the other side" to update.
+
+Fallback: if step 4 ever trips, open the second writer's commits first and
+prefer their version on conflict; record the incident (date, files, cause)
+in the collision log below. Two incidents in one week means graduate to
+branches + PRs — not before.
+
+Collision log: (empty — None recorded as of 2026-10-03.)
+
+Non-goals: no lock files, no claim comments, no mandatory PRs while history
+stays linear. Process heavier than the risk it covers will be skipped, and
+a skipped protocol is worse than a short one.
 
 ### Writing the next prompt (rigorous template)
 
