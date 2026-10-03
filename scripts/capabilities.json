@@ -40,6 +40,14 @@
       "registration": { "kind": "contains", "path": "scripts/web.sh", "marker": "ensure-env.sh" },
       "test": "scripts/test-ensure-env.sh",
       "evidence": { "path": "scripts/test-ensure-env.sh", "marker": "PASS" }
+    },
+    {
+      "id": "cdp-tab",
+      "purpose": "read live rendered browser state over CDP; :4096 vs :5099 E2E probe",
+      "impl": "scripts/cdp-tab.mjs",
+      "registration": { "kind": "contains", "path": "scripts/runbooks.json", "marker": "cdp-probe" },
+      "test": "scripts/cdp-tab.mjs",
+      "evidence": { "path": "logs/cdp/probe-latest.json", "marker": "\"verdict\"" }
     }
   ]
 }

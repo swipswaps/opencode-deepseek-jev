@@ -224,5 +224,17 @@
       "./scripts/preflight.sh"
     ],
     "note": "Manual: paste the key. Gemini goes through @ai-sdk/openai-compatible at https://generativelanguage.googleapis.com/v1beta/openai/. Then pick it with /models (TUI) or `opencode run -m gemini/gemini-2.5-flash`. gemini-2.5-flash and gemini-2.5-flash-lite are allow-listed in models.policy.json (Flash input is ~$0.30/1M, above the $0.20 ceiling — allowed explicitly)."
+  },
+  {
+    "id": "cdp-probe",
+    "title": "CDP probe (:4096 vs :5099 end to end)",
+    "purpose": "Prove the chain the dashboard visualizes: attach to the live browser over CDP, take session ids from the :4096 opencode API and the :5099 dashboard API, and take the rendered row ids from the live :5099 tab. PASS when the visualization is faithful to its source; dashboard-vs-opencode id drift is reported as a note. Screenshots + JSON land in logs/cdp/ (gitignored).",
+    "where": "host",
+    "commands": [
+      "node scripts/cdp-tab.mjs --self-test",
+      "node scripts/cdp-tab.mjs tabs",
+      "node scripts/cdp-tab.mjs probe"
+    ],
+    "note": "Needs a browser with remote debugging (browser-use Chrome exposes it; else set CDP_PORT). OPENCODE_SERVER_PASSWORD enables the :4096 count and is never printed. Without a browser the probe prints SKIP, which is not PASS."
   }
 ]

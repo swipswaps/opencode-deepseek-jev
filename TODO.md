@@ -93,6 +93,15 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] cdp-tab.mjs (CDP browser client, zero-dep). Attaches to the live
+      browser over the remote-debugging port (proc-scan discovery, no
+      child_process): tabs/open/text/eval/shot/probe + --self-test
+      (10/10). `probe` opens :5099 + :4096, compares dashboard api ids
+      vs opencode api ids vs rendered row ids; found real drift (8
+      dashboard sessions absent from :4096) and fixed 3 probe bugs live
+      (blank-target navigation, screenshot result path, subset verdict).
+      Registered: runbooks.json cdp-probe + capabilities.json GREEN E5.
+      Gates: lint 123, hygiene 38, dashboard 117.
 - [x] pressure-watch.sh (nebula audit, observe-only). deepseek's
       mechanism refuted by measurement (no systemd restart loop:
       NRestarts=0; nebula 1.8% CPU/17MB; real hogs are chromium
