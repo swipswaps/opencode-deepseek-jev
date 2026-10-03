@@ -2231,6 +2231,10 @@ const managedHtml = `<!doctype html>
  .badge{display:inline-block;padding:1px 6px;border-radius:999px;font-size:11px}
  .badge.HOST{background:#b6232433;color:#ff7b72}
  .badge.CONTAINER{background:#2ea04333;color:#7ee787}
+ .rb-head{cursor:pointer}
+ .rb-head::before{content:'▾ ';color:#8b949e}
+ .card.collapsed .rb-head::before{content:'▸ '}
+ .card.collapsed .cbody{display:none}
  .rb-purpose{font-size:12px;color:#8b949e;margin-bottom:6px}
  .cmd{display:flex;gap:8px;align-items:flex-start;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:6px 8px;margin:0 0 6px}
  .cmd code{flex:1;white-space:pre-wrap;word-break:break-word;font-size:12px}
@@ -2256,18 +2260,22 @@ function render(){
     var t=TOOLS[i];
     if(f!=='all'&&t.where!==f)continue;
     shown++;
-    var card=document.createElement('div');card.className='card';
+    var card=document.createElement('div');card.className='card collapsed';
     var head=document.createElement('div');head.className='rb-head';
+    head.setAttribute('tabindex','0');head.setAttribute('role','button');head.setAttribute('aria-expanded','false');
+    head.addEventListener('click',function(){var c=this.parentElement;var shut=c.classList.toggle('collapsed');this.setAttribute('aria-expanded',shut?'false':'true');});
+    head.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();this.click();}});
     var ti=document.createElement('span');ti.className='rb-title';ti.textContent=t.title;
     var b=document.createElement('span');b.className='badge '+(t.where==='host'?'HOST':'CONTAINER');b.textContent=t.where.toUpperCase();
     head.appendChild(ti);head.appendChild(b);card.appendChild(head);
-    var p=document.createElement('div');p.className='rb-purpose';p.textContent=t.purpose;card.appendChild(p);
+    var cbody=document.createElement('div');cbody.className='cbody';card.appendChild(cbody);
+    var p=document.createElement('div');p.className='rb-purpose';p.textContent=t.purpose;cbody.appendChild(p);
     for(var j=0;j<t.commands.length;j++){
       var row=document.createElement('div');row.className='cmd';
       var code=document.createElement('code');code.textContent=t.commands[j];
       var btn=document.createElement('button');btn.textContent='copy';btn.dataset.cmd=t.commands[j];btn.setAttribute('aria-label','copy command');
       btn.addEventListener('click',function(){copy(this.dataset.cmd,this);});
-      row.appendChild(code);row.appendChild(btn);card.appendChild(row);
+      row.appendChild(code);row.appendChild(btn);cbody.appendChild(row);
     }
     el.appendChild(card);
   }

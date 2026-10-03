@@ -85,6 +85,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] collapsible manage catalog (gate-driven UX). The phone-height
+      gate caught real growth (6101px for 24 tools): cards collapse
+      by default with ▸/▾ markers, keyboard-operable headers
+      (tabindex/role/aria-expanded), copy buttons unaffected.
+      390px: 6101 -> 2128px. Gates: lint 120, dashboard 117 (3rd
+      instance of the known cold #activity flake, green on re-run),
+      ux-test 27/0.
 - [x] user-side recovery + routing scripts (blocker tooling). New
       fix-docker-network.sh (sudo; probes ports, restarts daemon on
       typed YES, re-probes) for the host firewall/NAT path nothing
