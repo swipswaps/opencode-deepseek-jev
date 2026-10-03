@@ -297,16 +297,36 @@ to play):
 [![Brush to filter](docs/ux/thumb-brush.png)](docs/ux/clip-brush.mp4)
 [![Ops drill](docs/ux/thumb-ops.png)](docs/ux/clip-ops.mp4)
 [![Keyboard first](docs/ux/thumb-kbd.png)](docs/ux/clip-kbd.mp4)
+[![CDP probe](docs/ux/thumb-cdp.png)](docs/ux/cdp-probe-tour.mp4)
 
 Session-resume tour (33 s): when the upstream web UI cannot list old
 sessions, resume via transcript — `docs/ux/resume-tour.mp4` demonstrates
 the empty list, the data proof, the resume pointer, the agent
 continuing, and two upstream API defects with repro lines.
 
+CDP probe tour (36 s): the `:4096` → `:5099` chain made visible —
+home sessions table (12 recent rows, live counts), the runbooks page
+with the `cdp-probe` entry, then `/explore`. Captured with scripted
+Playwright against this HEAD (rev banner on screen, no STALE flag):
+`docs/ux/cdp-probe-tour.mp4`. Reproduce every frame from the terminal:
+
+```bash
+node scripts/cdp-tab.mjs --self-test                             # offline, 10 checks
+node scripts/cdp-tab.mjs tabs                                     # live browser tabs
+node scripts/cdp-tab.mjs openauth http://127.0.0.1:4096/session  # answer the login dialog
+node scripts/cdp-tab.mjs probe                                    # PASS + logs/cdp/probe-latest.json
+```
+
+Why `openauth` exists: `:4096` is JSON-API-only and answers browsers
+with `401 + Basic realm` and an empty body, so an opened tab parks on
+the login dialog with nothing to display. Answering the challenge
+renders the session JSON in the tab (43 sessions); the human-readable
+view of the same data stays `:5099`.
+
 ### Resume a session (read this — two stores exist)
 
 The host TUI reads your **host-local** session store (2 sessions);
-the `:4096` server holds **44 sessions**. A bare `opencode attach`
+the `:4096` server holds **43 sessions** (counted 2026-10-03). A bare `opencode attach`
 fails with `401 Unauthorized` because the server requires the
 password and the command sends none — load it from `.env.local`
 first (this prints nothing secret):
@@ -531,7 +551,9 @@ Host-only UX tools (Playwright; run as `python3 scripts/…` from the repo root)
 `ux-test.py [url]` (assertions; `--check` prerequisites; SKIP not PASS when
 absent), `ux-trace.py [url]` (records every click/drag/scroll + hotspots into
 `data/observability/ux.db` + `logs/ux/report.md`; `--ocr` reads each shot back
-to text; `--self-test` offline). Runbooks: "ux-test", "ux-trace" (host).
+to text; `--self-test` offline). `node scripts/cdp-tab.mjs` (live-browser
+CDP: tabs/open/text/eval/shot/openauth/probe; `--self-test` offline).
+Runbooks: "ux-test", "ux-trace", "cdp-probe" (host).
 
 ## Search from the terminal
     ./scripts/semantic-search.sh <query...>     # ranked, across sessions
