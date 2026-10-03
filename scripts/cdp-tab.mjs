@@ -212,8 +212,79 @@ export async function screenshot(wsUrl, path) {
   }
 }
 
+// One retry: captureScreenshot flakes transiently on a busy renderer, and a
+// red evidence step must mean the camera failed twice, not once.
+export async function screenshotRetry(wsUrl, path) {
+  try {
+    return await screenshot(wsUrl, path);
+  } catch (e1) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      return await screenshot(wsUrl, path);
+    } catch (e2) {
+      throw new Error(String((e2 && e2.message) || e2).slice(0, 80) + " (after retry)");
+    }
+  }
+}
+
 // Probe js: single expression, no backslash escapes (RULES #61).
 const RENDERED_JS = "({loading: document.querySelectorAll('[data-loading]').length, rows: document.querySelectorAll('#sessions tr[data-id]').length, ids: Array.prototype.slice.call(document.querySelectorAll('#sessions tr[data-id]'), 0, 20).map(function(r){return r.getAttribute('data-id');})})";
+
+// Answer an HTTP Basic auth challenge inside the tab (Fetch domain), so an
+// auth-gated API endpoint renders its body instead of parking the tab on the
+// browser login dialog with no DOM. Credentials come from env only and are
+// never logged or stored. Returns { target, href }.
+export async function openAuth(port, url, user, pw) {
+  // Create with the real URL (PUT, like openUrl); the first load parks on
+  // the login dialog, then Fetch answers it on the re-navigate.
+  const put = await fetch("http://127.0.0.1:" + port + "/json/new?url=" + encodeURIComponent(url),
+    { method: "PUT", signal: AbortSignal.timeout(8000) });
+  if (!put.ok) throw new Error("open failed: http " + put.status);
+  const t = await put.json();
+  const ws = await connect(t.webSocketDebuggerUrl);
+  let nextId = 11;
+  const send = (method, params) => {
+    const id = nextId++;
+    ws.send(JSON.stringify({ id, method, params }));
+    return id;
+  };
+  // Empty patterns + handleAuthRequests: only auth challenges pause.
+  send("Fetch.enable", { patterns: [], handleAuthRequests: true });
+  send("Page.navigate", { url });
+  const t0 = Date.now();
+  let href = "";
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("auth open timeout")), 25000);
+      ws.addEventListener("message", (ev) => {
+        let m = null;
+        try { m = JSON.parse(String(ev.data)); } catch { return; }
+        if (m && m.method === "Fetch.authRequired") {
+          const rid = nextId++;
+          ws.send(JSON.stringify({ id: rid, method: "Fetch.continueWithAuth",
+            params: { requestId: m.params.requestId,
+              authChallengeResponse: { response: "ProvideCredentials", username: user, password: pw } } }));
+        }
+      });
+      const poll = async () => {
+        try {
+          href = String(await evaluate(t.webSocketDebuggerUrl, "location.href"));
+          if (href.startsWith("http")) { clearTimeout(timer); resolve(href); return; }
+        } catch { /* target busy; retry */ }
+        if (Date.now() - t0 > 25000) {
+          clearTimeout(timer);
+          reject(new Error("auth navigation never committed: " + href));
+          return;
+        }
+        setTimeout(poll, 500);
+      };
+      setTimeout(poll, 800);
+    });
+  } finally {
+    try { ws.close(); } catch { /* already closed */ }
+  }
+  return { target: t, href };
+}
 
 async function ensureTab(port, url, match, tolerant) {
   const tabs = await listTabs(port);
@@ -261,6 +332,7 @@ export async function runProbe(outdir) {
   let c = { rows: 0, loading: -1, ids: [] };
   let shot5099 = "";
   let shot4096 = "";
+  let browserApi = -1;
   try {
     const found = await findDebugPort();
     const tab = await ensureTab(found.port, DASH + "/", "127.0.0.1:5099");
@@ -273,23 +345,49 @@ export async function runProbe(outdir) {
     }
     c = await evaluate(tab.webSocketDebuggerUrl, RENDERED_JS);
     step("rendered :5099", true, "rows=" + c.rows + " loading=" + c.loading);
-    mkdirSync(outdir, { recursive: true });
-    shot5099 = outdir + "/probe-5099.png";
-    await screenshot(tab.webSocketDebuggerUrl, shot5099);
-    const tab2 = await ensureTab(found.port, API + "/", "127.0.0.1:4096", true);
-    const gate = String(await evaluate(tab2.webSocketDebuggerUrl,
-      "document.title + ' :: ' + document.body.innerText.slice(0,80)")).replace(/\s+/g, " ");
-    step("auth gate :4096", true, gate.slice(0, 100));
-    shot4096 = outdir + "/probe-4096.png";
-    await screenshot(tab2.webSocketDebuggerUrl, shot4096);
-    step("screenshots", true, "2 png");
   } catch (e) {
     step("rendered :5099", false, String(e.message || e).slice(0, 120));
   }
+  try {
+    mkdirSync(outdir, { recursive: true });
+    const found2 = await findDebugPort();
+    const tabS = matchTab(await listTabs(found2.port), "127.0.0.1:5099");
+    if (!tabS.ok) throw new Error(tabS.why);
+    shot5099 = outdir + "/probe-5099.png";
+    await screenshotRetry(tabS.tab.webSocketDebuggerUrl, shot5099);
+    // 4. :4096 in the browser: answer the Basic challenge so the JSON
+    // actually displays (this is what "opened but shows nothing" lacked).
+    const pw2 = process.env.OPENCODE_SERVER_PASSWORD || "";
+    if (pw2) {
+      const user2 = process.env.OPENCODE_AUTH_USER || "opencode";
+      const opened = await openAuth(found2.port, API + "/session", user2, pw2);
+      const body = String(await evaluate(opened.target.webSocketDebuggerUrl,
+        "document.body ? document.body.innerText : ''"));
+      try { browserApi = JSON.parse(body).length; } catch { browserApi = -1; }
+      step("browser :4096", browserApi === apiIds.length,
+        "rendered json sessions=" + browserApi + " api=" + apiIds.length);
+      shot4096 = outdir + "/probe-4096.png";
+      await screenshotRetry(opened.target.webSocketDebuggerUrl, shot4096);
+    } else {
+      const tab2 = await ensureTab(found2.port, API + "/", "127.0.0.1:4096", true);
+      const gate = String(await evaluate(tab2.webSocketDebuggerUrl,
+        "document.title + ' :: ' + document.body.innerText.slice(0,80)")).replace(/\s+/g, " ");
+      step("auth gate :4096", true, "login dialog owns the tab" + (gate.trim() ? " :: " + gate.slice(0, 80) : ""));
+      shot4096 = outdir + "/probe-4096.png";
+      await screenshotRetry(tab2.webSocketDebuggerUrl, shot4096);
+    }
+    step("screenshots", true, "2 png");
+  } catch (e) {
+    step("browser evidence", false, String(e.message || e).slice(0, 120));
+  }
   const d = decideProbe(dashIds, apiIds, c);
+  if (browserApi >= 0 && browserApi !== apiIds.length) {
+    d.verdict = "FAIL";
+    d.reasons.push("browser :4096 shows " + browserApi + " sessions, api says " + apiIds.length);
+  }
   const report = {
     ts: started, dash: DASH, api: API, authed,
-    counts: { dashboard_api: dashIds.length, opencode_api: apiIds.length, rendered_rows: c.rows, rendered_loading: c.loading },
+    counts: { dashboard_api: dashIds.length, opencode_api: apiIds.length, rendered_rows: c.rows, rendered_loading: c.loading, browser_4096: browserApi },
     drift_sample: d.drift,
     shots: [shot5099, shot4096].filter(Boolean),
     steps, verdict: d.verdict, reasons: d.reasons, notes: d.notes,
@@ -305,9 +403,10 @@ export async function runProbe(outdir) {
 
 function usage() {
   const lines = [
-    "usage: node scripts/cdp-tab.mjs [--self-test|tabs|open <url>|text <match>|eval <match> <js>|shot <match> <png>|probe]",
+    "usage: node scripts/cdp-tab.mjs [--self-test|tabs|open <url>|openauth <url>|text <match>|eval <match> <js>|shot <match> <png>|probe]",
     "  env: CDP_PORT (override), DASH_URL (default " + DASH + "), OPENCODE_API_URL (default " + API + ")",
     "  OPENCODE_SERVER_PASSWORD only enables the :4096 count in probe; it is never printed.",
+    "  openauth answers the Basic login dialog from OPENCODE_AUTH_USER (default opencode) + OPENCODE_SERVER_PASSWORD.",
   ];
   process.stdout.write(lines.join("\n") + "\n");
 }
@@ -364,6 +463,17 @@ async function cli(argv) {
     if (!argv[1]) { usage(); return 2; }
     const t = await openUrl(found.port, argv[1]);
     process.stdout.write("opened: " + (t.url || argv[1]) + "\n");
+    return 0;
+  }
+  if (cmd === "openauth") {
+    if (!argv[1]) { usage(); return 2; }
+    const pw = process.env.OPENCODE_SERVER_PASSWORD || "";
+    if (!pw) { process.stdout.write("FAIL OPENCODE_SERVER_PASSWORD not set\n"); return 2; }
+    const user = process.env.OPENCODE_AUTH_USER || "opencode";
+    const opened = await openAuth(found.port, argv[1], user, pw);
+    const body = String(await evaluate(opened.target.webSocketDebuggerUrl,
+      "document.body ? document.body.innerText.slice(0,200) : ''"));
+    process.stdout.write("authed: " + opened.href + " chars=" + body.length + "\n");
     return 0;
   }
   const need = matchTab(await listTabs(found.port), argv[1]);

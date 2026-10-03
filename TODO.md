@@ -93,6 +93,16 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] :4096 opened but shows no sessions (diagnosed + fixed in scope).
+      Root cause: :4096 is JSON-API-only; unauthenticated browsers get
+      401 + `Basic realm="Secure Area"` with empty body, so the tab
+      parks on the login dialog with no DOM — reproduced independently
+      via browser_use attached over CDP (auth dialog owns the tab,
+      screenshot "not attached"). Fix: `cdp-tab.mjs openauth` answers
+      the Basic challenge via Fetch.authChallengeResponse (env creds
+      only, never logged); probe now asserts browser-rendered :4096
+      JSON count == api count (43 == 43). No HTML sessions view exists
+      upstream by design; the human view is :5099 (12/12 rows faithful).
 - [x] cdp-tab.mjs (CDP browser client, zero-dep). Attaches to the live
       browser over the remote-debugging port (proc-scan discovery, no
       child_process): tabs/open/text/eval/shot/probe + --self-test

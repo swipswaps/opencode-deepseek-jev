@@ -233,6 +233,7 @@
     "commands": [
       "node scripts/cdp-tab.mjs --self-test",
       "node scripts/cdp-tab.mjs tabs",
+      "node scripts/cdp-tab.mjs openauth http://127.0.0.1:4096/session",
       "node scripts/cdp-tab.mjs probe"
     ],
     "note": "Needs a browser with remote debugging (browser-use Chrome exposes it; else set CDP_PORT). OPENCODE_SERVER_PASSWORD enables the :4096 count and is never printed. Without a browser the probe prints SKIP, which is not PASS."
