@@ -143,6 +143,17 @@ main() {
         bad 'blacklist-guard-self-test.mjs present + node'
     fi
 
+    if [ -f "$REPO/scripts/re-extract-session.sh" ]; then
+        if bash "$REPO/scripts/re-extract-session.sh" --self-test > "$work/rx_st.txt" 2>&1; then
+            ok 're-extract-session: self-test (stub node + fixtures)'
+        else
+            bad 're-extract-session: self-test (stub node + fixtures)'
+            cat "$work/rx_st.txt"
+        fi
+    else
+        bad 're-extract-session.sh present'
+    fi
+
     if have node && [ -f "$REPO/scripts/session-health.mjs" ]; then
         if node --experimental-sqlite "$REPO/scripts/session-health.mjs" --self-test > "$work/sh_st.txt" 2>&1; then
             ok 'session-health: self-test (offline fixtures)'
@@ -447,7 +458,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-trace.py present'
     fi
 
-    rm -f "$work/sc.txt" "$work/atc.json" "$work/pl_last.json" "$work/atc_st.txt" "$work/pl_st.txt" "$work/is_st.txt" "$work/bg_st.txt" "$work/logs.txt" "$work/harness.txt" "$work/pf.txt" "$work/lr.txt" "$work/fz.txt" "$work/ci.txt" "$work/mo.txt" "$work/db.txt" "$work/tt.txt" "$work/uxh.txt" "$work/uxt_st.txt"
+    rm -f "$work"/*.txt "$work"/*.json
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

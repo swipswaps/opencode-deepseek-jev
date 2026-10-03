@@ -269,6 +269,15 @@ ux-trace.py
     in test-hygiene.sh); --json; --ocr reads each shot back to text (tesseract)
     into the `ux_shot` table — text is untrusted data. Runbook "ux-trace" (host).
 
+re-extract-session.sh
+    Reproduce a browser-extracted session transcript log: opens the session in
+    the live browser (cdp-tab.mjs openauth), pulls /session/<id>/message in
+    chunks behind the UI, then verifies (id uniformity, reassembled length and
+    in-page sha256 cross-check) BEFORE writing. Growth mid-pull aborts unless
+    --allow-growth. Out defaults to logs/ses_<id>.txt (gitignored). --check
+    reports prerequisites; --self-test runs offline against a stub node
+    (end-to-end minus CDP). Gated in test-hygiene.sh.
+
 runbook.sh
     Host-side multiple-choice runner for the runbooks shown at
     /runbooks on the dashboard. Reads the same scripts/runbooks.json the

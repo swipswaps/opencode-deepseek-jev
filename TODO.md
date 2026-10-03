@@ -93,6 +93,13 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] re-extract-session.sh installed + gated. Browser extraction of a
+      session log (cdp-tab openauth, chunked API-behind-UI pull, verify
+      before write: parse, id uniformity, length + sha256, growth
+      policy). Offline --self-test (stub node, 8 checks) wired into
+      test-hygiene.sh. Compliance audited: no sed/2>/dev/null/set -e,
+      main() wrapper, printf-only; scan-constraints 0 code hits.
+      Gates: lint 125, hygiene 39, dashboard 117.
 - [x] :4096 opened but shows no sessions (diagnosed + fixed in scope).
       Root cause: :4096 is JSON-API-only; unauthenticated browsers get
       401 + `Basic realm="Secure Area"` with empty body, so the tab

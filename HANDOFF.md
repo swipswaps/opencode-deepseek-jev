@@ -115,6 +115,7 @@ is its own segment); TTLs (`HEALTH_TTL_MS`, `POLL_TTL_MS`, …) are the knobs.
 | `verify-from-inside.sh [--full]` | in-container self-check (no docker) |
 | `test-jev-laya-ab.sh` | A/B the same payload through TypeSafe Jev vs self-hosted Laya; persists each run (latency + parsed `correctness`/`safe_to_merge` scores) to `data/observability/observability.db` (served at `/api/ab`) |
 | `cleanup-baks.sh --apply` | remove stale `*.bak.*` snapshots |
+| `re-extract-session.sh <id> [out] [--allow-growth]` | reproduce a browser-extracted session transcript via `cdp-tab.mjs` (chunked API-behind-UI pull, id/length/sha256 gates before write); `--check`, offline `--self-test` |
 | `runbook.sh [--list]` / `runbook.sh run <id>` | host-side menu runner; reads the same `scripts/runbooks.json` the dashboard serves |
 | `test-dashboard.sh` | gate for dashboard.mjs (both pages' inline-JS parse + `/api/*` + headless client execution via `test-dashboard-ui.mjs`) |
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
