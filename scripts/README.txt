@@ -100,6 +100,12 @@ media-budget.sh
     <= 150 KiB (tracked files only via git ls-files, so scratch and
     logs never trip it). Wired into test-hygiene.sh.
 
+pressure-watch.sh
+    Observe-only contention snapshot: PSI, top CPU/MEM holders, nebula
+    liveness (PID/start/NRestarts), D-state blockers, swap — archived
+    to logs/pressure-<ts>.log. Run twice ~60s apart and diff. Sends
+    no signals, touches no other project's services.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies)
     shared by dashboard.mjs and query-worker.mjs: single source of

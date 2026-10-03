@@ -56,6 +56,14 @@ Last updated: 2026-09-30
 
 ## Queue (ranked, top first)
 
+- [ ] NEBULA-1 (operator approval required): tame external restart
+      churn (3 PIDs/10 min, never systemd-counted — another project's
+      supervisor). Proposed override (NOT applied):
+      StartLimitIntervalSec=300/StartLimitBurst=5, CPUWeight=50,
+      IOWeight=50, MemoryMax=512M, LogRateLimitBurst=100, via
+      `sudo systemctl edit nebula`. Kill the restarter, not the
+      restarts: find what issues the external restarts first.
+      Evidence: logs/pressure-*.log (this repo, gitignored).
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;
@@ -85,6 +93,14 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] pressure-watch.sh (nebula audit, observe-only). deepseek's
+      mechanism refuted by measurement (no systemd restart loop:
+      NRestarts=0; nebula 1.8% CPU/17MB; real hogs are chromium
+      orphans + opencode sessions; io pressure is btrfs-flush).
+      Churn confirmed as EXTERNAL restarts (3 PIDs/10 min, never
+      systemd-counted). Proposed nebula override (CPUWeight/IOWeight
+      + burst limits) queued below for operator approval — NOT
+      applied (another project + needs sudo). Gates: lint 122.
 - [x] semantic-search --self-test (convention gap closed). Fixture
       DBs in temp dirs (real paths untouched): build count, ranking,
       determinism, empty query, no-match — 6/6. Caught a real trap

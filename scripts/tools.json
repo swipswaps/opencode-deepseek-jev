@@ -21,6 +21,13 @@
     "commands": ["./scripts/media-budget.sh"]
   },
   {
+    "id": "pressure-watch",
+    "title": "Contention-evidence snapshot",
+    "where": "host",
+    "purpose": "Observe-only PSI/CPU/nebula/D-state/swap snapshot to logs/. Run twice ~60s apart and diff. Sends no signals.",
+    "commands": ["./scripts/pressure-watch.sh"]
+  },
+  {
     "id": "fix-docker-network",
     "title": "Recover host->docker port path (sudo)",
     "where": "host",
