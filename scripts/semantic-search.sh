@@ -11,6 +11,7 @@
 #   ./scripts/semantic-search.sh <query...>        # build if needed, then search
 #   ./scripts/semantic-search.sh --rebuild         # rebuild the index only
 #   ./scripts/semantic-search.sh [--limit N] <q...>
+#   ./scripts/semantic-search.sh --self-test       # offline fixtures, temp DBs
 #
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
 #   no rm -rf, no subprocess.run, no bare kill, printf only, main() wrapper.
@@ -104,6 +105,9 @@ main() {
     fi
     DB="$REPO/data/opencode/opencode.db"
     IDX="$REPO/data/search/opencode-index.db"
+    case " $* " in
+        *" --self-test "*) selftest; return $? ;;
+    esac
     if [ ! -f "$DB" ]; then
         printf 'FAIL: no database at %s\n' "$DB"
         return 1
@@ -150,6 +154,46 @@ main() {
     fi
 
     search
+}
+
+selftest() {
+    # Offline fixtures in temp dirs: the real DBs are never touched.
+    # Asserts build count, ranking (rare-term session first), empty
+    # query handling, and determinism (same order twice).
+    local tmp fails=0
+    tmp=$(mktemp -d) || { printf 'FAIL: mktemp\n'; return 1; }
+    DB="$tmp/src.db"
+    IDX="$tmp/idx.db"
+    LIMIT=15
+    sqlite3 "$DB" "CREATE TABLE session(id TEXT PRIMARY KEY, title TEXT);
+        CREATE TABLE part(id TEXT PRIMARY KEY, session_id TEXT, data TEXT);
+        INSERT INTO session VALUES('ses_aa','alpha tattoo session'),('ses_bb','beta plain session');
+        INSERT INTO part VALUES
+          ('p1','ses_aa','{\"type\":\"text\",\"text\":\"quokka billboard zephyr\"}'),
+          ('p2','ses_aa','{\"type\":\"tool\",\"state\":{\"input\":{\"command\":\"echo hello\"}}}'),
+          ('p3','ses_bb','{\"type\":\"text\",\"text\":\"ordinary errands list\"}');" || { printf 'FAIL: fixture\n'; return 1; }
+    build > /dev/null || { printf 'FAIL: build\n'; return 1; }
+    local n
+    n=$(sqlite3 "$IDX" "SELECT n FROM meta;")
+    if [ "$n" = "3" ]; then printf 'ok build count\n'; else printf 'NOT OK build count (%s)\n' "$n"; fails=1; fi
+    QUERY="quokka"
+    local r1 r2
+    r1=$(search | head -3)
+    r2=$(search | head -3)
+    if printf '%s' "$r1" | grep -q 'ses_aa\|alpha tattoo'; then printf 'ok ranking\n'; else printf 'NOT OK ranking\n%s\n' "$r1"; fails=1; fi
+    if [ "$r1" = "$r2" ]; then printf 'ok deterministic\n'; else printf 'NOT OK deterministic\n'; fails=1; fi
+    QUERY=""
+    # NOTE: capture first, grep second — `search | grep -q` misreads under
+    # `set -o pipefail` because search itself returns 2 on empty input,
+    # which becomes the pipeline status even when grep matches.
+    out=$(search 2>&1)
+    if printf '%s' "$out" | grep -q 'empty query'; then printf 'ok empty query\n'; else printf 'NOT OK empty query\n'; fails=1; fi
+    QUERY="zzzqqqx"
+    if [ -z "$(search)" ]; then printf 'ok no-match empty\n'; else printf 'NOT OK no-match empty\n'; fails=1; fi
+    rm -f "$tmp/src.db" "$tmp/idx.db"
+    rmdir "$tmp"
+    if [ "$fails" -eq 0 ]; then printf 'self-test: PASS\n'; else printf 'self-test: FAIL (%s)\n' "$fails"; fi
+    return "$fails"
 }
 
 main "$@"

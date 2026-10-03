@@ -85,6 +85,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] semantic-search --self-test (convention gap closed). Fixture
+      DBs in temp dirs (real paths untouched): build count, ranking,
+      determinism, empty query, no-match — 6/6. Caught a real trap
+      while writing it: `search | grep -q` misreads under pipefail
+      because search itself exits 2 (capture-then-grep instead).
+      Gates: lint 120.
 - [x] collapsible manage catalog (gate-driven UX). The phone-height
       gate caught real growth (6101px for 24 tools): cards collapse
       by default with ▸/▾ markers, keyboard-operable headers
