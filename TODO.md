@@ -93,6 +93,12 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] Length-gate unit fix (Array.from probe) + faithful stub. The 5-char
+      gap proven == 5 astral chars in the pulled slice (U+1F534 etc.);
+      stub now emulates browser UTF-16 slicing, fixture carries U+1F534
+      (fails pre-fix by construction: 8 units vs 7 code points).
+      Live E2E on ses_f1d27512 (814 msgs): sha256 match, 1.43 MB written,
+      scratch removed. Gates: lint 127, hygiene 39, dashboard 117.
 - [x] tool-census.sh + HANDOFF multi-agent section. Evaluated Strands
       Decider 2B (real, 2026-10-01, Apache-2.0; needs runner+weights —
       ollama 0.32.1 present, no weights), Nimble (rejected: commercial

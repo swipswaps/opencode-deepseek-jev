@@ -112,7 +112,11 @@ extract() {
     node "$repo/scripts/cdp-tab.mjs" openauth "$base" || return 2
     local n0 len
     n0=$(node "$repo/scripts/cdp-tab.mjs" eval "$tab" 'fetch("/session/'"$sid"'/message").then(r=>r.json()).then(a=>a.length)') || return 2
-    len=$(node "$repo/scripts/cdp-tab.mjs" eval "$tab" 'fetch("/session/'"$sid"'/message").then(r=>r.text()).then(t=>(window.__sesT=t,t.length))') || return 2
+    # Code-point length (Array.from), NOT t.length: t.length counts UTF-16
+    # units while Python len() counts code points, so any astral char
+    # (emoji) trips the length gate. Slicing stays in UTF-16 units (covers
+    # every unit); run_transform compares code points to code points.
+    len=$(node "$repo/scripts/cdp-tab.mjs" eval "$tab" 'fetch("/session/'"$sid"'/message").then(r=>r.text()).then(t=>(window.__sesT=t,Array.from(t).length))') || return 2
     case "$n0" in ''|*[!0-9]*) printf 'bad count probe: %s\n' "$n0"; return 2;; esac
     case "$len" in ''|*[!0-9]*) printf 'bad length probe: %s\n' "$len"; return 2;; esac
     printf 'messages: %s chars: %s\n' "$n0" "$len"
@@ -174,12 +178,19 @@ case "$expr" in
         fi ;;
     *crypto.subtle*)
         python3 -c "import json,hashlib; print(json.dumps(hashlib.sha256(open('$fix','rb').read()).hexdigest()))" ;;
+    *Array.from*)
+        # Code-point length: what the fixed probe asks for (Array.from(t)).
+        python3 -c "print(len(open('$fix',encoding='utf-8').read()))" ;;
     *slice\(*)
+        # Faithful browser emulation: the live path slices UTF-16 code units
+        # (String.slice), not code points. Fixture stays single-chunk (tiny),
+        # so no boundary ever splits a surrogate pair here by construction.
         ab=$(printf '%s' "$expr" | grep -oE 'slice\([0-9]+,[0-9]+\)' | head -1 | tr -cd '0-9,')
         a=${ab%,*}; b=${ab#*,}
-        python3 -c "import json; t=open('$fix',encoding='utf-8').read(); print(json.dumps(t[$a:$b]))" ;;
+        SL_A="$a" SL_B="$b" python3 -c "import json,os; t=open('$fix',encoding='utf-8').read(); u=t.encode('utf-16-le'); a=int(os.environ['SL_A']); b=int(os.environ['SL_B']); print(json.dumps(u[a*2:b*2].decode('utf-16-le')))" ;;
     *__sesT*)
-        python3 -c "print(len(open('$fix',encoding='utf-8').read()))" ;;
+        # UTF-16 unit count, like t.length in the browser (pre-fix probe).
+        python3 -c "print(len(open('$fix',encoding='utf-8').read().encode('utf-16-le'))//2)" ;;
     *) printf 'stub: unhandled eval: %s\n' "$expr" >&2; exit 3 ;;
 esac
 STUBEOF
@@ -187,13 +198,15 @@ STUBEOF
     mkdir -p "$work/stubbin"
     mv "$work/stubbin-node" "$work/stubbin/node"
     # fixture: 2 messages; m1 has null parts + a long output (truncation mark)
+    # + an astral char in m0 text (regression: UTF-16 units != code points;
+    # T1 fails on the pre-fix t.length probe, passes with Array.from).
     python3 - "$work/fix.json" <<'FIXEOF'
 import json, sys
 long_out = "O" * 2000
 msgs = [
     {"info": {"sessionID": "ses_test", "role": "user", "id": "m0",
               "time": {"created": 1759530000000}},
-     "parts": [{"type": "text", "text": "hello"},
+      "parts": [{"type": "text", "text": "hello 🔴"},
                {"type": "tool", "tool": "bash",
                 "state": {"status": "completed", "input": {"command": "ls"},
                            "output": long_out}},
