@@ -18,6 +18,14 @@
 #     or any Laya/Jev local-judge step).
 #   browser-use / playwright — live-browser stacks already used by cdp-tab
 #     (CDP attach) and ux-test.py / ux-trace.py (bundled chromium).
+#   decision models (evaluated 2026-10-04, choy.in DecideBench):
+#     Tev (togethercomputer/Tev1-4B-experimental, open weights, 92.8%) and
+#     imajev-4b (mohit67890/imajev-4b, 95.0%, best open) need a runner +
+#     weights; adopted nowhere yet (deterministic Jaccard + policy files
+#     cover current needs; trigger: ASK-routing volume or a mishandled
+#     policy case). Laya (convaiinnovations/laya-typed-decisions, 59%) is
+#     the cheap baseline, not a judge. NAME COLLISION: Strands Decider 2B
+#     (AWS, 2026-10-01, untested here) is NOT Mapika decider-2b (63.5%).
 #
 # Usage: ./scripts/tool-census.sh
 #
@@ -81,6 +89,24 @@ main() {
         printf 'present playwright browsers: %s\n' "$(ls "$HOME/.cache/ms-playwright" | head -5 | paste -sd' ')"
     else
         printf 'MISSING playwright browsers\n'
+    fi
+    printf '%s\n' '--- decision models (ollama) ---'
+    if have ollama; then
+        ollama list 2>&1 | tail -n +2 | head -8 | while IFS= read -r line; do
+            [ -n "$line" ] && printf 'ollama model: %s\n' "$line"
+        done
+    else
+        printf 'MISSING ollama (no local runner)\n'
+    fi
+    local hub="$HOME/.cache/huggingface/hub" pat found=0
+    if [ -d "$hub" ]; then
+        for pat in '*tev*' '*imajev*' '*laya*' '*decider*' '*kev*'; do
+            find "$hub" -maxdepth 1 -iname "$pat" | head -3
+        done | while IFS= read -r line; do
+            [ -n "$line" ] && printf 'hf weights: %s\n' "$(basename "$line")"
+        done
+    else
+        printf 'hf hub: no local cache dir\n'
     fi
     return 0
 }

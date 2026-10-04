@@ -93,6 +93,11 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] Tev + JEV alternatives evaluated (choy.in DecideBench). Tev is open
+      weights (92.8%) but needs conversion + runtime; imajev-4b leads open
+      (95.0%); Laya stays baseline (59%); Strands-2B != Mapika-2B recorded.
+      Adopt nothing (deterministic checks suffice); trigger: ASK-routing
+      volume. Census now lists ollama models + decision weights.
 - [x] Open/outstanding sweep: :5099 was STALE (03c9220 vs 180af26) —
       restarted, serves HEAD. Lossless raw (814 msgs, sha256-verified
       round-trip) archived to notes as _0110 (+provenance); /tmp scratch
