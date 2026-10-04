@@ -93,6 +93,11 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] Open/outstanding sweep: :5099 was STALE (03c9220 vs 180af26) —
+      restarted, serves HEAD. Lossless raw (814 msgs, sha256-verified
+      round-trip) archived to notes as _0110 (+provenance); /tmp scratch
+      cleared. Still blocked on user: key rotation (needs new key
+      material), Tev identity (no distinct tool found).
 - [x] Length-gate unit fix (Array.from probe) + faithful stub. The 5-char
       gap proven == 5 astral chars in the pulled slice (U+1F534 etc.);
       stub now emulates browser UTF-16 slicing, fixture carries U+1F534
