@@ -1,0 +1,13 @@
+# Caddyfile — TLS termination for opencode-web over the nebula overlay.
+# Bound to 10.100.0.2 by docker port publishing; Caddy itself listens on
+# all container interfaces for the configured ports.
+
+:4096 {
+    tls /certs/opencode.crt /certs/opencode.key
+    reverse_proxy opencode-web:4096
+}
+
+:5099 {
+    tls /certs/opencode.crt /certs/opencode.key
+    reverse_proxy opencode-web:5099
+}

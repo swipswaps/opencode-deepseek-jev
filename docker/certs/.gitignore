@@ -1,0 +1,6 @@
+# certs/ contents are machine-local; the directory itself is tracked.
+*.crt
+*.key
+*.pem
+*.csr
+*.srl
