@@ -30,14 +30,27 @@ main() {
         return 1
     fi
 
+    # Invoked via sudo: HOME is /root, but the browser profiles live in
+    # the invoking user's home. Resolve that first, always.
+    local sudo_run=""
+    local target_home="$HOME"
+    if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        sudo_run="sudo -u ${SUDO_USER} -H"
+        target_home="$(getent passwd "${SUDO_USER}" | cut -d: -f6)" || target_home="$HOME"
+    fi
+    local do_sudo=""
+    if [ "$(id -u)" -ne 0 ]; then
+        do_sudo="sudo"
+    fi
+
     printf '%s\n' '--- 1. system trust ---'
     if [ -d /etc/pki/ca-trust/source/anchors ]; then
-        if [ "$(id -u)" -ne 0 ] && ! sudo -n true 2>&1; then
+        if [ -n "$do_sudo" ] && ! sudo -n true 2>&1; then
             printf 'WARN: sudo needed for system trust; skipping (Firefox step still runs)\n'
-            printf 'hint: sudo ./docker/certs-trust.sh\n'
+            printf 'hint: sudo ./docker/certs-trust.sh (profiles still resolve to you)\n'
         else
-            sudo cp "$CA_CRT" /etc/pki/ca-trust/source/anchors/opencode-local-ca.crt || return 1
-            sudo update-ca-trust 2>&1 || return 1
+            $do_sudo cp "$CA_CRT" /etc/pki/ca-trust/source/anchors/opencode-local-ca.crt || return 1
+            $do_sudo update-ca-trust 2>&1 || return 1
             printf 'system trust: installed\n'
         fi
     else
@@ -50,16 +63,16 @@ main() {
         printf 'hint: sudo dnf install nss-tools, then re-run\n'
     else
         local prof n=0
-        for prof in "$HOME"/.mozilla/firefox/*.default*; do
+        for prof in "$target_home"/.mozilla/firefox/*.default*; do
             [ -d "$prof" ] || continue
-            if certutil -A -d "sql:$prof" -t "C,," -n opencode-local-ca -i "$CA_CRT" 2>&1; then
+            if $sudo_run certutil -A -d "sql:$prof" -t "C,," -n opencode-local-ca -i "$CA_CRT" 2>&1; then
                 printf 'firefox: trusted in %s\n' "$(basename "$prof")"
                 n=$((n + 1))
             else
                 printf 'WARN: certutil failed for %s\n' "$(basename "$prof")"
             fi
         done
-        [ "$n" -gt 0 ] || printf 'firefox: no profiles found under ~/.mozilla/firefox\n'
+        [ "$n" -gt 0 ] || printf 'firefox: no profiles found under %s/.mozilla/firefox\n' "$target_home"
     fi
 
     printf '%s\n' '--- 3. chrome/chromium ---'
