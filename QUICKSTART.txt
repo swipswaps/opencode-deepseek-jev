@@ -1,22 +1,33 @@
 OpenCode + DeepSeek V4.1 Flash + Jev — quick start
 ===================================================
 
-1. Bring up the management UI:
+1. Keys (once per machine):
 
-       cd scripts
-       ./deploy-dockge.sh
+       ./scripts/ensure-env.sh
 
-2. Refresh the stack list after adding a new project:
+   Creates .env.local (mode 0600, gitignored): API keys + server password.
 
-       ./flatten-dockge-stacks.sh
+2. TLS (automatic, safe to re-run):
 
-3. Open the browser:
+       ./docker/certs-init.sh
 
-       http://localhost:5001
+   Mints machine-local docker/certs/opencode.{crt,key} for caddy
+   (:4096/:5099). Also runs inside scripts/web.sh on every start.
 
-Full description: scripts/README.txt
+3. Start the stack:
 
-The Docker image is built from docker/ in this directory. It embeds
-the OpenCode binary, DeepSeek provider configuration, jev-guard
-plugin, and jev-review MCP server. See docker/Dockerfile for the
-build recipe.
+       ./scripts/web.sh
+
+   Then verify:
+
+       curl -k https://127.0.0.1:5099/api/rev
+       curl -k https://127.0.0.1:4096/ -o /dev/null -w '%{http_code}\n'  # 401 = alive
+
+   Ports are https:// only. Plain http:// answers
+   "Client sent an HTTP request to an HTTPS server" by design.
+
+4. From any machine on the mesh, use the serving host's overlay IP,
+   e.g. https://10.100.0.24:5099/ and https://10.100.0.24:4096/
+
+Full guide (clone-and-run from anywhere, mesh join, troubleshooting):
+docs/ANYWHERE.md

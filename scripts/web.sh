@@ -118,6 +118,15 @@ main() {
         printf 'WARN: --insecure: starting WITHOUT authentication\n'
     fi
 
+    # ---- TLS pair for caddy (:4096/:5099) ----
+    # Machine-local and gitignored; certs-init.sh creates it if missing
+    # and refuses to overwrite (needs --rotate), so this is safe always.
+    if [ -x "$REPO_DIR/docker/certs-init.sh" ]; then
+        "$REPO_DIR/docker/certs-init.sh" || return 1
+    else
+        printf 'WARN: docker/certs-init.sh missing; caddy needs docker/certs/opencode.{crt,key}\n'
+    fi
+
     cd "$COMPOSE_DIR"
     printf 'starting opencode-web container\n'
     docker compose up -d opencode-web

@@ -17,6 +17,17 @@ cd docker
 
 Keys are cached in ../.env.local (mode 0600, gitignored).
 
+## Run anywhere (any machine, any network)
+
+Full user guide: [`docs/ANYWHERE.md`](docs/ANYWHERE.md) — clone,
+`ensure-env.sh`, `docker/certs-init.sh` (caddy TLS for `:4096`/`:5099`,
+also auto-runs from `scripts/web.sh`), `scripts/web.sh`, then join the
+nebula mesh (`onboard` on the lighthouse, `join`/`join-b64` on the new
+node). Services are `https://` only: plain `http://` answers `Client
+sent an HTTP request to an HTTPS server` by design. Over the mesh, use
+the serving host's overlay IP (ours: `https://10.100.0.24:5099/`,
+`https://10.100.0.24:4096/`).
+
 ## Vision / image input
 DeepSeek V4.1 Flash natively ingests images. `opencode.json` declares this
 (`attachment: true` + `modalities.input: ["text","image"]`), so OpenCode
