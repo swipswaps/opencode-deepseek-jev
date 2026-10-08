@@ -32,18 +32,27 @@ cd opencode-deepseek-jev
 `.env.local` is the only source of truth and is gitignored. Never paste
 its values into chat — refer to key names, not key material.
 
-## 3. TLS (automatic)
+## 3. TLS (self-healing)
 
 ```bash
 ./docker/certs-init.sh       # also runs inside scripts/web.sh on every start
+./docker/certs-trust.sh      # trust the CA once: system store + Firefox
 ```
 
-Mints machine-local `docker/certs/opencode.{crt,key}` (gitignored):
-SANs `localhost`, `127.0.0.1`, plus the host's nebula IPv4 when present,
-plus `CERT_EXTRA_SANS` (e.g. `CERT_EXTRA_SANS=DNS:mesh-lh01.duckdns.org`).
-Re-run is a no-op; `--rotate` replaces. Browsers show a one-time
-self-signed warning (accept it); `curl` needs `-k`; node clients set
-`NODE_TLS_REJECT_UNAUTHORIZED=0`.
+Model: a stable machine-local CA (`docker/certs/ca.crt`, 10y, gitignored)
+signs short server certs (825d). `certs-init.sh` ensures coverage on every
+run — minting the CA if missing, migrating legacy self-signed pairs, and
+**reissuing automatically when SANs no longer cover this host** (prints
+`ROTATED`; `web.sh` restarts caddy on that word). Needed SANs: `localhost`
++ `127.0.0.1` + the host's nebula IPv4 + `CERT_EXTRA_SANS`. `--check`
+verifies only (exit 1 + gaps listed), `--rotate` forces reissue,
+`--rotate-ca` starts over (re-trust everywhere afterwards).
+
+Kill the warnings permanently: `./docker/certs-trust.sh` installs the CA
+into the system store (covers Chrome/curl/`--cacert`-free clients after a
+relaunch) and every Firefox profile (via `certutil`). Until trusted:
+accept the one-time browser warning, `curl -k`,
+`NODE_TLS_REJECT_UNAUTHORIZED=0` for node.
 
 ## 4. Start services (any host)
 
