@@ -59,6 +59,9 @@ services:
     volumes:
       - ..:/workspace
       - ../data/opencode:/home/node/.local/share/opencode
+      # Mesh inventory DB (read-only here; absent dir is auto-created empty
+      # and /api/mesh reports unavailable). MESH_INVENTORY_DB overrides.
+      - /var/lib/mesh:/var/lib/mesh:ro
     env_file:
       - ../.env.local
     environment:
@@ -78,8 +81,8 @@ services:
     container_name: opencode-caddy
     user: "1000:1000"
     ports:
-      - "10.100.0.2:4096:4096"
-      - "10.100.0.2:5099:5099"
+      - "0.0.0.0:4096:4096"
+      - "0.0.0.0:5099:5099"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/certs:ro
