@@ -2375,6 +2375,9 @@ function send(res, code, body, type) {
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    // CORS transport for the mesh-portal SPA (GitHub Pages origin).
+    // Read APIs are public data; no mesh state lives here (see mesh-api).
+    "Access-Control-Allow-Origin": "*",
   });
   res.end(body);
 }
@@ -2384,6 +2387,14 @@ const server = http.createServer(async (req, res) => {
   const params = qs(req);
   if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
+    res.end();
+  } else if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    });
     res.end();
   } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
