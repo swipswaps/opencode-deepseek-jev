@@ -16,8 +16,6 @@
 // Usage: node --experimental-sqlite dashboard.mjs <db-path> [port] [host]
 
 import http from "node:http";
-import { X509Certificate } from "node:crypto";
-import { networkInterfaces } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -209,85 +207,6 @@ function apiRev() {
   const data = { served: SERVED_REV, head, stale: !!(head && SERVED_REV && head !== SERVED_REV) };
   revCache = { at: Date.now(), data };
   return data;
-}
-
-// Mesh inventory (mesh-owned SQLite at /var/lib/mesh/inventory.db, read-only
-// here; MESH_INVENTORY_DB overrides). Absent file = 503-style payload, so a
-// host without the mesh stack degrades instead of failing.
-function apiMesh() {
-  const path = process.env.MESH_INVENTORY_DB || "/var/lib/mesh/inventory.db";
-  try {
-    const db = new DatabaseSync(path, { readOnly: true });
-    const nodes = db.prepare("SELECT name,mesh_ip,machine_id,onboarded_at FROM nodes ORDER BY name").all();
-    const peers = db.prepare("SELECT mesh_ip,seen_at FROM peers ORDER BY mesh_ip").all();
-    const findings = db.prepare("SELECT id,ts,kind,detail FROM findings WHERE status='open' ORDER BY id").all();
-    const counts = {
-      devices: db.prepare("SELECT COUNT(*) n FROM eero_devices").get().n,
-      reservations: db.prepare("SELECT COUNT(*) n FROM eero_reservations").get().n,
-      forwards: db.prepare("SELECT COUNT(*) n FROM eero_forwards").get().n,
-    };
-    db.close();
-    return { available: true, nodes, peers, findings, counts };
-  } catch {
-    return { available: false, nodes: [], peers: [], findings: [], counts: {} };
-  }
-}
-
-// Served-cert status: fingerprint (TOFU compare against certs-verify.sh),
-// SAN coverage vs needed names (loopback + local nebula IPs), dates.
-function apiCerts() {
-  try {
-    const pem = readFileSync(REPO_ROOT + "/docker/certs/opencode.crt", "utf8");
-    const cert = new X509Certificate(pem);
-    const sans = String(cert.subjectAltName || "").split(", ").filter(Boolean);
-    const need = ["DNS:localhost", "IP Address:127.0.0.1"];
-    try {
-      for (const addrs of Object.values(networkInterfaces())) {
-        for (const a of addrs || []) {
-          if (a && a.family === "IPv4" && String(a.address).startsWith("10.")) {
-            need.push("IP Address:" + a.address);
-          }
-        }
-      }
-    } catch { /* interfaces unreadable: loopback check still stands */ }
-    const missing = need.filter((n) => !sans.includes(n));
-    return {
-      available: true,
-      fingerprint256: cert.fingerprint256,
-      subjectAltName: sans,
-      validFrom: cert.validFrom, validTo: cert.validTo,
-      needed: need, missing, covered: missing.length === 0,
-    };
-  } catch {
-    return { available: false, reason: "no cert (run docker/certs-init.sh)" };
-  }
-}
-
-// Portal client-error inbox: POST {source,message,url?} (4KB cap, 20/min/IP).
-// Lets the Pages portal persist diagnostics where operators query them
-// instead of losing them to per-browser consoles.
-const clientLogHits = new Map();
-function clientLogAllowed(ip) {
-  const now = Date.now();
-  const arr = (clientLogHits.get(ip) || []).filter((t) => now - t < 60000);
-  arr.push(now);
-  clientLogHits.set(ip, arr);
-  return arr.length <= 20;
-}
-function clientLogDb() {
-  const db = new DatabaseSync(dbPath);
-  db.prepare("CREATE TABLE IF NOT EXISTS client_log(ts TEXT, ip TEXT, source TEXT, message TEXT, url TEXT)").run();
-  return db;
-}
-function apiClientLogList() {
-  try {
-    const db = new DatabaseSync(dbPath, { readOnly: true });
-    const rows = db.prepare("SELECT ts,ip,source,message,url FROM client_log ORDER BY ts DESC LIMIT 50").all();
-    db.close();
-    return { rows };
-  } catch {
-    return { rows: [] };
-  }
 }
 
 async function apiExportPatterns() {
@@ -2241,11 +2160,9 @@ const runbooksHtml = `<!doctype html>
  .count{font-size:11px}
  button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
  button:hover{background:#2f81f7}
-  .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
-  details.cmds{margin:0}
-  details.cmds>summary{cursor:pointer;font-size:12px;color:#58a6ff;margin:0 0 6px;list-style:revert}
-  :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
- </style></head>
+ .rb-note{font-size:11px;color:#8b949e;margin-top:6px}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
+</style></head>
 <body>
 ${nav("runbooks")}
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
@@ -2272,18 +2189,14 @@ function render(){
     var p=document.createElement('div');p.className='rb-purpose';p.textContent=r.purpose;
     card.appendChild(p);
     if(r.manual){var mb=document.createElement('span');mb.className='badge MANUAL';mb.textContent='MANUAL';head.appendChild(mb);}
-    var det=document.createElement('details');det.className='cmds';
-    var sum=document.createElement('summary');sum.textContent='commands ('+r.commands.length+')';sum.setAttribute('aria-label','toggle commands for '+r.title);
-    det.appendChild(sum);
     for(var j=0;j<r.commands.length;j++){
       var row=document.createElement('div');row.className='cmd';
       var code=document.createElement('code');code.textContent=r.commands[j];
       var btn=document.createElement('button');btn.textContent='copy';btn.dataset.cmd=r.commands[j];btn.setAttribute('aria-label','copy command');
       btn.addEventListener('click',function(){copy(this.dataset.cmd,this);});
       row.appendChild(code);row.appendChild(btn);
-      det.appendChild(row);
+      card.appendChild(row);
     }
-    card.appendChild(det);
     if(r.note){var n=document.createElement('div');n.className='rb-note';n.textContent=r.note;card.appendChild(n);}
     el.appendChild(card);
   }
@@ -2462,9 +2375,6 @@ function send(res, code, body, type) {
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    // CORS for the GitHub-Pages portal: read APIs are public data, and the
-    // portal origin differs. POST stays same-origin (checked per-route).
-    "Access-Control-Allow-Origin": "*",
   });
   res.end(body);
 }
@@ -2474,14 +2384,6 @@ const server = http.createServer(async (req, res) => {
   const params = qs(req);
   if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
-    res.end();
-  } else if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    });
     res.end();
   } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
@@ -2528,41 +2430,6 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(apiTools()), "application/json");
   } else if (url === "/api/rev") {
     send(res, 200, JSON.stringify(apiRev()), "application/json");
-  } else if (url === "/api/mesh") {
-    const m = apiMesh();
-    send(res, m.available ? 200 : 503, JSON.stringify(m), "application/json");
-  } else if (url === "/api/certs") {
-    send(res, 200, JSON.stringify(apiCerts()), "application/json");
-  } else if (url === "/api/client-log" && req.method === "GET") {
-    send(res, 200, JSON.stringify(apiClientLogList()), "application/json");
-  } else if (url === "/api/client-log" && req.method === "POST") {
-    const ip = (req.socket && req.socket.remoteAddress) || "?";
-    if (!clientLogAllowed(ip)) {
-      send(res, 429, JSON.stringify({ error: "rate limited" }), "application/json");
-    } else {
-      let raw = "";
-      req.on("data", (c) => { raw += c; if (raw.length > 4096) req.destroy(); });
-      req.on("end", () => {
-        try {
-          const body = JSON.parse(raw || "{}");
-          const source = String(body.source || "").slice(0, 80);
-          const message = String(body.message || "").slice(0, 1000);
-          const page = String(body.url || "").slice(0, 200);
-          if (!source || !message) {
-            send(res, 400, JSON.stringify({ error: "source+message required" }), "application/json");
-            return;
-          }
-          const db = clientLogDb();
-          db.prepare("INSERT INTO client_log(ts,ip,source,message,url) VALUES(?,?,?,?,?)")
-            .run(new Date().toISOString(), ip, source, message, page);
-          db.close();
-          send(res, 200, JSON.stringify({ ok: true }), "application/json");
-        } catch {
-          send(res, 400, JSON.stringify({ error: "bad json" }), "application/json");
-        }
-      });
-      return;
-    }
   } else if (url === "/api/code") {
     send(res, 200, JSON.stringify(apiCode(Number(params.limit) || 200)), "application/json");
   } else if (url === "/api/providers") {
