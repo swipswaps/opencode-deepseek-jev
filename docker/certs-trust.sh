@@ -75,8 +75,23 @@ main() {
         [ "$n" -gt 0 ] || printf 'firefox: no profiles found under %s/.mozilla/firefox\n' "$target_home"
     fi
 
-    printf '%s\n' '--- 3. chrome/chromium ---'
-    printf 'uses the system store: covered by step 1 (relaunch the browser)\n'
+    printf '%s\n' '--- 3. chrome/chromium (shared NSS DB) ---'
+    # Chrome on Linux ignores the system bundle and reads the shared NSS
+    # DB instead (which is why only the old mkcert CA was trusted there).
+    if ! command -v certutil > /dev/null; then
+        printf 'certutil missing; chromium step skipped\n'
+    else
+        local nssdb="$target_home/.pki/nssdb"
+        mkdir -p "$nssdb" 2>&1 || true
+        if [ ! -f "$nssdb/cert9.db" ]; then
+            $sudo_run certutil -N -d "sql:$nssdb" --empty-password 2>&1 || true
+        fi
+        if $sudo_run certutil -A -d "sql:$nssdb" -t "C,," -n opencode-local-ca -i "$CA_CRT" 2>&1; then
+            printf 'chromium: trusted in shared NSS DB (relaunch the browser)\n'
+        else
+            printf 'WARN: shared NSS DB install failed\n'
+        fi
+    fi
     printf 'verify: curl --cacert %s https://10.100.0.24:5099/api/rev\n' "$CA_CRT"
     return 0
 }
