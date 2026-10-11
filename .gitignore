@@ -19,3 +19,4 @@ logs/artifacts-*/stall-*/
 # host notes bind-mount (ro) + runtime telemetry
 notes/
 logs/
+site/

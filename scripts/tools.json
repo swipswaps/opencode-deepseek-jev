@@ -175,6 +175,13 @@
     "commands": ["node scripts/cdp-tab.mjs --self-test", "node scripts/cdp-tab.mjs tabs", "node scripts/cdp-tab.mjs probe"]
   },
   {
+    "id": "pages",
+    "title": "GitHub Pages panel export (consent-gated)",
+    "where": "container",
+    "purpose": "Redacted static snapshot (aggregates + session rows, no message text) for Pages. Interactive consent: allow once / allow always / deny. CI assembles committed site-data/panel.json only; the DB never leaves the host.",
+    "commands": ["./scripts/pages-export.sh", "./scripts/pages-export.sh --shell --yes", "node scripts/pages-export.mjs --shell-only --commit site-data/panel.json --out /tmp/panel-check"]
+  },
+  {
     "id": "redact",
     "title": "Redact secrets at egress",
     "where": "container",

@@ -1,0 +1,50 @@
+# Deploy the redacted sessions panel to GitHub Pages.
+#
+# Trigger is workflow_dispatch ONLY: every run is a human clicking Run
+# workflow, which is the allow-once consent (see scripts/pages-export.sh;
+# CI passes --yes and records scope once-ci in data.json). No push trigger:
+# pushes must never publish session data by accident.
+#
+# Required repo configuration (one-time, Settings > Pages > Source:
+# GitHub Actions) plus a DEEPSEEK_API_KEY secret only if the models step
+# needs a live catalog refresh (it does not by default).
+
+name: Deploy panel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assemble panel from committed redacted data
+        run: ./scripts/pages-export.sh --shell --yes --limit 500
+        env:
+          GITHUB_ACTIONS: "true"
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
