@@ -168,6 +168,13 @@
     "commands": ["node --experimental-sqlite scripts/quirks.mjs --self-test", "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'", "node --experimental-sqlite scripts/quirks.mjs --report"]
   },
   {
+    "id": "cdp",
+    "title": "Live-page CDP probe (real Chrome)",
+    "where": "host",
+    "purpose": "Attaches to headed google-chrome-stable over CDP and reads rendered state: what the LIVE :5099/:4096 pages show right now (tabs, text, eval, screenshots). Zero-dependency (Node 22 fetch+WebSocket); needs the browser open with --remote-debugging-port. `probe` cross-checks :4096 session ids vs rendered :5099 rows.",
+    "commands": ["node scripts/cdp-tab.mjs --self-test", "node scripts/cdp-tab.mjs tabs", "node scripts/cdp-tab.mjs probe"]
+  },
+  {
     "id": "redact",
     "title": "Redact secrets at egress",
     "where": "container",

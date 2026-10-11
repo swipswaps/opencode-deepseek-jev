@@ -273,7 +273,7 @@ function apiCostFresh() {
     "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
   )[0];
   const sessions = query(
-    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.time_created, s.time_updated, " +
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, s.time_created, s.time_updated, " +
     "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
     "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
     "FROM session s ORDER BY s.time_created DESC LIMIT 12"
@@ -770,10 +770,10 @@ function qs(req) {
 
 function apiSessions(limit) {
   return query(
-    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.time_created, s.time_updated, " +
-    "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
-    "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
-    "FROM session s ORDER BY s.time_created DESC LIMIT ?",
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, p.worktree AS project, s.time_created, s.time_updated, " +
+    "(SELECT MIN(p2.time_created) FROM part p2 WHERE p2.session_id=s.id) p_start, " +
+    "(SELECT MAX(p2.time_updated) FROM part p2 WHERE p2.session_id=s.id) p_end " +
+    "FROM session s LEFT JOIN project p ON p.id=s.project_id ORDER BY s.time_created DESC LIMIT ?",
     limit
   );
 }
@@ -810,7 +810,7 @@ function apiParts(sessionId, limit) {
 
 function sessionRow(id) {
   return query(
-    "SELECT id, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, time_created, time_updated, model, agent FROM session WHERE id = ?",
+    "SELECT id, title, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, time_created, time_updated, model, agent, directory FROM session WHERE id = ?",
     id
   )[0] || null;
 }
@@ -1102,8 +1102,14 @@ function dur(s){
 function sessRow(s){
   var c=+s.cost||0;
   var cls=c>=0.10?' class="num" style="color:#ff7b72"':' class="num"';
+  var dir=String(s.directory||'');if(dir.length>42)dir='…'+dir.slice(-41);
+  var upd=s.time_updated?new Date(Number(s.time_updated)).toISOString().slice(0,19).replace('T',' '):'';
+  var mid=(function(m){if(!m)return '(none)';try{var o=JSON.parse(m);return o.id||m;}catch(e){return String(m);}})(s.model);
   return '<tr class="srow" data-id="'+esc(s.id||'')+'" title="click to drill down">'
     +'<td>'+esc(s.title||'(untitled)')+'</td>'
+    +'<td>'+esc(mid)+'</td>'
+    +'<td class="muted">'+esc(dir)+'</td>'
+    +'<td class="num">'+esc(upd)+'</td>'
     +'<td'+cls+'>$'+c.toFixed(4)+'</td>'
     +'<td class="num">'+fmt(s.tokens_input)+'</td>'
     +'<td class="num">'+fmt(s.tokens_output)+'</td>'
@@ -1125,7 +1131,7 @@ async function refreshCost(){
       '<div class="stat"><b>'+fmt(t.i)+'</b><span>tokens in</span></div>'+
       '<div class="stat"><b>'+fmt(t.o)+'</b><span>tokens out</span></div>'+
       '<div class="stat"><b>'+fmt(t.r)+'</b><span>reasoning</span></div>';
-    var sh='<table><tr><th>title</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
+    var sh='<table><tr><th>title</th><th>model</th><th>directory</th><th class="num">updated</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
     for(var i=0;i<c.sessions.length;i++){sh+=sessRow(c.sessions[i]);}
     sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10. click a row to drill down.</div>';
     var sel=document.getElementById('sessions');
@@ -1309,7 +1315,7 @@ ${nav("explore")}
 <div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)" aria-label="Search everything"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
-<div class="chart"><input id="tfilter" placeholder="filter sessions by title or model..." aria-label="Filter sessions by title or model" style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
+<div class="chart"><input id="tfilter" placeholder="filter sessions by title, model, directory or project..." aria-label="Filter sessions by title, model, directory or project" style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
 </div>
 <div class="pane" data-pane="code" id="pane-code" role="tabpanel" aria-labelledby="tab-code" tabindex="0" style="display:none">
 <h2>Code — repo files flagged by the database (scripts/code-index.py)</h2>
@@ -1456,7 +1462,7 @@ async function renderSchema(){
 }
 function tableRows(){
   var rows=DATA.filter(inFilter);
-  if(TFILTER){var q=TFILTER.toLowerCase();rows=rows.filter(function(d){return String(d.title||'').toLowerCase().indexOf(q)>=0||modelId(d.model).toLowerCase().indexOf(q)>=0;});}
+  if(TFILTER){var q=TFILTER.toLowerCase();rows=rows.filter(function(d){return String(d.title||'').toLowerCase().indexOf(q)>=0||modelId(d.model).toLowerCase().indexOf(q)>=0||String(d.directory||'').toLowerCase().indexOf(q)>=0||String(d.project||'').toLowerCase().indexOf(q)>=0;});}
   var col=SORT.col,dir=SORT.dir;
   rows.sort(function(a,b){
     var x,y;
@@ -1473,7 +1479,7 @@ function renderTable(){
   var rows=tableRows();
   var tc=document.getElementById('tcount');if(tc)tc.textContent=rows.length+' of '+DATA.length+' sessions';
   setBadge('overview',rows.length);renderLanding();
-  var cols=[['title','title'],['model','model'],['cost','cost $'],['tokens_input','in'],['tokens_output','out'],['tokens_reasoning','reason'],['tokens_cache_read','cache'],['_span','span']];
+  var cols=[['title','title'],['model','model'],['directory','dir'],['project','project'],['time_updated','updated'],['cost','cost $'],['tokens_input','in'],['tokens_output','out'],['tokens_reasoning','reason'],['tokens_cache_read','cache'],['_span','span']];
   var table=el.append('table');
   table.append('caption').text('sessions — activate a column header to sort');
   var sortBy=function(c){if(SORT.col===c)SORT.dir=-SORT.dir;else{SORT.col=c;SORT.dir=-1;}renderTable();};
@@ -1490,6 +1496,9 @@ function renderTable(){
     .on('click',function(ev,d){document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});if(ev.currentTarget&&ev.currentTarget.classList)ev.currentTarget.classList.add('selected');detail(d.id);});
   tr.append('td').text(function(d){return d.title||'(untitled)';});
   tr.append('td').text(function(d){return modelId(d.model);});
+  tr.append('td').text(function(d){var s=String(d.directory||'');return s.length>48?'…'+s.slice(-47):s;});
+  tr.append('td').text(function(d){var s=String(d.project||'');return s.length>48?'…'+s.slice(-47):s;});
+  tr.append('td').attr('class','num').text(function(d){return d.time_updated?new Date(Number(d.time_updated)).toISOString().slice(0,19).replace('T',' '):'';});
   tr.append('td').attr('class','num').text(function(d){return '$'+(+d.cost).toFixed(4);});
   tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_input);});
   tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_output);});
@@ -2345,7 +2354,7 @@ ${nav("models")}
 <div id="banner" class="banner"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="policy"></div>
 <h2>Catalog</h2><div id="cat"><span class="muted" data-loading>loading...</span></div>
-<div class="muted">This is the cost policy, not a guarantee. Switch with /models (TUI) or opencode run -m &lt;id&gt;.</div>
+ <div class="muted">This is the cost policy, not a guarantee: opencode/* personal-free rows are gateway-metered and can return "Free usage exceeded, subscribe to Go" even when listed ok. Prefer opencode-go/* (Go pool) or direct deepseek/gemini. Switch with /models (TUI) or opencode run -m &lt;id&gt;.</div>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 async function load(){
@@ -2375,12 +2384,6 @@ function send(res, code, body, type) {
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
-    // CORS transport for the mesh-portal SPA (GitHub Pages origin).
-    // Read APIs are public data; no mesh state lives here (see mesh-api).
-    // Allow-Private-Network: Chrome blocks public→loopback/LAN fetches
-    // (Private Network Access) without this explicit opt-in.
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Private-Network": "true",
   });
   res.end(body);
 }
@@ -2390,15 +2393,6 @@ const server = http.createServer(async (req, res) => {
   const params = qs(req);
   if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
-    res.end();
-  } else if (req.method === "OPTIONS") {
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Access-Control-Request-Private-Network",
-      "Access-Control-Allow-Private-Network": "true",
-      "Access-Control-Max-Age": "86400",
-    });
     res.end();
   } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");

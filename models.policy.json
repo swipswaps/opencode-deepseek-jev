@@ -1,8 +1,8 @@
 {
-  "$comment": "Model cost policy. max_input_per_m_usd is the ceiling for a model that is not explicitly allow-listed. Free models always pass. deny always fails closed.",
+  "$comment": "Model cost policy. max_input_per_m_usd is the ceiling for a model that is not explicitly allow-listed. Direct-key free models always pass. opencode/* personal-free models are gateway-metered (Free usage exceeded governor) and must NOT auto-pass: use opencode-go/* (Go subscription pool) or direct deepseek/gemini instead. deny always fails closed.",
   "max_input_per_m_usd": 0.2,
   "require_toolcall": true,
   "require_attachment": false,
-  "allow": ["deepseek-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"],
-  "deny": ["deepseek-v4-pro"]
+  "allow": ["deepseek-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "opencode-go/muse-spark-1.3-contributor", "opencode-go/deepseek-v4-flash", "opencode-go/deepseek-v4.1-flash"],
+  "deny": ["deepseek-v4-pro", "opencode/muse-spark-1.3-contributor-free", "litellm/deepseek-flash", "litellm/deepseek-flash-4.1", "litellm/deepseek-flash-pro"]
 }

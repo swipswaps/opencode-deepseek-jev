@@ -82,6 +82,12 @@ def allowed(m: dict, p: dict) -> bool:
         return False
     if listed(m["id"], p.get("allow", [])):
         return True
+    # Gateway-metered personal-free pool (opencode/* cost=0) is quota-gated
+    # server-side ("Free usage exceeded, subscribe to Go" governor). A local
+    # cost of 0 is not a guarantee, so never auto-pass it: the caller must
+    # pick opencode-go/* (Go pool) or a direct-key provider instead.
+    if m["free"] and m.get("provider") == "opencode":
+        return False
     if m["free"]:
         return True
     if p.get("require_toolcall") and not m["toolcall"]:
@@ -139,7 +145,11 @@ def report(r: dict) -> None:
     print(f"verdict:     {r['verdict']}  ({r['reason']})")
     rec = r["recommended"]
     print(f"recommended: {rec['id'] if rec else '(none)'}")
-    if r["verdict"] == "ASK" and rec:
+    if r["current"] and r["current"].startswith("opencode/") and rec:
+        print(f"\nnote: {r['current']} is gateway-metered (personal-free pool).")
+        print("On 'Free usage exceeded, subscribe to Go', switch to the Go pool or direct key:")
+        print(f"  /models            (TUI)  or  opencode run -m {rec['id']}")
+    elif r["verdict"] == "ASK" and rec:
         print(f"\nalert: {r['current']} is over policy. To switch:")
         print(f"  /models            (TUI)  or  opencode run -m {rec['id']}")
 
@@ -158,10 +168,11 @@ def self_test() -> int:
     p = {"max_input_per_m_usd": 0.2, "require_toolcall": True, "allow": ["deepseek-flash"], "deny": ["deepseek-v4-pro"]}
     checks = [
         ("parses 3 models", len(models) == 3),
-        ("free model always allowed", allowed(next(m for m in models if m["id"] == "opencode/free-1"), p)),
+        ("gateway-metered opencode free blocked", not allowed(next(m for m in models if m["id"] == "opencode/free-1"), p)),
+        ("gateway-metered spark-free blocked", not allowed({"id": "opencode/muse-spark-1.3-contributor-free", "provider": "opencode", "input": 0, "output": 0, "cache_read": 0, "context": 200000, "attachment": False, "toolcall": True, "free": True}, {"max_input_per_m_usd": 0.2, "require_toolcall": True, "allow": [], "deny": []})),
         ("allow-listed flash allowed", allowed(next(m for m in models if m["id"] == "deepseek/deepseek-flash"), p)),
         ("deny-listed v4-pro blocked", not allowed(next(m for m in models if m["id"] == "deepseek/deepseek-v4-pro"), p)),
-        ("free model recommended first", decide(models, p, "deepseek/deepseek-v4-pro")["recommended"]["id"].startswith("opencode/")),
+        ("direct-key flash recommended first", decide(models, p, "deepseek/deepseek-v4-pro")["recommended"]["id"] == "deepseek/deepseek-flash"),
         ("v4-pro verdict is BLOCK (deny)", decide(models, p, "deepseek/deepseek-v4-pro")["verdict"] == "BLOCK"),
         ("flash verdict is ALLOW", decide(models, p, "deepseek/deepseek-flash")["verdict"] == "ALLOW"),
     ]
