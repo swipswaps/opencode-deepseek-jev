@@ -106,7 +106,7 @@ main() {
             *) OUT_DIR="$REPO/$OUT" ;;
         esac
         printf '=== pages-export.sh (shell) ===\n'
-        if ! node "$REPO/scripts/pages-export.mjs" --shell-only \
+        if ! node --no-warnings --experimental-sqlite "$REPO/scripts/pages-export.mjs" --shell-only \
             --commit site-data/panel.json --out "$OUT_DIR" 2>&1; then
             printf 'GATE FAIL: shell assembly refused; nothing published\n' >&2
             return 2
