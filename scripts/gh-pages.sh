@@ -8,8 +8,9 @@
 #   dispatch             run the "Deploy panel" workflow (the allow-once)
 #   watch                follow the latest run to completion (exit 1 on fail)
 #   url                  print the expected Pages URL
+#   check                curl the live URL, print HTTP code (exit 1 unless 200)
 #
-# Usage: ./scripts/gh-pages.sh status|enable|dispatch|watch|url
+# Usage: ./scripts/gh-pages.sh status|enable|dispatch|watch|url|check
 # Requires: gh authenticated (gh auth login), repo slug from gh or --repo.
 # Exit 0 ok, 1 run failed/degraded, 2 usage/tool error.
 #
@@ -80,9 +81,21 @@ cmd_url() {
     return 0
 }
 
+cmd_check() {
+    local slug url code
+    slug="$(slug)" || return 2
+    url="https://${slug%%/*}.github.io/${slug##*/}/"
+    code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${url}" 2>&1 | head -n 1)"
+    printf '%s -> %s\n' "${url}" "${code}"
+    if [ "${code}" = "200" ]; then
+        return 0
+    fi
+    return 1
+}
+
 main() {
     if [ "$#" -eq 0 ]; then
-        fail 'usage: gh-pages.sh {status|enable|dispatch|watch|url} [--repo OWNER/REPO]'
+        fail 'usage: gh-pages.sh {status|enable|dispatch|watch|url|check} [--repo OWNER/REPO]'
         return 2
     fi
     local cmd="$1"
@@ -90,8 +103,8 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --repo) shift; REPO_SLUG="${1:-}"; shift ;;
-            --help|-h) printf 'usage: %s {status|enable|dispatch|watch|url}\n' "$0"; return 0 ;;
-            *) fail "usage: $0 {status|enable|dispatch|watch|url}"; return 2 ;;
+            --help|-h) printf 'usage: %s {status|enable|dispatch|watch|url|check}\n' "$0"; return 0 ;;
+            *) fail "usage: $0 {status|enable|dispatch|watch|url|check}"; return 2 ;;
         esac
     done
     if ! have gh; then
@@ -104,7 +117,8 @@ main() {
         dispatch) cmd_dispatch ;;
         watch) cmd_watch ;;
         url) cmd_url ;;
-        *) fail "usage: $0 {status|enable|dispatch|watch|url}" ;;
+        check) cmd_check ;;
+        *) fail "usage: $0 {status|enable|dispatch|watch|url|check}" ;;
     esac
 }
 

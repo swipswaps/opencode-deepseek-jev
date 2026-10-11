@@ -154,6 +154,13 @@
     "commands": ["./scripts/cost.sh", "./scripts/cost.sh --estimate IN OUT REASONING", "./scripts/cost-bottlenecks.sh --top 8"]
   },
   {
+    "id": "gh-pages",
+    "title": "GitHub Pages via gh api (no clicking)",
+    "where": "host",
+    "purpose": "Pages source, Deploy panel dispatch (= allow-once), run watch, URL. Requires gh auth login. Dispatch replaces the Actions UI click.",
+    "commands": ["./scripts/gh-pages.sh status", "./scripts/gh-pages.sh enable", "./scripts/gh-pages.sh dispatch", "./scripts/gh-pages.sh watch", "./scripts/gh-pages.sh url", "./scripts/gh-pages.sh check"]
+  },
+  {
     "id": "session-health",
     "title": "Session health (stalls / blank turns)",
     "where": "container",
