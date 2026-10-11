@@ -90,11 +90,6 @@ main() {
         printf 'FAIL: node is required\n' >&2
         return 2
     fi
-    local DB="$REPO/data/opencode/opencode.db"
-    if [ ! -f "$DB" ]; then
-        printf 'FAIL: no database at %s\n' "$DB" >&2
-        return 2
-    fi
     STAMP="$REPO/data/observability/pages-consent.json"
     if [ "$SHELL" -eq 1 ]; then
         if [ "$YES" -ne 1 ]; then
@@ -113,6 +108,11 @@ main() {
         fi
         printf 'wrote: %s/index.html\n' "$OUT_DIR"
         return 0
+    fi
+    local DB="$REPO/data/opencode/opencode.db"
+    if [ ! -f "$DB" ]; then
+        printf 'FAIL: no database at %s\n' "$DB" >&2
+        return 2
     fi
     POLICY_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('$REPO/models.policy.json','rb').read()).hexdigest()[:12])" 2>&1)
     local REV="unknown"
