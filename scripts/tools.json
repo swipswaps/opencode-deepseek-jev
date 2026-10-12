@@ -49,6 +49,13 @@
     "commands": ["./scripts/rotate-api-keys.sh", "./scripts/secret-scan.sh"]
   },
   {
+    "id": "rotate-server-password",
+    "title": "Rotate the :4096/:5099 Basic-auth password (guided, interactive)",
+    "where": "host",
+    "purpose": "Backup, token_urlsafe replacement, atomic single-line rewrite (0600), container RECREATE (env_file is creation-time; restart keeps the old value), then proves new=200 and old=401. Neither value is ever printed. Run in a terminal; /manage is read-only.",
+    "commands": ["./scripts/rotate-server-password.sh", "./scripts/rotate-server-password.sh --self-test"]
+  },
+  {
     "id": "sentinel",
     "title": "Periodic threshold monitor with ledger trips",
     "where": "host",

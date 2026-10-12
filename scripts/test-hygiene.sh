@@ -343,6 +343,17 @@ main() {
         bad 'sentinel-install.sh present'
     fi
 
+    if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
+        if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
+            ok 'rotate-server-password: self-test (generate + atomic rewrite)'
+        else
+            bad 'rotate-server-password: self-test (generate + atomic rewrite)'
+            cat "$work/rsp_st.txt"
+        fi
+    else
+        bad 'rotate-server-password.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

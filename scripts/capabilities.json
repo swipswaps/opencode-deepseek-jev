@@ -80,6 +80,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "sentinel.sh --self-test" },
       "test": "scripts/sentinel.sh",
       "evidence": { "path": "data/observability/observability.db", "marker": "sentinel" }
+    },
+    {
+      "id": "rotate-server-password",
+      "purpose": "rotate the web Basic-auth password with new=200/old=401 proof, values never printed",
+      "impl": "scripts/rotate-server-password.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "rotate-server-password.sh --self-test" },
+      "test": "scripts/rotate-server-password.sh",
+      "evidence": { "path": "scripts/tools.json", "marker": "rotate-server-password" }
     }
   ]
 }

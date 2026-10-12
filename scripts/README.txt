@@ -468,6 +468,14 @@ sentinel-install.sh
     --write-only for review, --uninstall to remove, --self-test
     offline (no systemd touched).
 
+rotate-server-password.sh
+    Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth
+    password): backup, token_urlsafe replacement, atomic single-line
+    rewrite (0600 kept), container RECREATE (env_file is read at
+    creation, so restart would keep the old value), then proves
+    new=200 and old=401. Neither value is ever printed. Interactive
+    "write" gate; prints rollback on mismatch. --env, --self-test.
+
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json,
     key env vars, opencode.json parse, jev-review server.js. --full adds
