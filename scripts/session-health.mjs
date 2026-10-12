@@ -33,6 +33,8 @@
 // CONTRACT
 //   export healthReport(dbPath, opts) -> { ts, counts, findings, ... }
 //   export handoffAdvice(dbPath, opts) -> { level ok|warn|over, action }
+//   export modelDenied(model, deny?) -> bool (deny-listed gateway free tier)
+//   export budgetRisks(dbPath, opts) -> { budget, scanned, over[], warn[], denied[] }
 //   CLI:  node --experimental-sqlite session-health.mjs [db] [--json]
 //         [--include-gaps] [--self-test] [--live]
 //   Read-only. No model calls. No network unless --live (then only :4096).
@@ -44,6 +46,87 @@
 import { DatabaseSync } from "node:sqlite"; // Node >= 22 built-in; no npm dep
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+const POLICY_PATH = fileURLToPath(new URL("../models.policy.json", import.meta.url));
+function loadDeny() {
+  try {
+    const p = JSON.parse(readFileSync(POLICY_PATH, "utf8"));
+    return Array.isArray(p.deny) ? p.deny : [];
+  } catch {
+    return [];
+  }
+}
+
+// MODEL-DENIED — is this a deny-listed gateway-metered free tier? Exact deny
+// match on the full or short id, plus the opencode/*-free shape the policy
+// $comment names. Such a model answers AI_APICallError "backend temporarily
+// unavailable" instead of text, so flag it even when the session is small.
+export function modelDenied(model, deny = loadDeny()) {
+  const raw = typeof model === "string" ? model : JSON.stringify(model);
+  const id = modelId(raw);
+  const short = String(id).split("/").pop();
+  if (deny.includes(id) || deny.includes(short)) return true;
+  return /^opencode\/.*-free$/.test(String(id));
+}
+
+// BUDGET RISKS — handoffAdvice() sees only the LATEST session, so an old
+// bloated session kept alive by retries stays invisible. This scans the
+// recent window for EVERY over/warn session plus every session on a
+// deny-listed model, each carrying its own guidance. One grouped pass so it
+// stays cheap enough for /api/health. Read-only.
+export function budgetRisks(dbPath, opts = {}) {
+  const budget = Number(opts.budgetTokens ?? process.env.CONTEXT_BUDGET ?? 200000);
+  const recent = opts.recentSessions ?? 40;
+  const deny = opts.deny ?? loadDeny();
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.title, s.model, COALESCE(s.tokens_input,0) AS in_tok,
+              COALESCE(s.cost,0) AS cost, s.time_updated,
+              (SELECT COUNT(*) FROM part p WHERE p.session_id = s.id) AS parts
+         FROM session s ORDER BY s.time_created DESC LIMIT ?`,
+    )
+    .all(recent);
+  const over = [], warn = [], denied = [];
+  for (const r of rows) {
+    const ratio = budget > 0 ? r.in_tok / budget : 0;
+    const lvl = r.in_tok > budget ? "over" : ratio >= 0.8 ? "warn" : "ok";
+    const mid = modelId(r.model);
+    // The session model JSON carries providerID apart from id; the policy
+    // deny list names provider/id pairs, so rejoin before the verdict.
+    let prov = "";
+    try {
+      const o = JSON.parse(r.model);
+      prov = (o && typeof o === "object" && o.providerID) || "";
+    } catch {
+      prov = "";
+    }
+    const full = prov ? prov + "/" + mid : mid;
+    const isDenied = modelDenied(full, deny);
+    const item = {
+      session: r.id, title: r.title, model: mid, model_denied: isDenied,
+      in_tok: r.in_tok, ratio: Number(ratio.toFixed(2)), level: lvl,
+      cost: r.cost, parts: r.parts, updated_at: iso(r.time_updated),
+    };
+    if (lvl === "over") {
+      item.guidance =
+        "stop prompting " + r.id + ": every turn re-sends " + r.in_tok +
+        " tokens; open a fresh session and carry a brief (./scripts/handoff-brief.sh " +
+        r.id + "), never --fork/--continue";
+      over.push(item);
+    } else if (lvl === "warn") {
+      warn.push(item);
+    }
+    if (isDenied) {
+      item.guidance =
+        (item.guidance ? item.guidance + " " : "") +
+        "model " + mid + " is deny-listed (gateway-metered free tier): " +
+        "switch to opencode-go/* or direct deepseek/flash";
+      denied.push(item);
+    }
+  }
+  return { available: true, budget, scanned: rows.length, over, warn, denied };
+}
 
 export const DEFAULTS = {
   runMs: 120_000, // a tool "running" longer than this is a stall
@@ -354,6 +437,30 @@ async function selfTest() {
   checks.push(["handoff within budget", hoOk.level === "ok" && hoOk.ratio === 0.1]);
   checks.push(["handoff over action names a fresh session", typeof hoOver.action === "string" && hoOver.action.includes("fresh session")]);
 
+  // budgetRisks: old bloated sessions must surface, not just the latest; a
+  // deny-listed free-tier model must flag even when the session is small.
+  const rkDir = mkdtempSync(join(tmpdir(), "sess-rk-"));
+  const rkFile = join(rkDir, "rk.db");
+  const rkDb = new DatabaseSync(rkFile);
+  rkDb.exec(
+    "CREATE TABLE session(id TEXT PRIMARY KEY, title TEXT, model TEXT, tokens_input INTEGER, cost REAL, time_created INTEGER, time_updated INTEGER);" +
+      "CREATE TABLE part(id TEXT, session_id TEXT);",
+  );
+  const rkIns = rkDb.prepare("INSERT INTO session VALUES(?,?,?,?,?,?,?)");
+  rkIns.run("s_risk", "risk", '{"id":"opencode/muse-spark-1.3-contributor-free"}', 5000, 0, NOW - 9000, NOW - 1000);
+  rkIns.run("s_warned", "warned", '{"id":"deepseek-flash"}', 850, 0.01, NOW - 8000, NOW - 2000);
+  rkIns.run("s_fine", "fine", '{"id":"deepseek-flash"}', 100, 0, NOW - 7000, NOW - 3000);
+  rkDb.prepare("INSERT INTO part VALUES(?,?)").run("p1", "s_risk");
+  rkDb.close();
+  const rk = budgetRisks(rkFile, { budgetTokens: 1000, deny: ["opencode/muse-spark-1.3-contributor-free"] });
+  rmSync(rkDir, { recursive: true, force: true });
+  checks.push(["risks: old over-budget session surfaces", rk.over.length === 1 && rk.over[0].session === "s_risk"]);
+  checks.push(["risks: over guidance names fresh session + no fork", typeof rk.over[0].guidance === "string" && rk.over[0].guidance.includes("fresh session") && rk.over[0].guidance.includes("--fork")]);
+  checks.push(["risks: warn band listed separately", rk.warn.length === 1 && rk.warn[0].session === "s_warned"]);
+  checks.push(["risks: deny-listed free tier flagged with guidance", rk.denied.length === 1 && rk.denied[0].model_denied === true && rk.denied[0].guidance.includes("deny-listed")]);
+  checks.push(["risks: healthy session in neither list", !rk.over.concat(rk.warn, rk.denied).some((x) => x.session === "s_fine")]);
+  checks.push(["modelDenied matches deny list + free shape", modelDenied('{"id":"opencode/muse-spark-1.3-contributor-free"}', ["opencode/muse-spark-1.3-contributor-free"]) === true && modelDenied('{"id":"deepseek-flash"}', ["opencode/muse-spark-1.3-contributor-free"]) === false]);
+
   // dead-tool adjudication: same old running tool under three live states.
   // No network — live payloads are passed directly (fail-safe default needs
   // no server at all).
@@ -445,6 +552,11 @@ async function main() {
   } catch {
     report.handoff = { available: false };
   }
+  try {
+    report.risks = budgetRisks(dbPath);
+  } catch {
+    report.risks = { available: false };
+  }
   if (argv.includes("--json")) {
     console.log(JSON.stringify(report, null, 2));
   } else {
@@ -452,6 +564,14 @@ async function main() {
       `session-health: ${report.counts.sessions_scanned} scanned · ` +
         `${report.counts.running_tools} running · ${report.counts.blank_tails} blank`,
     );
+    if (report.risks && report.risks.available) {
+      console.log(
+        `risks: ${report.risks.over.length} over, ${report.risks.warn.length} warn, ${report.risks.denied.length} denied-model`,
+      );
+      if (report.risks.over.length) {
+        console.log(`  worst: ${report.risks.over[0].session} ${report.risks.over[0].in_tok} in — ${report.risks.over[0].guidance}`);
+      }
+    }
     if (report.handoff && report.handoff.available) {
       console.log(
         `handoff: ${report.handoff.level} (${report.handoff.in_tok}/${report.handoff.budget} in) — ${report.handoff.action}`,

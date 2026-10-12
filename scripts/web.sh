@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# web.sh — start OpenCode's web UI in a Docker container.
+# web.sh — start OpenCode's web UI (opencode-web) plus its TLS terminator
+# (caddy) which publishes :4096/:5099 on the host.
 #
 # Sources .env.local so the container receives DEEPSEEK_API_KEY and
-# JEV_API_KEY. Publishes port 4096. Requires OPENCODE_SERVER_PASSWORD
+# JEV_API_KEY. Requires OPENCODE_SERVER_PASSWORD
 # for HTTP basic authentication (username defaults to "opencode");
 # refuses to start without it unless --insecure is passed.
+# Readiness probes https://127.0.0.1:4096/ (401 = alive behind auth).
 #
 #   https://opencode.ai/docs/web/
 #   https://opencode.ai/docs/server/
@@ -119,23 +121,39 @@ main() {
     fi
 
     cd "$COMPOSE_DIR"
-    printf 'starting opencode-web container\n'
-    docker compose up -d opencode-web
+    # ---- TLS certs (Caddy terminates :4096/:5099; see Caddyfile) ----
+    local certout=""
+    if [ -x "$COMPOSE_DIR/certs-init.sh" ]; then
+        certout=$("$COMPOSE_DIR/certs-init.sh" 2>&1 || true)
+        printf '%s\n' "$certout"
+    else
+        printf 'WARN: docker/certs-init.sh missing; skipping cert ensure\n'
+    fi
+
+    printf 'starting opencode-web + caddy containers\n'
+    docker compose up -d opencode-web caddy
     local rc=$?
     if [ "$rc" -ne 0 ]; then
         printf 'FAIL: docker compose up returned %d\n' "$rc"
         return 1
     fi
+    case "$certout" in
+        *ROTATED*)
+            printf 'certs ROTATED; restarting caddy to pick up new pair\n'
+            docker compose restart caddy
+            ;;
+    esac
 
-    # ---- Readiness: accept any HTTP response other than 000 -------
-    # 200 means ready; 401 means ready with auth challenge.
-    # 000 means no TCP listener. RFC 7235 §4.1:
-    #   https://www.rfc-editor.org/rfc/rfc7235#section-4.1
+    # ---- Readiness via the TLS terminator (host stratum) ----
+    # 401 means alive behind Basic auth (RFC 7235 §4.1:
+    # https://www.rfc-editor.org/rfc/rfc7235#section-4.1).
+    # 000 means no host listener; plain http:// can never answer here
+    # because Caddy serves https:// only (http:// → 400 by design).
     printf '\nwaiting for server\n'
     local tries=0
     local code=""
     while [ "$tries" -lt 60 ]; do
-        code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4096/ 2>&1 || true)
+        code=$(curl -k -s --max-time 5 -o /dev/null -w '%{http_code}' https://127.0.0.1:4096/ 2>&1 || true)
         if [ -n "$code" ] && [ "$code" != "000" ]; then
             break
         fi
@@ -148,11 +166,12 @@ main() {
         printf '\nFAIL: no listener on 127.0.0.1:4096 after 60s\n'
         printf 'last 40 lines of container log:\n'
         docker compose logs --tail=40 opencode-web
+        docker compose logs --tail=40 caddy
         return 1
     fi
 
     printf '\n=== OpenCode web UI is running ===\n'
-    printf 'URL:      http://127.0.0.1:4096\n'
+    printf 'URL:      https://127.0.0.1:4096\n'
     printf 'HTTP:     %s\n' "$code"
     if [ -n "$OPENCODE_SERVER_PASSWORD" ]; then
         printf 'Username: %s\n' "${OPENCODE_SERVER_USERNAME:-opencode}"

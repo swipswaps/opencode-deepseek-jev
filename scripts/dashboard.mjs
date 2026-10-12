@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { healthReport, handoffAdvice, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
+import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
 import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
@@ -693,6 +693,11 @@ async function refreshHealthCache() {
         r.handoff = handoffAdvice(dbPath);
       } catch {
         r.handoff = { available: false };
+      }
+      try {
+        r.risks = budgetRisks(dbPath);
+      } catch {
+        r.risks = { available: false };
       }
     }
     // perfNote measures aggregation cost, not loop blockage: on the worker
@@ -1682,6 +1687,7 @@ async function renderHealth(){
   var c=d.counts||{};
   var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+(c.dead_tools?' · dead '+esc(String(c.dead_tools)):'')+(c.dead_blanks?' · dead-blank '+esc(String(c.dead_blanks)):'')+'</div>';
   if(d.handoff&&d.handoff.available){h+='<div class="item"><span class="tag'+(d.handoff.level==='ok'?'':' ERR')+'">handoff '+esc(d.handoff.level||'?')+'</span>'+esc(String(d.handoff.in_tok))+'/'+esc(String(d.handoff.budget))+' in ('+esc(String(Math.round((d.handoff.ratio||0)*100)))+'%) — '+esc(d.handoff.action||'')+'</div>';}
+  if(d.risks&&d.risks.available){var rk=(d.risks.over||[]).concat(d.risks.denied||[]);for(var ri=0;ri<rk.length&&ri<6;ri++){var rs=rk[ri];h+='<div class="item"><span class="tag ERR">risk</span>'+esc(rs.session)+' '+esc(String(rs.in_tok))+' in ('+esc(String(Math.round((rs.ratio||0)*100)))+'%)'+(rs.model_denied?' · model '+esc(rs.model)+' deny-listed':'')+' — '+esc(String(rs.guidance||'').slice(0,140))+'</div>';}}
   if(!d.findings.length){h+='<div class="item">no stalls or blank turns — the web view lagging is a client issue, not an agent stall</div>';}
   for(var i=0;i<d.findings.length;i++){var f=d.findings[i];
     if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}

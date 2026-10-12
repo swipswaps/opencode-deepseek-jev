@@ -14,6 +14,34 @@
     "commands": ["./scripts/web-restart.sh"]
   },
   {
+    "id": "recover-4096",
+    "title": ":4096 recovery probe with ledger logging",
+    "where": "host",
+    "purpose": "Asserts every :4096 stratum (containers, compose DNS, loopback+mesh TLS edge, dashboard, cert battery, authenticated data plane, session store readonly) with per-signature recovery hints; logs one RECOVERY row per check to observability.db for watchdog polling. Check-only by default; --recover allows one bounded restart+reprobe.",
+    "commands": ["./scripts/recover-4096.sh --session ses_<id>", "./scripts/recover-4096.sh --json --no-log", "./scripts/recover-4096.sh --self-test"]
+  },
+  {
+    "id": "session-guard",
+    "title": "Over-budget / denied-model guidance with ledger logging",
+    "where": "host",
+    "purpose": "Reads session-health risks (every over/warn session, deny-listed free-tier models) and prints the numbered fresh-session guidance; logs ADVISORY rows for watchdog polling. Check-only; exit 1 when the focus is actionable.",
+    "commands": ["./scripts/session-guard.sh --session ses_<id>", "./scripts/session-guard.sh --json --no-log", "./scripts/session-guard.sh --self-test"]
+  },
+  {
+    "id": "handoff-brief",
+    "title": "Deterministic carry-over brief from a transcript",
+    "where": "host",
+    "purpose": "Builds a paste-ready brief (goal, findings, recent asks, tools, open question) from logs/transcript-<id>.md without a model call; every field passes through redact.mjs. --model only prints the prompt plus the spend command after an ALLOW verdict; it never calls a model.",
+    "commands": ["./scripts/handoff-brief.sh ses_<id>", "./scripts/handoff-brief.sh ses_<id> --model deepseek/deepseek-flash", "./scripts/handoff-brief.sh --self-test"]
+  },
+  {
+    "id": "secret-scan",
+    "title": "Secrets-at-rest scan with rotation guidance",
+    "where": "host",
+    "purpose": "Finds secret-shaped lines (deepseek/jev keys, bearer tokens, env assignments) in artifact dirs (logs/, observability, notes). The report is value-free (file:line:kind only). Exit 1 names ./scripts/rotate-api-keys.sh plus the revoke consoles.",
+    "commands": ["./scripts/secret-scan.sh", "./scripts/secret-scan.sh --json", "./scripts/secret-scan.sh --self-test"]
+  },
+  {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",

@@ -15,7 +15,7 @@
 // structured-cloneable (plain JSON shapes only — the same shapes already
 // served over HTTP and asserted by test-dashboard.sh).
 import { parentPort } from "node:worker_threads";
-import { healthReport, handoffAdvice } from "./session-health.mjs";
+import { healthReport, handoffAdvice, budgetRisks } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
 import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh } from "./query-lib.mjs";
 
@@ -30,6 +30,11 @@ const FNS = {
       r.handoff = handoffAdvice(dbPath);
     } catch {
       r.handoff = { available: false };
+    }
+    try {
+      r.risks = budgetRisks(dbPath);
+    } catch {
+      r.risks = { available: false };
     }
     return r;
   },

@@ -93,11 +93,18 @@ main() {
               printf('\$%.4f', cost) cost
          FROM session ORDER BY tokens_input DESC LIMIT $TOP;"
 
-    section "context budget (latest session)"
-    q "SELECT substr(title,1,40) title,
+    section "context budget (EVERY session near/over, not just latest)"
+    q "SELECT substr(title,1,36) title,
+              COALESCE(json_extract(model,'\$.id'),'(none)') model,
               tokens_input,
-              printf('%.0f%%', 100.0*tokens_input/$CTX_BUDGET) of_budget
-         FROM session ORDER BY time_created DESC LIMIT 1;"
+              printf('%.0f%%', 100.0*tokens_input/$CTX_BUDGET) of_budget,
+              CASE WHEN tokens_input >= $CTX_BUDGET THEN 'over'
+                   WHEN tokens_input >= $CTX_BUDGET*8/10 THEN 'warn'
+                   ELSE 'ok' END level
+         FROM session WHERE tokens_input >= $CTX_BUDGET*8/10
+         ORDER BY tokens_input DESC;"
+    printf 'note: opencode/*-free models are deny-listed (models.policy.json);\n'
+    printf 'see ./scripts/session-guard.sh for the per-session verdict + guidance.\n'
     printf 'budget: %s input tokens (CONTEXT_BUDGET) · compaction auto+prune, tail_turns=20 (opencode.json)\n' "$CTX_BUDGET"
     printf 'read: over budget → start a fresh session; long sessions re-send history every turn.\n'
     local latest=0 ho_level="ok"

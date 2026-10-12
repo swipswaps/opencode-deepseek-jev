@@ -1,5 +1,5 @@
 {
-  "_comment": "Vendored, curated map of known upstream opencode issues -> symptom matchers. Read offline by scripts/quirks.mjs. No runtime network. URLs verified 200 on 2026-09-27. `match` are JS regex strings (case-insensitive) for symptom text; `keywords` are literal tokens used for fuzzy corpus search (DB / repo code / docs).",
+  "_comment": "Vendored, curated map of known upstream opencode issues -> symptom matchers, PLUS this repo's own confirmed operational issues (id namespaced swipswaps/, url = this repo's tracker). Read offline by scripts/quirks.mjs. No runtime network. Upstream URLs verified 200 on 2026-09-27. `match` are JS regex strings (case-insensitive) for symptom text; `keywords` are literal tokens used for fuzzy corpus search (DB / repo code / docs).",
   "source": "https://github.com/anomalyco/opencode/issues",
   "verified": "2026-09-27",
   "issues": [
@@ -74,6 +74,14 @@
       "severity": "medium",
       "match": ["reasoning", "loop", "repetit", "degenerat", "long session"],
       "keywords": ["reasoning", "loop", "repetitive", "long session"]
+    },
+    {
+      "id": "swipswaps/opencode-deepseek-jev#gateway-free-tier",
+      "title": "Gateway-metered free-tier model (opencode/*-free, deny-listed) fails with 'backend temporarily unavailable' instead of text; huge sessions make paid models grind",
+      "url": "https://github.com/swipswaps/opencode-deepseek-jev/issues",
+      "severity": "high",
+      "match": ["backend.*temporarily unavailable", "free usage exceeded", "AI_APICallError", "deny.?listed.*free", "gateway.*free"],
+      "keywords": ["free tier", "gateway", "quota", "opencode/*-free", "backend unavailable", "over budget", "fresh session"]
     }
   ]
 }

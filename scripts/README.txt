@@ -419,6 +419,39 @@ web-restart.sh
     — this script is the command). Polls /api/rev until served==HEAD
     or fails loudly. Host-side; needs the docker daemon.
 
+recover-4096.sh
+    Automated :4096 recovery probe: asserts containers, compose DNS,
+    loopback + mesh TLS edge (401 healthy, 000/400/502 classified),
+    dashboard, cert battery, authenticated data plane (secret by name
+    only) and the session store (read-only). One bounded restart plus
+    re-probe with --recover; one RECOVERY ledger row per check for
+    watchdog polling. --json, --no-log, --db/--session/--rev seams,
+    --self-test offline. Gated in test-hygiene.sh.
+
+session-guard.sh
+    The 4-step over-budget / denied-model guidance as code: reads
+    session-health risks (every over/warn session, deny-listed
+    gateway-metered free tiers), prints numbered fresh-session steps
+    (stop, fresh session, brief, allow-listed model), logs ADVISORY
+    rows. Check-only; exit 1 when actionable. --json, --session,
+    --no-log, --db/--rev seams, --self-test offline.
+
+handoff-brief.sh
+    Deterministic carry-over brief from logs/transcript-<id>.md (goal,
+    findings, recent asks, tools, open question); every field passes
+    through redact.mjs. Refuses missing transcripts (points at
+    re-extract-session.sh) and --fork/--continue. --model only prints
+    the prompt plus the spend command after an ALLOW verdict; it never
+    calls a model. --out, --self-test offline.
+
+secret-scan.sh
+    Secrets-at-rest scan over artifact dirs (logs/, observability,
+    notes/): deepseek/jev keys, bearer tokens, env assignments. The
+    report is value-free (file:line:kind only, safe to paste).
+    Exit 1 names ./scripts/rotate-api-keys.sh plus both revoke
+    consoles. handoff-brief.sh runs it on its source transcript.
+    --paths, --json, --quiet, --self-test offline.
+
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json,
     key env vars, opencode.json parse, jev-review server.js. --full adds

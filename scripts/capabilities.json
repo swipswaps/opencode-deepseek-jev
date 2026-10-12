@@ -48,6 +48,30 @@
       "registration": { "kind": "contains", "path": "scripts/runbooks.json", "marker": "cdp-probe" },
       "test": "scripts/cdp-tab.mjs",
       "evidence": { "path": "logs/cdp/probe-latest.json", "marker": "\"verdict\"" }
+    },
+    {
+      "id": "session-guard",
+      "purpose": "numbered fresh-session guidance for over-budget / deny-listed-model sessions, ADVISORY rows to ledger",
+      "impl": "scripts/session-guard.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "session-guard.sh --self-test" },
+      "test": "scripts/session-guard.sh",
+      "evidence": { "path": "data/observability/observability.db", "marker": "session-guard" }
+    },
+    {
+      "id": "handoff-brief",
+      "purpose": "deterministic redacted carry-over brief from a transcript; never forks/continues",
+      "impl": "scripts/handoff-brief.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "handoff-brief.sh --self-test" },
+      "test": "scripts/handoff-brief.sh",
+      "evidence": { "path": "scripts/session-guard.sh", "marker": "handoff-brief.sh" }
+    },
+    {
+      "id": "secret-scan",
+      "purpose": "value-free secrets-at-rest scan of artifacts, guides to rotate-api-keys.sh",
+      "impl": "scripts/secret-scan.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "secret-scan.sh --self-test" },
+      "test": "scripts/secret-scan.sh",
+      "evidence": { "path": "scripts/handoff-brief.sh", "marker": "secret-scan.sh" }
     }
   ]
 }

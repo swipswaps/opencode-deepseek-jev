@@ -98,9 +98,26 @@ except Exception:
         printf 'session-health: unavailable\n'
     fi
 
+    # budget: every over/warn session + deny-listed models (not just latest).
+    if have node && [ -f "$REPO/scripts/session-health.mjs" ] && [ -f "$DB" ]; then
+        node --experimental-sqlite "$REPO/scripts/session-health.mjs" "$DB" --json 2>&1 \
+            | python3 -c 'import json,sys
+s=sys.stdin.read(); i=s.find("{")
+try:
+    d=json.loads(s[i:]); r=d.get("risks",{}); h=(d.get("handoff") or {}).get("level","?")
+    print("budget: handoff=%s over=%d warn=%d denied-model=%d" % (h, len(r.get("over",[])), len(r.get("warn",[])), len(r.get("denied",[]))))
+    for x in (r.get("over",[])[:3]):
+        print("  over %s %s in model=%s%s" % (x.get("session"), x.get("in_tok"), x.get("model"), " DENIED" if x.get("model_denied") else ""))
+except Exception:
+    print("budget: unavailable")'
+    else
+        printf 'budget: unavailable\n'
+    fi
+
     mkdir -p "$STATE"
     new_lines "$GUARD" "$STATE/guard.cursor" '"verdict":"(block|fix|advisory)"' "guard"
     new_lines "$APP" "$STATE/app.cursor" 'level=(ERROR|WARN)' "app"
+    new_lines "$APP" "$STATE/model.cursor" 'AI_APICallError|Free usage exceeded|backend is temporarily unavailable' "model-errors"
     return 0
 }
 
@@ -119,13 +136,16 @@ self_test() {
     printf '%s\n' "$o1" | grep -q 'app: 0 new (cursor initialised' && printf '  PASS first sweep suppresses history (app)\n' || { printf '  FAIL first sweep app init\n'; ok=1; }
     printf '%s\n' '{"verdict":"block","command":"ls /blocked2"}' >> "$d/guard.log"
     printf '%s\n' 'ts=3 level=ERROR new' >> "$d/app.log"
+    printf '%s\n' 'timestamp=2026-10-12T15:17:31Z level=ERROR message="stream error" providerID=opencode modelID=muse-spark-1.3-contributor-free error.error="AI_APICallError: The backend is temporarily unavailable. Please retry."' >> "$d/app.log"
     o2=$(bash "$0" --once 2>&1)
     o3=$(bash "$0" --once 2>&1)
+    printf '%s\n' "$o2" | grep -q 'model-errors: 1 new' && printf '  PASS gateway failure signature detected\n' || { printf '  FAIL model-errors\n'; ok=1; }
+    printf '%s\n' "$o3" | grep -q 'model-errors: 0 new' && printf '  PASS cursor suppresses re-show (model-errors 0 new)\n' || { printf '  FAIL cursor model-errors\n'; ok=1; }
     printf '%s\n' "$o2" | grep -q 'guard: 1 new' && printf '  PASS new guard action detected\n' || { printf '  FAIL new guard action\n'; ok=1; }
-    printf '%s\n' "$o2" | grep -q 'app: 1 new' && printf '  PASS new app error detected\n' || { printf '  FAIL new app error\n'; ok=1; }
+    printf '%s\n' "$o2" | grep -q 'app: 2 new' && printf '  PASS new app errors detected\n' || { printf '  FAIL new app error\n'; ok=1; }
     printf '%s\n' "$o3" | grep -q 'guard: 0 new' && printf '  PASS cursor suppresses re-show (guard 0 new)\n' || { printf '  FAIL cursor guard\n'; ok=1; }
     printf '%s\n' "$o3" | grep -q 'app: 0 new' && printf '  PASS cursor suppresses re-show (app 0 new)\n' || { printf '  FAIL cursor app\n'; ok=1; }
-    rm -f "$d"/guard.log "$d"/app.log "$d"/last-gate.json "$d"/state/guard.cursor "$d"/state/app.cursor
+    rm -f "$d"/guard.log "$d"/app.log "$d"/last-gate.json "$d"/state/guard.cursor "$d"/state/app.cursor "$d"/state/model.cursor
     rmdir "$d/state" "$d"
     printf 'result: %s\n' "$([ "$ok" -eq 0 ] && printf PASS || printf FAIL)"
     return "$ok"

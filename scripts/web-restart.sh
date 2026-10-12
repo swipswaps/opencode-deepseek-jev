@@ -55,7 +55,10 @@ main() {
     local i served
     for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
         sleep 5
-        served=$(curl -s --max-time 8 http://127.0.0.1:5099/api/rev 2>&1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("served","?") + " stale=" + str(d.get("stale", "?")))' 2>&1) || served=""
+        # :5099 is published through the caddy TLS terminator (compose), so a
+        # plain http:// probe gets 400 and would look like a failed restart.
+        # Probe https with -k; the JSON is what we assert on.
+        served=$(curl -k -s --max-time 10 https://127.0.0.1:5099/api/rev 2>&1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("served","?") + " stale=" + str(d.get("stale", "?")))' 2>&1) || served=""
         if [ -n "$served" ]; then
             printf 'rev: %s (HEAD %s)\n' "$served" "$head"
             case "$served" in
@@ -64,7 +67,7 @@ main() {
         fi
     done
     printf 'FAIL: :5099 did not serve %s within 60s (last: %s)\n' "$head" "$served"
-    printf 'hint: docker logs --tail 20 opencode-deepseek-web\n'
+    printf 'hint: docker logs --tail 20 opencode-deepseek-web (https probe; http:// -> 400 by design)\n'
     return 1
 }
 

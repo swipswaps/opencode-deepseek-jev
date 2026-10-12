@@ -277,6 +277,50 @@ main() {
         bad 'monitor-snapshot.sh present'
     fi
 
+    if [ -f "$REPO/scripts/recover-4096.sh" ]; then
+        if bash "$REPO/scripts/recover-4096.sh" --self-test > "$work/rc_st.txt" 2>&1; then
+            ok 'recover-4096: self-test (classifier + fixture + ledger seam)'
+        else
+            bad 'recover-4096: self-test (classifier + fixture + ledger seam)'
+            cat "$work/rc_st.txt"
+        fi
+    else
+        bad 'recover-4096.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/session-guard.sh" ]; then
+        if bash "$REPO/scripts/session-guard.sh" --self-test > "$work/sg_st.txt" 2>&1; then
+            ok 'session-guard: self-test (fixture + guidance + ledger seam)'
+        else
+            bad 'session-guard: self-test (fixture + guidance + ledger seam)'
+            cat "$work/sg_st.txt"
+        fi
+    else
+        bad 'session-guard.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/handoff-brief.sh" ]; then
+        if bash "$REPO/scripts/handoff-brief.sh" --self-test > "$work/hb_st.txt" 2>&1; then
+            ok 'handoff-brief: self-test (fixture + redaction path)'
+        else
+            bad 'handoff-brief: self-test (fixture + redaction path)'
+            cat "$work/hb_st.txt"
+        fi
+    else
+        bad 'handoff-brief.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/secret-scan.sh" ]; then
+        if bash "$REPO/scripts/secret-scan.sh" --self-test > "$work/ss_st.txt" 2>&1; then
+            ok 'secret-scan: self-test (fixture + value-free report)'
+        else
+            bad 'secret-scan: self-test (fixture + value-free report)'
+            cat "$work/ss_st.txt"
+        fi
+    else
+        bad 'secret-scan.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

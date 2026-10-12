@@ -191,6 +191,26 @@ except Exception:
     fi
     [ -f "$REPO/data/observability/guard.log" ] || warn "no guard.log yet (plugin loads on restart)"
 
+    # Context budget is advisory (WARN, never STOP): an over-budget latest
+    # session still answers, it just re-sends history every turn. Deny-listed
+    # models already STOP above; budget only advises a fresh session.
+    if [ -f "$db" ] && have sqlite3; then
+        local lasttok budget over
+        budget="${CONTEXT_BUDGET:-200000}"
+        lasttok=$(sqlite3 "$db" "SELECT COALESCE((SELECT tokens_input FROM session ORDER BY time_created DESC LIMIT 1),0);" 2>&1)
+        case "${lasttok:-0}" in
+            ''|*[!0-9]*) warn "cannot read latest session tokens" ;;
+            *)
+                if [ "$lasttok" -ge "$budget" ]; then
+                    over=$(python3 -c 'import sys;print("%.1f"%(float(sys.argv[1])/float(sys.argv[2])))' "$lasttok" "$budget" 2>&1)
+                    warn "latest session ${over}x over budget ($lasttok/$budget in) — ./scripts/session-guard.sh, then a fresh session"
+                else
+                    good "latest session within budget ($lasttok/$budget in)"
+                fi
+                ;;
+        esac
+    fi
+
     local ready=1
     [ "$CRIT" -gt 0 ] && ready=0
 
