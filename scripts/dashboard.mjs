@@ -1054,8 +1054,14 @@ const html = `<!doctype html>
  th,td{text-align:left;padding:3px 8px;border-bottom:1px solid #21262d}
  th{color:#8b949e;font-weight:600}
  .num{text-align:right;font-variant-numeric:tabular-nums}
- .srow{cursor:pointer}
+ .srow{cursor:default}
  .srow:hover{background:#1f6feb22}
+ .srow .exp{cursor:pointer;color:#8b949e;user-select:none;width:18px;text-align:center}
+ .srow .exp:hover{color:#e6edf3}
+ .sopen{color:#e6edf3;text-decoration:none}
+ .sopen:hover{color:#58a6ff;text-decoration:underline}
+ .sdetail-cell{padding:8px 10px;background:#0d1119;border-bottom:1px solid #21262d}
+ .sdetail-cell .stat{margin-right:16px}
  input#q{width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;box-sizing:border-box}
  .card a{font-size:12px;margin-right:6px}
  .live{color:#3fb950}.idle{color:#8b949e}
@@ -1068,7 +1074,7 @@ ${nav("dashboard")}
 <div class="row" id="stats"><span class="muted" data-loading>loading...</span></div>
 <div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres"></div></div>
 <div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"><span class="muted" data-loading>loading...</span></div></div>
-<div class="card"><h3>Sessions <span class="muted">(click a row to drill down)</span></h3><div id="sessions"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h3>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span></h3><div id="sessions"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
 <div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h3>Todos</h3><div id="todos"><span class="muted" data-loading>loading...</span></div></div>
@@ -1099,14 +1105,53 @@ function dur(s){
   var d=Number(s.time_updated||0)-Number(s.time_created||0);
   return d>0?(d/1000).toFixed(0)+'s':'';
 }
+function localt(ms){if(!ms)return '';try{return new Date(Number(ms)).toLocaleString();}catch(e){return String(ms);}}
+function sessOpenHref(id){
+  try{
+    var srv=location.protocol+'//'+location.hostname+':4096';
+    var b64=btoa(srv).replace(/=+$/,'');
+    return 'https://'+location.hostname+':4096/server/'+b64+'/session/'+encodeURIComponent(id);
+  }catch(e){return 'https://'+location.hostname+':4096/';}
+}
+var sessDetailLoaded={};
+async function toggleSessRow(id){
+  var dr=document.querySelector('tr.sdetail[data-for="'+id+'"]');
+  if(!dr){return;}
+  var cb=document.querySelector('.exp[data-exp="'+id+'"]');
+  if(!dr.hasAttribute('hidden')){dr.setAttribute('hidden','');if(cb)cb.textContent='▸';return;}
+  dr.removeAttribute('hidden');if(cb)cb.textContent='▾';
+  var cell=dr.querySelector('.sdetail-cell');
+  if(sessDetailLoaded[id]){return;}
+  cell.innerHTML='<span class="muted">loading…</span>';
+  var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=60');
+  if(!d||d.error){cell.innerHTML='<span class="muted">'+esc((d&&d.error)||'no data')+'</span>';return;}
+  var s=d.session||{};
+  var href=sessOpenHref(id);
+  cell.innerHTML='<div class="row">'
+    +'<div class="stat"><b>$'+(+s.cost).toFixed(4)+'</b><span>cost</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_input)+'</b><span>in</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_output)+'</b><span>out</span></div>'
+    +'<div class="stat"><b>'+fmt(s.tokens_reasoning)+'</b><span>reasoning</span></div>'
+    +'<div class="stat"><b>'+esc(d.messages||0)+'</b><span>messages</span></div>'
+    +'</div>'
+    +'<div class="muted" style="font-size:12px">download: '
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=txt">[txt]</a> '
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=md">[md]</a> '
+    +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=json">[json]</a>'
+    +' &nbsp;·&nbsp; <a href="'+esc(href)+'" target="_blank" rel="noopener">open in opencode web ↗</a></div>';
+  sessDetailLoaded[id]=1;
+}
 function sessRow(s){
   var c=+s.cost||0;
   var cls=c>=0.10?' class="num" style="color:#ff7b72"':' class="num"';
   var dir=String(s.directory||'');if(dir.length>42)dir='…'+dir.slice(-41);
-  var upd=s.time_updated?new Date(Number(s.time_updated)).toISOString().slice(0,19).replace('T',' '):'';
+  var upd=localt(s.time_updated);
   var mid=(function(m){if(!m)return '(none)';try{var o=JSON.parse(m);return o.id||m;}catch(e){return String(m);}})(s.model);
-  return '<tr class="srow" data-id="'+esc(s.id||'')+'" title="click to drill down">'
-    +'<td>'+esc(s.title||'(untitled)')+'</td>'
+  var id=esc(s.id||'');
+  var href=esc(sessOpenHref(s.id||''));
+  return '<tr class="srow" data-id="'+id+'">'
+    +'<td class="exp" data-exp="'+id+'" role="button" tabindex="0" title="expand details">▸</td>'
+    +'<td><a class="sopen" href="'+href+'" target="_blank" rel="noopener" title="open session in new tab">'+esc(s.title||'(untitled)')+'</a></td>'
     +'<td>'+esc(mid)+'</td>'
     +'<td class="muted">'+esc(dir)+'</td>'
     +'<td class="num">'+esc(upd)+'</td>'
@@ -1114,7 +1159,8 @@ function sessRow(s){
     +'<td class="num">'+fmt(s.tokens_input)+'</td>'
     +'<td class="num">'+fmt(s.tokens_output)+'</td>'
     +'<td class="num">'+fmt(s.tokens_reasoning)+'</td>'
-    +'<td class="num">'+dur(s)+'</td></tr>';
+    +'<td class="num">'+dur(s)+'</td></tr>'
+    +'<tr class="sdetail" data-for="'+id+'" hidden><td></td><td colspan="9" class="sdetail-cell"></td></tr>';
 }
 var bal=null;
 async function refreshCost(){
@@ -1131,7 +1177,7 @@ async function refreshCost(){
       '<div class="stat"><b>'+fmt(t.i)+'</b><span>tokens in</span></div>'+
       '<div class="stat"><b>'+fmt(t.o)+'</b><span>tokens out</span></div>'+
       '<div class="stat"><b>'+fmt(t.r)+'</b><span>reasoning</span></div>';
-    var sh='<table><tr><th>title</th><th>model</th><th>directory</th><th class="num">updated</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
+    var sh='<table><tr><th class="exp">↕</th><th>title</th><th>model</th><th>directory</th><th class="num">updated</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
     for(var i=0;i<c.sessions.length;i++){sh+=sessRow(c.sessions[i]);}
     sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10. click a row to drill down.</div>';
     var sel=document.getElementById('sessions');
@@ -1181,7 +1227,7 @@ function drillItem(x){
 }
 async function drill(id){
   drillId=id;
-  var d=await j('/api/session?id='+encodeURIComponent(id));
+  var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=60');
   var el=document.getElementById('drill');
   if(!d||d.error){el.innerHTML='<span class="muted">'+esc((d&&d.error)||'no data')+'</span>';return;}
   var s=d.session;
@@ -1229,8 +1275,16 @@ document.getElementById('searchres').addEventListener('click',function(ev){
   if(t){drill(t.getAttribute('data-go'));}
 });
 document.getElementById('sessions').addEventListener('click',function(ev){
+  var a=ev.target&&ev.target.closest?ev.target.closest('a.sopen'):null;
+  if(a){return;}
+  var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;
+  if(ex){toggleSessRow(ex.getAttribute('data-exp'));return;}
   var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
-  if(tr){drill(tr.getAttribute('data-id'));}
+  if(tr){toggleSessRow(tr.getAttribute('data-id'));}
+});
+getElementById('sessions').addEventListener('keydown',function(ev){
+  var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;
+  if(ex&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault();toggleSessRow(ex.getAttribute('data-exp'));}
 });
 var want=new URLSearchParams(location.search).get('session');
 if(want){drill(want);}
@@ -1523,7 +1577,7 @@ async function detail(id){
   var card=document.getElementById('detail-card');if(card)card.classList.remove('collapsed');
   var el=document.getElementById('detail');
   el.innerHTML='<span class="muted">loading...</span>';
-  var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=300');
+  var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=60');
   if(!d||d.error){el.innerHTML='<span class="muted">'+esc((d&&d.error)||'no data')+'</span>';return;}
   var s=d.session;
   var h='<div class="row">'

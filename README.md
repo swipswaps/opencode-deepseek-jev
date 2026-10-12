@@ -736,6 +736,12 @@ To confirm a session streams into the sidebar while it processes:
     ./scripts/test-sidebar-streaming.sh [--insecure]
 
 ## Troubleshooting
+Scheme mismatch: plain `http://` on a TLS port answers `Client sent an HTTP
+  request to an HTTPS server` — always use `https://` (there is no
+  same-port redirect by design; the TLS listener owns 4096/5099).
+  Drill-down silent on slow links: detail fetches are bounded at 60 parts
+  (full transcripts via the txt/md/json download links); right-click has
+  no "open link" because rows drill via JS, not anchors.
 EACCES on /workspace: host UID mismatch. Script uses --user $(id -u).
 HTTP 401 from DeepSeek: verbatim body printed by the script.
 HTTP 422 from TypeSafe: request body format issue.
