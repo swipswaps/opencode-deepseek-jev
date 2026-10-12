@@ -1,13 +1,31 @@
 # Caddyfile — TLS termination for opencode-web over loopback + LAN + nebula.
 # Host publishing lives in docker-compose.yml (caddy `ports:`); Caddy itself
 # listens on all container interfaces for the configured ports.
+#
+# Access log (JSON to stdout, one line per fetch): the ONLY record of slow
+# fetches. The error log shows failures (502/dial); only the access log
+# carries `duration` + `size` per request, which is how a "loading takes
+# forever" complaint becomes a number. Logger names are http.log.access.logN
+# (one per site block), so match with startswith, not ==. Query the slow ones:
+#   docker logs opencode-caddy 2>&1 | python3 -c \
+#     'import json,sys
+# [print(e["ts"], round(e.get("duration",0),2), e["request"]["method"], e["request"]["uri"][:70], e.get("status",0)) for l in sys.stdin for e in [json.loads(l)] if str(e.get("logger","")).startswith("http.log.access") and e.get("duration",0)>5]'
+# (Caddy access logs go to stderr of the container; `duration` is seconds.)
 
 :4096 {
-    tls /certs/opencode.crt /certs/opencode.key
-    reverse_proxy opencode-web:4096
+	tls /certs/opencode.crt /certs/opencode.key
+	log {
+		output stdout
+		format json
+	}
+	reverse_proxy opencode-web:4096
 }
 
 :5099 {
-    tls /certs/opencode.crt /certs/opencode.key
-    reverse_proxy opencode-web:5099
+	tls /certs/opencode.crt /certs/opencode.key
+	log {
+		output stdout
+		format json
+	}
+	reverse_proxy opencode-web:5099
 }
