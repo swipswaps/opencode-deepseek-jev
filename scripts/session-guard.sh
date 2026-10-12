@@ -4,7 +4,7 @@
 #
 # Reads session-health.mjs --json (read-only over opencode.db) and prints the
 # numbered recovery for the focus session:
-#   1. stop prompting <id> (every turn re-sends the whole context)
+#   1. pause this session (every turn re-sends the whole context)
 #   2. open a fresh session (read HANDOFF.md first)
 #   3. carry a brief, not the history (./scripts/handoff-brief.sh <id>);
 #      never --fork/--continue (copies the context back)
@@ -13,16 +13,27 @@
 #      answers AI_APICallError "backend temporarily unavailable" instead of
 #      text, which the web UI renders as its backend banner).
 #
+# On the verdict wording, read this before renaming it: FAIL does NOT mean
+# broken, unrecoverable, or anyone's fault. It means ACTIONABLE NOW — the
+# session cannot continue efficiently, and the prescription IS the handoff.
+# The word exists for the watchdog, which only understands binary signals
+# (exit 1 trips, exit 0 does not). The human lines around it say the rest:
+# routine handoff due, work intact, offer below.
+#
 # Focus default: first over-budget session, else first deny-listed session,
 # else the latest handoff session. Findings are logged as ADVISORY rows to the
 # observability ledger (LEDGER_DB seam) so a watchdog can poll them.
 #
 #   ./scripts/session-guard.sh [--session ID] [--db PATH]
+#   ./scripts/session-guard.sh --handoff --session ID [--out FILE]
+#       runs the whole chain (risks -> brief -> leak check -> ledger) and
+#       prints the paste-ready handoff offer. This is the "do it for me".
 #   ./scripts/session-guard.sh --json [--no-log] [--session ID]
 #   ./scripts/session-guard.sh --self-test   # offline fixture, no docker/net
 #
-# Exit 0 when the focus is clean, 1 when it is over budget or deny-listed
-# (actionable), 2 on usage/resolve errors. A SKIP is never reported clean.
+# Exit 0 when the focus is clean (or the handoff offer was delivered),
+# 1 when it is over budget or deny-listed (actionable), 2 on
+# usage/resolve errors. A SKIP is never reported clean.
 # Secrets by name only, never by value.
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
@@ -76,9 +87,10 @@ con.commit()
 PYEOF
     local o=""
     o=$(CONTEXT_BUDGET=1000 LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --no-log --db "$work/fix.db" --session s_over 2>&1)
-    printf '%s' "$o" | grep -q '1\. stop prompting s_over' || { printf 'FAIL step 1 names session\n'; fail=1; }
+    printf '%s' "$o" | grep -q '1\. pause s_over' || { printf 'FAIL step 1 names session\n'; fail=1; }
     printf '%s' "$o" | grep -q 'never --fork/--continue' || { printf 'FAIL no-fork rule\n'; fail=1; }
     printf '%s' "$o" | grep -q '4\. ' || { printf 'FAIL 4 steps\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'routine handoff' || { printf 'FAIL verdict transparency\n'; fail=1; }
     bash "${BASH_SOURCE[0]}" --no-log --db "$work/fix.db" --session s_over > /dev/null 2>&1
     [ "$?" -eq 1 ] || { printf 'FAIL over exits 1\n'; fail=1; }
     o=$(CONTEXT_BUDGET=1000 bash "${BASH_SOURCE[0]}" --no-log --db "$work/fix.db" --session s_denied 2>&1)
@@ -91,7 +103,12 @@ PYEOF
     CONTEXT_BUDGET=1000 LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --db "$work/fix.db" --session s_over > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep session-guard 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
-    rm -f "$work/fix.db" "$work/obs.db"
+    printf '%s\n' '# s_over - fixture' '' '## user m1 2026-10-12 10:00:00 UTC' '' 'fixture goal here' '' '## assistant m2 2026-10-12 10:01:00 UTC' '' 'fixture finding here' > "$work/transcript-s_over.md"
+    o=$(CONTEXT_BUDGET=1000 LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --db "$work/fix.db" --session s_over --handoff --transcript "$work/transcript-s_over.md" --out "$work/brief-s_over.md" --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'handoff offer for s_over' || { printf 'FAIL handoff offer\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'used: session-health' || { printf 'FAIL tool chain credited\n'; fail=1; }
+    [ -f "$work/brief-s_over.md" ] || { printf 'FAIL brief file written\n'; fail=1; }
+    rm -f "$work/fix.db" "$work/obs.db" "$work/brief-s_over.md" "$work/transcript-s_over.md"
     rmdir "$work"
     if [ "$fail" -eq 0 ]; then printf 'session-guard: self-test PASS\n'; else printf 'session-guard: self-test FAIL\n'; fi
     return "$fail"
@@ -104,13 +121,18 @@ main() {
         printf 'GATE FAIL: cannot resolve repo root\n'
         return 2
     fi
-    local JSON=0 SELFTEST=0 DOLOG=1 SESSION=""
+    local JSON=0 SELFTEST=0 DOLOG=1 SESSION="" HANDOFF=0 OUTF="" TRANSCRIPT=""
     local DB="$REPO/data/opencode/opencode.db" REV=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --json) JSON=1; shift ;;
             --self-test) SELFTEST=1; shift ;;
             --no-log) DOLOG=0; shift ;;
+            --handoff) HANDOFF=1; shift ;;
+            --out) OUTF="${2:-}"; shift 2 ;;
+            --out=*) OUTF="${1#--out=}"; shift ;;
+            --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
+            --transcript=*) TRANSCRIPT="${1#--transcript=}"; shift ;;
             --session) SESSION="${2:-}"; shift 2 ;;
             --session=*) SESSION="${1#--session=}"; shift ;;
             --db) DB="${2:-}"; shift 2 ;;
@@ -118,7 +140,7 @@ main() {
             --rev) REV="${2:-}"; shift 2 ;;
             --rev=*) REV="${1#--rev=}"; shift ;;
             -h | --help)
-                printf 'usage: %s [--session ID] [--db PATH] [--json] [--no-log] [--rev REV] [--self-test]\n' "$0"
+                printf 'usage: %s [--session ID] [--db PATH] [--json] [--no-log] [--rev REV] [--handoff] [--out FILE] [--transcript PATH] [--self-test]\n' "$0"
                 return 0 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
         esac
@@ -190,19 +212,22 @@ sid = focus.get("session")
 lvl, denied_m = focus.get("level"), focus.get("model_denied")
 verdict = "FAIL" if (lvl == "over" or denied_m) else ("WARN" if lvl == "warn" else "PASS")
 steps = [
-    "stop prompting %s: every turn re-sends %s input tokens (%sx the budget)%s" % (
+    "pause %s: every turn re-sends %s input tokens (%sx the budget)%s" % (
         sid, focus.get("in_tok"), focus.get("ratio"),
         "; the free-tier gateway answers AI_APICallError instead of text" if denied_m else "; expect minutes per turn"),
     "open a fresh session (read HANDOFF.md first)",
-    "carry a brief, not the history: ./scripts/handoff-brief.sh %s, then paste it into the new session; the full transcript stays in logs/ \u2014 never --fork/--continue (copies the context back)" % sid,
+    "carry a brief, not the history: run ./scripts/session-guard.sh --handoff --session %s (writes the redacted, leak-checked brief for you), then paste it into the new session; the full transcript stays in logs/ \u2014 never --fork/--continue (copies the context back)" % sid,
     ("drop model %s: deny-listed gateway-metered free tier" % focus.get("model")) if denied_m else "stay on an allow-listed model (opencode-go/*, deepseek/deepseek-flash, gemini-2.5-flash*)",
 ]
+meaning = ("action due now: this session cannot continue efficiently; the prescription is a routine handoff (step 3) \u2014 nothing is broken, nothing is anyone's fault"
+           if verdict == "FAIL" else ("watch: approaching budget; plan the handoff soon" if verdict == "WARN" else "clean: keep working"))
 if as_json:
     print(json.dumps({"ts": ts, "rev": rev, "session": sid, "verdict": verdict,
-                      "guidance": steps,
+                      "meaning": meaning, "guidance": steps,
                       "risks": {"over": len(over), "denied": len(denied)}}))
 else:
-    print("=== session-guard: %s [%s] ===" % (sid, verdict))
+    print("=== session-guard: %s ===" % sid)
+    print("verdict: %s \u2014 %s" % (verdict, meaning))
     for i, s in enumerate(steps, 1):
         print("%d. %s" % (i, s))
 print("RC=" + ("1" if verdict == "FAIL" else "0"))
@@ -224,7 +249,39 @@ PYEOF
     if [ "$exitcode" -eq 1 ]; then
         log_advisory "FAIL" "session/guard-focus" "guidance issued (see stdout)"
     fi
+    if [ "$HANDOFF" -eq 1 ]; then
+        run_handoff
+        return "$?"
+    fi
     return "$exitcode"
+}
+
+run_handoff() {
+    # The offer, executed: brief -> leak check (inside the brief) -> ledger.
+    if [ -z "$SESSION" ]; then
+        printf 'handoff needs --session ID\n'
+        return 2
+    fi
+    local out="$OUTF"
+    [ -n "$out" ] || out="$REPO/logs/brief-$SESSION.md"
+    local hbargs
+    hbargs=("$SESSION" --out "$out")
+    if [ -n "$TRANSCRIPT" ]; then
+        hbargs+=(--transcript "$TRANSCRIPT")
+    fi
+    if ! bash "$REPO/scripts/handoff-brief.sh" "${hbargs[@]}"; then
+        printf 'handoff: brief failed (no transcript? run re-extract-session.sh first)\n'
+        return 1
+    fi
+    local chars=""
+    chars=$(wc -c < "$out" | tr -d ' ')
+    log_advisory "PASS" "session/handoff-$SESSION" "brief ready at $out ($chars chars, redacted, leak-checked)"
+    printf '\n=== handoff offer for %s ===\n' "$SESSION"
+    printf 'brief: %s (%s chars, redacted, leak-checked)\n' "$out" "$chars"
+    printf 'paste: open a fresh session, paste the brief, state your question\n'
+    printf 'used: session-health (risks) - handoff-brief (brief+redact) - secret-scan (leak check) - ledger (this row)\n'
+    printf 'the old session stays untouched; never --fork/--continue it\n'
+    return 0
 }
 
 main "$@"

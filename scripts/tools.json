@@ -25,7 +25,7 @@
     "title": "Over-budget / denied-model guidance with ledger logging",
     "where": "host",
     "purpose": "Reads session-health risks (every over/warn session, deny-listed free-tier models) and prints the numbered fresh-session guidance; logs ADVISORY rows for watchdog polling. Check-only; exit 1 when the focus is actionable.",
-    "commands": ["./scripts/session-guard.sh --session ses_<id>", "./scripts/session-guard.sh --json --no-log", "./scripts/session-guard.sh --self-test"]
+    "commands": ["./scripts/session-guard.sh --session ses_<id>", "./scripts/session-guard.sh --handoff --session ses_<id>", "./scripts/session-guard.sh --json --no-log", "./scripts/session-guard.sh --self-test"]
   },
   {
     "id": "handoff-brief",
@@ -40,6 +40,13 @@
     "where": "host",
     "purpose": "Finds secret-shaped lines (deepseek/jev keys, bearer tokens, env assignments) in artifact dirs (logs/, observability, notes). The report is value-free (file:line:kind only). Exit 1 names ./scripts/rotate-api-keys.sh plus the revoke consoles.",
     "commands": ["./scripts/secret-scan.sh", "./scripts/secret-scan.sh --json", "./scripts/secret-scan.sh --self-test"]
+  },
+  {
+    "id": "rotate-keys",
+    "title": "Rotate DeepSeek + JEV API keys (guided, interactive)",
+    "where": "host",
+    "purpose": "Browser revoke checklist, .env.local backup (0600), hidden-input new keys, atomic rewrite, container recreate, smoke test. Run in a terminal; the dashboard /manage page is read-only and cannot do this.",
+    "commands": ["./scripts/rotate-api-keys.sh", "./scripts/secret-scan.sh"]
   },
   {
     "id": "sentinel",

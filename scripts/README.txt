@@ -432,9 +432,11 @@ session-guard.sh
     The 4-step over-budget / denied-model guidance as code: reads
     session-health risks (every over/warn session, deny-listed
     gateway-metered free tiers), prints numbered fresh-session steps
-    (stop, fresh session, brief, allow-listed model), logs ADVISORY
-    rows. Check-only; exit 1 when actionable. --json, --session,
-    --no-log, --db/--rev seams, --self-test offline.
+    (pause, fresh session, brief, allow-listed model), logs ADVISORY
+    rows. FAIL means action due now (a routine handoff, nothing
+    broken) — the wording says so; exit 1 is for the watchdog.
+    --handoff runs the whole offer (brief + leak check + ledger).
+    --json, --session, --no-log, --db/--rev seams, --self-test.
 
 handoff-brief.sh
     Deterministic carry-over brief from logs/transcript-<id>.md (goal,

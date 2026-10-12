@@ -139,7 +139,7 @@ main() {
 
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
         run_json "$work/sguard.json" bash "$REPO/scripts/session-guard.sh" --json --no-log
-        validate_json "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "guidance" in d and len(d["guidance"]) == 4'
+        validate_json "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4'
     fi
 
     if [ -f "$REPO/scripts/sentinel.sh" ]; then

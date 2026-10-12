@@ -224,7 +224,7 @@ PYEOF
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'
         if [ -n "$TRIPMSG" ]; then
             printf '%s' "$TRIPMSG"
-            printf 'guidance: ./scripts/session-guard.sh [--session <id>] then a fresh session + brief, never --fork\n'
+            printf 'guidance: ./scripts/session-guard.sh [--session <id>] for the verdict, or --handoff --session <id> for the full offer (brief+paste steps)\n'
         else
             printf 'clean: no actionable trips (history reported above)\n'
         fi
