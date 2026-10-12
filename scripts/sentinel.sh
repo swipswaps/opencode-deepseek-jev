@@ -20,6 +20,10 @@
 #   T3 >=1 NEW gateway-failure line in opencode.log since the cursor
 #      (AI_APICallError | Free usage exceeded | backend is temporarily
 #      unavailable), grouped by modelID.
+#   T4 >=1 NEW caddy fetch slower than SENTINEL_SLOW_SEC (default 10) since
+#      the access cursor — the "loading takes forever" tripwire. Source is
+#      `docker logs` (or SENTINEL_ACCESSLOG file seam); first run
+#      initialises silently like every cursor here.
 # REPORT-only (exit stays 0): total over/warn/denied counts across recent 40.
 # A permanently-red monitor desensitizes (cry-wolf); history is reported,
 # only news trips.
@@ -27,7 +31,9 @@
 #   ./scripts/sentinel.sh [--once] [--json] [--no-log]
 #   ./scripts/sentinel.sh --self-test   # offline fixture, no docker/net
 #
-# Env seams: SENTINEL_DB, SENTINEL_APP, SENTINEL_STATE, LEDGER_DB.
+# Env seams: SENTINEL_DB, SENTINEL_APP, SENTINEL_STATE, LEDGER_DB,
+# SENTINEL_ACCESSLOG (file instead of `docker logs`), SENTINEL_NODOCKER=1
+# (skip T4), SENTINEL_SLOW_SEC (default 10).
 # Exit 0 clean-or-report, 1 tripped, 2 usage/resolve error.
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
@@ -101,10 +107,15 @@ PYEOF
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" bash "${BASH_SOURCE[0]}" --json --no-log 2>&1)
     python3 -c 'import json,sys; d=json.load(sys.stdin); assert set(("ts","rev","tripped","trips","counts")) <= set(d), "keys"; assert d["tripped"] is True, "tripped"' <<< "$o" \
         || { printf 'FAIL json contract\n'; fail=1; }
+    printf '%s\n' '{"logger":"http.log.access.log0","ts":1791840000,"duration":44.2,"request":{"method":"GET","uri":"/session/s1/message"},"status":200}' '{"logger":"http.log.access.log0","ts":1791840001,"duration":0.2,"request":{"method":"GET","uri":"/api/health"},"status":200}' > "$work/acc.log"
+    printf '%s' '0' > "$work/state/sentinel-access.cursor"
+    o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_ACCESSLOG="$work/acc.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'TRIP T4 slow-fetch: 1 fetch' || { printf 'FAIL T4 trips on slow fetch\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'slowest 44.2s' || { printf 'FAIL T4 slowest reported\n'; fail=1; }
     SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
-    rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/state/sentinel.cursor"
+    rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor"
     rmdir "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'sentinel: self-test PASS\n'; else printf 'sentinel: self-test FAIL\n'; fi
     return "$fail"
@@ -217,8 +228,71 @@ PYEOF
             done
         fi
     fi
+    # T4: slow caddy fetches since the access cursor. First run initialises
+    # silently; docker missing (or NODOCKER) skips.
+    local SLOW_SEC="${SENTINEL_SLOW_SEC:-10}"
+    local slow_n=0 slow_max=0 slow_uri=""
+    if [ "${SENTINEL_NODOCKER:-0}" -eq 0 ] && have docker && have python3; then
+        local acc_cur="$STATE/sentinel-access.cursor" acc_since="" acc_new=0
+        if [ -f "$acc_cur" ]; then
+            acc_since=$(tr -d ' ' < "$acc_cur")
+        fi
+        case "$acc_since" in ''|*[!0-9]*) acc_since="" ;; esac
+        local acc_lines="" acc_src="" acc_tmp=""
+        if [ -n "${SENTINEL_ACCESSLOG:-}" ]; then
+            acc_src="$SENTINEL_ACCESSLOG"
+        elif [ -n "$acc_since" ]; then
+            acc_tmp=$(mktemp)
+            docker logs --since "$acc_since" opencode-caddy > "$acc_tmp" 2>&1 || true
+            acc_src="$acc_tmp"
+        else
+            acc_src=""
+        fi
+        if [ -z "$acc_src" ]; then
+            : # first live run: initialise below, no trip on history
+        else
+            local slow_out=""
+            slow_out=$(python3 - "$SLOW_SEC" "$acc_src" << 'PYEOF'
+import json, sys
+thresh = float(sys.argv[1])
+n, mx, uri = 0, 0.0, ""
+try:
+    fh = open(sys.argv[2], encoding="utf-8", errors="replace")
+except OSError:
+    fh = []
+for line in fh:
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        e = json.loads(line)
+    except Exception:
+        continue
+    if not str(e.get("logger", "")).startswith("http.log.access"):
+        continue
+    dur = float(e.get("duration", 0) or 0)
+    if dur >= thresh:
+        r = e.get("request", {}) or {}
+        n += 1
+        if dur > mx:
+            mx, uri = dur, str(r.get("method", "?")) + " " + str(r.get("uri", "?"))[:70]
+print("%d|%.1f|%s" % (n, mx, uri))
+PYEOF
+            )
+            slow_n=${slow_out%%|*}
+            slow_max=$(printf '%s' "$slow_out" | cut -d'|' -f2)
+            slow_uri=$(printf '%s' "$slow_out" | cut -d'|' -f3-)
+            case "$slow_n" in ''|*[!0-9]*) slow_n=0 ;; esac
+        fi
+        printf '%s' "$(date +%s)" > "$acc_cur"
+        if [ "$slow_n" -gt 0 ]; then
+            trip "TRIP T4 slow-fetch: $slow_n fetch(es) >= ${SLOW_SEC}s (slowest ${slow_max}s $slow_uri)" "caddy access log" "slow fetches x$slow_n, slowest ${slow_max}s ($slow_uri)"
+        fi
+        [ -n "$acc_tmp" ] && rm -f "$acc_tmp"
+    fi
+    export SLOW_N="$slow_n" SLOW_MAX="$slow_max"
     if [ "$JSON" -eq 1 ]; then
-        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")), "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0"))}))'
+        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
     else
         printf '=== sentinel @ %s ===\n' "$RUN_TS"
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'

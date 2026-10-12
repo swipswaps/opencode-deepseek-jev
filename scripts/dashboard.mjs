@@ -301,11 +301,12 @@ function budgetUsd() {
 // apiCode is deliberately NOT cached (measured 12-29ms — caching would be
 // cargo-cult). The overview key includes the request param, so limit=5 and
 // limit=200 never share an entry.
-function apiOverview(limit) {
-  return ttlCached("overview:" + Number(limit || 500), CACHE_TTL_MS, () => apiOverviewFresh(limit));
+function apiOverview(limit, offset) {
+  const key = "overview:" + (Number(limit) || 500) + ":" + (Number(offset) || 0);
+  return ttlCached(key, CACHE_TTL_MS, () => apiOverviewFresh(limit, offset));
 }
-function apiOverviewFresh(limit) {
-  return { budget: budgetUsd(), sessions: apiSessions(limit) };
+function apiOverviewFresh(limit, offset) {
+  return { budget: budgetUsd(), sessions: apiSessions(limit, offset) };
 }
 
 function apiSchema() {
@@ -773,13 +774,18 @@ function qs(req) {
   return out;
 }
 
-function apiSessions(limit) {
+function apiSessions(limit, offset) {
+  // No correlated subqueries: MIN/MAX over part per session measured 130x
+  // slower than the plain scan (1.045s vs 0.008s at 82 sessions). The UI
+  // already falls back to session times (span()/dur()), so p_start/p_end
+  // are dropped, not moved. limit/offset are clamped to ints (injection
+  // cannot ride a string into LIMIT/OFFSET).
+  const lim = Math.max(1, Math.min(2000, Number(limit) || 200));
+  const off = Math.max(0, Number(offset) || 0);
   return query(
-    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, p.worktree AS project, s.time_created, s.time_updated, " +
-    "(SELECT MIN(p2.time_created) FROM part p2 WHERE p2.session_id=s.id) p_start, " +
-    "(SELECT MAX(p2.time_updated) FROM part p2 WHERE p2.session_id=s.id) p_end " +
-    "FROM session s LEFT JOIN project p ON p.id=s.project_id ORDER BY s.time_created DESC LIMIT ?",
-    limit
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, p.worktree AS project, s.time_created, s.time_updated " +
+    "FROM session s LEFT JOIN project p ON p.id=s.project_id ORDER BY s.time_created DESC LIMIT ? OFFSET ?",
+    lim, off
   );
 }
 
@@ -2504,7 +2510,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/providers") {
     send(res, 200, JSON.stringify(apiProviders()), "application/json");
   } else if (url === "/api/overview") {
-    send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500)), "application/json");
+    send(res, 200, JSON.stringify(apiOverview(Number(params.limit) || 500, Number(params.offset) || 0)), "application/json");
   } else if (url === "/api/schema") {
     send(res, 200, JSON.stringify(apiSchema()), "application/json");
   } else if (url === "/api/integrations") {
@@ -2550,7 +2556,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/todos") {
     send(res, 200, JSON.stringify(apiTodos()), "application/json");
   } else if (url === "/api/sessions") {
-    send(res, 200, JSON.stringify(apiSessions(Number(params.limit) || 200)), "application/json");
+    send(res, 200, JSON.stringify(apiSessions(Number(params.limit) || 200, Number(params.offset) || 0)), "application/json");
   } else if (url === "/api/parts") {
     send(res, 200, JSON.stringify(apiParts(params.session || null, Number(params.limit) || 600)), "application/json");
   } else if (url === "/api/session") {

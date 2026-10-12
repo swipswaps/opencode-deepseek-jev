@@ -144,7 +144,7 @@ main() {
 
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
         run_json "$work/sen.json" bash "$REPO/scripts/sentinel.sh" --json --no-log
-        validate_json "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d'
+        validate_json "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d'
     fi
 
     if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
