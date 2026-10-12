@@ -72,6 +72,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "secret-scan.sh --self-test" },
       "test": "scripts/secret-scan.sh",
       "evidence": { "path": "scripts/handoff-brief.sh", "marker": "secret-scan.sh" }
+    },
+    {
+      "id": "sentinel",
+      "purpose": "periodic threshold trips (latest over/denied, new gateway errors) to the ledger",
+      "impl": "scripts/sentinel.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "sentinel.sh --self-test" },
+      "test": "scripts/sentinel.sh",
+      "evidence": { "path": "data/observability/observability.db", "marker": "sentinel" }
     }
   ]
 }

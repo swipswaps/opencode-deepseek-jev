@@ -42,6 +42,13 @@
     "commands": ["./scripts/secret-scan.sh", "./scripts/secret-scan.sh --json", "./scripts/secret-scan.sh --self-test"]
   },
   {
+    "id": "sentinel",
+    "title": "Periodic threshold monitor with ledger trips",
+    "where": "host",
+    "purpose": "One sweep: latest-session over-budget/deny-listed trips (T1/T2) plus new gateway-failure lines since cursor (T3); history only reported. Logs ADVISORY rows for watchdog polling. Runs under systemd/opencode-sentinel.timer every 5 min (see sentinel-install).",
+    "commands": ["./scripts/sentinel.sh --once", "./scripts/sentinel.sh --json --no-log", "./scripts/sentinel-install.sh"]
+  },
+  {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",

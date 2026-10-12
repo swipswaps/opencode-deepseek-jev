@@ -142,6 +142,11 @@ main() {
         validate_json "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "guidance" in d and len(d["guidance"]) == 4'
     fi
 
+    if [ -f "$REPO/scripts/sentinel.sh" ]; then
+        run_json "$work/sen.json" bash "$REPO/scripts/sentinel.sh" --json --no-log
+        validate_json "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d'
+    fi
+
     # The explore treemap uses the vendored d3. The page must call it as a
     # layout with a tile function; calling d3.treemapResquarify() as a layout
     # throws in the browser. Prove the exact call pattern works against the

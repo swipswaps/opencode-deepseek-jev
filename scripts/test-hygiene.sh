@@ -321,6 +321,28 @@ main() {
         bad 'secret-scan.sh present'
     fi
 
+    if [ -f "$REPO/scripts/sentinel.sh" ]; then
+        if bash "$REPO/scripts/sentinel.sh" --self-test > "$work/sen_st.txt" 2>&1; then
+            ok 'sentinel: self-test (fixture trips + cursor + ledger seam)'
+        else
+            bad 'sentinel: self-test (fixture trips + cursor + ledger seam)'
+            cat "$work/sen_st.txt"
+        fi
+    else
+        bad 'sentinel.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/sentinel-install.sh" ]; then
+        if bash "$REPO/scripts/sentinel-install.sh" --self-test > "$work/sen_ins.txt" 2>&1; then
+            ok 'sentinel-install: self-test (unit bake, no systemd)'
+        else
+            bad 'sentinel-install: self-test (unit bake, no systemd)'
+            cat "$work/sen_ins.txt"
+        fi
+    else
+        bad 'sentinel-install.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

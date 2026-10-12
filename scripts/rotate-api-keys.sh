@@ -277,10 +277,17 @@ r7_verify_inside() {
 r8_smoke() {
     section "R8  one-shot smoke test with new keys"
     local log="/tmp/rotate-smoke-${R_TS}.log"
-    docker exec -w /workspace "$C" sh -c \
+    # Bound the model call: on a loaded host with a large store the run can
+    # take many minutes, which used to look like a hang (operator ^C).
+    # timeout 127/124 both mean "no answer in time" -> FAIL, not a hang.
+    timeout 180 docker exec -w /workspace "$C" sh -c \
         "opencode run --model '$MODEL' 'Reply with exactly: ROTATED'" \
         > "$log" 2>&1
+    local trc=$?
     tail -10 "$log" | indent
+    if [ "$trc" -eq 124 ] || [ "$trc" -eq 127 ]; then
+        printf '\n  smoke: TIMEOUT after 180s (keys may still be fine; verify with a balance check)\n' >> "$log"
+    fi
     if grep -q 'ROTATED' "$log"; then
         R_SMOKE="PASS"
         printf '\n  smoke: PASS\n'

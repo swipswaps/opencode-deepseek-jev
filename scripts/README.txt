@@ -452,6 +452,20 @@ secret-scan.sh
     consoles. handoff-brief.sh runs it on its source transcript.
     --paths, --json, --quiet, --self-test offline.
 
+sentinel.sh
+    Periodic threshold monitor (user timer, every 5 min): trips only
+    on actionable news — latest session over budget (T1) or on a
+    deny-listed model (T2), new gateway-failure lines since cursor
+    (T3); history only reported. Logs ADVISORY rows for watchdog
+    polling. --once (default), --json, --no-log, --self-test offline.
+    Install: ./scripts/sentinel-install.sh (no sudo).
+
+sentinel-install.sh
+    Installs the user-level sentinel timer (writes units with the repo
+    path baked in, enables via systemctl --user). Idempotent;
+    --write-only for review, --uninstall to remove, --self-test
+    offline (no systemd touched).
+
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json,
     key env vars, opencode.json parse, jev-review server.js. --full adds

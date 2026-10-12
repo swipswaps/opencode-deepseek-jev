@@ -1,0 +1,14 @@
+[Unit]
+Description=opencode session/model health sentinel (one sweep, ledger-logged)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/sentinel-install.sh (no sudo needed).
+ExecStart=__REPO__/scripts/sentinel.sh --once
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
