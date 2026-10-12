@@ -1,0 +1,33 @@
+%% opencode-deepseek-jev request path + deployment (renders natively on GitHub)
+flowchart TD
+    subgraph client["Client (any node)"]
+        B[Browser / opencode TUI]
+    end
+    subgraph edge["Edge (.24 host)"]
+        C[Caddy :4096/:5099<br/>TLS + Basic opencode]
+    end
+    subgraph svc["Services (compose)"]
+        W[opencode-web :4096<br/>53 repo-project sessions]
+        D[dashboard :5099<br/>78 sessions, findings]
+        L[litellm :4000<br/>flash / pro / 4.1 + fallbacks]
+    end
+    subgraph planes["Reachability planes"]
+        LAN[LAN 192.168.4.24<br/>no gateway state]
+        NEB[Nebula 10.100.0.24<br/>overlay roam]
+        TAIL[Tailnet taile17668<br/>overlay roam]
+        PUB[DuckDNS :443<br/>needs eero forward]
+    end
+    B --> LAN & NEB & TAIL & PUB
+    LAN & NEB & TAIL --> C
+    PUB -.->|CLOSED until eero app forwards| C
+    C --> W & D
+    W --> L
+
+flowchart LR
+    subgraph host[".24 host (Fedora)"]
+        R[repo + scripts/ux.sh]
+        DB[(opencode.db<br/>read-only + nightly .backup)]
+        CERTS[certs/ local CA]
+    end
+    R --> DB
+    R --> CERTS

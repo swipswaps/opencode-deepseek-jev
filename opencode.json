@@ -54,6 +54,11 @@
         "type": "local",
         "command": [ "node", "/opt/jev-review/dist/server.js" ],
         "environment": { "JEV_API_KEY": "{env:JEV_API_KEY}" }
+      },
+      "repo-tools": {
+        "type": "local",
+        "command": [ "node", "scripts/repo-mcp.mjs" ],
+        "environment": {}
       }
     }
   }

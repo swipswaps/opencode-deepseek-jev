@@ -27,6 +27,22 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       num_retries: 3
 
+# Failover order for transient upstream 401/429/503 (DeepSeek governor
+# blips, congestion). First entry is tried first; litellm advances on
+# retryable errors. Keeps the TUI on a working model without re-picking.
+fallbacks:
+  - deepseek-flash: [deepseek-flash-pro, deepseek-flash-4.1]
+  - deepseek-flash-4.1: [deepseek-flash-pro, deepseek-flash]
+  - deepseek-flash-pro: [deepseek-flash]
+
+# Spend persistence (enables the max_budget cap + admin UI history).
+# NOT active: requires a Postgres the compose stack does not run yet.
+# Host enable path: add a postgres service, set DATABASE_URL below to
+# os.environ/LITELLM_DATABASE_URL, recreate litellm. Until then max_budget
+# stays decorative (see note under litellm_settings).
+# general_settings:
+#   database_url: os.environ/LITELLM_DATABASE_URL
+
 litellm_settings:
   # Hard cap in USD. 30d = rolling 30 days; also: 1d, 1h.
   # Budgets / virtual keys: https://docs.litellm.ai/docs/proxy/virtual_keys
