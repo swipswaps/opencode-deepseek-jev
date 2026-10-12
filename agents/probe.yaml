@@ -1,0 +1,35 @@
+# agents/probe.yaml — declarative :4096/:5099 probe pipeline.
+#
+# Adapted from docker/docker-agent's agent.yaml idiom: versionable,
+# shareable task text with named steps, each carrying its gate.
+# The router scripts/ux.sh executes these steps in order; this file is
+# the contract (edit here, router follows). Secrets never appear here:
+# OPENCODE_SERVER_PASSWORD arrives via .env.local at runtime.
+#
+# hermes-agent mapping: this is the unattended half of the gateway —
+# cron runs `probe` and delivers PASS/FAIL; humans run `ux` for the
+# same steps interactively. Same steps, both doors.
+version: 1
+name: web-probe
+description: HTTPS + auth + render evidence for opencode-web via caddy
+env_required:
+  - OPENCODE_SERVER_PASSWORD
+defaults:
+  OPENCODE_API_URL: https://192.168.4.24:4096
+  DASH_URL: https://192.168.4.24:5099
+steps:
+  - name: chrome
+    cmd: bash scripts/chrome-cdp-up.sh
+    expect: "CDP listening"
+  - name: probe
+    cmd: bash scripts/probe-diagnose.sh
+    expect: "probe: PASS"
+  - name: findings
+    cmd: bash scripts/ux-findings.sh
+    expect: "GUIDE-OK"
+  - name: recall
+    cmd: python3 scripts/recall-sessions.py mesh --limit 5
+    expect: "message-hits:"
+  - name: cost
+    cmd: bash scripts/cost.sh
+    expect: "sessions"

@@ -118,28 +118,9 @@ main() {
         printf 'WARN: --insecure: starting WITHOUT authentication\n'
     fi
 
-    # ---- TLS pair for caddy (:4096/:5099) ----
-    # Machine-local and gitignored. certs-init.sh is self-healing: mints
-    # the CA + server pair if missing and reissues when SANs no longer
-    # cover this host (prints ROTATED). caddy reads certs at startup, so
-    # a rotation needs a restart to take effect (handled below).
-    local certs_out=""
-    if [ -x "$REPO_DIR/docker/certs-init.sh" ]; then
-        certs_out="$("$REPO_DIR/docker/certs-init.sh" 2>&1)" || { printf '%s\n' "$certs_out"; return 1; }
-        printf '%s\n' "$certs_out"
-    else
-        printf 'WARN: docker/certs-init.sh missing; caddy needs docker/certs/opencode.{crt,key}\n'
-    fi
-
     cd "$COMPOSE_DIR"
     printf 'starting opencode-web container\n'
     docker compose up -d opencode-web
-    case "$certs_out" in
-        *ROTATED*)
-            printf 'certs rotated; restarting caddy to serve the new pair\n'
-            docker compose restart caddy || return 1
-            ;;
-    esac
     local rc=$?
     if [ "$rc" -ne 0 ]; then
         printf 'FAIL: docker compose up returned %d\n' "$rc"

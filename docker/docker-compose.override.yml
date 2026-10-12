@@ -4,3 +4,24 @@ services:
       - ..:/workspace
       - ../data/opencode:/home/node/.local/share/opencode
       - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
+      - /home/owner/.config/opencode:/home/node/.config/opencode:rw
+      - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:rw
+      - /home/owner/Documents/6ac64c8c-d70c-83ea-8512-7b449377d861/notes:/home/owner/Documents/6ac64c8c-d70c-83ea-8512-7b449377d861/notes:rw
+      - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo:/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo:rw
+      - /home/owner:/home/owner:rw
+    networks:
+      - default
+      - litellm_default
+
+  opencode:
+    volumes:
+      - ..:/workspace
+      - ../data/opencode:/home/node/.local/share/opencode
+      - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
+      - /home/owner/.config/opencode:/home/node/.config/opencode:rw
+      - /home/owner:/home/owner:rw
+
+networks:
+  litellm_default:
+    external: true
+    name: litellm_default

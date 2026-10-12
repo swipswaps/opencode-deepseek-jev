@@ -27,6 +27,11 @@ prints its own evidence is an asset. Apply on every paste, in every repo.
 - Every script prints measured state before acting: current SSID/IP/gateway,
   unit states, counters before/after, DB rows written. `telemetry()` blocks
   beat paragraphs.
+- Zero-cost sources first: `ps`/`top`/`uptime`, PSI (`/proc/pressure/*`),
+  `ss`, `ip`, `systemctl`, `journalctl -p warning`, Tailnet counters,
+  DB aggregates. These are always on, need no setup, and settle
+  resource-contention arguments with numbers (a stray `htop` in TTY F2
+  outranks a theory). Reach for them before any new instrumentation.
 - Never suppress stderr: no `2>/dev/null`, no `head`-truncated proof,
   no "should work". A claim without a row/line is a guess — label it so.
 - Destructive steps (deletes, restarts, re-signs) require typed confirmation

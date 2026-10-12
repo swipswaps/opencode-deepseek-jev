@@ -17,17 +17,6 @@ cd docker
 
 Keys are cached in ../.env.local (mode 0600, gitignored).
 
-## Run anywhere (any machine, any network)
-
-Full user guide: [`docs/ANYWHERE.md`](docs/ANYWHERE.md) — clone,
-`ensure-env.sh`, `docker/certs-init.sh` (caddy TLS for `:4096`/`:5099`,
-also auto-runs from `scripts/web.sh`), `scripts/web.sh`, then join the
-nebula mesh (`onboard` on the lighthouse, `join`/`join-b64` on the new
-node). Services are `https://` only: plain `http://` answers `Client
-sent an HTTP request to an HTTPS server` by design. Over the mesh, use
-the serving host's overlay IP (ours: `https://10.100.0.24:5099/`,
-`https://10.100.0.24:4096/`).
-
 ## Vision / image input
 DeepSeek V4.1 Flash natively ingests images. `opencode.json` declares this
 (`attachment: true` + `modalities.input: ["text","image"]`), so OpenCode
@@ -468,6 +457,19 @@ closed, and capture `logs.sh` output before any retry so a retry is not blind.
 Jev/TypeSafe calls — small here (11 jev-review invocations total). It does not
 cut DeepSeek: Laya is a Jev-compatible classifier, not a chat model. The big
 lever is pinning `deepseek-flash` (v4-pro was 75% of spend).
+
+## Verification status (2026-10-12, rev 338e142)
+
+Sandbox-runnable gates, all green: `lint.sh` 165 pass, `test-hygiene.sh`
+39 pass, `test-patterns.sh` 6 pass, `cdp-tab.mjs --self-test` 10/10,
+`blacklist-guard-self-test` PASS, `ux-trace.py --self-test` 9/9.
+Host-side `ux.sh status` (chrome + probe): `probe: PASS` — dash 79,
+opencode 54, rendered 12 rows, browser 54/54, drift note by design.
+Pages export (`pages-export.sh --shell`): 78 sessions, `site/index.html` +
+`data.json` built; deploy stays manual (`workflow_dispatch`).
+
+![probe :4096](docs/ux/probe-4096.png)
+![probe :5099](docs/ux/probe-5099.png)
 
 ## Choosing a model
     ./scripts/models.sh              # catalog + cost policy verdict

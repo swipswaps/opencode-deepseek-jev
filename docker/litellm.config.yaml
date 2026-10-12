@@ -7,12 +7,24 @@
 model_list:
   - model_name: deepseek-flash
     litellm_params:
-      model: deepseek/deepseek-chat          # verify exact DeepSeek model id
+      model: deepseek/deepseek-flash
       api_key: os.environ/DEEPSEEK_API_KEY
       # Absorb transient upstream congestion (429/503 "backend
       # temporarily overloaded") at the proxy instead of failing
       # every client on the first blip. num_retries semantics:
       # https://docs.litellm.ai/docs/completion/reliable_completions
+      num_retries: 3
+
+  - model_name: deepseek-flash-pro
+    litellm_params:
+      model: deepseek/deepseek-v4-pro
+      api_key: os.environ/DEEPSEEK_API_KEY
+      num_retries: 3
+
+  - model_name: deepseek-flash-4.1
+    litellm_params:
+      model: deepseek/deepseek-flash
+      api_key: os.environ/DEEPSEEK_API_KEY
       num_retries: 3
 
 litellm_settings:

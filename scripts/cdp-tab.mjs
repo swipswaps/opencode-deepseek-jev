@@ -38,8 +38,8 @@ import { readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url)).replace(/\/+$/, "");
-const DASH = process.env.DASH_URL || "http://127.0.0.1:5099";
-const API = process.env.OPENCODE_API_URL || "http://127.0.0.1:4096";
+const DASH = process.env.DASH_URL || "https://127.0.0.1:5099";
+const API = process.env.OPENCODE_API_URL || "https://127.0.0.1:4096";
 
 // ---- pure helpers (unit-tested by --self-test, no I/O) -----------------
 
@@ -228,7 +228,11 @@ export async function screenshotRetry(wsUrl, path) {
 }
 
 // Probe js: single expression, no backslash escapes (RULES #61).
-const RENDERED_JS = "({loading: document.querySelectorAll('[data-loading]').length, rows: document.querySelectorAll('#sessions tr[data-id]').length, ids: Array.prototype.slice.call(document.querySelectorAll('#sessions tr[data-id]'), 0, 20).map(function(r){return r.getAttribute('data-id');})})";
+// :5099 serves the observability shell (cmdk/session/stats/sessions panes;
+// runbook cards only on older builds), so rows = session entries if the
+// sessions pane lists them, else runbook cards. Session-id faithfulness
+// across the full set is checked on :4096 via browserApi instead.
+const RENDERED_JS = "({loading: document.querySelectorAll('[data-loading]').length, rows: Math.max(document.querySelectorAll('#sessions [data-id]').length, document.querySelectorAll('#list .card').length, document.querySelectorAll('#sessions option, #sessions [role=\"option\"], #sessions li').length), ids: Array.prototype.slice.call(document.querySelectorAll('#sessions [data-id]'), 0, 20).map(function(r){return r.getAttribute('data-id');})})";
 
 // Answer an HTTP Basic auth challenge inside the tab (Fetch domain), so an
 // auth-gated API endpoint renders its body instead of parking the tab on the
@@ -289,7 +293,15 @@ export async function openAuth(port, url, user, pw) {
 async function ensureTab(port, url, match, tolerant) {
   const tabs = await listTabs(port);
   const found = matchTab(tabs, match);
-  if (found.ok) return found.tab;
+  if (found.ok) {
+    // Self-heal: a stale tab (e.g. http:// survivor from before the
+    // https default) matches the substring but serves the wrong scheme.
+    // Navigate it to the desired URL instead of reusing the error page.
+    if (found.tab.url !== url) {
+      await navigateTab(found.tab.webSocketDebuggerUrl, url, tolerant);
+    }
+    return found.tab;
+  }
   return openUrl(port, url, tolerant);
 }
 
@@ -335,7 +347,7 @@ export async function runProbe(outdir) {
   let browserApi = -1;
   try {
     const found = await findDebugPort();
-    const tab = await ensureTab(found.port, DASH + "/", "127.0.0.1:5099");
+    const tab = await ensureTab(found.port, DASH + "/", ":5099");
     // Settle: poll the loading marker the way ux-test.py does.
     for (let i = 0; i < 30; i++) {
       const cur = await evaluate(tab.webSocketDebuggerUrl,
@@ -351,7 +363,7 @@ export async function runProbe(outdir) {
   try {
     mkdirSync(outdir, { recursive: true });
     const found2 = await findDebugPort();
-    const tabS = matchTab(await listTabs(found2.port), "127.0.0.1:5099");
+    const tabS = matchTab(await listTabs(found2.port), ":5099");
     if (!tabS.ok) throw new Error(tabS.why);
     shot5099 = outdir + "/probe-5099.png";
     await screenshotRetry(tabS.tab.webSocketDebuggerUrl, shot5099);
@@ -369,7 +381,7 @@ export async function runProbe(outdir) {
       shot4096 = outdir + "/probe-4096.png";
       await screenshotRetry(opened.target.webSocketDebuggerUrl, shot4096);
     } else {
-      const tab2 = await ensureTab(found2.port, API + "/", "127.0.0.1:4096", true);
+      const tab2 = await ensureTab(found2.port, API + "/", ":4096", true);
       const gate = String(await evaluate(tab2.webSocketDebuggerUrl,
         "document.title + ' :: ' + document.body.innerText.slice(0,80)")).replace(/\s+/g, " ");
       step("auth gate :4096", true, "login dialog owns the tab" + (gate.trim() ? " :: " + gate.slice(0, 80) : ""));
