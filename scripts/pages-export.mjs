@@ -167,8 +167,35 @@ function main() {
   console.log("WROTE " + out + " sessions=" + sessions.length + " models=" + models.length);
 }
 
+// Endpoints deduced from the caddy publish lines in docker-compose.yml
+// (own-infra addresses only — no secrets, redaction-safe). Labels encode
+// the roaming rule the 2026-10-12 hotspot switch proved: LAN-bound URLs
+// die on network change, overlay URLs survive it.
+function deduceEndpoints() {
+  const out = [];
+  try {
+    const yml = readFileSync(join(ROOT, "docker", "docker-compose.yml"), "utf8");
+    const seen = new Set();
+    const re = /"(\d+\.\d+\.\d+\.\d+):(\d+):\d+"/g;
+    let m = null;
+    while ((m = re.exec(yml)) !== null) {
+      const key = m[1] + ":" + m[2];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (m[2] !== "4096" && m[2] !== "5099") continue;
+      const url = "https://" + m[1] + ":" + m[2] + "/";
+      const note = m[1] === "127.0.0.1" ? "this machine only"
+        : m[1] === "10.100.0.24" ? "any LAN via Nebula overlay — survives network switches"
+        : m[1] === "192.168.4.24" ? "belkin LAN only — breaks if the client switches networks"
+        : "published binding";
+      out.push({ url, note });
+    }
+  } catch {}
+  return out;
+}
 function writeShell(out, data, sessions, rev, totals) {
   mkdirSync(out, { recursive: true });
+  const endpoints = deduceEndpoints();
   mkdirSync(join(out, "vendor"), { recursive: true });
   for (const v of ["d3.min.js"]) {
     try {
@@ -191,6 +218,8 @@ function writeShell(out, data, sessions, rev, totals) {
     "<div class=badge>generated " + esc(data.generated_at) + " · rev " + esc(rev) + " · consent " + esc(data.consent.scope) +
     " · policy " + esc(data.consent.policyHash || "?") + " · redacted aggregates only (no message text)</div>" +
     "<div class=muted>" + totals.n + " sessions · $" + Number(totals.c).toFixed(2) + " total</div>" +
+    "<h2>endpoints</h2><div class=muted>deduced from docker compose bindings at export time — pick by where the browser sits (Basic login: opencode + server password)</div><ul>" +
+    endpoints.map((e) => "<li><a href=\"" + esc(e.url) + "\">" + esc(e.url) + "</a> — " + esc(e.note) + "</li>").join("") + "</ul>" +
     "<h2>models</h2><div id=bars></div>" +
     "<h2>sessions</h2><div style=overflow-x:auto><table><tr><th>title</th><th>model</th><th>project</th><th class=num>updated</th><th class=num>cost</th></tr>" +
     rows + "</table></div>" +

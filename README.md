@@ -278,6 +278,29 @@ scratch dashboard build, none retouched):
 - docs/ux/explore-sessions.png — /explore overview sessions table
   (42 sessions, same scratch build).
 
+## Features and tools
+
+One entry point, `bash scripts/ux.sh <verb>` (`help|status|chrome|probe|
+findings|recall|cost|review|net`); the contract lives in
+`agents/probe.yaml`. Built rea-style: every tool states behavior, emits
+evidence, and names its limitations — findings always carry all three.
+
+| Tool | Behavior → evidence |
+|---|---|
+| `ux.sh status` | Chrome + probe end-to-end → `probe: PASS` + `logs/cdp/probe-latest.json` |
+| `probe-diagnose.sh` / `cdp-tab.mjs` | HTTPS + auth + render evidence over CDP (zero-dep, no Playwright install) |
+| `ux-findings.sh` | `:5099` findings in plain language (means / care / action) |
+| `recall-sessions.py` | Keyword recall over sessions with provenance |
+| `cost.sh` | Spend headline: sessions, tokens, balance, estimates |
+| `dns-guard.sh` / `dns-audit.sh` | Detect → ledger-record → staged remediation (daemon-safe first) |
+| `verify-loads.sh` / `verify-caddy-audit.sh` | Served-config proof (fallbacks, MCP entry, bindings, denials sweep) |
+| `gate-all.sh` | 15 asserts (lint/hygiene/patterns/self-tests/contract/freshness/certs/secrets/recall/pages) → PASS/FAIL/SKIP |
+| `review-diff.sh` | Pre-push semantic review; SKIP (never FAIL) when uninstalled |
+| `repo-mcp.mjs` | The four read-only tools as an MCP server (`repo-tools` in `opencode.json`) |
+| `enable-lan-cert.sh` / `certs-init.sh` / `certs-trust.sh` | LAN SAN rotation + CA trust (system/Firefox/Chromium NSS) |
+| Skills | `jev-harness` (workflow), `repo-wizard` (human-only steps + grill), `typed-must-be-scripted`, `ux-verify` |
+| Dashboard `:5099` | Panes: dashboard, explore, models, runbooks, manage, docs + cmdk palette |
+
 ## Usage guide (step by step, with screenshots)
 
 Video walkthrough (39 s, 13 captioned steps with pan/zoom into each
@@ -473,6 +496,51 @@ Second environment (2026-10-12): `.45` moved `belkin2` → Samsung Galaxy
 hotspot. `dns-guard.sh` HEALTHY on the new uplink, `.24` stack re-probed
 PASS unaffected (isolation proven), tailnet cross-plane 5–17ms 0% loss.
 Same `docs/ux` shots below (refreshed 09:20 run).
+
+## How-to guides
+
+```bash
+# PASS check (the whole state, one command)
+bash scripts/ux.sh status
+# Backup (atomic, WAL-safe) + verify
+python3 -c "import sqlite3; s=sqlite3.connect('file:data/opencode/opencode.db?mode=ro',uri=True); print(s.execute('SELECT COUNT(*) FROM session').fetchone())"
+# Cert rotate + trust (LAN SAN, then relaunch Chrome)
+CERT_EXTRA_SANS="IP:192.168.4.24" ./docker/certs-init.sh && ./docker/certs-trust.sh
+# DNS recovery (detect/record always; remediate only with --fix)
+bash scripts/dns-guard.sh && bash scripts/dns-guard.sh --fix
+# Uplink switch survival (.45 belkin2 → Galaxy proven 2026-10-12)
+bash /tmp/dns-guard.sh && ping -c3 100.70.43.78
+# Pre-push review (SKIP when reviewer absent) + redacted Pages build
+bash scripts/ux.sh review && ./scripts/pages-export.sh --shell --yes --limit 500
+```
+
+### Hotspot roaming test (.45 → Samsung Galaxy, annotated)
+
+On `.45`, switch the uplink, then prove the overlay outlives the LAN.
+Copy `hotspot-test.sh` over first (`.45` has no repo checkout):
+`scp owner@192.168.4.24:.../repo/scripts/hotspot-test.sh /tmp/` then
+`bash /tmp/hotspot-test.sh`. What to press when:
+
+| When | Press / run | Expect |
+|---|---|---|
+| Phone | Hotspot ON | `.45` joins new LAN |
+| `.45` shell | `bash /tmp/hotspot-test.sh` | §1 DNS ok |
+| Same run | (automatic) | §2 overlay `401` + `200`; §3 belkin URL times out (control) |
+| Same run | (automatic) | §4 Pages `200`; §5 Chrome version or SKIP |
+| `.45` Chrome | Open `https://10.100.0.24:4096/` → **accept** cert if asked → Basic login `opencode` → sessions render | Interactive UI on hotspot |
+| Done | Paste the whole output back | Recorded as the next environment row |
+
+Proven 2026-10-12: DNS HEALTHY, `.24` stack PASS unaffected, tailnet
+5–17ms lossless, Pages reachable.
+
+Hotspot anomaly under watch: from `.45`-on-Galaxy, Nebula `:5099`
+answers `200` but `:4096/session` stalls past 10s with zero bytes while
+the same endpoint is instant on-LAN. Small-response-OK vs
+large-response-stall fits an MTU/PMTUD blackhole on the phone uplink
+(Nebula runs mtu 1300; `/session` ships 54 sessions). Not yet proven —
+re-run §2 on a quiet link and, if it persists, `tracepath 10.100.0.24`
+from `.45` to find the clamping hop. The deduced-links panel this
+motivates ships in the Pages build below.
 
 ![probe :4096](docs/ux/probe-4096.png)
 ![probe :5099](docs/ux/probe-5099.png)
