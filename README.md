@@ -460,13 +460,19 @@ lever is pinning `deepseek-flash` (v4-pro was 75% of spend).
 
 ## Verification status (2026-10-12, rev 338e142)
 
-Sandbox-runnable gates, all green: `lint.sh` 165 pass, `test-hygiene.sh`
+Sandbox-runnable gates, all green: `lint.sh` 177 pass, `test-hygiene.sh`
 39 pass, `test-patterns.sh` 6 pass, `cdp-tab.mjs --self-test` 10/10,
-`blacklist-guard-self-test` PASS, `ux-trace.py --self-test` 9/9.
+`blacklist-guard-self-test` PASS, `ux-trace.py --self-test` 9/9,
+`gate-all.sh` 15 pass / 0 fail / 1 skip (host-only probe/litellm).
 Host-side `ux.sh status` (chrome + probe): `probe: PASS` — dash 79,
 opencode 54, rendered 12 rows, browser 54/54, drift note by design.
 Pages export (`pages-export.sh --shell`): 78 sessions, `site/index.html` +
 `data.json` built; deploy stays manual (`workflow_dispatch`).
+
+Second environment (2026-10-12): `.45` moved `belkin2` → Samsung Galaxy
+hotspot. `dns-guard.sh` HEALTHY on the new uplink, `.24` stack re-probed
+PASS unaffected (isolation proven), tailnet cross-plane 5–17ms 0% loss.
+Same `docs/ux` shots below (refreshed 09:20 run).
 
 ![probe :4096](docs/ux/probe-4096.png)
 ![probe :5099](docs/ux/probe-5099.png)
