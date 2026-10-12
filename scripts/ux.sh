@@ -13,13 +13,14 @@
 #   bash scripts/ux.sh recall [keyword]  # keyword recall, default: mesh
 #   bash scripts/ux.sh cost              # cost accounting
 #   bash scripts/ux.sh review            # pre-push semantic review (SKIP if uninstalled)
+#   bash scripts/ux.sh net               # DNS recovery-loop check (never mutates)
 # Exit 0 all-green, 2 otherwise.
 # Plain ASCII. No sed. No rm -rf. No set -e.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 3
 usage() {
-    printf 'usage: bash scripts/ux.sh [help|status|chrome|probe|findings|recall [kw]|cost|review]\n'
+    printf 'usage: bash scripts/ux.sh [help|status|chrome|probe|findings|recall [kw]|cost|review|net]\n'
     printf '  status   chrome + probe (the PASS check)\n'
     printf '  chrome   ensure CDP browser\n'
     printf '  probe    probe + telemetry\n'
@@ -27,6 +28,7 @@ usage() {
     printf '  recall   keyword recall over sessions (default: mesh)\n'
     printf '  cost     cost accounting\n'
     printf '  review   pre-push semantic review (SKIP if reviewer absent)\n'
+    printf '  net      DNS recovery-loop check (never mutates)\n'
 }
 cmd="${1:-help}"
 case "$cmd" in
@@ -41,6 +43,7 @@ case "$cmd" in
         ;;
     cost) bash scripts/cost.sh; exit "$?" ;;
     review) bash scripts/review-diff.sh; exit "$?" ;;
+    net) bash scripts/dns-guard.sh; exit "$?" ;;
     status)
         bash scripts/chrome-cdp-up.sh || exit 2
         bash scripts/probe-diagnose.sh || exit 2

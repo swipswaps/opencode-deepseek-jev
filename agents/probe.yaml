@@ -18,6 +18,9 @@ defaults:
   OPENCODE_API_URL: https://192.168.4.24:4096
   DASH_URL: https://192.168.4.24:5099
 steps:
+  - name: net
+    cmd: bash scripts/dns-guard.sh
+    expect: "verdict: HEALTHY"
   - name: chrome
     cmd: bash scripts/chrome-cdp-up.sh
     expect: "CDP listening"
