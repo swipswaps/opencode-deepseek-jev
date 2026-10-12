@@ -354,6 +354,17 @@ main() {
         bad 'rotate-server-password.sh present'
     fi
 
+    if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
+        if bash "$REPO/scripts/latency-timeline.sh" --self-test > "$work/lt_st.txt" 2>&1; then
+            ok 'latency-timeline: self-test (fixture Gantt + JSON)'
+        else
+            bad 'latency-timeline: self-test (fixture Gantt + JSON)'
+            cat "$work/lt_st.txt"
+        fi
+    else
+        bad 'latency-timeline.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

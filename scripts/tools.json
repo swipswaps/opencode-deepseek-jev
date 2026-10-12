@@ -63,6 +63,13 @@
     "commands": ["./scripts/sentinel.sh --once", "./scripts/sentinel.sh --json --no-log", "./scripts/sentinel-install.sh"]
   },
   {
+    "id": "latency-timeline",
+    "title": "Gantt timeline of what made a session slow",
+    "where": "host",
+    "purpose": "Reads part timings (readonly) plus the caddy access log and draws one session's agentic-loop cadence against the slow fetches that queued behind it. --json for machines. Shows serial-loop starvation, not averages.",
+    "commands": ["./scripts/latency-timeline.sh --session ses_<id>", "./scripts/latency-timeline.sh --session ses_<id> --json", "./scripts/latency-timeline.sh --self-test"]
+  },
+  {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",

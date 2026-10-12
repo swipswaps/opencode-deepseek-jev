@@ -468,6 +468,13 @@ sentinel-install.sh
     --write-only for review, --uninstall to remove, --self-test
     offline (no systemd touched).
 
+latency-timeline.sh
+    Gantt-style timeline of what made a session slow: part timings
+    (read-only) on one axis against slow caddy fetches from the access
+    log — serial-loop starvation made visible, not averaged away.
+    --session (required), --window/--width/--min-fetch, --json,
+    --db/--access-log seams, --self-test offline.
+
 rotate-server-password.sh
     Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth
     password): backup, token_urlsafe replacement, atomic single-line

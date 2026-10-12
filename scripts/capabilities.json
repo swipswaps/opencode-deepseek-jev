@@ -88,6 +88,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "rotate-server-password.sh --self-test" },
       "test": "scripts/rotate-server-password.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "rotate-server-password" }
+    },
+    {
+      "id": "latency-timeline",
+      "purpose": "DB-driven Gantt of agentic-loop cadence vs queued slow fetches",
+      "impl": "scripts/latency-timeline.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "latency-timeline.sh --self-test" },
+      "test": "scripts/latency-timeline.sh",
+      "evidence": { "path": "scripts/tools.json", "marker": "latency-timeline" }
     }
   ]
 }

@@ -147,6 +147,27 @@ main() {
         validate_json "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d'
     fi
 
+    if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
+        # Offline contract: fixture DB + fixture access log, no docker needed.
+        local ltw
+        ltw=$(mktemp -d)
+        python3 - "$ltw/fix.db" << 'PYEOF'
+import sqlite3, sys, time
+con = sqlite3.connect(sys.argv[1])
+con.execute('CREATE TABLE session(id TEXT PRIMARY KEY)')
+con.execute('CREATE TABLE part(id TEXT, message_id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT)')
+con.execute("INSERT INTO session VALUES('s1')")
+now = int(time.time() * 1000)
+con.execute("INSERT INTO part VALUES('p1','m','s1',?,?,?)", (now - 5000, now - 1000, '{"type":"tool"}'))
+con.commit()
+PYEOF
+        printf '%s\n' '{"logger":"http.log.access.log0","ts":1750000000,"duration":2.5,"request":{"method":"GET","uri":"/x"},"status":200}' > "$ltw/acc.log"
+        run_json "$work/lt.json" bash "$REPO/scripts/latency-timeline.sh" --session s1 --db "$ltw/fix.db" --access-log "$ltw/acc.log" --window 60 --json
+        validate_json "latency-timeline.sh --json" "$work/lt.json" '"session" in d and "parts" in d and "fetches" in d and "summary" in d'
+        rm -f "$ltw/fix.db" "$ltw/acc.log"
+        rmdir "$ltw"
+    fi
+
     # The explore treemap uses the vendored d3. The page must call it as a
     # layout with a tile function; calling d3.treemapResquarify() as a layout
     # throws in the browser. Prove the exact call pattern works against the
