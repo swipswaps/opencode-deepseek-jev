@@ -1293,7 +1293,7 @@ document.getElementById('sessions').addEventListener('click',function(ev){
   var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
   if(tr){toggleSessRow(tr.getAttribute('data-id'));}
 });
-getElementById('sessions').addEventListener('keydown',function(ev){
+document.getElementById('sessions').addEventListener('keydown',function(ev){
   var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;
   if(ex&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault();toggleSessRow(ex.getAttribute('data-exp'));}
 });
