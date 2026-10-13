@@ -732,7 +732,11 @@ function apiActivity() {
   return ttlCached("activity", POLL_TTL_MS, apiActivityFresh);
 }
 function apiActivityFresh() {
-  const rows = query("SELECT time_created, data FROM part ORDER BY time_created DESC LIMIT 80");
+  // Bounded to the 12 most recently UPDATED sessions via part_session_idx:
+  // the unscoped ORDER BY over the whole part table measured 3.1s uncontended
+  // (full SCAN + temp B-tree; 90s+ under contention) vs 0.3s scoped here.
+  // time_updated (not created) so an old session with fresh parts still counts.
+  const rows = query("SELECT time_created, data FROM part WHERE session_id IN (SELECT id FROM session ORDER BY time_updated DESC LIMIT 12) ORDER BY time_created DESC LIMIT 80");
   const items = [];
   for (const row of rows) {
     let d;
@@ -2605,11 +2609,16 @@ server.listen(port, host, () => {
   // runs ~10 s of synchronous aggregation that blocks the event loop and
   // serialises every concurrent fetch (measured ~18 s explore tails).
   // setImmediate keeps listen prompt; the first visitor gets a warm cache.
+  // /api/activity gets the same treatment: its unscoped cold scan measured
+  // 3.1s uncontended and 90s+ under contention (now session-scoped, but the
+  // first visitor still should not pay cold).
   setImmediate(() => {
     console.log("pre-warming /api/health cache...");
     Promise.resolve(apiHealth()).then(
       () => console.log("pre-warm /api/health ready"),
       (e) => console.log("pre-warm /api/health failed: " + (e && e.message ? e.message : e))
     );
+    try { apiActivity(); console.log("pre-warm /api/activity ready"); }
+    catch (e) { console.log("pre-warm /api/activity failed: " + (e && e.message ? e.message : e)); }
   });
 });
