@@ -365,6 +365,17 @@ main() {
         bad 'latency-timeline.sh present'
     fi
 
+    if [ -f "$REPO/scripts/state-snapshot.sh" ]; then
+        if bash "$REPO/scripts/state-snapshot.sh" --self-test > "$work/ssnap_st.txt" 2>&1; then
+            ok 'state-snapshot: self-test (snapshot + verified restore + tamper catch)'
+        else
+            bad 'state-snapshot: self-test (snapshot + verified restore + tamper catch)'
+            cat "$work/ssnap_st.txt"
+        fi
+    else
+        bad 'state-snapshot.sh present'
+    fi
+
     if [ -f "$REPO/scripts/deploy.sh" ]; then
         if bash "$REPO/scripts/deploy.sh" --self-test > "$work/dep_st.txt" 2>&1; then
             ok 'deploy: self-test (serve-rev parse + UI gate present)'

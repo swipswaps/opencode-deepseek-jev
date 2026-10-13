@@ -77,6 +77,13 @@
     "commands": ["./scripts/latency-timeline.sh --session ses_<id>", "./scripts/latency-timeline.sh --session ses_<id> --json", "./scripts/latency-timeline.sh --self-test"]
   },
   {
+    "id": "state-snapshot",
+    "title": "Snapshot + verified restore of irreplaceable state",
+    "where": "host",
+    "purpose": "Copies secrets/certs/config (and the store with --with-db) into a 0700 dir with a sha256 manifest; restore verifies checksums and snapshots current state first. Nothing is printed by value. Run before risky changes.",
+    "commands": ["./scripts/state-snapshot.sh snapshot", "./scripts/state-snapshot.sh list", "./scripts/state-snapshot.sh verify --latest", "./scripts/state-snapshot.sh restore --latest --dry-run"]
+  },
+  {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",

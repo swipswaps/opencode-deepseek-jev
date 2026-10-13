@@ -484,6 +484,15 @@ latency-timeline.sh
     --session (required), --window/--width/--min-fetch, --json,
     --db/--access-log seams, --self-test offline.
 
+state-snapshot.sh
+    Snapshot + verified restore of the state you cannot regenerate:
+    .env.local, TLS certs, compose/Caddy/config (and the store with
+    --with-db, copied consistently via the sqlite backup API). Each
+    snapshot carries a sha256 manifest; restore verifies checksums and
+    snapshots current state first (reversible). 0700 dirs, secrets
+    never printed. Commands: snapshot/list/verify/restore, --dry-run,
+    --keep N, --self-test offline.
+
 rotate-server-password.sh
     Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth
     password): backup, token_urlsafe replacement, atomic single-line

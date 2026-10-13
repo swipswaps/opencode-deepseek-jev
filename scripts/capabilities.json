@@ -104,6 +104,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "deploy.sh --self-test" },
       "test": "scripts/deploy.sh",
       "evidence": { "path": "scripts/deploy.sh", "marker": "D3 gate" }
+    },
+    {
+      "id": "state-snapshot",
+      "purpose": "snapshot + checksum-verified, reversible restore of secrets/certs/config",
+      "impl": "scripts/state-snapshot.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "state-snapshot.sh --self-test" },
+      "test": "scripts/state-snapshot.sh",
+      "evidence": { "path": "data/observability/snapshots", "marker": "manifest.json" }
     }
   ]
 }
