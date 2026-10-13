@@ -1272,7 +1272,7 @@ poll(refreshConfig,30000);
 </script></body></html>`;
 
 const exploreHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode explore</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode explore</title>
 <script src="/vendor/d3.min.js"></script>
 <script src="/vendor/d3-sankey.min.js"></script>
 <script src="/vendor/plot.umd.min.js"></script>
@@ -2170,7 +2170,7 @@ load();
 </script></body></html>`;
 
 const runbooksHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode runbooks</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode runbooks</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 8px}
@@ -2249,7 +2249,7 @@ fetch('/api/runbooks').then(function(r){return r.json();}).then(function(d){RUNB
 </script></body></html>`;
 
 const managedHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode manage</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode manage</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  a{color:#58a6ff;text-decoration:none;font-size:13px}
@@ -2330,7 +2330,7 @@ fetch('/api/providers').then(function(r){return r.json();}).then(function(d){
 </script></body></html>`;
 
 const docsHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode docs</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode docs</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  select{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px 8px;font-size:13px;margin:0 0 10px}
@@ -2358,7 +2358,7 @@ loadDoc(DOCS[0]);
 </script></body></html>`;
 
 const modelsHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode models</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode models</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  table{border-collapse:collapse;width:100%;font-size:12px}

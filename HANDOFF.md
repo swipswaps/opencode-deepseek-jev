@@ -556,7 +556,10 @@ proven fix), `prompt-lint.py` (dedupe/vagueness), `audit-tool-calls.py --fail`
 a topic/trend timeline (classify sessions, plot topic share/cost over time).
 Convention for a new tool: read-only, `--json`, `--self-test`, no model call,
 self-test wired into `test-hygiene.sh`, documented in the command table and
-`scripts/README.txt`.
+`scripts/README.txt`. **External, on-demand (not gated):** `npx @ra11y/core
+<file>` for a WCAG 2.2/2.1 a11y pass — zero-dep, runs in-container; complements
+impeccable (design/contrast/heading). Not wired into a gate (needs network).
+See TODO for the impeccable-vs-ra11y-vs-mdvp evaluation.
 
 ## Remaining work — doable groups
 

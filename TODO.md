@@ -94,6 +94,19 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] UX/a11y auditor evaluation (audit → adopt/reject; completes the split-out
+      turn). **`@ra11y/core`** (npm `npx @ra11y/core`, zero-dep, node>=22) RUNS
+      here: home 0E/1W/1N, explore 13E/6W/1N, models+runbooks+manage 1E/3W/1N,
+      docs 2E/3W/1N (1.3–2.6 s/page). **Adopted as an on-demand a11y auditor**
+      (complements impeccable's design/contrast/heading pass); NOT wired as a
+      blocking gate — npx needs network, a gate must stay deterministic. Its
+      first audit fixed a real defect impeccable missed: `<html lang="en">` was
+      on home only; added to explore/models/runbooks/manage/docs (re-scan:
+      0 lang findings). **`@mdvp/cli` REJECT/DEFER**: exact path crashes
+      (`ERR_MODULE_NOT_FOUND …/crawler-auth.mjs`, no Chromium here) and the
+      static `--fast` path requires a public https URL (mis-parses local http
+      → fetch failed). Note: the npm package `ra11y` is an unrelated library —
+      the tool is `@ra11y/core`.
 - [x] Sentinel T6: trip non-latest over-budget sessions active since last
       sweep (T1 covers latest only — prompting a background session re-sends
       its history, e.g. ses_eca8793c5ffe7gDmY5PGoa7PuX at 1.74M tok / 8.71x).
