@@ -7,6 +7,7 @@
 // read-only handle per call (node:sqlite handles cannot cross threads).
 // Behavior changes here must keep test-dashboard.sh endpoint shapes green.
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 
 export function queryDb(dbPath, sql, ...args) {
   const db = new DatabaseSync(dbPath, { readOnly: true });
@@ -91,4 +92,104 @@ export function apiWordsFresh(dbPath, limit) {
   const arr = Object.entries(counts).map(([text, size]) => ({ text, size }));
   arr.sort((a, b) => b.size - a.size);
   return arr.slice(0, limit);
+}
+
+// --- semantic (FTS5 / bm25 over parts + OCR) ----------------------------
+// Building the in-memory index is a multi-second synchronous scan. It lives
+// here (not in dashboard.mjs) so the identical body runs in query-worker.mjs,
+// off the dashboard's single-threaded event loop; dashboard.mjs imports it
+// only for the rare inline fallback when the worker is unavailable. The index
+// is reused for minRebuildMs so a continuously-written DB does not rebuild on
+// every search (bounded staleness instead of a per-query stall).
+// Rebuild the in-memory index at most once per window. The build is a
+// multi-second (measured ~19 s on a 19582-part DB) synchronous scan, so a
+// short window would rebuild almost continuously under write load and starve
+// the single query worker; 2 min bounds that while keeping search fresh enough.
+export const FTS_MIN_REBUILD_MS = Number(process.env.FTS_MIN_REBUILD_MS || 120000);
+let FTS = { db: null, at: 0, count: -1, sourceMax: -1 };
+
+function sanitizeFts(q) {
+  const words = String(q || "").toLowerCase().match(/[a-z0-9_]+/g) || [];
+  return words.map((w) => '"' + w + '"').join(" ");
+}
+
+function ftsSource(dbPath) {
+  return queryDb(dbPath,
+    "SELECT COUNT(*) n, COALESCE(MAX(time_created),0) m FROM part " +
+    "WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+  )[0];
+}
+
+function ocrRows(limit) {
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
+    const rows = db.prepare("SELECT id, ts, image, engine, lang, text FROM ocr_run ORDER BY id DESC LIMIT ?").all(limit || 2000);
+    db.close();
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+function ensureFts(dbPath, minRebuildMs) {
+  const src = ftsSource(dbPath);
+  const n = Number(src.n), m = Number(src.m);
+  if (FTS.db && Date.now() - FTS.at < minRebuildMs) return FTS.db;
+  if (FTS.db && FTS.count === n && FTS.sourceMax === m) return FTS.db;
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
+  const rows = queryDb(dbPath,
+    "SELECT id, session_id, json_extract(data,'$.type') type, " +
+    "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
+    "FROM part WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+  );
+  const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
+  db.exec("BEGIN");
+  for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+  for (const o of ocrRows(2000)) ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
+  db.exec("COMMIT");
+  FTS = { db, at: Date.now(), count: n, sourceMax: m };
+  return db;
+}
+
+export function apiSemanticFresh(dbPath, q, limit, minRebuildMs = FTS_MIN_REBUILD_MS) {
+  const raw = String(q || "");
+  const needle = sanitizeFts(raw);
+  const sessions = queryDb(dbPath,
+    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
+    "%" + raw.replace(/[%_\\]/g, "") + "%", limit
+  );
+  if (!needle) return { q: raw, mode: "fts", indexed: FTS.count, sessions, results: [] };
+  let db;
+  try { db = ensureFts(dbPath, minRebuildMs); } catch (e) {
+    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  }
+  let rows;
+  try {
+    rows = db.prepare(
+      "SELECT part_id, session_id, type, snippet(parts_fts, 3, '[', ']', '...', 14) snip, bm25(parts_fts) score " +
+      "FROM parts_fts WHERE parts_fts MATCH ? ORDER BY score LIMIT ?"
+    ).all(needle, limit);
+  } catch (e) {
+    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  }
+  const ids = [...new Set(rows.map((r) => r.session_id))];
+  const titles = {};
+  if (ids.length) {
+    const ph = ids.map(() => "?").join(",");
+    for (const t of queryDb(dbPath, "SELECT id, title FROM session WHERE id IN (" + ph + ")", ...ids)) titles[t.id] = t.title;
+  }
+  const ocrTitles = {};
+  for (const o of ocrRows(2000)) ocrTitles[o.id] = o.image;
+  return {
+    q: needle, mode: "fts", indexed: FTS.count, sessions,
+    results: rows.map((r) => {
+      const isOcr = r.session_id === "OCR";
+      return {
+        session: isOcr ? "" : r.session_id,
+        title: isOcr ? (ocrTitles[Number(String(r.part_id).slice(3))] || "(screenshot)") : (titles[r.session_id] || ""),
+        type: r.type, snippet: r.snip, score: r.score, part: r.part_id, ocr: isOcr,
+      };
+    })
+  };
 }

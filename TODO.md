@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-09-30
+Last updated: 2026-10-13
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -93,6 +93,24 @@ Last updated: 2026-09-30
 
 ## Done (most recent first)
 
+- [x] Impeccable audit patch order for `scripts/dashboard.mjs`. `doSearch`
+      uses `AbortSignal.timeout(8000)` with a searching… spinner and falls
+      back directly to `/api/search` on timeout/error; the FTS build (measured
+      ~19s on 19.6k parts) moved off the event loop into `query-worker.mjs`
+      (`apiSemanticFresh` in `query-lib.mjs`, single source; async
+      `apiSemantic` with identical inline fallback) and `FTS_MIN_REBUILD_MS`
+      raised 30s→120s; live polling is 5s with an in-flight guard +
+      `visibilitychange` pause/resume; home HTML has `lang="en"`, `<h1>`,
+      `<main>`, `aria-live="polite"` live regions. Proven: `node --check` x3,
+      `test-dashboard.sh` 116 pass (+1 fail was sentinel T4, skipped for lack
+      of docker CLI — proven identical at clean HEAD via stash, then fixed:
+      the `SENTINEL_ACCESSLOG` fixture path no longer requires docker;
+      `test-hygiene.sh` now 50 pass / 0 fail), headless UI panes all populate. Follow-up: `impeccable detect`
+      on the served page flagged the new `<h1>` skipping to `<h3>` (fixed:
+      card headings now `<h2>`) and pre-existing white-on-accent 3.4:1
+      (fixed: active nav/tab text uses `var(--bg)`, ~5.6:1, accent token
+      untouched). Detector clean (exit 0) on all six pages; explore carries
+      1 pre-existing em-dash advisory.
 - [x] Tev + JEV alternatives evaluated (choy.in DecideBench). Tev is open
       weights (92.8%) but needs conversion + runtime; imajev-4b leads open
       (95.0%); Laya stays baseline (59%); Strands-2B != Mapika-2B recorded.

@@ -229,10 +229,13 @@ PYEOF
         fi
     fi
     # T4: slow caddy fetches since the access cursor. First run initialises
-    # silently; docker missing (or NODOCKER) skips.
+    # silently; docker missing (or NODOCKER) skips — unless SENTINEL_ACCESSLOG
+    # names a fixture file, which is parsed directly and never shells out to
+    # docker (this is the self-test path; it must pass in containers that
+    # have no docker CLI at all).
     local SLOW_SEC="${SENTINEL_SLOW_SEC:-10}"
     local slow_n=0 slow_max=0 slow_uri=""
-    if [ "${SENTINEL_NODOCKER:-0}" -eq 0 ] && have docker && have python3; then
+    if [ "${SENTINEL_NODOCKER:-0}" -eq 0 ] && { have docker || [ -n "${SENTINEL_ACCESSLOG:-}" ]; } && have python3; then
         local acc_cur="$STATE/sentinel-access.cursor" acc_since="" acc_new=0
         if [ -f "$acc_cur" ]; then
             acc_since=$(tr -d ' ' < "$acc_cur")

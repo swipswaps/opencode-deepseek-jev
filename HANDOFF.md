@@ -120,7 +120,7 @@ is its own segment); TTLs (`HEALTH_TTL_MS`, `POLL_TTL_MS`, …) are the knobs.
 | `test-dashboard.sh` | gate for dashboard.mjs (both pages' inline-JS parse + `/api/*` + headless client execution via `test-dashboard-ui.mjs`) |
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
-| `semantic-search.sh [--rebuild] [--fuzzy] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard builds the same index in memory (`/api/semantic`); `--fuzzy` = typo tolerance |
+| `semantic-search.sh [--rebuild] [--fuzzy] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard serves the same index in memory via `query-worker.mjs` (`/api/semantic`); `--fuzzy` = typo tolerance |
 | `fuzzy-search.py <q>` | tokenize + exact hits + `difflib` near-matches over the on-disk index; `edti` finds `edit`; `--limit N`, `--json`, `--self-test` |
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
 | `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |
@@ -224,7 +224,14 @@ headlessly via `test-dashboard-ui.mjs`.
   the running process keeps the old code (this is what made the first host
   `ux-test.py` run report stale `/models` 404s and an old `/explore`). The nav
   now shows the **served revision** and turns red (`STALE served … vs HEAD …`)
-  when the on-disk HEAD has moved — so staleness is visible, not guessed.
+   when the on-disk HEAD has moved — so staleness is visible, not guessed.
+- **`/api/semantic` builds FTS in `query-worker.mjs`** (2026-10-13):
+  `apiSemanticFresh` in `query-lib.mjs` is the single source; the dashboard
+  awaits the worker (own read-only handles, own in-memory FTS cache) with an
+  identical inline fallback. `FTS_MIN_REBUILD_MS` default 120s. The home
+  search box aborts the FTS call at 8s (`AbortSignal.timeout`, spinner) and
+  falls back directly to `/api/search`. Live polling is 5s with an in-flight
+  guard and `visibilitychange` pause/resume.
 - **Runbooks are data, not code.** `scripts/runbooks.json` is the single
   source for the dashboard `/runbooks` page and `runbook.sh`; add an entry
   there (never hardcode in `dashboard.mjs`) and bump the `count=N` assertion

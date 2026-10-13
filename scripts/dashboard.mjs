@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh } from "./query-lib.mjs";
+import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
 
 const dbPath = process.argv[2];
@@ -92,8 +92,8 @@ const THEME_CSS =
   "input,select{background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius)}" +
   "button{border-radius:var(--pill);min-height:24px;min-width:24px}" +
   ".tab,.tag,.badge{border-radius:var(--pill)}" +
-  ".tab.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
-  ".nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}" +
+  ".tab.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}" +
+  ".nav a.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}" +
   ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}" +
   ".card{overflow-x:auto}";
 
@@ -904,88 +904,19 @@ function apiSearch(q, limit) {
   return { q: needle, sessions, hits };
 }
 
-let fts = { db: null, at: 0, count: -1, sourceMax: -1 };
-// Minimum time before the in-memory FTS index is rebuilt, even if the DB
-// advanced. Bounds the ~3s rebuild to once per window under continuous writes.
-const FTS_MIN_REBUILD_MS = Number(process.env.FTS_MIN_REBUILD_MS || 30000);
-
-function sanitizeFts(q) {
-  const words = String(q || "").toLowerCase().match(/[a-z0-9_]+/g) || [];
-  return words.map((w) => '"' + w + '"').join(" ");
-}
-
-function ftsSource() {
-  return query(
-    "SELECT COUNT(*) n, COALESCE(MAX(time_created),0) m FROM part " +
-    "WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
-  )[0];
-}
-
-function ensureFts() {
-  const src = ftsSource();
-  const n = Number(src.n), m = Number(src.m);
-  // Debounce: the agent writes the DB continuously, so sourceMax advances on
-  // almost every call and a naive cache rebuilds the whole in-memory FTS index
-  // (~3s) per search. Reuse for a minimum window (accepting that staleness)
-  // before allowing a rebuild.
-  if (fts.db && Date.now() - fts.at < FTS_MIN_REBUILD_MS) return fts.db;
-  if (fts.db && fts.count === n && fts.sourceMax === m) return fts.db;
-  const db = new DatabaseSync(":memory:");
-  db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
-  const rows = query(
-    "SELECT id, session_id, json_extract(data,'$.type') type, " +
-    "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
-    "FROM part WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
-  );
-  const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
-  db.exec("BEGIN");
-  for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
-  for (const o of ocrRows(2000)) ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
-  db.exec("COMMIT");
-  fts = { db, at: Date.now(), count: n, sourceMax: m };
-  return db;
-}
-
-function apiSemantic(q, limit) {
+// The FTS index build runs in query-worker.mjs (apiSemanticFresh in
+// query-lib.mjs) so the multi-second sync scan no longer blocks this event
+// loop. FTS_MIN_REBUILD_MS (query-lib) is the rebuild window / env knob.
+// Async shell: on worker failure the identical query-lib body runs inline.
+async function apiSemantic(q, limit) {
   const raw = String(q || "");
-  const needle = sanitizeFts(raw);
-  const sessions = query(
-    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
-    "%" + raw.replace(/[%_\\]/g, "") + "%", limit
-  );
-  if (!needle) return { q: raw, mode: "fts", indexed: fts.count, sessions, results: [] };
-  let db;
-  try { db = ensureFts(); } catch (e) {
-    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
-  }
-  let rows;
+  limit = Number(limit) || 20;
   try {
-    rows = db.prepare(
-      "SELECT part_id, session_id, type, snippet(parts_fts, 3, '[', ']', '...', 14) snip, bm25(parts_fts) score " +
-      "FROM parts_fts WHERE parts_fts MATCH ? ORDER BY score LIMIT ?"
-    ).all(needle, limit);
+    return await workerCall("semantic", raw, limit);
   } catch (e) {
-    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+    workerWarn("semantic fell back inline (" + String((e && e.message) || e).slice(0, 100) + ")");
+    return semanticFresh(dbPath, raw, limit);
   }
-  const ids = [...new Set(rows.map((r) => r.session_id))];
-  const titles = {};
-  if (ids.length) {
-    const ph = ids.map(() => "?").join(",");
-    for (const t of query("SELECT id, title FROM session WHERE id IN (" + ph + ")", ...ids)) titles[t.id] = t.title;
-  }
-  const ocrTitles = {};
-  for (const o of ocrRows(2000)) ocrTitles[o.id] = o.image;
-  return {
-    q: needle, mode: "fts", indexed: fts.count, sessions,
-    results: rows.map((r) => {
-      const isOcr = r.session_id === "OCR";
-      return {
-        session: isOcr ? "" : r.session_id,
-        title: isOcr ? (ocrTitles[Number(String(r.part_id).slice(3))] || "(screenshot)") : (titles[r.session_id] || ""),
-        type: r.type, snippet: r.snip, score: r.score, part: r.part_id, ocr: isOcr,
-      };
-    })
-  };
 }
 
 
@@ -1048,13 +979,13 @@ async function apiBalance() {
 }
 
 const html = `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode observability</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode observability</title>
 <style>
  body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
  h1{font-size:18px;margin:0 0 8px}
  .row{display:flex;flex-wrap:wrap;gap:10px}
  .card{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;margin:10px 0}
- .card h3{margin:0 0 8px;font-size:13px;color:#8b949e;font-weight:600}
+ .card h2{margin:0 0 8px;font-size:13px;color:#8b949e;font-weight:600}
  .stat{flex:1;min-width:120px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px}
  .stat b{display:block;font-size:20px;font-weight:600}
  .stat span{color:#8b949e;font-size:12px}
@@ -1085,19 +1016,25 @@ const html = `<!doctype html>
 </style></head>
 <body>
 ${nav("dashboard")}
-<div id="session" class="muted"><span class="muted" data-loading>loading...</span></div>
-<div class="row" id="stats"><span class="muted" data-loading>loading...</span></div>
-<div class="card"><h3>Search <span class="muted">(ranked FTS: title · text · commands)</span></h3><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres"></div></div>
-<div class="card"><h3>Config audit <span class="muted">(actual vs expected)</span></h3><div id="config"><span class="muted" data-loading>loading...</span></div></div>
-<div class="card"><h3>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span></h3><div id="sessions"><span class="muted" data-loading>loading...</span></div></div>
-<div class="card"><h3>Session detail <span class="muted" id="drill-id"></span></h3><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
-<div class="card"><h3>Live activity <span class="muted">(click to expand)</span></h3><div id="activity"><span class="muted" data-loading>loading...</span></div></div>
-<div class="card"><h3>Todos</h3><div id="todos"><span class="muted" data-loading>loading...</span></div></div>
+<main>
+<h1>opencode observability</h1>
+<div id="session" class="muted" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
+<div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
+<div class="card"><h2>Search <span class="muted">(ranked FTS: title · text · commands)</span></h2><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres" aria-live="polite"></div></div>
+<div class="card"><h2>Config audit <span class="muted">(actual vs expected)</span></h2><div id="config" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span></h2><div id="sessions" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Session detail <span class="muted" id="drill-id"></span></h2><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
+<div class="card"><h2>Live activity <span class="muted">(click to expand)</span></h2><div id="activity" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Todos</h2><div id="todos" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+</main>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
 function ts(t){return new Date(t).toISOString().slice(11,23);}
-async function j(u){try{var r=await fetch(u);return r.ok?r.json():null;}catch(e){return null;}}
+// Bounded fetch: ms sets AbortSignal.timeout, so a caller that cares about
+// latency aborts a slow/hung endpoint instead of stalling (guarded where
+// AbortSignal is absent, e.g. the headless UI shim).
+async function j(u,ms){try{var o=(ms&&typeof AbortSignal!=='undefined')?{signal:AbortSignal.timeout(ms)}:undefined;var r=await fetch(u,o);return r.ok?r.json():null;}catch(e){return null;}}
 function failIfPristine(id,msg){var el=document.getElementById(id);if(el&&el.querySelector('[data-loading]'))el.innerHTML='<span class="muted" data-error>'+msg+'</span>';}
 var expanded={};
 function item(x){
@@ -1266,8 +1203,9 @@ async function doSearch(){
   var q=document.getElementById('q').value.trim();
   var el=document.getElementById('searchres');
   if(!q){el.innerHTML='';return;}
+  el.innerHTML='<span class="muted" data-loading>searching…</span>';
   var h='';
-  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=20');
+  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=20',8000);
   if(r&&r.mode==='fts'){
     if(r.sessions&&r.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
       for(var i=0;i<r.sessions.length;i++){var s=r.sessions[i];
@@ -1276,7 +1214,7 @@ async function doSearch(){
       for(var k=0;k<r.results.length;k++){var x=r.results[k];
         h+='<div class="item"'+(x.ocr?'':' data-go="'+esc(x.session)+'" style="cursor:pointer"')+'><span class="tag STEP">'+esc(x.ocr?'screenshot':(x.type||'part'))+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
   } else {
-    var f=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20');
+    var f=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20',8000);
     if(f&&f.sessions){for(var a=0;a<f.sessions.length;a++){var ss=f.sessions[a];
       h+='<div class="item" data-go="'+esc(ss.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(ss.title)+'</div>';}}
     if(f&&f.hits){for(var b=0;b<f.hits.length;b++){var y=f.hits[b];
@@ -1312,11 +1250,25 @@ document.addEventListener('keydown',function(ev){
   if(ev.key==='/'){var q=document.getElementById('q');if(q){ev.preventDefault();q.focus();}}
   else if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
 });
-setInterval(refreshCost,2000);
-setInterval(refreshActivity,2000);
-setInterval(refreshTodos,2000);
-setInterval(refreshBalance,30000);
-setInterval(refreshConfig,30000);
+// Polling: 5 s glance cadence (server TTLs are coarser, so this is cheap).
+// The in-flight guard never stacks a second request, and polling pauses while
+// the tab is hidden — visibilitychange fires an immediate catch-up tick on
+// return instead of a burst of queued intervals.
+function poll(fn,ms){
+  var inflight=false;
+  function tick(){
+    if(document.hidden||inflight)return;
+    inflight=true;
+    Promise.resolve().then(fn).catch(function(){}).then(function(){inflight=false;});
+  }
+  setInterval(tick,ms);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)tick();});
+}
+poll(refreshCost,5000);
+poll(refreshActivity,5000);
+poll(refreshTodos,5000);
+poll(refreshBalance,30000);
+poll(refreshConfig,30000);
 </script></body></html>`;
 
 const exploreHtml = `<!doctype html>
@@ -2568,7 +2520,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/search") {
     send(res, 200, JSON.stringify(apiSearch(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/semantic") {
-    send(res, 200, JSON.stringify(apiSemantic(params.q, Number(params.limit) || 20)), "application/json");
+    send(res, 200, JSON.stringify(await apiSemantic(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/export/session") {
     const fmt = (params.format || "txt").toLowerCase();
     const body = apiExportSession(params.id, fmt === "md" ? "md" : fmt === "json" ? "json" : "txt");

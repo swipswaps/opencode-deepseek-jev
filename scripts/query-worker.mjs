@@ -17,7 +17,7 @@
 import { parentPort } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh } from "./query-lib.mjs";
+import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh } from "./query-lib.mjs";
 
 const FNS = {
   // Mirrors refreshHealthCache's sync prefix (minus live adjudication,
@@ -46,6 +46,12 @@ const FNS = {
   },
   words(dbPath, limit) {
     return apiWordsFresh(dbPath, limit);
+  },
+  // FTS5/bm25 search: the in-memory index build (~19s on a large part table)
+  // runs here, never on the dashboard's event loop. The rebuild window
+  // (FTS_MIN_REBUILD_MS) is query-lib's default / env knob.
+  semantic(dbPath, q, limit) {
+    return apiSemanticFresh(dbPath, q, limit);
   },
   models(dbPath) {
     return modelLedger(dbPath);
