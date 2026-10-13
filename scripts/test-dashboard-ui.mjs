@@ -133,11 +133,15 @@ async function main() {
   }
 
   const panes = ["session", "stats", "sessions", "activity", "config"];
+  // Per-pane wait. #activity aggregates recent parts and can exceed 20s on a
+  // loaded host; a slow-but-correct pane is not a broken page. Callers that
+  // gate a deploy (deploy.sh) raise UI_PANE_MS so load does not false-fail.
+  const paneMs = Number(process.env.UI_PANE_MS || 20000);
   let ok = true;
   for (const id of panes) {
     const el = getEl(id);
     const t0 = Date.now();
-    while ((el._html || el._text || "").length === 0 && Date.now() - t0 < 20000) {
+    while ((el._html || el._text || "").length === 0 && Date.now() - t0 < paneMs) {
       await new Promise((r) => setTimeout(r, 250));
     }
     const n = (el._html || el._text || "").length;

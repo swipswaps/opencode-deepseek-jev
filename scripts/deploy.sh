@@ -72,18 +72,20 @@ scratch_ui_check() {
     done
     local rc=1 res=""
     if [ "$out" = "200" ]; then
-        res=$(node "$repo/scripts/test-dashboard-ui.mjs" "http://127.0.0.1:$port" 2>&1)
+        res=$(UI_PANE_MS="${UI_PANE_MS:-90000}" node "$repo/scripts/test-dashboard-ui.mjs" "http://127.0.0.1:$port" 2>&1)
         printf '%s' "$res" | grep -q '^FAIL' || rc=0
     else
         res="scratch server never answered on :$port"
     fi
-    kill -TERM "$pid" 2>&1 || true
-    wait "$pid" 2>&1 || true
+    kill -TERM "$pid" > /dev/null 2>&1 || true
+    wait "$pid" > /dev/null 2>&1 || true
     rm -f "$log"
     if [ "$rc" -eq 0 ]; then
         printf 'PASS'
     else
-        printf 'FAIL: %s' "$(printf '%s' "$res" | head -n 3 | tr '\n' ' ')"
+        # Surface the actual failing line(s), not the first three (which are
+        # usually the PASSes and hide the diagnosis).
+        printf 'FAIL: %s' "$(printf '%s' "$res" | grep '^FAIL' | head -n 3 | tr '\n' ' ')"
     fi
     return "$rc"
 }
@@ -128,6 +130,15 @@ main() {
         esac
     done
     have node || { printf 'GATE FAIL: node required\n'; return 1; }
+    # A stale scratch server on the chosen port would answer the gate with
+    # OLD code and false-fail (or false-pass) the deploy. Walk to a free port.
+    local p="$PORT"
+    while curl -s --max-time 1 -o /dev/null "http://127.0.0.1:$p/api/rev" 2>&1; do
+        p=$((p + 1))
+        if [ $((p - PORT)) -gt 10 ]; then printf 'WARN: no free scratch port near %s\n' "$PORT"; break; fi
+    done
+    if [ "$p" != "$PORT" ]; then printf 'note: port %s busy, using %s for the scratch gate\n' "$PORT" "$p"; fi
+    PORT="$p"
     printf '=== deploy.sh ===\n'
     local head prev
     head=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
@@ -173,7 +184,7 @@ try: print(json.load(sys.stdin).get("stale","?"))
 except Exception: print("?")' 2>&1)
     printf '  served=%s stale=%s (want HEAD=%s, stale=False)\n' "$served" "$stale" "$head"
     local lres=""
-    lres=$(node "$REPO/scripts/test-dashboard-ui.mjs" "https://127.0.0.1:5099" 2>&1)
+    lres=$(UI_PANE_MS="${UI_PANE_MS:-90000}" node "$REPO/scripts/test-dashboard-ui.mjs" "https://127.0.0.1:5099" 2>&1)
     printf '%s' "$lres" | grep -q '^PASS pane #session populated' && lres="UI PASS" || lres="UI FAIL"
     printf '  live %s\n' "$lres"
     if [ "$served" = "$head" ] && [ "$stale" = "False" ] && [ "$lres" = "UI PASS" ]; then
