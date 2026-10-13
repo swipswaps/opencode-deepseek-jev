@@ -89,7 +89,7 @@ import sqlite3, sys
 con = sqlite3.connect(sys.argv[1])
 con.execute('CREATE TABLE session(id TEXT PRIMARY KEY, title TEXT, model TEXT, tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, cost REAL, time_created INTEGER, time_updated INTEGER)')
 con.execute('CREATE TABLE part(id TEXT, message_id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT)')
-con.execute("INSERT INTO session VALUES('s_old','old','{\"id\":\"deepseek-flash\"}',5000,0,0,0,1,2)")
+con.execute("INSERT INTO session VALUES('s_old','old','{\"id\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\"}',5000,0,0,0,1,2)")
 con.execute("INSERT INTO session VALUES('s_new','new','{\"id\":\"opencode/x-free\",\"providerID\":\"opencode\"}',100,0,0,0,3,4)")
 con.execute("INSERT INTO part VALUES('p1','m','s_old',1,2,'{\"type\":\"text\",\"text\":\"hi\"}')")
 con.commit()
@@ -112,10 +112,25 @@ PYEOF
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_ACCESSLOG="$work/acc.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
     printf '%s' "$o" | grep -q 'TRIP T4 slow-fetch: 1 fetch' || { printf 'FAIL T4 trips on slow fetch\n'; fail=1; }
     printf '%s' "$o" | grep -q 'slowest 44.2s' || { printf 'FAIL T4 slowest reported\n'; fail=1; }
+    # T5: s_old is deny-listed but NOT latest; stamp it active 60s ago with a
+    # cursor 600s old (relative offsets — immune to clock). First sweep trips,
+    # second sweep is silent (cursor advanced past the activity).
+    t5_now=$(date +%s)
+    python3 - "$work/fix.db" "$(( (t5_now - 60) * 1000 ))" << 'PYEOF'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("UPDATE session SET time_updated=? WHERE id='s_old'", (int(sys.argv[2]),))
+con.commit()
+PYEOF
+    printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
+    o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'TRIP T5 denied-model: s_old' || { printf 'FAIL T5 trips on denied non-latest active session\n'; fail=1; }
+    o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'TRIP T5' && { printf 'FAIL T5 re-fires after cursor\n'; fail=1; }
     SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
-    rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor"
+    rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor"
     rmdir "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'sentinel: self-test PASS\n'; else printf 'sentinel: self-test FAIL\n'; fi
     return "$fail"
@@ -184,6 +199,8 @@ if lat is None:
            "model": "", "model_denied": False}
 out["latest"] = {"session": lat.get("session"), "level": lat.get("level"),
                  "model_denied": lat.get("model_denied")}
+out["denied"] = [{"session": x.get("session"), "model": x.get("model"),
+                  "updated_at": x.get("updated_at")} for x in denied]
 if lat.get("level") == "over":
     out["trips"].append({"id": "T1", "session": lat.get("session"),
         "msg": "latest session over budget: %s in (%sx)" % (lat.get("in_tok"), lat.get("ratio"))})
@@ -293,9 +310,54 @@ PYEOF
         fi
         [ -n "$acc_tmp" ] && rm -f "$acc_tmp"
     fi
+    # T5: deny-listed sessions OTHER than latest, active since last sweep.
+    # T2 covers latest only; a background/forked session keeps burning on a
+    # denied model invisibly (the $2.04 v4-pro history). Cursor-bounded like
+    # T3: first run initialises silently, no trip on history. Advisory only —
+    # trips never stop sessions; the guidance names the handoff.
+    local t5_cur="$STATE/sentinel-t5.cursor" t5_since=""
+    if [ -f "$t5_cur" ]; then
+        t5_since=$(tr -d ' ' < "$t5_cur")
+    fi
+    case "$t5_since" in ''|*[!0-9]*) t5_since="" ;; esac
+    local t5_n=0 t5_hits=""
+    if [ -n "$t5_since" ]; then
+        # Data travels by env (a heredoc owns stdin — the pipe would lose it).
+        t5_hits=$(TRIPS_JSON="$trips_json" SENTINEL_T5_SINCE="$t5_since" python3 - << 'PYEOF' 2>&1
+import json, os, sys
+from datetime import datetime
+try:
+    d = json.loads(os.environ.get("TRIPS_JSON", "") or "{}")
+except Exception:
+    print("")
+    raise SystemExit
+since = int(os.environ.get("SENTINEL_T5_SINCE", "0") or 0)
+latest = (d.get("latest") or {}).get("session") or ""
+out = []
+for x in d.get("denied") or []:
+    sid = x.get("session") or ""
+    if not sid or sid == latest:
+        continue
+    try:
+        upd = datetime.fromisoformat((x.get("updated_at") or "").replace("Z", "+00:00")).timestamp()
+    except Exception:
+        continue
+    if upd > since:
+        out.append("%s on %s" % (sid, x.get("model") or "?"))
+print("\n".join(out))
+PYEOF
+) || true
+        while IFS= read -r hit; do
+            [ -n "$hit" ] || continue
+            t5_n=$((t5_n + 1))
+            trip "TRIP T5 denied-model: $hit active since last sweep" "session/${hit%% *}" "deny-listed model still burning; stop prompting, hand off (./scripts/handoff-brief.sh ${hit%% *})"
+        done <<< "$t5_hits"
+    fi
+    printf '%s' "$(date +%s)" > "$t5_cur"
+    export T5_N="$t5_n"
     export SLOW_N="$slow_n" SLOW_MAX="$slow_max"
     if [ "$JSON" -eq 1 ]; then
-        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
+        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
     else
         printf '=== sentinel @ %s ===\n' "$RUN_TS"
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'

@@ -206,6 +206,23 @@ From `scripts/README.txt`:
   `SCRIPT_EOF`, `PATCH_EOF`, `WATCH_EOF`). A delimiter must appear on a line
   of its own with no leading whitespace.
 
+## Interaction contract
+
+These govern how the agent replies, not how scripts are written; they are kept
+here because review enforces them the same way. Grounded in the corpus: over
+1286 user turns, `audit` appears 298 times, `//re:` 180, `deduce` 164,
+`prove`/`proof` 161.
+
+- `//re: "<claim>"` is a direct-reply contract: answer *that* claim with
+  evidence. Do not substitute a different (easier) question, and do not answer
+  from memory — cite the file:line, DB count, or pasted command output that
+  settles it. A claim that cannot be evidenced is stated as an open gap.
+- "prove it" is satisfied by pasted raw output, never a quoted assertion.
+  SKIP is not PASS (rule #37) applies to proof as much as to gates.
+- The audit → deduce → write → audit → upgrade → implement → explain loop
+  (the `phd-pipeline` skill) is the standing shape of a PhD-terms request; the
+  upgrade step is not skipped even when the first prompt looks clean.
+
 ## Not rules
 
 The digits `#5`, `#12`, `#9`, `#13`, `#14`, and `#5604` that appear when

@@ -93,6 +93,14 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] Sentinel T5: trip non-latest deny-listed sessions active since last
+      sweep (T2 covers latest only — the $2.04 v4-pro history). Cursor-bounded
+      like T3 (silent first-run init), integer-epoch compare, advisory only.
+      Proven: self-test 3/3 (TRIP T5 fires once, silent after cursor),
+      `test-hygiene.sh` 50 pass / 0 fail. Two real bugs caught by the
+      verification loop, not review: `||` on a heredoc-opener line inside
+      `$()` is a bash syntax error (moved after `)`), and a heredoc owns
+      stdin so piped data never arrives (data now travels by env).
 - [x] Impeccable audit patch order for `scripts/dashboard.mjs`. `doSearch`
       uses `AbortSignal.timeout(8000)` with a searching… spinner and falls
       back directly to `/api/search` on timeout/error; the FTS build (measured
