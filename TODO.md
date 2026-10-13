@@ -94,6 +94,13 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] a11y pair from the ra11y pass: skip-link + `<main id="main">` landmark on
+      every page (nav() emits `<a class="skip-link" href="#main">` before the
+      nav; all six templates wrapped) and `aria-current="page"` on the active
+      nav link. ra11y re-scan: home 0E/0W/0N (was 0E/1W/1N); skip-link and
+      active-state colour warnings 0 on all pages. Remaining, queued: explore
+      12E (`nested-interactive`, `inline-display-none-on-focusable`), docs
+      `forms/labels-required`.
 - [x] UX/a11y auditor evaluation (audit → adopt/reject; completes the split-out
       turn). **`@ra11y/core`** (npm `npx @ra11y/core`, zero-dep, node>=22) RUNS
       here: home 0E/1W/1N, explore 13E/6W/1N, models+runbooks+manage 1E/3W/1N,

@@ -95,12 +95,14 @@ const THEME_CSS =
   ".tab.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}" +
   ".nav a.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}" +
   ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}" +
-  ".card{overflow-x:auto}";
+  ".card{overflow-x:auto}" +
+  ".skip-link{position:absolute;left:-9999px;top:8px;background:var(--accent);color:var(--bg);padding:8px 12px;border-radius:var(--radius);z-index:200;text-decoration:none;font-size:13px}" +
+  ".skip-link:focus{left:8px}";
 
 function nav(active) {
-  let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
+  let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><a class=\"skip-link\" href=\"#main\">Skip to main content</a><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
   for (const it of NAV_ITEMS) {
-    h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\"" : "") + ">" + it[1] + "</a>";
+    h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\" aria-current=\"page\"" : "") + ">" + it[1] + "</a>";
   }
   h += "<span id=\"rev\" class=\"muted\" style=\"margin-left:auto;font-size:11px\"></span>";
   h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
@@ -1016,7 +1018,7 @@ const html = `<!doctype html>
 </style></head>
 <body>
 ${nav("dashboard")}
-<main>
+<main id="main">
 <h1>opencode observability</h1>
 <div id="session" class="muted" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
 <div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
@@ -1320,6 +1322,7 @@ const exploreHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("explore")}
+<main id="main">
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
   <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview <span class="tbadge" data-badge="overview"></span></button>
@@ -1391,6 +1394,7 @@ ${nav("explore")}
 <div class="chart" id="ops"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="tip" id="tip"></div>
+</main>
 <script>
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
 async function j(u){try{var r=await fetch(u);return r.ok?r.json():null;}catch(e){return null;}}
@@ -2196,10 +2200,12 @@ const runbooksHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("runbooks")}
+<main id="main">
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f" aria-label="Filter runbooks by tag"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
 <div id="count" class="muted count"></div>
 <div id="list" role="list" aria-label="Runbooks"><span class="muted" data-loading>loading...</span></div>
+</main>
 <script>
 var RUNBOOKS=[];
 function render(){
@@ -2275,11 +2281,13 @@ const managedHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("manage")}
+<main id="main">
 <div class="muted" style="font-size:12px">The repo's tools, surfaced read-only. host = run where docker/browser live; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div id="providers"></div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="container">container only</option><option value="host">host only</option></select></div>
 <div id="count" class="muted count"></div>
 <div id="list"></div>
+</main>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 var TOOLS=[];
@@ -2340,9 +2348,11 @@ const docsHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("docs")}
+<main id="main">
 <div class="muted" style="margin-bottom:8px">The repo's own rules, handoff and docs, rendered in-UI. Read-only; whitelisted files only.</div>
 <select id="docsel"></select>
 <pre id="docbody">loading...</pre>
+</main>
 <script>
 var DOCS=["HANDOFF.md","RULES.md","README.md","scripts/README.txt","HANDOFF-PROMPT.txt"];
 var sel=document.getElementById('docsel');
@@ -2373,10 +2383,12 @@ const modelsHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("models")}
+<main id="main">
 <div id="banner" class="banner"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="policy"></div>
 <h2>Catalog</h2><div id="cat"><span class="muted" data-loading>loading...</span></div>
  <div class="muted">This is the cost policy, not a guarantee: opencode/* personal-free rows are gateway-metered and can return "Free usage exceeded, subscribe to Go" even when listed ok. Prefer opencode-go/* (Go pool) or direct deepseek/gemini. Switch with /models (TUI) or opencode run -m &lt;id&gt;.</div>
+</main>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 async function load(){
