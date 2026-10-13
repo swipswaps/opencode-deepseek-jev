@@ -493,6 +493,13 @@ state-snapshot.sh
     never printed. Commands: snapshot/list/verify/restore, --dry-run,
     --keep N, --self-test offline.
 
+extract-transcript.sh
+    Transcript straight from opencode.db (read-only) in the
+    re-extract shape: use when the tab will not render or the message
+    route stalls. Same fidelity caps; feeds handoff-brief.sh via
+    logs/ses_<id>.txt. Never paste the raw file (may hold pasted
+    secrets). --out/--out-dir/--max-parts/--db, --self-test offline.
+
 rotate-server-password.sh
     Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth
     password): backup, token_urlsafe replacement, atomic single-line

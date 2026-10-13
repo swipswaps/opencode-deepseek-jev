@@ -84,6 +84,13 @@
     "commands": ["./scripts/state-snapshot.sh snapshot", "./scripts/state-snapshot.sh list", "./scripts/state-snapshot.sh verify --latest", "./scripts/state-snapshot.sh restore --latest --dry-run"]
   },
   {
+    "id": "extract-transcript",
+    "title": "Transcript from the store, no browser required",
+    "where": "host",
+    "purpose": "Reads messages+parts straight from opencode.db (readonly) in the re-extract shape when the tab will not render or the message route stalls. Same caps; feeds handoff-brief.sh. Never paste the raw file (may hold pasted secrets).",
+    "commands": ["./scripts/extract-transcript.sh ses_<id>", "./scripts/extract-transcript.sh --self-test"]
+  },
+  {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",

@@ -376,6 +376,17 @@ main() {
         bad 'state-snapshot.sh present'
     fi
 
+    if [ -f "$REPO/scripts/extract-transcript.sh" ]; then
+        if bash "$REPO/scripts/extract-transcript.sh" --self-test > "$work/ext_st.txt" 2>&1; then
+            ok 'extract-transcript: self-test (DB-direct shape + caps)'
+        else
+            bad 'extract-transcript: self-test (DB-direct shape + caps)'
+            cat "$work/ext_st.txt"
+        fi
+    else
+        bad 'extract-transcript.sh present'
+    fi
+
     if [ -f "$REPO/scripts/deploy.sh" ]; then
         if bash "$REPO/scripts/deploy.sh" --self-test > "$work/dep_st.txt" 2>&1; then
             ok 'deploy: self-test (serve-rev parse + UI gate present)'

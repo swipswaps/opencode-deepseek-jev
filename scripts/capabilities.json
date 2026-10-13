@@ -112,6 +112,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "state-snapshot.sh --self-test" },
       "test": "scripts/state-snapshot.sh",
       "evidence": { "path": "data/observability/snapshots", "marker": "manifest.json" }
+    },
+    {
+      "id": "extract-transcript",
+      "purpose": "DB-direct transcript when the tab will not render; feeds handoff-brief",
+      "impl": "scripts/extract-transcript.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "extract-transcript.sh --self-test" },
+      "test": "scripts/extract-transcript.sh",
+      "evidence": { "path": "scripts/tools.json", "marker": "extract-transcript" }
     }
   ]
 }
