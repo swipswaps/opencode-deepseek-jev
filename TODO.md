@@ -57,6 +57,19 @@ Last updated: 2026-10-13
 
 ## Queue (ranked, top first)
 
+- [ ] Board — DB-driven Kanban + Gantt (design prepared, not built; see the
+      prepared prompt in the session that added this). Sources: opencode `todo`
+      (99 rows: state/priority/session_id/times) ⨝ `session` (cost/tokens/model);
+      TODO.md marks (65 done / 6 todo) parsed server-side; observability
+      `ledger` (531 GATE/ADVISORY ts) as milestones. Endpoint `GET /api/board`
+      (read-only, TTL-cached, zero model calls): `cards[]` with
+      state/source(db|md)/session/cost/tokens/start/end/duration, `milestones[]`,
+      `estimates{}`. Render as a new `/explore` tab `data-tab="board"` (reuse
+      vendored Plot for the Gantt bars; CSS-grid columns for the Kanban); every
+      chart backed by an accessible `<table>`, provenance labelled per datum,
+      heuristic estimates marked as such; rule #61 (inline script parse+execute).
+      Steps: /api/board → Kanban → Gantt → a11y table → test-dashboard asserts.
+      Open question for the user: tab on /explore vs its own nav page vs /manage.
 - [ ] NEBULA-1 (operator approval required): tame external restart
       churn (3 PIDs/10 min, never systemd-counted — another project's
       supervisor). Proposed override (NOT applied):
