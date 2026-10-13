@@ -15,7 +15,8 @@
 
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
-(`deepseek-flash`) + **Jev** (`jev-guard` plugin + `jev-review` MCP).
+(default `opencode-go/deepseek-v4.1-flash`; direct `deepseek/deepseek-flash`
+also configured) + **Jev** (`jev-guard` plugin + `jev-review` MCP).
 Managed on the host via Dockge (port 5001). Repo: `github.com/swipswaps/opencode-deepseek-jev`.
 
 ## Where we are (2026-09-27) — screen blindness, guard, exposure
@@ -324,7 +325,8 @@ n-grams)" candidate — no new capture needed.**
 `harness.sh` records `data/observability/last-gate.json`; `preflight.sh`
 reads it and refuses (exit 1) unless every critical check passes: keys
 present, **last gate run passed**, balance ≥ `MIN_BALANCE` ($1.00 default),
-and the model is `deepseek-flash`. Run `preflight.sh` before any paid session
+and the model verdict is ALLOW (`opencode.json` model + latest session). Run
+`preflight.sh` before any paid session
 — cheaper than discovering a red gate after spending. Best practice, in
 order: gate on a cheap local signal, fail closed, check the cheapest signal
 first, never retry blind (capture `logs.sh` output before retrying).
@@ -334,8 +336,9 @@ first, never retry blind (capture `logs.sh` output before retrying).
 Single source: "Jev vs Laya" near the end of this file (facts + lever table).
 Short version: the Laya cascade cuts **Jev** calls only (11 here, tiny); it
 does **not** cut DeepSeek; free Muse-style models are a vision fallback, not a
-chat replacement. Keep the model on policy (pin `deepseek-flash` or a free
-model) and wire the LiteLLM cap before investing in Laya.
+chat replacement. Keep the model on policy (default
+`opencode-go/deepseek-v4.1-flash`; direct `deepseek-flash` or a free model also
+pass) and wire the LiteLLM cap before investing in Laya.
 
 ### Model choice is a policy, not a hard-code
 

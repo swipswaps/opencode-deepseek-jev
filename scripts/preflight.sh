@@ -14,8 +14,8 @@
 #   - the last `harness.sh` run recorded a failed gate (data/observability/last-gate.json)
 #   - no recorded gate run yet
 #   - DeepSeek balance below MIN_BALANCE (default 1.00 USD)
-#   - the configured model is not deepseek-flash (unless --allow-pro)
-#   - the most recent session ran a non-flash model (unless --allow-pro)
+#   - the configured model is outside models.policy.json (verdict ASK/BLOCK), unless --allow-pro
+#   - the most recent session's model is outside policy (ASK/BLOCK), unless --allow-pro
 # Warns (does not stop): guard off, no guard.log yet.
 #
 #   ./scripts/preflight.sh            # human output

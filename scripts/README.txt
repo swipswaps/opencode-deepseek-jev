@@ -592,7 +592,7 @@ Paths used by the tools
   notes           sibling directory of repo, override with --dir or
                   CHATLOG_DIR
   docker image    opencode-deepseek-jev:robust
-  model           deepseek/deepseek-flash
+  model           opencode-go/deepseek-v4.1-flash
   opencode.json   at repo root
   .env.local      at repo root, mode 0600, gitignored
 

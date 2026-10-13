@@ -44,7 +44,7 @@
       }
     }
   },
-  "model": "deepseek/deepseek-flash",
+  "model": "opencode-go/deepseek-v4.1-flash",
   "compaction": { "auto": true, "prune": true, "tail_turns": 20 },
   "plugin": [ "jev-guard" ],
   "skills": [ "/opt/jev-review/skills" ],

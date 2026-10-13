@@ -151,17 +151,18 @@ main() {
               printf('%.1f%%', 100.0*SUM(cost)/MAX(1,(SELECT SUM(cost) FROM session))) share
          FROM session GROUP BY COALESCE(json_extract(model,'\$.id'),'(none)') ORDER BY SUM(cost) DESC;"
 
-    section "model mix check (default = deepseek-flash)"
+    section "model mix check (flash baseline = deepseek-flash / deepseek-v4.1-flash)"
     q "SELECT printf('\$%.4f', COALESCE(SUM(cost),0)) nonflash_cost,
               printf('%.1f%%', 100.0*SUM(cost)/MAX(1,(SELECT SUM(cost) FROM session))) nonflash_share
-         FROM session WHERE COALESCE(json_extract(model,'\$.id'),'') <> 'deepseek-flash';"
+         FROM session WHERE COALESCE(json_extract(model,'\$.id'),'') NOT IN ('deepseek-flash','deepseek-v4.1-flash');"
 
     printf '\nread: per_1k_in is the effective price of context. A high\n'
     printf 'per_1k_in with high in_tok is the bottleneck to cut first\n'
     printf '(trim context, summarize, or cache). tiny_sessions are the\n'
     printf 'fixed per-call overhead.\n'
     printf 'If nonflash_share is high, switch the model back to\n'
-    printf 'deepseek-flash (the opencode.json default): a non-flash\n'
+    printf 'the configured flash default (deepseek-flash or\n'
+    printf 'opencode-go/deepseek-v4.1-flash): a non-flash\n'
     printf 'reasoning model re-prices the whole context every turn.\n'
     return 0
 }

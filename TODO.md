@@ -34,8 +34,9 @@ Last updated: 2026-10-13
   client-side; the only server hook runs after the SPA renders the inline image,
   so a repo transform cannot prevent the black page. Guidance only.
 - **Resolved / accepted (full detail in `git log`).** Dashboard reloads only on
-  restart; guard firing; model pinned to `deepseek-flash` (preflight fails closed
-  otherwise); orphaned word cloud restored; cache-hit report + patterns view
+  restart; guard firing; default model `opencode-go/deepseek-v4.1-flash` (was
+  `deepseek/deepseek-flash`; both policy-ALLOW, preflight fails closed otherwise);
+  orphaned word cloud restored; cache-hit report + patterns view
   built; `session_context_epoch`/credential tables unused (opencode-owned);
   historical `JEV_API_KEY` rejections pre-rotation; `echo` warn-only;
   `logs.sh --source system` needs the host; `test-dashboard.sh` ~2.5 min (run

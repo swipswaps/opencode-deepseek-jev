@@ -110,8 +110,14 @@ def decide(models: list[dict], p: dict, current: str | None) -> dict:
     elif listed(current, deny):
         verdict, reason = "BLOCK", f"{current} is deny-listed"
     else:
-        cur = next((m for m in models
-                    if m["id"] == current or short(m["id"]) == short(current)), None)
+        # Exact id wins; a bare/short id resolves to an allowed entry when
+        # several share the short id. Without this, "opencode-go/deepseek-v4.1-flash"
+        # (allow-listed) reads ASK because its catalog twin "opencode/…" (pricier,
+        # not allow-listed) short-matches first and preflight fails closed.
+        cur = next((m for m in models if m["id"] == current), None)
+        if cur is None:
+            cands = [m for m in models if short(m["id"]) == short(current)]
+            cur = next((m for m in cands if allowed(m, p)), None) or (cands[0] if cands else None)
         if cur is None:
             verdict, reason = "ASK", "current model not in the catalog"
         elif allowed(cur, p):
@@ -166,6 +172,14 @@ def self_test() -> int:
     )
     models = parse_verbose(sample)
     p = {"max_input_per_m_usd": 0.2, "require_toolcall": True, "allow": ["deepseek-flash"], "deny": ["deepseek-v4-pro"]}
+    # Two catalog entries share the short id "deepseek-v4.1-flash"; only the
+    # opencode-go/* one is allow-listed. Exact id and bare id must both resolve
+    # to the allowed entry (regression guard for the decide() collision fix).
+    collision = [
+        {"id": "opencode/deepseek-v4.1-flash", "provider": "opencode", "input": 0.3, "output": 1.2, "cache_read": 0.006, "context": 1000000, "attachment": True, "toolcall": True, "free": False},
+        {"id": "opencode-go/deepseek-v4.1-flash", "provider": "opencode-go", "input": 0.15, "output": 0.6, "cache_read": 0.003, "context": 1000000, "attachment": True, "toolcall": True, "free": False},
+    ]
+    cp = {"max_input_per_m_usd": 0.2, "require_toolcall": True, "allow": ["opencode-go/deepseek-v4.1-flash"], "deny": []}
     checks = [
         ("parses 3 models", len(models) == 3),
         ("gateway-metered opencode free blocked", not allowed(next(m for m in models if m["id"] == "opencode/free-1"), p)),
@@ -175,6 +189,8 @@ def self_test() -> int:
         ("direct-key flash recommended first", decide(models, p, "deepseek/deepseek-v4-pro")["recommended"]["id"] == "deepseek/deepseek-flash"),
         ("v4-pro verdict is BLOCK (deny)", decide(models, p, "deepseek/deepseek-v4-pro")["verdict"] == "BLOCK"),
         ("flash verdict is ALLOW", decide(models, p, "deepseek/deepseek-flash")["verdict"] == "ALLOW"),
+        ("short-id collision: exact Go id is ALLOW", decide(collision, cp, "opencode-go/deepseek-v4.1-flash")["verdict"] == "ALLOW"),
+        ("short-id collision: bare id resolves to the allowed Go entry", decide(collision, cp, "deepseek-v4.1-flash")["verdict"] == "ALLOW"),
     ]
     fails = 0
     for name, ok in checks:

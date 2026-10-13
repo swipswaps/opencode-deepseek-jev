@@ -10,7 +10,7 @@
 #   .env.local present, mode 0600
 #   DEEPSEEK_API_KEY (sk-*) and JEV_API_KEY (apikey_*) set
 #   OPENCODE_SERVER_PASSWORD set, length >= 12
-#   opencode.json parses; model == deepseek/deepseek-flash;
+#   opencode.json parses; model == opencode-go/deepseek-v4.1-flash;
 #     mcp.servers includes jev-review; plugin includes jev-guard
 #   docker-compose.yml opencode-web: no-new-privileges, cap_drop ALL,
 #     publishes 127.0.0.1:5099 (and 4096)
@@ -181,10 +181,10 @@ main() {
         model=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("model",""))' "$OC" 2>&1)
         mcp=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("mcp",{}).get("servers",{}).keys()))' "$OC" 2>&1)
         plugin=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("plugin",[]) or []))' "$OC" 2>&1)
-        if [ "$model" = "deepseek/deepseek-flash" ]; then
-            emit opencode-model OK OK "deepseek/deepseek-flash" "$model" ""
+        if [ "$model" = "opencode-go/deepseek-v4.1-flash" ]; then
+            emit opencode-model OK OK "opencode-go/deepseek-v4.1-flash" "$model" ""
         else
-            emit opencode-model ERROR DRIFT "deepseek/deepseek-flash" "$model" "set \"model\" in opencode.json"
+            emit opencode-model ERROR DRIFT "opencode-go/deepseek-v4.1-flash" "$model" "set \"model\" in opencode.json"
         fi
         case ",$mcp," in
             *,jev-review,*) emit jev-mcp OK OK "jev-review" "$mcp" "" ;;
