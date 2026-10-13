@@ -94,6 +94,15 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] Sentinel T6: trip non-latest over-budget sessions active since last
+      sweep (T1 covers latest only — prompting a background session re-sends
+      its history, e.g. ses_eca8793c5ffe7gDmY5PGoa7PuX at 1.74M tok / 8.71x).
+      T5/T6 share one cursor; T6 reuses the T5 machinery (silent first-run
+      init, integer-epoch compare, advisory only, handoff guidance). Adds
+      `over_active` to `--json`. Proven: self-test PASS (TRIP T6 fires once,
+      silent after cursor), `--json` contract clean. Audit follow-up: the
+      fixture now also carries `s_over` (over budget, ALLOW-listed, non-latest)
+      so T6 is proven independent of T5 — it must trip T6 and not T5.
 - [x] Sentinel T5: trip non-latest deny-listed sessions active since last
       sweep (T2 covers latest only — the $2.04 v4-pro history). Cursor-bounded
       like T3 (silent first-run init), integer-epoch compare, advisory only.
