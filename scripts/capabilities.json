@@ -96,6 +96,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "latency-timeline.sh --self-test" },
       "test": "scripts/latency-timeline.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "latency-timeline" }
+    },
+    {
+      "id": "deploy",
+      "purpose": "gated promote: scratch-boot + inline-script execution gate before serving",
+      "impl": "scripts/deploy.sh",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "deploy.sh --self-test" },
+      "test": "scripts/deploy.sh",
+      "evidence": { "path": "scripts/deploy.sh", "marker": "D3 gate" }
     }
   ]
 }

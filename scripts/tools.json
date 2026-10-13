@@ -14,6 +14,13 @@
     "commands": ["./scripts/web-restart.sh"]
   },
   {
+    "id": "deploy",
+    "title": "Gated promote: prove the page works, then serve it",
+    "where": "host",
+    "purpose": "The lesson of the 2026-10-12 freeze: rev-match is not page-works. Boots the new dashboard in a scratch process, runs the inline-script execution test (the detector we dismissed), and only on PASS recreates the container + re-verifies live. Failure prints rollback; never auto-reverts.",
+    "commands": ["./scripts/deploy.sh", "./scripts/deploy.sh --verify-only", "./scripts/deploy.sh --self-test"]
+  },
+  {
     "id": "recover-4096",
     "title": ":4096 recovery probe with ledger logging",
     "where": "host",

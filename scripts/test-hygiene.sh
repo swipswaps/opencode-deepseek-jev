@@ -365,6 +365,17 @@ main() {
         bad 'latency-timeline.sh present'
     fi
 
+    if [ -f "$REPO/scripts/deploy.sh" ]; then
+        if bash "$REPO/scripts/deploy.sh" --self-test > "$work/dep_st.txt" 2>&1; then
+            ok 'deploy: self-test (serve-rev parse + UI gate present)'
+        else
+            bad 'deploy: self-test (serve-rev parse + UI gate present)'
+            cat "$work/dep_st.txt"
+        fi
+    else
+        bad 'deploy.sh present'
+    fi
+
     if [ -x "$REPO/scripts/logs.sh" ]; then
         if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
             ok 'logs.sh runs (packet)'

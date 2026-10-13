@@ -419,6 +419,15 @@ web-restart.sh
     — this script is the command). Polls /api/rev until served==HEAD
     or fails loudly. Host-side; needs the docker daemon.
 
+deploy.sh
+    Gated promote. The 2026-10-12 lesson: rev-match is not page-works
+    (a bad inline script froze the page while /api/rev matched HEAD).
+    D2 parses served .mjs; D3 boots the new dashboard in a scratch
+    process and runs test-dashboard-ui.mjs (executes the served inline
+    scripts); only on PASS does D4 recreate the container; D5 verifies
+    live. Failure prints rollback, never auto-reverts. --verify-only,
+    --skip-gates, --port, --self-test.
+
 recover-4096.sh
     Automated :4096 recovery probe: asserts containers, compose DNS,
     loopback + mesh TLS edge (401 healthy, 000/400/502 classified),
