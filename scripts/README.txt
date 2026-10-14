@@ -269,6 +269,16 @@ ux-trace.py
     in test-hygiene.sh); --json; --ocr reads each shot back to text (tesseract)
     into the `ux_shot` table — text is untrusted data. Runbook "ux-trace" (host).
 
+chrome-cdp-attach.sh
+    Run ON THE HOST to make the USER'S Chrome CDP-reachable on the user's OWN
+    profile (logins persist) and forward the debug port for the sandbox.
+    Chrome ignores --remote-debugging-port when an instance already owns the
+    profile, and chrome-cdp-up.sh's /tmp profile is logged out — so this
+    restarts the DEFAULT profile with the flag (typed YES unless --yes),
+    verifies the CDP banner, and starts a socat forward (idempotent, never
+    auto-deleted). Then attach with CDP_HOST=<host-ip> CDP_PORT=<fwd>
+    node scripts/cdp-tab.mjs ... (RULES #62). --dry-run prints the plan.
+
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
     no Playwright, no X11). Attaches to the browser that is ALREADY open
