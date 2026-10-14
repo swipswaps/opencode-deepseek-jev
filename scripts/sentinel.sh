@@ -28,6 +28,11 @@
 #      the last sweep (T2 covers the latest only) — the $2.04 v4-pro history.
 #   T6 a NON-latest session is over budget and was active since the last
 #      sweep (T1 covers the latest only) — prompting it re-sends history.
+#   T7 a tool in a recent session has been `running` longer than
+#      session-health's run_ms (a stalled tool the single-threaded server is
+#      blocked on — S0) and started since the last sweep. Cursor-bounded like
+#      T3/T5/T6: the first sweep initialises silently, so an archival "running"
+#      part (e.g. a 12-day-old entry) is history, not news.
 # REPORT-only (exit stays 0): total over/warn/denied counts across recent 40.
 # A permanently-red monitor desensitizes (cry-wolf); history is reported,
 # only news trips.
@@ -123,10 +128,15 @@ PYEOF
     # T5 only for s_old and T6 for both; second sweep is silent (cursor
     # advanced past the activity). s_over isolates T6 from T5.
     t5_now=$(date +%s)
-    python3 - "$work/fix.db" "$(( (t5_now - 60) * 1000 ))" << 'PYEOF'
+    python3 - "$work/fix.db" "$(( (t5_now - 60) * 1000 ))" "$(( (t5_now - 180) * 1000 ))" << 'PYEOF'
 import sqlite3, sys
 con = sqlite3.connect(sys.argv[1])
 con.execute("UPDATE session SET time_updated=? WHERE id IN ('s_old','s_over')", (int(sys.argv[2]),))
+# T7 stall fixture: a tool in `running` for 180s (> session-health run_ms of
+# 120s) that began 180s ago, i.e. AFTER the 600s-old sweep cursor. time_created
+# stays 0 so s_new remains the latest session and T2 still fires.
+con.execute("INSERT OR REPLACE INTO session VALUES('s_stall','stall','{\"id\":\"deepseek-flash\",\"providerID\":\"deepseek\"}',10,0,0,0,0,?)", (int(sys.argv[3]),))
+con.execute("INSERT OR REPLACE INTO part VALUES('p_stall','m','s_stall',?,?,'{\"type\":\"tool\",\"tool\":\"bash\",\"state\":{\"status\":\"running\",\"input\":{\"command\":\"sleep 999\"}}}')", (int(sys.argv[3]), int(sys.argv[3])))
 con.commit()
 PYEOF
     printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
@@ -135,9 +145,11 @@ PYEOF
     printf '%s' "$o" | grep -q 'TRIP T6 over-budget: s_old' || { printf 'FAIL T6 trips on over-budget non-latest active session\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T6 over-budget: s_over' || { printf 'FAIL T6 trips on over-budget ALLOW-listed non-latest session\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T5.*s_over' && { printf 'FAIL T5 fired on an allow-listed session\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'TRIP T7 stall: s_stall bash running' || { printf 'FAIL T7 trips on a stall that began since the cursor\n'; fail=1; }
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
     printf '%s' "$o" | grep -q 'TRIP T5' && { printf 'FAIL T5 re-fires after cursor\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T6' && { printf 'FAIL T6 re-fires after cursor\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'TRIP T7' && { printf 'FAIL T7 re-fires after cursor\n'; fail=1; }
     SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
@@ -215,6 +227,9 @@ out["denied"] = [{"session": x.get("session"), "model": x.get("model"),
 out["over"] = [{"session": x.get("session"), "model": x.get("model"),
                 "updated_at": x.get("updated_at"), "in_tok": x.get("in_tok"),
                 "ratio": x.get("ratio")} for x in over]
+out["stalls"] = [{"session": f.get("session"), "tool": f.get("tool"),
+                  "started_at": f.get("started_at"), "age_s": f.get("age_s")}
+                 for f in d.get("findings", []) if f.get("kind") == "running_tool"]
 if lat.get("level") == "over":
     out["trips"].append({"id": "T1", "session": lat.get("session"),
         "msg": "latest session over budget: %s in (%sx)" % (lat.get("in_tok"), lat.get("ratio"))})
@@ -336,7 +351,7 @@ PYEOF
         t5_since=$(tr -d ' ' < "$t5_cur")
     fi
     case "$t5_since" in ''|*[!0-9]*) t5_since="" ;; esac
-    local t5_n=0 t6_n=0 t5_hits=""
+    local t5_n=0 t6_n=0 t7_n=0 t5_hits=""
     if [ -n "$t5_since" ]; then
         # Data travels by env (a heredoc owns stdin — the pipe would lose it).
         t5_hits=$(TRIPS_JSON="$trips_json" SENTINEL_T5_SINCE="$t5_since" python3 - << 'PYEOF' 2>&1
@@ -367,6 +382,17 @@ for x in d.get("over") or []:
     sid = active(x)
     if sid:
         out.append("T6|%s|%s|%s" % (sid, x.get("ratio"), x.get("in_tok")))
+# T7: a running tool whose start is NEW since the sweep cursor. A stall that
+# predates the cursor was already news on an earlier sweep (or is the silent
+# first-run init), so re-tripping it every 5 min would desensitize.
+for x in d.get("stalls") or []:
+    sid = x.get("session") or ""
+    try:
+        st = datetime.fromisoformat((x.get("started_at") or "").replace("Z", "+00:00")).timestamp()
+    except Exception:
+        continue
+    if sid and st > since:
+        out.append("T7|%s|%s|%s" % (sid, x.get("tool") or "?", x.get("age_s") or 0))
 print("\n".join(out))
 PYEOF
 ) || true
@@ -377,14 +403,16 @@ PYEOF
                     trip "TRIP T5 denied-model: $sid on $a active since last sweep" "session/$sid" "deny-listed model still burning; stop prompting, hand off (./scripts/handoff-brief.sh $sid)" ;;
                 T6) t6_n=$((t6_n + 1))
                     trip "TRIP T6 over-budget: $sid (${a}x, $b in) active since last sweep" "session/$sid" "non-latest session over budget still being prompted; stop, hand off (./scripts/handoff-brief.sh $sid)" ;;
+                T7) t7_n=$((t7_n + 1))
+                    trip "TRIP T7 stall: $sid $a running ${b}s active since last sweep" "session/$sid" "tool stuck in running (session-health S0); the single-threaded server is blocked on it; inspect, then hand off if it must be abandoned (./scripts/handoff-brief.sh $sid)" ;;
             esac
         done <<< "$t5_hits"
     fi
     printf '%s' "$(date +%s)" > "$t5_cur"
-    export T5_N="$t5_n" T6_N="$t6_n"
+    export T5_N="$t5_n" T6_N="$t6_n" T7_N="$t7_n"
     export SLOW_N="$slow_n" SLOW_MAX="$slow_max"
     if [ "$JSON" -eq 1 ]; then
-        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
+        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0 or int(os.environ.get("T7_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "stall_active": int(os.environ.get("T7_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
     else
         printf '=== sentinel @ %s ===\n' "$RUN_TS"
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'

@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -94,6 +94,17 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] Sentinel T7: trip a recent session whose tool has been `running` past
+      `session-health`'s run_ms and started since the last sweep — the
+      DB-native stall (S0) the single-threaded server is blocked on.
+      Cursor-bounded like T3/T5/T6 (silent first run, so the 12-day archival
+      "running" part is history, not news); adds `stall_active` to `--json`.
+      Proven: `sentinel.sh --self-test` PASS (T7 fires once on `s_stall`,
+      silent after cursor); live-DB proof fired
+      `TRIP T7 stall: ses_f0664ed1… bash running 1090140s` with a back-dated
+      cursor; `test-hygiene.sh` 30/30. Design note: long inter-part *gaps* are
+      deliberately NOT a trip — `session-health.mjs` rejects them (20/20
+      overnight-idle), and a duplicate trip would desensitize (cry-wolf).
 - [x] a11y cleanup — **all six pages 0 errors / 0 warnings / 0 notes** under
       @ra11y/core (home was already clean; explore 13E→0, the rest →0). Two
       root causes: (1) the `.pane` tabpanels carried `tabindex="0"` + inline
