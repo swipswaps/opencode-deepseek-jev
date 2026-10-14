@@ -94,6 +94,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Installed **browser_use + selenium** (scripted:
+      `scripts/browser-tools-install.sh`). The image has no pip/ensurepip, so
+      the script creates the venv with `--without-pip` and bootstraps pip via
+      `get-pip.py`, then pip-installs both. browser-use 0.13.11 works —
+      verified it connects to the host Chrome over CDP
+      (`BrowserSession(cdp_url=...)`) and lists tabs. selenium 4.51.0 installs
+      but its chromedriver cannot run here (needs libnss3/libnspr4/libdbus-1,
+      absent with no sudo), so selenium is host-only. Surfaced in
+      tools.json/README/HANDOFF.
 - [x] Browser control formalized (the recurring "do it in the open chrome"
       ask). `scripts/cdp-tab.mjs` gained reusable form verbs — `fill`
       (prototype-setter + `input`/`change` so React/Vue registers it),

@@ -281,6 +281,17 @@ chrome-cdp-attach.sh
     CDP_HOST=<host-ip> CDP_PORT=<fwd> node scripts/cdp-tab.mjs ... (#62).
     --dry-run prints the plan.
 
+browser-tools-install.sh
+    Installs browser_use + selenium into a venv (default ~/.venvs/browser).
+    This image ships no pip and no ensurepip, so the script makes the venv
+    with --without-pip and bootstraps pip from bootstrap.pypa.io/get-pip.py.
+    Both stacks drive the already-open browser over CDP (RULES #62);
+    browser_use works via pure-Python cdp-use (verified: lists the host's
+    tabs at CDP_HOST/CDP_PORT). Selenium is installed but its chromedriver
+    needs libnss3/libnspr4/libdbus-1, absent in this sandbox with no sudo,
+    so selenium only runs where those libs exist (e.g. the host).
+    --venv DIR, --with-browsers (playwright chromium), --dry-run.
+
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
     no Playwright, no X11). Attaches to the browser that is ALREADY open

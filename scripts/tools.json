@@ -278,5 +278,12 @@
     "where": "host",
     "purpose": "Chrome M136+ refuses --remote-debugging-port on the DEFAULT profile (\"requires a non-default data directory\") and a fresh /tmp profile is logged out. Stops any running Chrome (typed YES unless --yes), launches CDP on a NON-default --user-data-dir, and with --clone-default seeds it from ~/.config/google-chrome so logins persist; forwards the port with socat so the sandbox can attach via cdp-tab.mjs (RULES #62). UI-only GitHub steps (e.g. minting a fine-grained PAT) run here, not gh api (#63).",
     "commands": ["bash scripts/chrome-cdp-attach.sh 'https://github.com/settings/personal-access-tokens/new'", "bash scripts/chrome-cdp-attach.sh --dry-run", "CDP_HOST=<host-ip> CDP_PORT=9223 node scripts/cdp-tab.mjs tabs"]
+  },
+  {
+    "id": "browser-tools",
+    "title": "Install browser-use + selenium into a venv",
+    "where": "container",
+    "purpose": "This image ships no pip/ensurepip, so the script creates a venv with --without-pip and bootstraps pip via get-pip.py, then installs browser-use + selenium. Both drive the already-open browser over CDP (RULES #62); browser-use works via pure-Python cdp-use (verified: lists host tabs). Selenium is installed but its chromedriver needs libnss3/libnspr4/libdbus-1, absent here with no sudo, so it only runs where those libs exist (e.g. the host).",
+    "commands": ["bash scripts/browser-tools-install.sh", "bash scripts/browser-tools-install.sh --dry-run", "/home/node/.venvs/browser/bin/python -c 'from browser_use import BrowserSession'"]
   }
 ]
