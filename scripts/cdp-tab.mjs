@@ -40,6 +40,10 @@ import { fileURLToPath } from "node:url";
 const REPO = fileURLToPath(new URL("..", import.meta.url)).replace(/\/+$/, "");
 const DASH = process.env.DASH_URL || "https://127.0.0.1:5099";
 const API = process.env.OPENCODE_API_URL || "https://127.0.0.1:4096";
+// CDP_HOST lets the sandbox drive a browser on another host (the browser is
+// usually on the workstation, not in the container). Default stays loopback.
+const CDP_HOST = process.env.CDP_HOST || "127.0.0.1";
+function cdpBase(port) { return "http://" + CDP_HOST + ":" + port; }
 
 // ---- pure helpers (unit-tested by --self-test, no I/O) -----------------
 
@@ -91,6 +95,9 @@ export async function findDebugPort() {
     const p = Number(process.env.CDP_PORT);
     if (p > 0) return { port: p, via: "env" };
   }
+  if (process.env.CDP_HOST && process.env.CDP_HOST !== "127.0.0.1") {
+    return { port: Number(process.env.CDP_PORT) || 9222, via: "env-host" };
+  }
   try {
     for (const pid of readdirSync("/proc")) {
       if (!/^\d+$/.test(pid)) continue;
@@ -105,7 +112,7 @@ export async function findDebugPort() {
 }
 
 async function cdpGet(port, path) {
-  const r = await fetch("http://127.0.0.1:" + port + path,
+  const r = await fetch(cdpBase(port) + path,
     { signal: AbortSignal.timeout(5000) });
   if (!r.ok) throw new Error("cdp http " + r.status + " on " + path);
   return r.json();
@@ -116,7 +123,7 @@ export async function listTabs(port) {
 }
 
 export async function openUrl(port, url, tolerant) {
-  const r = await fetch("http://127.0.0.1:" + port + "/json/new?url=" + encodeURIComponent(url),
+  const r = await fetch(cdpBase(port) + "/json/new?url=" + encodeURIComponent(url),
     { method: "PUT", signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error("open failed: http " + r.status);
   const t = await r.json();
@@ -241,7 +248,7 @@ const RENDERED_JS = "({loading: document.querySelectorAll('[data-loading]').leng
 export async function openAuth(port, url, user, pw) {
   // Create with the real URL (PUT, like openUrl); the first load parks on
   // the login dialog, then Fetch answers it on the re-navigate.
-  const put = await fetch("http://127.0.0.1:" + port + "/json/new?url=" + encodeURIComponent(url),
+  const put = await fetch(cdpBase(port) + "/json/new?url=" + encodeURIComponent(url),
     { method: "PUT", signal: AbortSignal.timeout(8000) });
   if (!put.ok) throw new Error("open failed: http " + put.status);
   const t = await put.json();
@@ -413,10 +420,34 @@ export async function runProbe(outdir) {
 
 // ---- CLI ---------------------------------------------------------------
 
+// ---- form actions (reusable DOM drivers for the attached live page) ------
+// These build the JS that `evaluate` runs in the tab. A bare `.value =` does
+// NOT register on React/Vue controlled inputs, so we set through the prototype
+// setter and dispatch input+change. Selectors are strings; no X11/xdotool and
+// no Playwright — the browser is driven over CDP only.
+export function jsFill(sel, val) {
+  return "(()=>{const e=document.querySelector(" + JSON.stringify(sel) + ");" +
+    "if(!e)return {ok:false,why:'no match'};e.focus();" +
+    "const d=Object.getOwnPropertyDescriptor(e.__proto__,'value');" +
+    "if(d&&d.set){d.set.call(e," + JSON.stringify(val) + ")}else{e.value=" + JSON.stringify(val) + "}" +
+    "e.dispatchEvent(new Event('input',{bubbles:true}));" +
+    "e.dispatchEvent(new Event('change',{bubbles:true}));" +
+    "return {ok:true,value:String(e.value)}})()";
+}
+export function jsClick(sel) {
+  return "(()=>{const e=document.querySelector(" + JSON.stringify(sel) + ");" +
+    "if(!e)return {ok:false,why:'no match'};e.scrollIntoView({block:'center'});" +
+    "e.click();return {ok:true,tag:e.tagName}})()";
+}
+export function jsWait(sel) {
+  return "(()=>{const e=document.querySelector(" + JSON.stringify(sel) + ");" +
+    "return {ok:!!e}})()";
+}
+
 function usage() {
   const lines = [
-    "usage: node scripts/cdp-tab.mjs [--self-test|tabs|open <url>|openauth <url>|text <match>|eval <match> <js>|shot <match> <png>|probe]",
-    "  env: CDP_PORT (override), DASH_URL (default " + DASH + "), OPENCODE_API_URL (default " + API + ")",
+    "usage: node scripts/cdp-tab.mjs [--self-test|tabs|open <url>|openauth <url>|text <match>|eval <match> <js>|fill <match> <sel> <value>|click <match> <sel>|waitfor <match> <sel> [ms]|shot <match> <png>|probe]",
+    "  env: CDP_HOST (default 127.0.0.1), CDP_PORT (override), DASH_URL (default " + DASH + "), OPENCODE_API_URL (default " + API + ")",
     "  OPENCODE_SERVER_PASSWORD only enables the :4096 count in probe; it is never printed.",
     "  openauth answers the Basic login dialog from OPENCODE_AUTH_USER (default opencode) + OPENCODE_SERVER_PASSWORD.",
   ];
@@ -439,6 +470,10 @@ function selfTest() {
   const h = basicHeader("opencode", "s3cret!");
   ok("basic shape", /^Basic [A-Za-z0-9+/=]+$/.test(h));
   ok("basic decodes", Buffer.from(h.slice(6), "base64").toString().includes(":"));
+  ok("jsFill quotes value", jsFill("#n", 'a"b').includes('"a\\"b"'));
+  ok("jsFill dispatches", jsFill("#n", "x").includes("new Event('input'") && jsFill("#n", "x").includes("new Event('change'"));
+  ok("jsClick calls click()", jsClick("#go").includes(".click()"));
+  ok("jsWait probes selector", jsWait("#x").includes("querySelector"));
   const d1 = decideProbe(["a", "b"], ["a", "b"], { rows: 2, loading: 0, ids: ["a"] });
   ok("decide pass", d1.verdict === "PASS");
   const d2 = decideProbe(["a", "b"], ["a"], { rows: 1, loading: 0, ids: ["a"] });
@@ -499,6 +534,27 @@ async function cli(argv) {
     if (!argv[2]) { usage(); return 2; }
     process.stdout.write(JSON.stringify(await evaluate(ws, argv[2])) + "\n");
     return 0;
+  }
+  if (cmd === "fill") {
+    if (!argv[2] || argv[3] === undefined) { usage(); return 2; }
+    process.stdout.write(JSON.stringify(await evaluate(ws, jsFill(argv[2], argv[3]))) + "\n");
+    return 0;
+  }
+  if (cmd === "click") {
+    if (!argv[2]) { usage(); return 2; }
+    process.stdout.write(JSON.stringify(await evaluate(ws, jsClick(argv[2]))) + "\n");
+    return 0;
+  }
+  if (cmd === "waitfor") {
+    if (!argv[2]) { usage(); return 2; }
+    const budget = Number(argv[3] || 15000);
+    const t0 = Date.now();
+    for (;;) {
+      const r = await evaluate(ws, jsWait(argv[2]));
+      if (r && r.ok) { process.stdout.write("ready: " + argv[2] + "\n"); return 0; }
+      if (Date.now() - t0 > budget) { process.stdout.write("FAIL waitfor timeout: " + argv[2] + "\n"); return 2; }
+      await new Promise((r) => setTimeout(r, 500));
+    }
   }
   if (cmd === "shot") {
     if (!argv[2]) { usage(); return 2; }

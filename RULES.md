@@ -35,6 +35,8 @@ number and a constraint overlap, both are listed.
 | #55 | Raw-link HTTP-200 validation with backoff. | `push_notes_v18.sh` link block |
 | #57 | End sentinel. The script ends with a sentinel line so truncation in transit is detected. | `push_notes_v18.sh` line 20 |
 | #61 | No escape-dependent generated code. When JS/HTML is produced from a JS template literal, `\n`, `\'`, `\"`, `\\` are evaluated by the generator, not the consumer. Never emit inline handlers or escaped quotes; use `data-*` attributes plus delegated listeners. Every served page's inline script must be syntax-parsed AND executed headlessly. | `dashboard.mjs` (`html`, `exploreHtml`); `test-dashboard.sh`; `test-dashboard-ui.mjs` |
+| #62 | Drive a live browser over **CDP, never X11 automation**. `scripts/cdp-tab.mjs` (`tabs`/`open`/`openauth`/`text`/`eval`/`fill`/`click`/`waitfor`/`shot`/`probe`) is the browser-control path — no Playwright, no `xdotool`, no display inside the sandbox. Run it where the browser runs; the sandbox reaches it only if the debug port is exposed (`scripts/chrome-cdp-up.sh`, then bind/tunnel). Selectors resolve in-page, so setting a controlled input's value must dispatch `input`+`change` (React/Vue ignore a bare `.value=`). | `cdp-tab.mjs`; `chrome-cdp-up.sh` |
+| #63 | `gh api` cannot mint a **fine-grained PAT** (no endpoint; only the legacy classic `POST /authorizations`). UI-only consent steps — token creation, OAuth-app installs, account settings — are driven as browser steps (#62), not API calls. | this session |
 
 ## Substitutions for the blacklist
 

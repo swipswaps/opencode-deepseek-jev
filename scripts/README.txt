@@ -269,6 +269,20 @@ ux-trace.py
     in test-hygiene.sh); --json; --ocr reads each shot back to text (tesseract)
     into the `ux_shot` table — text is untrusted data. Runbook "ux-trace" (host).
 
+cdp-tab.mjs
+    Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
+    no Playwright, no X11). Attaches to the browser that is ALREADY open
+    (discovers --remote-debugging-port from /proc, else CDP_PORT, else 9222)
+    and drives the LIVE page: tabs, open <url>, openauth <url>,
+    text <match>, eval <match> <js>, fill <match> <sel> <value>,
+    click <match> <sel>, waitfor <match> <sel>, shot <match> <png>, probe.
+    fill sets the value through the prototype setter and dispatches
+    input+change (React/Vue ignore a bare assignment). Run it where the
+    browser runs — scripts/chrome-cdp-up.sh starts google-chrome-stable with
+    the debug port; the sandbox reaches it only if that port is exposed.
+    UI-only GitHub steps (e.g. minting a fine-grained PAT) go here, not
+    `gh api`. --self-test offline.
+
 re-extract-session.sh
     Reproduce a browser-extracted session transcript log: opens the session in
     the live browser (cdp-tab.mjs openauth), pulls /session/<id>/message in

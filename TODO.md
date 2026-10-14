@@ -94,6 +94,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Browser control formalized (the recurring "do it in the open chrome"
+      ask). `scripts/cdp-tab.mjs` gained reusable form verbs — `fill`
+      (prototype-setter + `input`/`change` so React/Vue registers it),
+      `click`, `waitfor` — plus a `CDP_HOST` seam so the sandbox can drive a
+      browser on the workstation (Chrome's debug port is host-side).
+      `RULES.md` #62 (drive via CDP, never X11/Playwright; run where the
+      browser runs) and #63 (`gh api` cannot mint a fine-grained PAT — it is
+      UI-only, so drive the page). Proven: `cdp-tab.mjs --self-test` 14/14;
+      lint 204/0; test-hygiene 52/0.
 - [x] SubQ Snap triage gate wired (the "first SubQ Snap then Jev" ask). The
       SubQ key was validated (`GET /v1/models` → 200) and stored as
       `SUBQ_API_KEY` (in `.env.local`; added to `ensure-env.sh`'s wanted set).
