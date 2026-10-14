@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 #
-# chrome-cdp-attach.sh — make the USER'S Chrome CDP-reachable on the user's
-# OWN profile (logins persist) and forward the debug port so a client in
-# another namespace (the sandbox) can attach. Run ON THE HOST.
+# chrome-cdp-attach.sh — make a CDP-reachable Chrome whose profile CARRIES
+# the user's logins, and forward the debug port so a client in another
+# namespace (the sandbox) can attach. Run ON THE HOST.
 #
-# Why not chrome-cdp-up.sh: that starts an ISOLATED profile under
-# /tmp/chrome-cdp (logged out) — fine for our own :5099/:4096 pages, wrong
-# for GitHub settings, which need the signed-in session. Chrome also IGNORES
-# --remote-debugging-port when an instance already owns the profile
-# ("Opening in existing browser session"), so the running instance must be
-# restarted WITH the flag, on the DEFAULT profile.
+# The hard constraints this encodes (learned from the actual failures):
+#   1. Chrome (M136+) REFUSES --remote-debugging-port on the DEFAULT profile:
+#      "DevTools remote debugging requires a non-default data directory."
+#      -> we always pass an explicit non-default --user-data-dir.
+#   2. A fresh /tmp profile is logged OUT, so GitHub settings can't be used.
+#      -> with --clone-default we seed the non-default dir from the real
+#         profile (~/.config/google-chrome), so cookies survive (same machine,
+#         same OS keyring).
+#   3. Chrome ignores --remote-debugging-port while an instance already owns
+#      the profile ("Opening in existing browser session").
+#      -> we SIGTERM a running instance first (typed YES unless --yes).
 #
-#   bash scripts/chrome-cdp-attach.sh [URL] [--port N] [--fwd N] [--yes] [--no-forward] [--dry-run]
+#   bash scripts/chrome-cdp-attach.sh [URL] [--clone-default] [--yes]
+#        [--port N] [--fwd N] [--no-forward] [--dry-run]
 #
-# Restarting Chrome closes unsaved tabs; it asks for a typed YES unless
-# --yes is given. The socat forward is idempotent and never auto-deleted.
+#   profile dir: $CDP_PROFILE, else ~/.cache/chrome-cdp-profile (persistent).
 #
 # Then, from the sandbox (RULES #62):
 #   CDP_HOST=<host-ip> CDP_PORT=<fwd> node scripts/cdp-tab.mjs tabs
@@ -37,48 +42,59 @@ chrome_count() {
     fi
 }
 
+default_profile() {
+    local c
+    for c in "$HOME/.config/google-chrome" "$HOME/.config/chromium" \
+             "$HOME/.var/app/com.google.Chrome/config/google-chrome"; do
+        [ -d "$c" ] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+
 main() {
-    local PORT=9222 FWD=9223 URL="" ASSUME=0 NOFWD=0 DRY=0
+    local PORT=9222 FWD=9223 URL="about:blank" ASSUME=0 NOFWD=0 DRY=0 CLONE=0
+    local PROFILE_DIR="${CDP_PROFILE:-$HOME/.cache/chrome-cdp-profile}"
     while [ $# -gt 0 ]; do
         case "$1" in
             --port) PORT="${2:-9222}"; shift 2 ;;
             --fwd) FWD="${2:-9223}"; shift 2 ;;
             --yes) ASSUME=1; shift ;;
+            --clone-default) CLONE=1; shift ;;
             --no-forward) NOFWD=1; shift ;;
             --dry-run) DRY=1; shift ;;
             -h | --help)
-                printf 'usage: %s [URL] [--port N] [--fwd N] [--yes] [--no-forward] [--dry-run]\n' "$0"
+                printf 'usage: %s [URL] [--clone-default] [--yes] [--port N] [--fwd N] [--no-forward] [--dry-run]\n' "$0"
                 return 0 ;;
             -*) printf 'unknown arg: %s\n' "$1"; return 2 ;;
             *) URL="$1"; shift ;;
         esac
     done
-    [ -n "$URL" ] || URL="about:blank"
 
     have google-chrome-stable || { printf 'GATE FAIL: google-chrome-stable not on PATH\n'; return 2; }
+    [ "$URL" = "about:blank" ] && [ "$CLONE" -eq 1 ] && URL="https://github.com/settings/personal-access-tokens/new"
 
-    local np banner
+    local np banner src
     np=$(chrome_count)
     banner=$(probe "$PORT")
     printf '=== chrome-cdp-attach ===\n'
-    printf 'host:    %s\n' "$(hostname)"
-    printf 'cwd:     %s\n' "$PWD"
-    printf 'chrome:  %s instance(s)\n' "$np"
-    printf 'probe %s: %s\n' "$PORT" "${banner:-closed}"
-    printf 'socat:   %s\n' "$(have socat && command -v socat || printf MISSING)"
+    printf 'host:     %s\n' "$(hostname)"
+    printf 'cwd:      %s\n' "$PWD"
+    printf 'chrome:   %s instance(s)\n' "$np"
+    printf 'probe %s:  %s\n' "$PORT" "${banner:-closed}"
+    printf 'profile:  %s%s\n' "$PROFILE_DIR" "$([ -e "$PROFILE_DIR" ] && printf ' (exists)' || printf ' (new)')"
+    printf 'socat:    %s\n' "$(have socat && command -v socat || printf MISSING)"
 
     if [ "$DRY" -eq 1 ]; then
-        printf '\n[dry-run] would: restart %s chrome on the default profile with --remote-debugging-port=%s; forward %s -> 127.0.0.1:%s; open %s\n' \
-            "$np" "$PORT" "$FWD" "$PORT" "$URL"
+        printf '\n[dry-run] would: stop %s chrome; %s; launch google-chrome-stable --user-data-dir=%s --remote-debugging-port=%s %s; forward %s -> 127.0.0.1:%s\n' \
+            "$np" "$([ "$CLONE" -eq 1 ] && printf 'clone the default profile into it' || printf 'use it as-is')" \
+            "$PROFILE_DIR" "$PORT" "$URL" "$FWD" "$PORT"
         return 0
     fi
 
-    if [ -n "$banner" ]; then
-        printf 'CDP already listening on %s\n' "$PORT"
-    else
+    if [ -z "$banner" ]; then
         if [ "$np" -gt 0 ] && [ "$ASSUME" -ne 1 ]; then
-            printf '\nChrome is running WITHOUT the debug port. Restarting closes unsaved tabs.\n'
-            printf 'Type YES to restart Chrome with CDP on the default profile: '
+            printf '\nChrome is running. It must stop to free the profile. Unsaved tabs close.\n'
+            printf 'Type YES to continue: '
             local ans=""
             read -r ans
             [ "$ans" = YES ] || { printf 'aborted (no changes)\n'; return 2; }
@@ -87,14 +103,23 @@ main() {
             printf 'stopping chrome (SIGTERM, graceful)...\n'
             pkill -TERM -f 'google-chrome-stable' || true
             local i=0
-            while [ "$i" -lt 15 ] && [ "$(chrome_count)" -gt 0 ]; do
-                sleep 1
-                i=$((i + 1))
-            done
+            while [ "$i" -lt 15 ] && [ "$(chrome_count)" -gt 0 ]; do sleep 1; i=$((i + 1)); done
         fi
-        printf 'starting chrome with CDP on the default profile...\n'
-        setsid google-chrome-stable --remote-debugging-port="$PORT" \
-            --remote-allow-origins='*' "$URL" > /tmp/chrome-cdp-attach.log 2>&1 < /dev/null &
+        if [ "$CLONE" -eq 1 ] && [ ! -e "$PROFILE_DIR" ]; then
+            if src=$(default_profile); then
+                printf 'cloning %s -> %s (login cookies carry over)...\n' "$src" "$PROFILE_DIR"
+                mkdir -p "$PROFILE_DIR" || return 2
+                cp -a "$src/." "$PROFILE_DIR/" || { printf 'GATE FAIL: profile clone failed\n'; return 2; }
+                rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonSocket" "$PROFILE_DIR/SingletonCookie"
+            else
+                printf 'WARN no default profile found to clone; starting logged out\n'
+            fi
+        fi
+        mkdir -p "$PROFILE_DIR" || return 2
+        printf 'starting chrome with CDP on a NON-default profile dir (M136 requirement)...\n'
+        setsid google-chrome-stable --user-data-dir="$PROFILE_DIR" \
+            --remote-debugging-port="$PORT" --remote-allow-origins='*' \
+            --no-first-run "$URL" > /tmp/chrome-cdp-attach.log 2>&1 < /dev/null &
         local j=0
         banner=""
         while [ "$j" -lt 30 ]; do
@@ -106,9 +131,14 @@ main() {
         if [ -z "$banner" ]; then
             printf 'GATE FAIL: CDP not reachable on %s after 30s; log tail:\n' "$PORT"
             tail -n 15 /tmp/chrome-cdp-attach.log
+            if grep -q 'non-default data directory' /tmp/chrome-cdp-attach.log; then
+                printf 'hint: --user-data-dir was rejected; this build requires a NON-default dir (the script sets one per line above).\n'
+            fi
             return 2
         fi
         printf 'CDP bound: %s\n' "$banner"
+    else
+        printf 'CDP already listening on %s\n' "$PORT"
     fi
 
     if [ "$NOFWD" -ne 1 ]; then

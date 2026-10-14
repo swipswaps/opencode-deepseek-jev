@@ -272,12 +272,14 @@ ux-trace.py
 chrome-cdp-attach.sh
     Run ON THE HOST to make the USER'S Chrome CDP-reachable on the user's OWN
     profile (logins persist) and forward the debug port for the sandbox.
-    Chrome ignores --remote-debugging-port when an instance already owns the
-    profile, and chrome-cdp-up.sh's /tmp profile is logged out — so this
-    restarts the DEFAULT profile with the flag (typed YES unless --yes),
-    verifies the CDP banner, and starts a socat forward (idempotent, never
-    auto-deleted). Then attach with CDP_HOST=<host-ip> CDP_PORT=<fwd>
-    node scripts/cdp-tab.mjs ... (RULES #62). --dry-run prints the plan.
+    Chrome M136+ REFUSES --remote-debugging-port on the DEFAULT profile
+    ("requires a non-default data directory") and a fresh /tmp profile is
+    logged out. So this stops any running Chrome (typed YES unless --yes),
+    launches CDP on a NON-default --user-data-dir, and with --clone-default
+    seeds that dir from ~/.config/google-chrome so logins persist. Verifies
+    the banner, then starts an idempotent socat forward. Attach with
+    CDP_HOST=<host-ip> CDP_PORT=<fwd> node scripts/cdp-tab.mjs ... (#62).
+    --dry-run prints the plan.
 
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;

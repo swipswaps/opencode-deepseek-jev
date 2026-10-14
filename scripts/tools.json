@@ -276,7 +276,7 @@
     "id": "chrome-cdp-attach",
     "title": "Make the user's own Chrome CDP-reachable + forward it",
     "where": "host",
-    "purpose": "Chrome ignores --remote-debugging-port when an instance already owns the profile, and an isolated /tmp profile is logged out. Restarts the DEFAULT profile with the flag (typed YES unless --yes), verifies the CDP banner, and forwards the port with socat so the sandbox can attach via cdp-tab.mjs (RULES #62). UI-only GitHub steps (e.g. minting a fine-grained PAT) run here, not gh api (#63).",
+    "purpose": "Chrome M136+ refuses --remote-debugging-port on the DEFAULT profile (\"requires a non-default data directory\") and a fresh /tmp profile is logged out. Stops any running Chrome (typed YES unless --yes), launches CDP on a NON-default --user-data-dir, and with --clone-default seeds it from ~/.config/google-chrome so logins persist; forwards the port with socat so the sandbox can attach via cdp-tab.mjs (RULES #62). UI-only GitHub steps (e.g. minting a fine-grained PAT) run here, not gh api (#63).",
     "commands": ["bash scripts/chrome-cdp-attach.sh 'https://github.com/settings/personal-access-tokens/new'", "bash scripts/chrome-cdp-attach.sh --dry-run", "CDP_HOST=<host-ip> CDP_PORT=9223 node scripts/cdp-tab.mjs tabs"]
   }
 ]
