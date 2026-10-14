@@ -83,7 +83,7 @@ repo = pathlib.Path(sys.argv[1])
 rotate = sys.argv[2] == "1"
 env = repo / ".env.local"
 wanted = ("DEEPSEEK_API_KEY", "JEV_API_KEY", "GEMINI_API_KEY",
-          "OPENCODE_SERVER_PASSWORD")
+          "OPENCODE_SERVER_PASSWORD", "SUBQ_API_KEY")
 known = set(wanted)
 
 def parse_values(p):

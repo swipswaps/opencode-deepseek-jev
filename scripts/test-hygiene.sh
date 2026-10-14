@@ -321,6 +321,17 @@ main() {
         bad 'session-digest.sh present'
     fi
 
+    if [ -f "$REPO/scripts/subq_snap.py" ]; then
+        if python3 "$REPO/scripts/subq_snap.py" --self-test > "$work/sq_st.txt" 2>&1; then
+            ok 'subq_snap: self-test (decisions body + answer format)'
+        else
+            bad 'subq_snap: self-test (decisions body + answer format)'
+            cat "$work/sq_st.txt"
+        fi
+    else
+        bad 'subq_snap.py present'
+    fi
+
     if [ -f "$REPO/scripts/secret-scan.sh" ]; then
         if bash "$REPO/scripts/secret-scan.sh" --self-test > "$work/ss_st.txt" 2>&1; then
             ok 'secret-scan: self-test (fixture + value-free report)'

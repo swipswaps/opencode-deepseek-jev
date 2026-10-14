@@ -465,6 +465,15 @@ session-digest.sh
     The sentinel writes one such digest per T5/T6/T7 trip to
     data/observability/digests/<id>.md (SENTINEL_DIGEST_DIR overrides).
 
+subq_snap.py
+    Client for SubQ's Decisions API (Snap): model subq-snap-preview,
+    POST /v1/systemone, typed questions (noul / choice / score), billed
+    on input only ($0.05 / 1M). A cheap FIRST-PASS triage gate — run it
+    on a bounded digest before an expensive second opinion (e.g. the Jev
+    review MCP). Key SUBQ_API_KEY (env or .env.local); seams SUBQ_MODEL,
+    SUBQ_URL. --state/--state-file, --question, --type, --criteria,
+    --true/--false, --json, --dry-run, --self-test offline.
+
 secret-scan.sh
     Secrets-at-rest scan over artifact dirs (logs/, observability,
     notes/): deepseek/jev keys, bearer tokens, env assignments. The

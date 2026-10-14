@@ -94,6 +94,19 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] SubQ Snap triage gate wired (the "first SubQ Snap then Jev" ask). The
+      SubQ key was validated (`GET /v1/models` → 200) and stored as
+      `SUBQ_API_KEY` (in `.env.local`; added to `ensure-env.sh`'s wanted set).
+      New `scripts/subq_snap.py` calls the **Decisions API**
+      (`subq-snap-preview`, `POST /v1/systemone`, typed noul/choice/score,
+      $0.05 / 1M input, output free) — a cheap first-pass gate to run on a
+      **bounded digest** before an expensive second opinion. Proven:
+      `--self-test` + `--dry-run` offline; live call on the 1.5 KB URL-session
+      digest → `handoff: noul=0.986 (yes)`, 788 in-tokens (~$0.00004).
+      Diagnosis: Jev's errors are the **rejected `JEV_API_KEY`** (8× in the
+      DB), not a context-window problem; typesafe.ai login is down so rotation
+      is blocked. Pipeline: `session-digest.sh` (curate) → `subq_snap.py`
+      (triage) → Jev (deep review, once the key rotates).
 - [x] Auto-digest on a non-latest trip (the curation half). On a T5/T6/T7
       trip the sentinel now writes `scripts/session-digest.sh <id>` output to
       `data/observability/digests/<id>.md` (seam: `SENTINEL_DIGEST_DIR`), so
