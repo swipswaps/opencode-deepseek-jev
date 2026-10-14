@@ -310,6 +310,17 @@ main() {
         bad 'handoff-brief.sh present'
     fi
 
+    if [ -f "$REPO/scripts/session-digest.sh" ]; then
+        if bash "$REPO/scripts/session-digest.sh" --self-test > "$work/sd_st.txt" 2>&1; then
+            ok 'session-digest: self-test (DB-only digest + over-budget directive)'
+        else
+            bad 'session-digest: self-test (DB-only digest + over-budget directive)'
+            cat "$work/sd_st.txt"
+        fi
+    else
+        bad 'session-digest.sh present'
+    fi
+
     if [ -f "$REPO/scripts/secret-scan.sh" ]; then
         if bash "$REPO/scripts/secret-scan.sh" --self-test > "$work/ss_st.txt" 2>&1; then
             ok 'secret-scan: self-test (fixture + value-free report)'

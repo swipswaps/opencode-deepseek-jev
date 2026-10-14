@@ -455,6 +455,14 @@ handoff-brief.sh
     the prompt plus the spend command after an ALLOW verdict; it never
     calls a model. --out, --self-test offline.
 
+session-digest.sh
+    Deterministic, DB-ONLY digest of ONE session (~1.5 KB): title,
+    model, budget ratio, cost, last user ask, last assistant text, open
+    todos, running tool, and an over-budget directive. Curates the
+    critical facts for a FRESH session instead of replaying a huge
+    transcript into a model — no model call, no transcript at rest.
+    Read-only (mode=ro), redacted. --db, --max-bytes, --self-test.
+
 secret-scan.sh
     Secrets-at-rest scan over artifact dirs (logs/, observability,
     notes/): deepseek/jev keys, bearer tokens, env assignments. The
@@ -467,9 +475,12 @@ sentinel.sh
     Periodic threshold monitor (user timer, every 5 min): trips only
     on actionable news — latest session over budget (T1) or on a
     deny-listed model (T2), new gateway-failure lines since cursor
-    (T3); history only reported. Logs ADVISORY rows for watchdog
-    polling. --once (default), --json, --no-log, --self-test offline.
-    Install: ./scripts/sentinel-install.sh (no sudo).
+    (T3), slow caddy fetch (T4), a non-latest deny-listed (T5) or
+    over-budget (T6) session active since the last sweep, and a
+    recent tool stuck in `running` (T7). History only reported. Logs
+    ADVISORY rows for watchdog polling. --once (default), --json,
+    --no-log, --self-test offline. Install: ./scripts/sentinel-install.sh
+    (no sudo).
 
 sentinel-install.sh
     Installs the user-level sentinel timer (writes units with the repo

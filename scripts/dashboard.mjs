@@ -1115,15 +1115,19 @@ ${nav("dashboard")}
 <div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
 <div class="card"><h2>Search <span class="muted">(ranked FTS: title · text · commands)</span></h2><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres" aria-live="polite"></div></div>
 <div class="card"><h2>Config audit <span class="muted">(actual vs expected)</span></h2><div id="config" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
-<div class="card"><h2>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span></h2><div id="sessions" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span> <span class="muted" data-tz></span></h2><div id="sessions" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Session detail <span class="muted" id="drill-id"></span></h2><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
-<div class="card"><h2>Live activity <span class="muted">(click to expand)</span></h2><div id="activity" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Live activity <span class="muted">(click to expand)</span> <span class="muted" data-tz></span></h2><div id="activity" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Todos</h2><div id="todos" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 </main>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
-function ts(t){return new Date(t).toISOString().slice(11,23);}
+// Times are shown in the VIEWER's local timezone (browser clock), not UTC, so
+// they match the operator's wall clock; tzname() labels the zone on screen.
+function tzname(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||'local';}catch(e){return 'local';}}
+function pad3(n){n=String(n);return n.length<3?('00'+n).slice(-3):n;}
+function ts(t){var d=new Date(Number(t));return d.toLocaleTimeString(undefined,{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})+'.'+pad3(d.getMilliseconds());}
 // Bounded fetch: ms sets AbortSignal.timeout, so a caller that cares about
 // latency aborts a slow/hung endpoint instead of stalling (guarded where
 // AbortSignal is absent, e.g. the headless UI shim).
@@ -1344,24 +1348,27 @@ document.addEventListener('keydown',function(ev){
   else if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
 });
 // Polling: 5 s glance cadence (server TTLs are coarser, so this is cheap).
-// The in-flight guard never stacks a second request, and polling pauses while
-// the tab is hidden — visibilitychange fires an immediate catch-up tick on
-// return instead of a burst of queued intervals.
+// The in-flight guard never stacks a second request. The first tick fires
+// immediately, and polling does NOT pause when the tab reports hidden — an
+// embedded/preview viewer often reports hidden and never fires
+// visibilitychange, which made the page look frozen until a manual reload.
 function poll(fn,ms){
   var inflight=false;
   function tick(){
-    if(document.hidden||inflight)return;
+    if(inflight)return;
     inflight=true;
     Promise.resolve().then(fn).catch(function(){}).then(function(){inflight=false;});
   }
+  tick();
   setInterval(tick,ms);
-  document.addEventListener('visibilitychange',function(){if(!document.hidden)tick();});
+  document.addEventListener('visibilitychange',function(){tick();});
 }
 poll(refreshCost,5000);
 poll(refreshActivity,5000);
 poll(refreshTodos,5000);
 poll(refreshBalance,30000);
 poll(refreshConfig,30000);
+document.querySelectorAll('[data-tz]').forEach(function(e){e.textContent='(times '+tzname()+')';});
 </script></body></html>`;
 
 const exploreHtml = `<!doctype html>
@@ -1512,9 +1519,9 @@ async function j(u){try{var r=await fetch(u);return r.ok?r.json():null;}catch(e)
 var colors={tool:'#58a6ff',reasoning:'#d2a8ff',text:'#7ee787','step-start':'#8b949e','step-finish':'#8b949e',patch:'#ff7b72'};
 function tip(html){var t=d3.select('#tip');if(html==null){t.style('opacity',0);return;}t.html(html).style('opacity',1);}
 function moveTip(ev){d3.select('#tip').style('left',(ev.clientX+14)+'px').style('top',(ev.clientY+14)+'px');}
-function timeFmt(d){var x=new Date(d);return x.toISOString().slice(11,16);}
+function timeFmt(d){var x=new Date(Number(d));return x.toLocaleTimeString(undefined,{hour12:false,hour:'2-digit',minute:'2-digit'});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-function ts(t){return new Date(t).toISOString().slice(11,23);}
+function ts(t){var d=new Date(Number(t));return d.toLocaleTimeString(undefined,{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})+'.'+((function(n){n=String(n);return n.length<3?('00'+n).slice(-3):n;})(d.getMilliseconds()));}
 function modelId(m){if(!m)return '(none)';try{var o=JSON.parse(m);return o.id||o.modelID||m;}catch(e){return String(m);}}
 function span(d){var a=Number(d.p_start||0),b=Number(d.p_end||0);if(b>a)return b-a;return Math.max(0,Number(d.time_updated||0)-Number(d.time_created||0));}
 var MODEL_COLOR=null,COST=null;
@@ -1523,7 +1530,7 @@ function inFilter(d){var t=d.time_created;return t>=FILTER[0]&&t<=FILTER[1];}
 function setFilterText(){
   var el=document.getElementById('filter');
   if(!el)return;
-  el.textContent=(FILTER[1]===Infinity)?'filter: all time':('filter: '+new Date(FILTER[0]).toISOString().slice(0,16)+' to '+new Date(FILTER[1]).toISOString().slice(0,16));
+  el.textContent=(FILTER[1]===Infinity)?'filter: all time':('filter: '+new Date(FILTER[0]).toLocaleString(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})+' to '+new Date(FILTER[1]).toLocaleString(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}));
 }
 var HEALTH_SUMMARY='';
 function setBadge(name,text){var el=document.querySelector('[data-badge="'+name+'"]');if(el)el.textContent=text;}
@@ -1634,7 +1641,7 @@ function renderTable(){
   tr.append('td').text(function(d){return modelId(d.model);});
   tr.append('td').text(function(d){var s=String(d.directory||'');return s.length>48?'…'+s.slice(-47):s;});
   tr.append('td').text(function(d){var s=String(d.project||'');return s.length>48?'…'+s.slice(-47):s;});
-  tr.append('td').attr('class','num').text(function(d){return d.time_updated?new Date(Number(d.time_updated)).toISOString().slice(0,19).replace('T',' '):'';});
+  tr.append('td').attr('class','num').text(function(d){return d.time_updated?new Date(Number(d.time_updated)).toLocaleString():'';});
   tr.append('td').attr('class','num').text(function(d){return '$'+(+d.cost).toFixed(4);});
   tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_input);});
   tr.append('td').attr('class','num').text(function(d){return fmt(d.tokens_output);});

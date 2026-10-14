@@ -94,6 +94,20 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Observability fixes + DB-only session digest (the "non-latest,
+      over-budget, not deny-listed" answer). Dashboard served **312ff85**
+      (STALE) — restarted the entrypoint-launched :5099 process to HEAD, and
+      code fixes: Live activity/Sessions timestamps now render in the VIEWER's
+      local zone with a zone label (were UTC `toISOString`), and the poll loop
+      no longer pauses on `document.hidden` (an embedded/preview viewer reports
+      hidden and never fires `visibilitychange`, which froze the page until a
+      manual reload) and now fires an immediate first tick. New
+      `scripts/session-digest.sh`: one-pass **DB-only** digest
+      (~1.5 KB vs the 606 KB transcript) — title, ratio, cost, last user ask,
+      last assistant text, open todos, running tool, over-budget directive; no
+      model call, read-only, redacted. Proven: `test-dashboard-ui` home PASS +
+      explore PASS on the live :5099, `node --check`, `session-digest
+      --self-test` PASS, live digest 1526 B for the URL session.
 - [x] Sentinel T7: trip a recent session whose tool has been `running` past
       `session-health`'s run_ms and started since the last sweep — the
       DB-native stall (S0) the single-threaded server is blocked on.
