@@ -21,9 +21,11 @@ if curl -s -m 3 "http://127.0.0.1:${PORT}/json/version" 2>&1 | grep -q Browser; 
 fi
 printf 'starting chrome --remote-debugging-port=%s ...\n' "$PORT"
 mkdir -p "$DIR" || exit 2
-nohup google-chrome-stable --remote-debugging-port="$PORT" \
+# setsid: put Chrome in its OWN session so a ^C on this script's wait loop
+# does NOT signal Chrome (nohup only ignores SIGHUP, not SIGINT).
+setsid google-chrome-stable --remote-debugging-port="$PORT" \
     --remote-allow-origins='*' \
-    --user-data-dir="$DIR" --no-first-run > /tmp/chrome-cdp.log 2>&1 &
+    --user-data-dir="$DIR" --no-first-run > /tmp/chrome-cdp.log 2>&1 < /dev/null &
 i=0
 while [ "$i" -lt 30 ]; do
     if curl -s -m 3 "http://127.0.0.1:${PORT}/json/version" 2>&1 | grep -q Browser; then
