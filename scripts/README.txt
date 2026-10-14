@@ -292,6 +292,15 @@ browser-tools-install.sh
     so selenium only runs where those libs exist (e.g. the host).
     --venv DIR, --with-browsers (playwright chromium), --dry-run.
 
+browser_bench.py
+    Probes each CDP browser driver against the live endpoint for the same
+    op (enumerate tabs) and writes data/observability/browser-drivers.json
+    with order[] fastest-working-first. Callers take order[0] and fail over
+    down the list; SKIP is not PASS (#37). Run with the venv python so the
+    imports resolve. Measured: cdp_tab ~1.3s < playwright ~11s <
+    browser_use ~25s; selenium FAIL (chromedriver libs). --json, --runs N,
+    --pick prints the fastest working driver (exit 2 if none).
+
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
     no Playwright, no X11). Attaches to the browser that is ALREADY open

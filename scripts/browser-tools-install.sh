@@ -46,7 +46,7 @@ main() {
     printf 'pypi:   http %s\n' "$(curl -s -m 8 -o /dev/null -w '%{http_code}' https://pypi.org/simple/)"
 
     if [ "$DRY" -eq 1 ]; then
-        printf '[dry-run] would: create %s; bootstrap pip via get-pip.py; pip install browser-use selenium%s\n' \
+        printf '[dry-run] would: create %s; bootstrap pip via get-pip.py; pip install browser-use selenium playwright%s\n' \
             "$VENV" "$([ "$WB" -eq 1 ] && printf ' + playwright chromium')"
         return 0
     fi
@@ -64,8 +64,8 @@ main() {
         "$PY" /tmp/get-pip.py || { printf 'FAIL: get-pip run\n'; return 1; }
     fi
 
-    printf 'installing browser-use selenium (a few minutes; wheels only)...\n'
-    "$PY" -m pip install --upgrade pip browser-use selenium || { printf 'FAIL: pip install browser-use selenium\n'; return 1; }
+    printf 'installing browser-use selenium playwright (a few minutes; wheels only)...\n'
+    "$PY" -m pip install --upgrade pip browser-use selenium playwright || { printf 'FAIL: pip install browser-use selenium playwright\n'; return 1; }
 
     if [ "$WB" -eq 1 ]; then
         printf 'installing playwright chromium (~150 MB)...\n'

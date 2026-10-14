@@ -94,6 +94,16 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Browser-driver **benchmark + failover** (RULES #64,
+      `scripts/browser_bench.py`). Probes cdp_tab / playwright / browser_use /
+      selenium against the live CDP endpoint for the same op and writes
+      `data/observability/browser-drivers.json` with `order[]`
+      fastest-working-first; callers take `order[0]` and fall over down the
+      list. Measured: **cdp_tab 1.3s < playwright 11s < browser_use 25s;
+      selenium FAIL** (chromedriver needs libnss3/libnspr4/libdbus-1).
+      playwright added to the installer. Surfaced in tools.json/README/HANDOFF.
+      Note: all four attach over CDP (RULES #62) — none can launch a local
+      browser here (missing system libs, no sudo).
 - [x] Installed **browser_use + selenium** (scripted:
       `scripts/browser-tools-install.sh`). The image has no pip/ensurepip, so
       the script creates the venv with `--without-pip` and bootstraps pip via
