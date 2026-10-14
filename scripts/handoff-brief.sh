@@ -228,8 +228,19 @@ main() {
         TR=$(find_transcript "$SESSION")
     fi
     if [ -z "$TR" ] || [ ! -f "$TR" ]; then
+        # DB-direct fallback: extract-transcript.sh reads the store (no browser),
+        # unlike re-extract-session.sh which needs a reachable CDP/browser. When
+        # a transcript is simply missing, generate it here and retry the lookup.
+        if [ -x "$REPO/scripts/extract-transcript.sh" ]; then
+            if "$REPO/scripts/extract-transcript.sh" "$SESSION" >&2; then
+                TR=$(find_transcript "$SESSION")
+            fi
+        fi
+    fi
+    if [ -z "$TR" ] || [ ! -f "$TR" ]; then
         printf 'FAIL: no transcript for %s\n' "$SESSION"
-        printf 'run ./scripts/re-extract-session.sh %s first, then retry\n' "$SESSION"
+        printf 'tried logs/transcript-*.md, logs/ses_*.txt, and DB-direct extract-transcript.sh\n'
+        printf 'if the store has no such session: ./scripts/re-extract-session.sh %s (needs a browser)\n' "$SESSION"
         return 1
     fi
     have python3 || { printf 'GATE FAIL: python3 required\n'; return 1; }
