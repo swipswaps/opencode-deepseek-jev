@@ -94,6 +94,18 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] a11y cleanup — **all six pages 0 errors / 0 warnings / 0 notes** under
+      @ra11y/core (home was already clean; explore 13E→0, the rest →0). Two
+      root causes: (1) the `.pane` tabpanels carried `tabindex="0"` + inline
+      `style="display:none"`, which together produced every
+      `nested-interactive` and `inline-display-none-on-focusable` error across
+      the 9 panes — panes now use the `hidden` attribute with no tabindex, and
+      `activateTab` toggles `hidden`; (2) headings/names — `<h1>` added to
+      explore/models/runbooks/manage/docs, `aria-label` on the docs `<select>`,
+      distinct WCAG 2.5.3-compliant names on the two "[csv]" links (accessible
+      name must contain the visible "[csv]"), `role="note"` on the chart
+      tooltip. Proven: ra11y 0/0/0 on all six; test-dashboard-ui home+explore
+      PASS; board still renders; harness --fast 3/3.
 - [x] Board — DB-driven Kanban + Gantt shipped as a new `/explore` tab
       (`data-tab="board"`; placement decided: a view, not a new nav page).
       `GET /api/board` (read-only, TTL-cached, zero model calls) joins the

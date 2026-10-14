@@ -1414,12 +1414,14 @@ const exploreHtml = `<!doctype html>
  .khead{font-size:12px;color:#8b949e;font-weight:600;margin-bottom:6px}
  .kcard{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 7px;margin:4px 0;font-size:12px;word-break:break-word}
  .kcard .tag{font-size:10px;padding:0 5px}
+ .pane[hidden]{display:none}
  h3{font-size:12px;color:#8b949e;margin:14px 0 6px}
  :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
 ${nav("explore")}
 <main id="main">
+<h1>opencode explore</h1>
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
   <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview <span class="tbadge" data-badge="overview"></span></button>
@@ -1434,16 +1436,16 @@ ${nav("explore")}
 </div>
 <div class="muted" id="landing" style="margin:2px 0 8px"><span class="muted" data-loading>loading...</span></div>
 <div class="card" id="detail-card" style="border-color:#d29922"><h2 style="margin-top:0" id="detail-head">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
-<div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+<div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)" aria-label="Search everything"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
 <div class="chart"><input id="tfilter" placeholder="filter sessions by title, model, directory or project..." aria-label="Filter sessions by title, model, directory or project" style="max-width:360px"> <span id="tcount" class="muted"></span><div id="stable"><span class="muted" data-loading>loading...</span></div></div>
 </div>
-<div class="pane" data-pane="code" id="pane-code" role="tabpanel" aria-labelledby="tab-code" tabindex="0" style="display:none">
+<div class="pane" data-pane="code" id="pane-code" role="tabpanel" aria-labelledby="tab-code" hidden>
 <h2>Code — repo files flagged by the database (scripts/code-index.py)</h2>
 <div class="chart" id="code"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="data" id="pane-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" style="display:none">
+<div class="pane" data-pane="data" id="pane-data" role="tabpanel" aria-labelledby="tab-data" hidden>
 <h2>Duplicates — near-identical sessions</h2>
 <div class="chart" id="dupes"><span class="muted" data-loading>loading...</span></div>
 <h2>Integrations — Jev (hosted) vs Laya (self-hosted)</h2>
@@ -1453,7 +1455,7 @@ ${nav("explore")}
 <h2>Database map — tables sized by rows, edges = foreign keys</h2>
 <div class="chart" id="dmap"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="charts" id="pane-charts" role="tabpanel" aria-labelledby="tab-charts" tabindex="0" style="display:none">
+<div class="pane" data-pane="charts" id="pane-charts" role="tabpanel" aria-labelledby="tab-charts" hidden>
 <h2>Where the money goes — sessions sized by cost, grouped by model</h2>
 <div class="chart" id="treemap"><span class="muted" data-loading>loading...</span></div>
 <h2>Cumulative spend vs budget — drag to filter the views below</h2>
@@ -1469,29 +1471,29 @@ ${nav("explore")}
 <h2>Word cloud — recurring terms in reasoning &amp; text</h2>
 <div class="chart" id="cloud"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="signals" id="pane-signals" role="tabpanel" aria-labelledby="tab-signals" tabindex="0" style="display:none">
+<div class="pane" data-pane="signals" id="pane-signals" role="tabpanel" aria-labelledby="tab-signals" hidden>
 <h2>Session health — stalled / blank turns (read-only, browser-independent)</h2>
 <div class="chart" id="health"><span class="muted" data-loading>loading...</span></div>
 <h2>Signals — mistakes, rule mentions, churn</h2>
 <div class="chart" id="signals"><span class="muted" data-loading>loading...</span></div>
-<h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard">[csv]</a></h2>
+<h2>Blacklist guard — blocked / fixed during "Thinking" <a href="/api/export/guard" aria-label="[csv] guard blocks">[csv]</a></h2>
 <div class="chart" id="guard"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="patterns" id="pane-patterns" role="tabpanel" aria-labelledby="tab-patterns" tabindex="0" style="display:none">
-<h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns">[csv]</a></h2>
+<div class="pane" data-pane="patterns" id="pane-patterns" role="tabpanel" aria-labelledby="tab-patterns" hidden>
+<h2>Patterns — recurring tool-sequence n-grams <a href="/api/export/patterns" aria-label="[csv] patterns">[csv]</a></h2>
 <div class="chart" id="patterns"><span class="muted" data-loading>loading...</span></div>
 <h2>Pivot — from tool &times; to tool (bigram matrix, Observable Plot)</h2>
 <div class="chart" id="pivot"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="ocr" id="pane-ocr" role="tabpanel" aria-labelledby="tab-ocr" tabindex="0" style="display:none">
+<div class="pane" data-pane="ocr" id="pane-ocr" role="tabpanel" aria-labelledby="tab-ocr" hidden>
 <h2>OCR — screenshot text (searchable)</h2>
 <div class="chart" id="ocr"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="ops" id="pane-ops" role="tabpanel" aria-labelledby="tab-ops" tabindex="0" style="display:none">
+<div class="pane" data-pane="ops" id="pane-ops" role="tabpanel" aria-labelledby="tab-ops" hidden>
 <h2>Ops — hotspots, bottlenecks, failures, successes (click a row to drill down)</h2>
 <div class="chart" id="ops"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="pane" data-pane="board" id="pane-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0" style="display:none">
+<div class="pane" data-pane="board" id="pane-board" role="tabpanel" aria-labelledby="tab-board" hidden>
 <h2>Board — Kanban (state) + Gantt (time), straight from the databases</h2>
 <div class="muted" style="font-size:11px">provenance — <b>db</b> = opencode todo ⨝ session (measured) · <b>md</b> = TODO.md queue (declared) · <b>derived</b> = heuristic estimate (labelled, not a promise)</div>
 <h3>Kanban — task state (pending / in-progress / completed)</h3>
@@ -1502,7 +1504,7 @@ ${nav("explore")}
 <h3>Milestones — gate / advisory events (observability ledger)</h3>
 <div id="board-tables"><span class="muted" data-loading>loading...</span></div>
 </div>
-<div class="tip" id="tip"></div>
+<div class="tip" id="tip" role="note"></div>
 </main>
 <script>
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
@@ -1868,7 +1870,7 @@ function activateTab(name,setHash){
     if(tabs[i].getAttribute('data-tab')===name){tabs[i].classList.add('active');tabs[i].setAttribute('aria-selected','true');}else{tabs[i].classList.remove('active');tabs[i].setAttribute('aria-selected','false');}
   }
   var panes=document.querySelectorAll('.pane');
-  for(var j=0;j<panes.length;j++){panes[j].style.display=(panes[j].getAttribute('data-pane')===name)?'block':'none';}
+  for(var j=0;j<panes.length;j++){panes[j].hidden=(panes[j].getAttribute('data-pane')!==name);}
   if(setHash){try{location.hash=name;}catch(e){}}
   // Self-healing signals: live adjudication (dead_tool/dead_blank) can
   // change between loads, and a load that raced a live-unavailable window
@@ -2376,6 +2378,7 @@ const runbooksHtml = `<!doctype html>
 <body>
 ${nav("runbooks")}
 <main id="main">
+<h1>opencode runbooks</h1>
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f" aria-label="Filter runbooks by tag"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
 <div id="count" class="muted count"></div>
@@ -2457,6 +2460,7 @@ const managedHtml = `<!doctype html>
 <body>
 ${nav("manage")}
 <main id="main">
+<h1>opencode manage</h1>
 <div class="muted" style="font-size:12px">The repo's tools, surfaced read-only. host = run where docker/browser live; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div id="providers"></div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f"><option value="all">all</option><option value="container">container only</option><option value="host">host only</option></select></div>
@@ -2524,8 +2528,9 @@ const docsHtml = `<!doctype html>
 <body>
 ${nav("docs")}
 <main id="main">
+<h1>opencode docs</h1>
 <div class="muted" style="margin-bottom:8px">The repo's own rules, handoff and docs, rendered in-UI. Read-only; whitelisted files only.</div>
-<select id="docsel"></select>
+<select id="docsel" aria-label="Select a document to view"></select>
 <pre id="docbody">loading...</pre>
 </main>
 <script>
@@ -2559,6 +2564,7 @@ const modelsHtml = `<!doctype html>
 <body>
 ${nav("models")}
 <main id="main">
+<h1>opencode models</h1>
 <div id="banner" class="banner"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="policy"></div>
 <h2>Catalog</h2><div id="cat"><span class="muted" data-loading>loading...</span></div>
