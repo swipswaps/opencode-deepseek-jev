@@ -186,7 +186,10 @@ plus known fixes (`/api/solutions`, from `issue-solutions.py --write`), and a
 declarative **tool→tool pivot** (from × to bigram matrix) rendered with
 vendored Observable Plot (see "Next candidates").
 **ocr**: screenshot text (`/api/ocr`, also folded into `/api/semantic`, CSV
-at `/api/export/ocr`). **charts**: cost treemap, brushable burn-down (linked
+at `/api/export/ocr`). **board**: DB-driven Kanban (task state) + Gantt
+(realized session spans), from one read-only `/api/board` (opencode `todo` ⨝
+`session` + TODO.md marks + observability `ledger` milestones; heuristic
+estimates flagged). **charts**: cost treemap, brushable burn-down (linked
 to treemap/scatter/sankey/Gantt), latency×cost scatter, token-flow Sankey,
 part timeline, word cloud. d3 v7.9.0 + d3-sankey v0.12.3 are vendored at
 `scripts/vendor/` (served at `/vendor/*.js`, whitelisted).

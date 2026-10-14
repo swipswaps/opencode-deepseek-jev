@@ -921,6 +921,97 @@ async function apiSemantic(q, limit) {
   }
 }
 
+// Board — one read-only payload for the Kanban (state) + Gantt (time) view.
+// Three provenance classes, labelled per datum so an estimate never reads as a
+// measurement: db = the opencode `todo` table joined to `session` (measured
+// state + resource use); md = TODO.md queue marks (declared intent, no span);
+// milestones = the observability `ledger` (GATE/GATE_START/ADVISORY). Estimates
+// are a median over completed db cards — heuristic, flagged estimates.heuristic.
+const TODO_PATH = fileURLToPath(new URL("../TODO.md", import.meta.url));
+const OBS_DB_PATH = fileURLToPath(new URL("../data/observability/observability.db", import.meta.url));
+function apiBoardFresh() {
+  let cards = [];
+  try {
+    const rows = query(
+      "SELECT t.session_id sid, t.content, t.status, t.priority, t.position, t.time_created tc, t.time_updated tu, " +
+      "s.title, s.model, s.cost, s.tokens_input " +
+      "FROM todo t LEFT JOIN session s ON s.id = t.session_id " +
+      "ORDER BY t.time_created DESC LIMIT 500"
+    );
+    cards = rows.map((r) => {
+      let mid = r.model;
+      try { mid = (JSON.parse(r.model) || {}).id || r.model; } catch { mid = r.model; }
+      const start = Number(r.tc) || 0, end = Number(r.tu) || 0;
+      return {
+        id: r.sid + "#" + r.position, title: String(r.content || "").replace(/\s+/g, " ").slice(0, 160),
+        state: r.status || "unknown", priority: r.priority || "", source: "db",
+        session: r.sid, session_title: r.title || "", model: mid || "",
+        cost: Number(r.cost) || 0, tokens_in: Number(r.tokens_input) || 0,
+        start, end, duration: end > start ? end - start : 0,
+      };
+    });
+  } catch { cards = []; }
+  let md = "";
+  try { md = readFileSync(TODO_PATH, "utf8"); } catch { md = ""; }
+  const re = /^- \[([ x~])\]\s+(.+)$/gm;
+  let mm, mdi = 0;
+  while ((mm = re.exec(md))) {
+    const mark = mm[1];
+    cards.push({
+      id: "md:" + (mdi++), title: mm[2].replace(/\s+/g, " ").slice(0, 160),
+      state: mark === "x" ? "completed" : mark === "~" ? "in_progress" : "pending",
+      priority: "", source: "md", session: "", session_title: "", model: "",
+      cost: 0, tokens_in: 0, start: 0, end: 0, duration: 0,
+    });
+  }
+  let milestones = [];
+  try {
+    const db = new DatabaseSync(OBS_DB_PATH, { readOnly: true });
+    milestones = db.prepare("SELECT ts, type, verdict, source FROM ledger ORDER BY id DESC LIMIT 200").all()
+      .map((r) => ({ ts: r.ts, type: r.type, verdict: r.verdict || "", source: r.source || "" }));
+    db.close();
+  } catch { milestones = []; }
+  // The Gantt uses real session spans (time_created -> time_updated): todo rows
+  // are written in one instant (duration 0), so a task-span Gantt would be
+  // empty. Sessions are the realized schedule; each carries its own resources.
+  let sessions = [];
+  try {
+    sessions = query(
+      "SELECT id, title, model, agent, cost, tokens_input, time_created, time_updated " +
+      "FROM session ORDER BY time_created DESC LIMIT 150"
+    ).map((r) => {
+      let mid = r.model;
+      try { mid = (JSON.parse(r.model) || {}).id || r.model; } catch { mid = r.model; }
+      const start = Number(r.time_created) || 0, end = Number(r.time_updated) || 0;
+      return {
+        id: r.id, title: r.title || "", model: mid || "", agent: r.agent || "",
+        cost: Number(r.cost) || 0, tokens_in: Number(r.tokens_input) || 0,
+        start, end, duration: end > start ? end - start : 0,
+      };
+    });
+  } catch { sessions = []; }
+  const median = (a) => {
+    if (!a.length) return 0;
+    const s = [...a].sort((x, y) => x - y), m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+  };
+  // Estimates over realized sessions (a session ~ one work unit): heuristic,
+  // flagged. Not a promise for an unstarted task's real duration/cost.
+  const spent = sessions.filter((s) => s.duration > 0);
+  return {
+    generated_at: new Date().toISOString(),
+    states: ["pending", "in_progress", "completed"],
+    cards, sessions, milestones,
+    estimates: {
+      n: spent.length,
+      median_duration_ms: median(spent.map((s) => s.duration)),
+      median_cost_usd: median(spent.map((s) => s.cost)),
+      heuristic: true,
+    },
+  };
+}
+function apiBoard() { return ttlCached("board", CACHE_TTL_MS, apiBoardFresh); }
+
 
 
 async function apiWords(limit) {
@@ -1318,6 +1409,12 @@ const exploreHtml = `<!doctype html>
  .stat{flex:1;min-width:90px;background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px}
  .stat b{display:block;font-size:16px}
  .stat span{color:#8b949e;font-size:11px}
+ .kanban{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+ .kcol{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;min-height:60px}
+ .khead{font-size:12px;color:#8b949e;font-weight:600;margin-bottom:6px}
+ .kcard{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:5px 7px;margin:4px 0;font-size:12px;word-break:break-word}
+ .kcard .tag{font-size:10px;padding:0 5px}
+ h3{font-size:12px;color:#8b949e;margin:14px 0 6px}
  :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
 </style></head>
 <body>
@@ -1333,6 +1430,7 @@ ${nav("explore")}
   <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data <span class="tbadge" data-badge="data"></span></button>
   <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr <span class="tbadge" data-badge="ocr"></span></button>
   <button class="tab" data-tab="ops" role="tab" id="tab-ops" aria-selected="false" aria-controls="pane-ops">ops <span class="tbadge" data-badge="ops"></span></button>
+  <button class="tab" data-tab="board" role="tab" id="tab-board" aria-selected="false" aria-controls="pane-board">board <span class="tbadge" data-badge="board"></span></button>
 </div>
 <div class="muted" id="landing" style="margin:2px 0 8px"><span class="muted" data-loading>loading...</span></div>
 <div class="card" id="detail-card" style="border-color:#d29922"><h2 style="margin-top:0" id="detail-head">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
@@ -1392,6 +1490,17 @@ ${nav("explore")}
 <div class="pane" data-pane="ops" id="pane-ops" role="tabpanel" aria-labelledby="tab-ops" tabindex="0" style="display:none">
 <h2>Ops — hotspots, bottlenecks, failures, successes (click a row to drill down)</h2>
 <div class="chart" id="ops"><span class="muted" data-loading>loading...</span></div>
+</div>
+<div class="pane" data-pane="board" id="pane-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0" style="display:none">
+<h2>Board — Kanban (state) + Gantt (time), straight from the databases</h2>
+<div class="muted" style="font-size:11px">provenance — <b>db</b> = opencode todo ⨝ session (measured) · <b>md</b> = TODO.md queue (declared) · <b>derived</b> = heuristic estimate (labelled, not a promise)</div>
+<h3>Kanban — task state (pending / in-progress / completed)</h3>
+<div id="kanban" class="kanban" role="list" aria-label="Kanban columns"><span class="muted" data-loading>loading...</span></div>
+<h3>Gantt — realized sessions over time (time_created → time_updated), resources per bar</h3>
+<div class="chart" id="boardgantt" role="img" aria-label="Gantt of realized sessions over time"><span class="muted" data-loading>loading...</span></div>
+<div class="muted" id="board-estimates" style="font-size:11px"></div>
+<h3>Milestones — gate / advisory events (observability ledger)</h3>
+<div id="board-tables"><span class="muted" data-loading>loading...</span></div>
 </div>
 <div class="tip" id="tip"></div>
 </main>
@@ -1771,6 +1880,9 @@ function activateTab(name,setHash){
     for(var k=0;k<ids.length;k++){var c=document.getElementById(ids[k]);if(c)c.innerHTML='<span class="muted" data-loading>loading...</span>';}
     renderHealth();renderSignals();renderGuard();
   }
+  // board: lazy load once on first activation (the payload is small, but no
+  // reason to pay for it when nobody opens the tab).
+  if(name==='board'&&!BOARD_LOADED){BOARD_LOADED=true;renderBoard();}
 }
 // APG tabs pattern (W3C ARIA Authoring Practices Guide):
 // https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ — tablist/tab/tabpanel
@@ -2170,6 +2282,69 @@ async function renderCloud(){
 
 document.getElementById('tl-reset').addEventListener('click',function(){renderTimeline(null,null);});
 document.addEventListener('keydown',function(ev){if(ev.key==='/'&&ev.target&&ev.target.tagName!=='INPUT'){var q=document.getElementById('q2');if(q){ev.preventDefault();q.focus();}}});
+// Board: Kanban (task state) + Gantt (realized session spans) + accessible
+// table twins, from one /api/board payload. Provenance is labelled per source;
+// estimates are heuristic and marked. Lazy: rendered on first tab activation.
+var BOARD_LOADED=false,BOARD_DATA=null;
+async function renderBoard(){
+  var kb=document.getElementById('kanban'),bg=document.getElementById('boardgantt'),bt=document.getElementById('board-tables');
+  var d=await j('/api/board');
+  if(!d||!d.cards){kb.textContent='(board unavailable)';bg.textContent='(board unavailable)';if(bt)bt.textContent='';return;}
+  BOARD_DATA=d;
+  var cols=d.states||['pending','in_progress','completed'];
+  var kh='';
+  for(var i=0;i<cols.length;i++){var st=cols[i];
+    var items=(d.cards||[]).filter(function(c){return c.state===st;});
+    kh+='<div class="kcol"><div class="khead">'+esc(st)+' <span class="muted">'+items.length+'</span></div>';
+    for(var k=0;k<items.length&&k<40;k++){var c=items[k];
+      kh+='<div class="kcard"><span class="tag">'+esc(c.source)+'</span>'+esc(c.title)+(c.cost?' <span class="muted">$'+(+c.cost).toFixed(4)+'</span>':'')+'</div>';}
+    if(items.length>40)kh+='<div class="muted" style="font-size:11px">+ '+(items.length-40)+' more</div>';
+    kh+='</div>';
+  }
+  kb.innerHTML=kh;
+  var es=d.estimates||{};
+  var esEl=document.getElementById('board-estimates');
+  if(esEl)esEl.textContent='estimates (heuristic \u00b7 n='+(es.n||0)+' realized sessions): median duration '+((es.median_duration_ms||0)/1000).toFixed(0)+'s \u00b7 median cost $'+(+es.median_cost_usd||0).toFixed(4)+' — a rough per-work-unit figure, not a per-task promise';
+  renderBoardGantt(d);
+  renderBoardTables(d);
+}
+function renderBoardGantt(d){
+  var host=document.getElementById('boardgantt');if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.barX!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
+  var rows=(d.sessions||[]).filter(function(s){return s.start>0&&(s.end||s.start)>s.start;}).slice(0,150);
+  if(!rows.length){host.textContent='(no realized sessions with a span)';return;}
+  var minT=Infinity,maxT=0,i;
+  for(i=0;i<rows.length;i++){if(rows[i].start<minT)minT=rows[i].start;if(rows[i].end>maxT)maxT=rows[i].end;}
+  if(maxT<=minT)maxT=minT+1000;
+  var pad=Math.max((maxT-minT)/500,1000);
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:1000,height:32+Math.max(160,rows.length*7),marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
+    x:{domain:[minT,maxT],ticks:6},
+    y:{axis:null,domain:rows.map(function(_,j){return j;})},
+    marks:[Plot.barX(rows,{
+      x1:function(r){return r.start;},
+      x2:function(r){return Math.max(r.end,r.start+pad);},
+      y:function(r,j){return j;},
+      fill:function(r){return r.agent||r.model||'?';},
+      insetTop:1,insetBottom:1,
+      title:function(r){return r.title+' — '+(r.model||'')+' · $'+(+r.cost).toFixed(4)+' · in '+fmt(r.tokens_in)+' · '+Math.round(r.duration/1000)+'s';}
+    })]
+  }));
+}
+function renderBoardTables(d){
+  var bt=document.getElementById('board-tables');if(!bt)return;
+  var rows=(d.sessions||[]).slice().sort(function(a,b){return b.duration-a.duration;}).slice(0,20);
+  var h='<table><caption class="muted" style="text-align:left">Gantt data — longest realized sessions (accessible twin)</caption><tr><th>session</th><th>model</th><th>agent</th><th class="num">dur s</th><th class="num">cost $</th></tr>';
+  for(var i=0;i<rows.length;i++){var r=rows[i];
+    h+='<tr><td>'+esc(String(r.title||r.id).slice(0,60))+'</td><td>'+esc(r.model)+'</td><td>'+esc(r.agent)+'</td><td class="num">'+Math.round(r.duration/1000)+'</td><td class="num">'+(+r.cost).toFixed(4)+'</td></tr>';}
+  h+='</table>';
+  var ms=(d.milestones||[]).slice(0,15);
+  h+='<table style="margin-top:10px"><caption class="muted" style="text-align:left">milestones — gate/advisory (observability ledger, newest 15)</caption><tr><th>ts</th><th>type</th><th>verdict</th><th>source</th></tr>';
+  for(var k=0;k<ms.length;k++){h+='<tr><td class="muted">'+esc(ms[k].ts)+'</td><td>'+esc(ms[k].type)+'</td><td>'+esc(ms[k].verdict)+'</td><td class="muted">'+esc(ms[k].source)+'</td></tr>';}
+  h+='</table>';
+  bt.innerHTML=h;
+}
 load();
 </script></body></html>`;
 
@@ -2546,6 +2721,8 @@ const server = http.createServer(async (req, res) => {
     }
   } else if (url === "/api/words") {
     send(res, 200, JSON.stringify(await apiWords(Number(params.limit) || 80)), "application/json");
+  } else if (url === "/api/board") {
+    send(res, 200, JSON.stringify(apiBoard()), "application/json");
   } else if (url === "/api/export") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-sessions.csv" });
     res.end(apiExport());

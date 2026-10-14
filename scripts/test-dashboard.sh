@@ -140,6 +140,9 @@ main() {
     has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'
     has 'data-tab="code"' "$work/explore.html" && ok 'explore code tab' || bad 'explore code tab'
     has 'id="code"' "$work/explore.html" && ok 'explore code section' || bad 'explore code section'
+    has 'data-tab="board"' "$work/explore.html" && ok 'explore board tab' || bad 'explore board tab'
+    has 'id="pane-board"' "$work/explore.html" && ok 'explore board pane' || bad 'explore board pane'
+    has 'id="kanban"' "$work/explore.html" && ok 'explore board kanban container' || bad 'explore board kanban container'
     python3 - "$work/explore.html" > "$work/uxcheck.txt" <<'UX_EOF'
 import sys, re
 h = open(sys.argv[1]).read()
@@ -313,6 +316,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("runs"),list) and "count" in d else 1)' "$work/ocr.json" && ok 'api/ocr' || bad 'api/ocr'
         curl -s "http://$HOST:$PORT/api/duplicates" > "$work/dupes.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/dupes.json" && ok 'api/duplicates' || bad 'api/duplicates'
+        curl -s "http://$HOST:$PORT/api/board" > "$work/board.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("cards"),list) and isinstance(d.get("sessions"),list) and isinstance(d.get("milestones"),list) and isinstance(d.get("estimates"),dict) else 1)' "$work/board.json" && ok 'api/board (kanban+gantt payload)' || bad 'api/board (kanban+gantt payload)'
         curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
         has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
         curl -s "http://$HOST:$PORT/api/export/patterns" > "$work/pat.csv"

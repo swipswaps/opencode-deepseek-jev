@@ -57,19 +57,6 @@ Last updated: 2026-10-13
 
 ## Queue (ranked, top first)
 
-- [ ] Board — DB-driven Kanban + Gantt (design prepared, not built; see the
-      prepared prompt in the session that added this). Sources: opencode `todo`
-      (99 rows: state/priority/session_id/times) ⨝ `session` (cost/tokens/model);
-      TODO.md marks (65 done / 6 todo) parsed server-side; observability
-      `ledger` (531 GATE/ADVISORY ts) as milestones. Endpoint `GET /api/board`
-      (read-only, TTL-cached, zero model calls): `cards[]` with
-      state/source(db|md)/session/cost/tokens/start/end/duration, `milestones[]`,
-      `estimates{}`. Render as a new `/explore` tab `data-tab="board"` (reuse
-      vendored Plot for the Gantt bars; CSS-grid columns for the Kanban); every
-      chart backed by an accessible `<table>`, provenance labelled per datum,
-      heuristic estimates marked as such; rule #61 (inline script parse+execute).
-      Steps: /api/board → Kanban → Gantt → a11y table → test-dashboard asserts.
-      Open question for the user: tab on /explore vs its own nav page vs /manage.
 - [ ] NEBULA-1 (operator approval required): tame external restart
       churn (3 PIDs/10 min, never systemd-counted — another project's
       supervisor). Proposed override (NOT applied):
@@ -107,6 +94,22 @@ Last updated: 2026-10-13
 
 ## Done (most recent first)
 
+- [x] Board — DB-driven Kanban + Gantt shipped as a new `/explore` tab
+      (`data-tab="board"`; placement decided: a view, not a new nav page).
+      `GET /api/board` (read-only, TTL-cached, zero model calls) joins the
+      opencode `todo` (99) ⨝ `session` → 171 cards (db 99 / md 72; states
+      pending 21 / in_progress 9 / completed 141) + 91 session spans for the
+      Gantt + 200 ledger milestones + heuristic `estimates` (n=85, median 71s /
+      $0.0001). Kanban = CSS-grid columns; Gantt = vendored Plot.barX over real
+      session spans (todo spans are degenerate); provenance labelled per datum;
+      estimates flagged heuristic. Each chart has an accessible `<table>` twin.
+      Proven: board renders via a headless shim (kanban 8.9 KB, table twin
+      5.3 KB), `test-dashboard.sh` asserts added (tab/pane/kanban + /api/board
+      shape), `test-dashboard-ui` explore PASS, `harness --fast` 3/3. ra11y
+      /explore: 12→13 errors — the +1 is the SAME pre-existing
+      `inline-display-none-on-focusable` on tabpanels (the board pane follows
+      its 8 siblings); no new error class. Proper fix (queued): replace inline
+      `style=display:none` with the `hidden` attribute across all panes.
 - [x] a11y pair from the ra11y pass: skip-link + `<main id="main">` landmark on
       every page (nav() emits `<a class="skip-link" href="#main">` before the
       nav; all six templates wrapped) and `aria-current="page"` on the active
