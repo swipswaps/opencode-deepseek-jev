@@ -91,6 +91,18 @@ trip() {
     log_advisory "FAIL" "$2" "$3" "$4"
 }
 
+emit_digest() {
+    # emit_digest SID DB — best-effort DB-only digest written next to the trip,
+    # so the operator (or a consumer) can hand off WITHOUT replaying the
+    # transcript into a model. Never fails the sweep.
+    local sid="$1" dbf="$2"
+    [ -n "$sid" ] && [ -f "$REPO/scripts/session-digest.sh" ] || return 0
+    have python3 || return 0
+    mkdir -p "$DIGEST_DIR" || return 0
+    bash "$REPO/scripts/session-digest.sh" "$sid" --db "$dbf" > "$DIGEST_DIR/$sid.md" 2>&1 || true
+    return 0
+}
+
 self_test() {
     local fail=0 work="" n1 n2
     have node || { printf 'FAIL node missing\n'; return 1; }
@@ -156,18 +168,19 @@ PYEOF
     printf '%s' "$o" | grep -q 'TRIP T6' && { printf 'FAIL T6 re-fires after cursor\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T7' && { printf 'FAIL T7 re-fires after cursor\n'; fail=1; }
     printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
-    SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
+    SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_DIGEST_DIR="$work/digests" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
+    [ -f "$work/digests/s_old.md" ] || { printf 'FAIL digest emitted for tripped session\n'; fail=1; }
     # Stable per-incident keys: re-running the SAME trips must NOT add rows
     # (UNIQUE(source,key) ignores them) — the cry-wolf fix.
     n1=$(LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -c 'ADVISORY')
     printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
-    SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
+    SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_DIGEST_DIR="$work/digests" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     n2=$(LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -c 'ADVISORY')
     [ "$n1" = "$n2" ] && [ "$n1" -gt 0 ] || { printf 'FAIL ledger not idempotent (n1=%s n2=%s)\n' "$n1" "$n2"; fail=1; }
-    rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor"
-    rmdir "$work/state" "$work"
+    rm -f "$work/digests/"*.md "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor"
+    rmdir "$work/digests" "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'sentinel: self-test PASS\n'; else printf 'sentinel: self-test FAIL\n'; fi
     return "$fail"
 }
@@ -199,6 +212,7 @@ main() {
     local DB="${SENTINEL_DB:-$REPO/data/opencode/opencode.db}"
     local APP="${SENTINEL_APP:-$HOME/.local/share/opencode/log/opencode.log}"
     local STATE="${SENTINEL_STATE:-$REPO/data/observability/.watch}"
+    local DIGEST_DIR="${SENTINEL_DIGEST_DIR:-$REPO/data/observability/digests}"
     [ -f "$DB" ] || { printf 'FAIL: no database at %s\n' "$DB"; return 1; }
     REV=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
     RUN_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -416,11 +430,11 @@ PYEOF
         while IFS='|' read -r tag sid a b; do
             [ -n "$tag" ] || continue
             case "$tag" in
-                T5) t5_n=$((t5_n + 1))
+                T5) t5_n=$((t5_n + 1)); emit_digest "$sid" "$DB"
                     trip "TRIP T5 denied-model: $sid on $a active since last sweep" "session/$sid" "deny-listed model still burning; stop prompting, hand off (./scripts/handoff-brief.sh $sid)" "sentinel-T5-$sid" ;;
-                T6) t6_n=$((t6_n + 1))
+                T6) t6_n=$((t6_n + 1)); emit_digest "$sid" "$DB"
                     trip "TRIP T6 over-budget: $sid (${a}x, $b in) active since last sweep" "session/$sid" "non-latest session over budget still being prompted; stop, hand off (./scripts/handoff-brief.sh $sid)" "sentinel-T6-$sid" ;;
-                T7) t7_n=$((t7_n + 1))
+                T7) t7_n=$((t7_n + 1)); emit_digest "$sid" "$DB"
                     trip "TRIP T7 stall: $sid $a running ${b}s active since last sweep" "session/$sid" "tool stuck in running (session-health S0); the single-threaded server is blocked on it; inspect, then hand off if it must be abandoned (./scripts/handoff-brief.sh $sid)" "sentinel-T7-$sid" ;;
             esac
         done <<< "$t5_hits"

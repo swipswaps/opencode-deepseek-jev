@@ -462,6 +462,8 @@ session-digest.sh
     critical facts for a FRESH session instead of replaying a huge
     transcript into a model — no model call, no transcript at rest.
     Read-only (mode=ro), redacted. --db, --max-bytes, --self-test.
+    The sentinel writes one such digest per T5/T6/T7 trip to
+    data/observability/digests/<id>.md (SENTINEL_DIGEST_DIR overrides).
 
 secret-scan.sh
     Secrets-at-rest scan over artifact dirs (logs/, observability,
@@ -481,7 +483,9 @@ sentinel.sh
     ADVISORY rows for watchdog polling; each trip carries a STABLE
     per-incident ledger key, so a condition that persists across sweeps
     stays ONE row (UNIQUE(source,key)) instead of one per sweep — no
-    cry-wolf. --once (default), --json, --no-log, --self-test offline.
+    cry-wolf, and writes a DB-only session-digest next to each
+    non-latest trip (data/observability/digests/<id>.md).
+    --once (default), --json, --no-log, --self-test offline.
     Install: ./scripts/sentinel-install.sh (no sudo).
 
 sentinel-install.sh

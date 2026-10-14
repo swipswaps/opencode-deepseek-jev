@@ -79,13 +79,25 @@ def age(ms):
     except Exception:
         return "?"
 
+def one(sql, args=()):
+    try:
+        return con.execute(sql, args).fetchone()
+    except Exception:
+        return None
+
+def many(sql, args=()):
+    try:
+        return con.execute(sql, args).fetchall()
+    except Exception:
+        return []
+
 def last_text(role):
-    r = con.execute(
+    r = one(
         "SELECT p.data FROM part p JOIN message m ON m.id=p.message_id "
         "WHERE p.session_id=? AND json_extract(m.data,'$.role')=? "
         "AND json_extract(p.data,'$.type')='text' ORDER BY p.time_created DESC LIMIT 1",
         (sid, role),
-    ).fetchone()
+    )
     if r is None:
         return ""
     try:
@@ -98,19 +110,21 @@ def clip(t, n):
 
 in_tok = int(s["tokens_input"] or 0)
 ratio = (in_tok / budget) if budget else 0.0
-parts = con.execute("SELECT COUNT(*) FROM part WHERE session_id=?", (sid,)).fetchone()[0]
-msgs = con.execute("SELECT COUNT(*) FROM message WHERE session_id=?", (sid,)).fetchone()[0]
-todos = con.execute(
+pc = one("SELECT COUNT(*) FROM part WHERE session_id=?", (sid,))
+parts = pc[0] if pc else 0
+mc = one("SELECT COUNT(*) FROM message WHERE session_id=?", (sid,))
+msgs = mc[0] if mc else 0
+todos = many(
     "SELECT content, status FROM todo WHERE session_id=? "
     "AND status IN ('pending','in_progress') ORDER BY position ASC LIMIT 10",
     (sid,),
-).fetchall()
-rt = con.execute(
+)
+rt = one(
     "SELECT json_extract(data,'$.tool') t, json_extract(data,'$.state.input.command') c, "
     "time_created tc FROM part WHERE session_id=? AND json_extract(data,'$.type')='tool' "
     "AND json_extract(data,'$.state.status')='running' ORDER BY time_created DESC LIMIT 1",
     (sid,),
-).fetchone()
+)
 
 out = []
 out.append("# Session digest \u2014 " + sid)

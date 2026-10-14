@@ -94,6 +94,14 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Auto-digest on a non-latest trip (the curation half). On a T5/T6/T7
+      trip the sentinel now writes `scripts/session-digest.sh <id>` output to
+      `data/observability/digests/<id>.md` (seam: `SENTINEL_DIGEST_DIR`), so
+      the curated facts (~1.5 KB, no model call) exist at detection time — the
+      operator never replays the transcript into an LLM. `session-digest.sh`
+      hardened to tolerate minimal/older DB shapes (missing `message`/`todo`).
+      Proven: self-test asserts a digest is emitted for a tripped fixture
+      session; live sweep wrote 12 digests (URL session 1526 B) for 12 trips.
 - [x] Sentinel de-cry-wolf: **stable per-incident ledger keys**. Root cause
       read from the DB: `ledger.py` is `INSERT OR IGNORE` on
       `UNIQUE(source,key)`, but the sentinel keyed every trip by RUN
