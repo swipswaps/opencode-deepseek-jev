@@ -478,9 +478,11 @@ sentinel.sh
     (T3), slow caddy fetch (T4), a non-latest deny-listed (T5) or
     over-budget (T6) session active since the last sweep, and a
     recent tool stuck in `running` (T7). History only reported. Logs
-    ADVISORY rows for watchdog polling. --once (default), --json,
-    --no-log, --self-test offline. Install: ./scripts/sentinel-install.sh
-    (no sudo).
+    ADVISORY rows for watchdog polling; each trip carries a STABLE
+    per-incident ledger key, so a condition that persists across sweeps
+    stays ONE row (UNIQUE(source,key)) instead of one per sweep — no
+    cry-wolf. --once (default), --json, --no-log, --self-test offline.
+    Install: ./scripts/sentinel-install.sh (no sudo).
 
 sentinel-install.sh
     Installs the user-level sentinel timer (writes units with the repo

@@ -94,6 +94,17 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Sentinel de-cry-wolf: **stable per-incident ledger keys**. Root cause
+      read from the DB: `ledger.py` is `INSERT OR IGNORE` on
+      `UNIQUE(source,key)`, but the sentinel keyed every trip by RUN
+      (`sentinel-<ts>-<seq>`), so one chronic condition (slow `GET /provider`,
+      up to 137 s) wrote **589** ADVISORY rows and desensitized the watchdog.
+      Now every trip carries a stable key — `sentinel-T4-<worst-uri>`,
+      `sentinel-T5/T6/T7-<sid>`, `sentinel-t3-<models>`,
+      `sentinel-T1/T2-<id>_<sid>` — so a persisting condition stays ONE row
+      while a NEW one still logs. Proven: self-test asserts ledger idempotency
+      (`n1==n2>0`); live 2×-sweep rewind proof — 12 identical trips → **12**
+      rows (was 24); `bash -n` + self-test PASS.
 - [x] Observability fixes + DB-only session digest (the "non-latest,
       over-budget, not deny-listed" answer). Dashboard served **312ff85**
       (STALE) — restarted the entrypoint-launched :5099 process to HEAD, and

@@ -67,14 +67,19 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null 2>&1; }
 
 log_advisory() {
-    # log_advisory VERDICT RESOURCE DETAIL — guarded, never fails the run.
+    # log_advisory VERDICT RESOURCE DETAIL [KEY] — guarded, never fails the run.
+    # KEY defaults to a fresh per-run key. Pass a STABLE per-incident key so a
+    # recurring condition collapses to ONE ledger row via UNIQUE(source,key)
+    # instead of one ADVISORY per sweep (the 589-row slow-/provider cry-wolf,
+    # which desensitizes the watchdog).
     [ "$DOLOG" -eq 1 ] || return 0
     have python3 || return 0
     SEQ=$((SEQ + 1))
+    local key="${4:-sentinel-$RUN_TS-$SEQ}"
     python3 "$REPO/scripts/ledger.py" record --type ADVISORY \
         --actor sentinel --tool sentinel --resource "$2" \
         --verdict "$1" --detail "$3" --rev "$REV" \
-        --source sentinel --key "sentinel-$RUN_TS-$SEQ" \
+        --source sentinel --key "$key" \
         > /dev/null 2>&1 || true
     return 0
 }
@@ -83,11 +88,11 @@ trip() {
     NTRIP=$((NTRIP + 1))
     TRIPMSG="$TRIPMSG$1
 "
-    log_advisory "FAIL" "$2" "$3"
+    log_advisory "FAIL" "$2" "$3" "$4"
 }
 
 self_test() {
-    local fail=0 work=""
+    local fail=0 work="" n1 n2
     have node || { printf 'FAIL node missing\n'; return 1; }
     have python3 || { printf 'FAIL python3 missing\n'; return 1; }
     work=$(mktemp -d)
@@ -150,9 +155,17 @@ PYEOF
     printf '%s' "$o" | grep -q 'TRIP T5' && { printf 'FAIL T5 re-fires after cursor\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T6' && { printf 'FAIL T6 re-fires after cursor\n'; fail=1; }
     printf '%s' "$o" | grep -q 'TRIP T7' && { printf 'FAIL T7 re-fires after cursor\n'; fail=1; }
+    printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
     SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -q 'ADVISORY' \
         || { printf 'FAIL ledger advisory logged\n'; fail=1; }
+    # Stable per-incident keys: re-running the SAME trips must NOT add rows
+    # (UNIQUE(source,key) ignores them) — the cry-wolf fix.
+    n1=$(LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -c 'ADVISORY')
+    printf '%s' "$((t5_now - 600))" > "$work/state/sentinel-t5.cursor"
+    SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
+    n2=$(LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -c 'ADVISORY')
+    [ "$n1" = "$n2" ] && [ "$n1" -gt 0 ] || { printf 'FAIL ledger not idempotent (n1=%s n2=%s)\n' "$n1" "$n2"; fail=1; }
     rm -f "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor"
     rmdir "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'sentinel: self-test PASS\n'; else printf 'sentinel: self-test FAIL\n'; fi
@@ -259,15 +272,19 @@ PYEOF
         printf '%s' "$total" > "$STATE/sentinel.cursor"
     fi
     export GWCOUNT="$gwcount"
-    local t1
+    local t1 tk=""
     t1=$(printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join("TRIP %s %s: %s" % (t["id"], t["session"], t["msg"]) for t in d.get("trips",[])))' 2>&1 || true)
     while IFS= read -r line; do
-        [ -n "$line" ] && trip "$line" "session/sentinel-focus" "guidance issued (see stdout)"
+        [ -n "$line" ] || continue
+        # Stable key per (trip-id, session): a latest session that STAYS over
+        # budget / deny-listed logs ONE advisory, not one per sweep.
+        tk=$(printf '%s' "$line" | awk '{gsub(/:$/,"",$3); print $2"_"$3}')
+        trip "$line" "session/sentinel-focus" "guidance issued (see stdout)" "sentinel-$tk"
     done <<< "$t1"
     if [ "$gwcount" -gt 0 ]; then
         local models=""
         models=$(printf '%s' "$newseg" | grep -oE 'modelID=[^ ,"]+' | sort -u | tr '\n' ' ')
-        trip "TRIP T3 gateway: $gwcount new failure line(s) (models: $models)" "log/opencode.log" "AI_APICallError/Free-usage signatures x$gwcount ($models)"
+        trip "TRIP T3 gateway: $gwcount new failure line(s) (models: $models)" "log/opencode.log" "AI_APICallError/Free-usage signatures x$gwcount ($models)" "sentinel-t3-$models"
         if [ "$JSON" -eq 0 ]; then
             printf '%s' "$newseg" | tail -3 | cut -c1-200 | while IFS= read -r line; do
                 printf '  %s\n' "$line"
@@ -335,7 +352,7 @@ PYEOF
         fi
         printf '%s' "$(date +%s)" > "$acc_cur"
         if [ "$slow_n" -gt 0 ]; then
-            trip "TRIP T4 slow-fetch: $slow_n fetch(es) >= ${SLOW_SEC}s (slowest ${slow_max}s $slow_uri)" "caddy access log" "slow fetches x$slow_n, slowest ${slow_max}s ($slow_uri)"
+            trip "TRIP T4 slow-fetch: $slow_n fetch(es) >= ${SLOW_SEC}s (slowest ${slow_max}s $slow_uri)" "caddy access log" "slow fetches x$slow_n, slowest ${slow_max}s ($slow_uri)" "sentinel-t4-$slow_uri"
         fi
         [ -n "$acc_tmp" ] && rm -f "$acc_tmp"
     fi
@@ -400,11 +417,11 @@ PYEOF
             [ -n "$tag" ] || continue
             case "$tag" in
                 T5) t5_n=$((t5_n + 1))
-                    trip "TRIP T5 denied-model: $sid on $a active since last sweep" "session/$sid" "deny-listed model still burning; stop prompting, hand off (./scripts/handoff-brief.sh $sid)" ;;
+                    trip "TRIP T5 denied-model: $sid on $a active since last sweep" "session/$sid" "deny-listed model still burning; stop prompting, hand off (./scripts/handoff-brief.sh $sid)" "sentinel-T5-$sid" ;;
                 T6) t6_n=$((t6_n + 1))
-                    trip "TRIP T6 over-budget: $sid (${a}x, $b in) active since last sweep" "session/$sid" "non-latest session over budget still being prompted; stop, hand off (./scripts/handoff-brief.sh $sid)" ;;
+                    trip "TRIP T6 over-budget: $sid (${a}x, $b in) active since last sweep" "session/$sid" "non-latest session over budget still being prompted; stop, hand off (./scripts/handoff-brief.sh $sid)" "sentinel-T6-$sid" ;;
                 T7) t7_n=$((t7_n + 1))
-                    trip "TRIP T7 stall: $sid $a running ${b}s active since last sweep" "session/$sid" "tool stuck in running (session-health S0); the single-threaded server is blocked on it; inspect, then hand off if it must be abandoned (./scripts/handoff-brief.sh $sid)" ;;
+                    trip "TRIP T7 stall: $sid $a running ${b}s active since last sweep" "session/$sid" "tool stuck in running (session-health S0); the single-threaded server is blocked on it; inspect, then hand off if it must be abandoned (./scripts/handoff-brief.sh $sid)" "sentinel-T7-$sid" ;;
             esac
         done <<< "$t5_hits"
     fi
