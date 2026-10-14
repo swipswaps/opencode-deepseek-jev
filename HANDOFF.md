@@ -562,7 +562,9 @@ self-test wired into `test-hygiene.sh`, documented in the command table and
 `scripts/README.txt`. **External, on-demand (not gated):** `npx @ra11y/core
 <file>` for a WCAG 2.2/2.1 a11y pass — zero-dep, runs in-container; complements
 impeccable (design/contrast/heading). Not wired into a gate (needs network).
-See TODO for the impeccable-vs-ra11y-vs-mdvp evaluation.
+Current state: **all six served pages 0 errors / 0 warnings / 0 notes**
+(2026-10-14 — fixed the `.pane` tabindex+inline-display:none pattern, added
+`<h1>`/labels). See TODO for the impeccable-vs-ra11y-vs-mdvp evaluation.
 
 ## Remaining work — doable groups
 
