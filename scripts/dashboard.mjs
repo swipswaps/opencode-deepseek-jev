@@ -1752,7 +1752,7 @@ async function renderPatterns(){
   if(d.errorTools&&d.errorTools.length){
     h+='<div class="muted" style="font-size:12px;margin-top:10px">error tool calls</div>';
     for(var k=0;k<d.errorTools.length;k++){var e=d.errorTools[k];
-      h+='<div class="item"><span class="tag">error</span>'+esc(e.tool)+' x'+e.n+'</div>';}
+      h+='<div class="item"'+(e.example_sid?' data-go="'+esc(e.example_sid)+'" style="cursor:pointer"':'')+'><span class="tag">error</span>'+esc(e.tool)+' x'+e.n+'</div>';}
   }
   var s=await j('/api/solutions');
   if(s&&s.issues&&s.issues.length){
@@ -1868,7 +1868,7 @@ async function renderDupes(){
   setBadge('data',d&&d.length?d.length:0);
   if(!d||!d.length){el.text('no duplicate sessions');return;}
   var h='<div class="muted" style="font-size:12px">'+d.length+' duplicate groups (normalized title)</div>';
-  for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
+  for(var i=0;i<d.length;i++){var g=d[i];h+='<div class="item"'+(g.ids&&g.ids[0]?' data-go="'+esc(g.ids[0])+'" style="cursor:pointer" title="drill into '+esc(g.ids[0])+'"':'')+'><span class="tag">'+g.count+'x</span>'+esc(g.title)+' <span class="muted">$'+(+g.cost).toFixed(4)+'</span></div>';}
   el.html(h);
 }
 async function renderOps(){
@@ -1906,6 +1906,8 @@ async function renderOps(){
   el.html(h);
 }
 document.getElementById('ops').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+document.getElementById('dupes').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+document.getElementById('patterns').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 function activateTab(name,setHash){
   if(!name)return;
   var tabs=document.querySelectorAll('.tab');

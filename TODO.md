@@ -41,6 +41,13 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **P3 drill-down pass.** Wired the last session-bearing aggregates:
+      **duplicate groups** (`/api/duplicates[].ids[0]`) and **patterns
+      errorTools** (`example_sid`) now carry `data-go` → `detail()`. Most charts
+      already drilled (table rows, treemap, scatter, sankey, signals, ops,
+      flags); the rest are true aggregates with no session to open (pivot tool
+      pairs, pattern bigrams, code files, OCR images, burn cumulative line).
+      `test-dashboard-ui explore` PASS.
 - [x] **P4 alerting sink.** `scripts/notify.sh` — the alerting the incumbents
       have and this stack lacked: reads `observability.db` ledger
       (ADVISORY/FAIL), builds JSON, POSTs to `$NOTIFY_WEBHOOK`; no webhook →
