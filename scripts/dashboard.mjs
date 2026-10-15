@@ -1538,6 +1538,8 @@ ${nav("explore")}
 <h3>Gantt — realized sessions over time (time_created → time_updated), resources per bar (click a bar to drill in)</h3>
 <div class="chart" id="boardgantt" role="img" aria-label="Gantt of realized sessions over time"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="board-estimates" style="font-size:11px"></div>
+<h3>Projected schedule — outstanding tasks (heuristic estimate, not a promise)</h3>
+<div class="chart" id="board-estimategantt" role="img" aria-label="Estimated schedule of outstanding tasks"><span class="muted" data-loading>loading...</span></div>
 <h3>Milestones — gate / advisory events (observability ledger)</h3>
 <div id="board-tables"><span class="muted" data-loading>loading...</span></div>
 </div>
@@ -2345,6 +2347,7 @@ async function renderBoard(){
   var esEl=document.getElementById('board-estimates');
   if(esEl)esEl.textContent='estimates (heuristic \u00b7 n='+(es.n||0)+' realized sessions): median duration '+((es.median_duration_ms||0)/1000).toFixed(0)+'s \u00b7 median cost $'+(+es.median_cost_usd||0).toFixed(4)+' — a rough per-work-unit figure, not a per-task promise';
   renderBoardGantt(d);
+  renderBoardEstimate(d);
   renderBoardTables(d);
 }
 function renderBoardGantt(d){
@@ -2385,6 +2388,39 @@ function renderBoardGantt(d){
       el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();detail(row.id);}});
     })(rects[bi],rows[bi]);
   }
+}
+function renderBoardEstimate(d){
+  // Gantt-STYLE estimate chart for the OUTSTANDING tasks (pending/in_progress):
+  // one bar per task, projected sequentially from now, sized by the median
+  // realized session (heuristic, labelled) — for db cards with a real span the
+  // bar is the measured span. Answers "what is left, and roughly how big".
+  var host=document.getElementById('board-estimategantt');if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'||typeof Plot.barX!=='function'){host.textContent='Plot failed to load';return;}
+  var lead=(d.estimates&&d.estimates.median_duration_ms)||60000;
+  var tasks=(d.cards||[]).filter(function(c){return c.state!=='completed';});
+  if(!tasks.length){host.textContent='(no outstanding tasks)';return;}
+  var order={'in_progress':0,'pending':1};
+  tasks=tasks.slice().sort(function(a,b){return (order[a.state]||2)-(order[b.state]||2);}).slice(0,40);
+  var t0=Date.now(),cursor=t0,gap=Math.max(lead*0.15,5000),rows=[];
+  for(var i=0;i<tasks.length;i++){var c=tasks[i];
+    var dur=(c.source==='db'&&c.end>c.start)?(c.end-c.start):lead;
+    rows.push({i:i,title:c.title||c.id,source:c.source||'',session:c.session||'',dur:dur,x1:cursor,x2:cursor+dur});
+    cursor+=dur+gap;
+  }
+  host.innerHTML='';
+  var chart=Plot.plot({
+    width:1000,height:36+rows.length*20,marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
+    x:{domain:[t0,cursor],ticks:6,tickFormat:function(v){return new Date(+v).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}},
+    y:{axis:null,domain:rows.map(function(r){return r.i;})},
+    color:{domain:['db','md'],range:['#1f6feb','#8b949e']},
+    marks:[
+      Plot.barX(rows,{x1:'x1',x2:'x2',y:'i',fill:'source',insetTop:1,insetBottom:1,title:function(r){return '~'+Math.round(r.dur/1000)+'s estimate \u2014 '+r.title;}}),
+      Plot.text(rows,{x:function(){return t0;},y:'i',text:function(r){return (r.i+1)+'. '+String(r.title||'').slice(0,46);},dx:4,textAnchor:'start',fill:'#8b949e',fontSize:10})
+    ]
+  });
+  host.appendChild(chart);
+  var rects=chart.querySelectorAll('rect');
+  for(var bi=0;bi<rects.length&&bi<rows.length;bi++){(function(el,r){if(r.session){el.style.cursor='pointer';el.setAttribute('tabindex','0');el.setAttribute('role','link');el.addEventListener('click',function(){detail(r.session);});}})(rects[bi],rows[bi]);}
 }
 function renderBoardTables(d){
   var bt=document.getElementById('board-tables');if(!bt)return;

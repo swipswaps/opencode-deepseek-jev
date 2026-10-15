@@ -39,6 +39,20 @@ Last updated: 2026-10-14
       now `asyncCached` with an inline fallback. Proven: `/` stayed ~10 ms while
       the cold board computed; `/api/board` shape PASS. Fixes the "long delays".
 
+## Done (most recent first)
+
+- [x] **Estimate Gantt + OCR crop** (per user). (1) Board **"Projected schedule
+      — outstanding tasks"** Gantt: one bar per pending/in_progress card,
+      projected from now, sized by the median realized session (heuristic,
+      labelled; db cards use real spans); clickable to `detail()`. Renders
+      **31 bars**. (2) `ux-smoke --vision` now **crops to the heading strip**
+      (fast + focused; the answer to "crop to the affected area") and adds
+      **goto retries** (the host path flakes). (3) **Finding:** the CONTAINER
+      serves every page/API in **≤25 ms** — the slowness is the **HOST→Caddy
+      path**, so the gate is flaky there. **Outstanding:** localize/fix the host
+      path (or run `ux-smoke` on the host). PaddleOCR verdict: **host-only**
+      (pipeline needs libs the sandbox lacks) — receipts-ocr runs it on the host.
+
 ## Outstanding issues (audited — resolve or explicitly accept)
 
 - [~] **Telemetry-console upgrade** (deduced from the DB's own frequency:
