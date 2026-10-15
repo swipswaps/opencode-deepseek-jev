@@ -301,6 +301,15 @@ browser_bench.py
     browser_use ~25s; selenium FAIL (chromedriver libs). --json, --runs N,
     --pick prints the fastest working driver (exit 2 if none).
 
+ux-smoke.py
+    Live UX smoke for the six :5099 pages, driven through the host browser
+    over CDP (RULES #62; runnable-now bridge to tester-army/e2e, whose own
+    browsers can't launch in this sandbox). Per page: loads, lang, one <h1>,
+    <main>+skip, no leftover visible "loading..." after the settle wait;
+    plus /explore empty Session-detail hidden on load and board Gantt+Kanban
+    render. Writes data/observability/ux-smoke.json; --json; exit 2 on fail;
+    SKIP (no CDP) is not PASS. --base URL, --settle S.
+
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
     no Playwright, no X11). Attaches to the browser that is ALREADY open

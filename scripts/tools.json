@@ -292,5 +292,12 @@
     "where": "container",
     "purpose": "Probes every CDP browser driver against the live endpoint (cdp_tab, playwright, browser_use, selenium) for the same op (enumerate tabs) and writes data/observability/browser-drivers.json with order[] fastest-working-first. Callers take order[0] and fail over down the list on runtime error; SKIP is not PASS. Measured: cdp_tab ~1.3s < playwright ~11s < browser_use ~25s; selenium FAIL (chromedriver needs libnss3/libnspr4/libdbus-1).",
     "commands": ["CDP_HOST=<h> CDP_PORT=<p> python3 scripts/browser_bench.py", "python3 scripts/browser_bench.py --json", "python3 scripts/browser_bench.py --pick"]
+  },
+  {
+    "id": "ux-smoke",
+    "title": "Live UX smoke for the :5099 pages (e2e bridge)",
+    "where": "container",
+    "purpose": "CDP-driven UX assertions (through the host browser, RULES #62) over all six :5099 pages: each LOADS, lang set, one h1, main+skip, no leftover 'loading...', the empty Session-detail card is hidden on load, and the board Gantt+Kanban render. Runnable-now bridge to tester-army/e2e (run the full natural-language framework on the host). Writes data/observability/ux-smoke.json; exit 2 on any failure.",
+    "commands": ["CDP_HOST=<h> CDP_PORT=<p> python3 scripts/ux-smoke.py", "python3 scripts/ux-smoke.py --json"]
   }
 ]

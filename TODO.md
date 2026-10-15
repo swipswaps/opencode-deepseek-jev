@@ -94,6 +94,14 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **UX smoke gate** (e2e bridge). `scripts/ux-smoke.py` drives the six
+      `:5099` pages through the host browser over CDP and asserts: each loads,
+      `lang`, one `<h1>`, `<main>`+skip, no leftover visible `loading…` after
+      the settle wait, `/explore` empty Session-detail hidden, and board
+      **Gantt + Kanban render**. Result: **33/33 PASS**. Runnable-now bridge to
+      **tester-army/e2e** (natural-language Playwright; run its own browsers on
+      the host). Next: offload the slow `/api/*` reads off the single event
+      loop.
 - [x] UX review fixes from the user's report. (1) The empty **"Session detail"**
       card on `/explore` (rendered always-visible with only a hint + a `close`
       button) is now **hidden until a drill**: `#detail-card hidden`, shown by
