@@ -94,6 +94,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **GANTT?** — the `/explore ▸ board` Gantt works (1 SVG + 37-row table
+      twin + 70 kanban cards) but had two defects, both fixed and verified via
+      the host Chrome over CDP: (1) the time axis rendered raw **epoch ms**
+      (`1,790,000,000…`) — now **dates** (`09/28, 08:53 … 10/14, 13:46`) via a
+      `tickFormat` on the x scale; (2) `/api/board` was **~19s cold**, so the
+      board sat on `loading…` ~20s — now **pre-warmed on boot**
+      (`apiBoard()` in the pre-warm `setImmediate`), board renders in ≤6s.
+      Root lesson: the first selector (`#board`) was wrong — the pane is
+      `#pane-board`, Gantt is `#boardgantt` — verify selectors, don't guess.
 - [x] Browser tools applied to the `:5099` pages + UX audit. Drove all six
       (`/`, `/explore`, `/models`, `/runbooks`, `/manage`, `/docs`) through the
       host Chrome over CDP (playwright `connect_over_cdp`): **clean** —

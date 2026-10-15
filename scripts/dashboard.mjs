@@ -2329,7 +2329,7 @@ function renderBoardGantt(d){
   host.innerHTML='';
   host.appendChild(Plot.plot({
     width:1000,height:32+Math.max(160,rows.length*7),marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
-    x:{domain:[minT,maxT],ticks:6},
+    x:{domain:[minT,maxT],ticks:6,tickFormat:function(v){return new Date(+v).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}},
     y:{axis:null,domain:rows.map(function(_,j){return j;})},
     marks:[Plot.barX(rows,{
       x1:function(r){return r.start;},
@@ -2774,5 +2774,7 @@ server.listen(port, host, () => {
     );
     try { apiActivity(); console.log("pre-warm /api/activity ready"); }
     catch (e) { console.log("pre-warm /api/activity failed: " + (e && e.message ? e.message : e)); }
+    try { apiBoard(); console.log("pre-warm /api/board ready"); }
+    catch (e) { console.log("pre-warm /api/board failed: " + (e && e.message ? e.message : e)); }
   });
 });
