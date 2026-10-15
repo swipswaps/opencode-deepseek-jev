@@ -8,6 +8,19 @@ Last updated: 2026-10-14
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
+- [~] **Telemetry-console upgrade** (deduced from the DB's own frequency:
+      `ux 66 / telemetry 60 / dashboard 54 / cost 27 / drill 15 / slow 15 /
+      flag 14`). Doctrine codified as **RULE #67** +
+      `.opencode/skills/telemetry-dashboard/SKILL.md` (declarative + DB-driven +
+      drill-down-native; Grafana / Vega-Lite / TanStack; **not Flutter**).
+      Plan, in order: (1) **clickable Gantt** bars → session timeline;
+      (2) a **"flagged" panel** — bottlenecks (slow endpoints), high-cost
+      ($ by session/model), slowdowns (T4) as counts + examples; (3) drill-down
+      across every section; (4) offer **Grafana + SQLite** as the non-bespoke
+      ops view. Also still pending: **offload `/api/board` off the event loop**
+      (`/api/health` is already in the worker) — it is the remaining cause of
+      the freezes/`loading…`.
+
 - **Guard runtime was silently inert (root-caused + fixed).** Web sessions boot
   at `$HOME/.opencode`, so the project-scoped `{plugin,plugins}/*.{ts,js}` glob
   never found the guard; `web-entrypoint.sh` now links it into the **global**
