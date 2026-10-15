@@ -41,6 +41,20 @@ Docker-based setup. All project code stays inside this repository.
 4. Drill-down across every section; then optionally **Grafana + SQLite** as a
    non-bespoke ops view.
 
+### Screenshots (light theme)
+
+Dashboard home — sessions with tz-labelled times, cost, live activity:
+
+![Dashboard home](docs/ux/status-home.png)
+
+`/explore ▸ board · gantt` — Kanban + the **clickable Gantt** (moved to the 2nd tab):
+
+![Explore board Gantt](docs/ux/status-board-gantt.png)
+
+Clicking a Gantt bar drills into that session's **timeline in-page** (`detail()`):
+
+![Gantt bar drilled into a session](docs/ux/status-gantt-drill.png)
+
 See `RULES.md` #62–#67, `.opencode/skills/telemetry-dashboard`, `HANDOFF.md`,
 and `TODO.md` for the full queue.
 
