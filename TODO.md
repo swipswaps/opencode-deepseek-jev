@@ -41,6 +41,11 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **P4 alerting sink.** `scripts/notify.sh` — the alerting the incumbents
+      have and this stack lacked: reads `observability.db` ledger
+      (ADVISORY/FAIL), builds JSON, POSTs to `$NOTIFY_WEBHOOK`; no webhook →
+      prints payload + SKIPs (exit 0). `--dry-run`, offline `--self-test`.
+      Proven: dry-run built 2 real flags; self-test PASS; scan-constraints PASS.
 - [x] **P5 Option A — Grafana + SQLite ops view (scaffolded).**
       `docker/docker-compose.observability.yml` runs Grafana (plugin
       `frser-sqlite-datasource`) with the two SQLite stores mounted **read-only**

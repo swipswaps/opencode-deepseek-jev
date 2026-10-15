@@ -313,5 +313,12 @@
     "where": "container",
     "purpose": "ASK-tier, deliberation-only. Refuses unless --reason AND --yes (consult the operator first); --dry-run prints plan + cost estimate. Escalation / second opinion only (fills the Jev-MCP gap); never the default, never vision. Key ANTHROPIC_API_KEY.",
     "commands": ["python3 scripts/ask-claude.py --reason '...' --prompt-file /tmp/p.txt --dry-run", "python3 scripts/ask-claude.py --self-test"]
+  },
+  {
+    "id": "notify-sink",
+    "title": "Push sentinel FAIL flags to a webhook (alerting)",
+    "where": "host",
+    "purpose": "The alerting capability the observability tools have and this stack lacked: reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs to $NOTIFY_WEBHOOK. No webhook -> prints payload and SKIPs (exit 0). No model spend, no backend.",
+    "commands": ["NOTIFY_WEBHOOK=<url> ./scripts/notify.sh --last 10", "./scripts/notify.sh --dry-run", "./scripts/notify.sh --self-test"]
   }
 ]
