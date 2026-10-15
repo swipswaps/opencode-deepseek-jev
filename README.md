@@ -2,6 +2,48 @@
 
 Docker-based setup. All project code stays inside this repository.
 
+## Status — where we are, how we got here, next steps (2026-10-15)
+
+### How we got here
+- Started as a dockerized OpenCode + DeepSeek + Jev stack with a read-only
+  observability dashboard on `:5099`.
+- Added a fail-closed monitoring family — **sentinel T1–T7** (over-budget,
+  deny-listed, gateway, slow-fetch, non-latest deny/over, DB-native stall),
+  cursor-bounded and driven from the SQLite stores, then **de-cry-wolfed** with
+  stable per-incident ledger keys.
+- Proved the browser path: **`cdp-tab.mjs`** (zero-dep CDP) drives the
+  already-open browser (RULES #62), benchmarked against playwright / browser-use
+  / selenium with a failover order (RULE #64).
+- Fixed served-page defects the operator hit: local-time + tz labels, a poll
+  loop that froze the page, the **STALE-rev** banner (dockerless restart), the
+  empty **Session-detail** card, the inline-expand that collapsed every 5 s, and
+  the **buried Gantt** (moved to the 2nd tab + a home link).
+- Added a UX gate **`ux-smoke.py`** (DOM + local-OCR `--vision`), a **light
+  theme** so tesseract can read (RULES #65/#66), and a DB-only session digest
+  for cheap handoffs.
+- Codified the telemetry doctrine: **RULE #67** +
+  `.opencode/skills/telemetry-dashboard` (declarative, DB-driven,
+  drill-down-native; Grafana / Vega-Lite / TanStack; **not Flutter**).
+
+### Where we are
+- Sentinel T1–T7 running; ledger deduped; handoff digests auto-written.
+- Dashboard serves HEAD after `./scripts/web-restart.sh`; all six pages pass
+  `ux-smoke.py` (DOM), and `--vision` reads words in light mode.
+- **Known gap (the main UX pain):** **`/api/board` (and `/api/activity`) run
+  synchronously on the single event loop** — a cold board read (~19 s) freezes
+  every other request, which makes the UI feel slow and the UX gate flaky.
+  `/api/health` is already offloaded to `query-worker.mjs`; `/api/board` is not.
+
+### Next steps (in order)
+1. **Offload `/api/board` off the event loop** (worker, like `healthSync`).
+2. **Clickable Gantt** — a bar drills to that session's timeline (`detail()`).
+3. **"Flagged" panel** — bottlenecks / high-cost / slowdowns as counts + examples.
+4. Drill-down across every section; then optionally **Grafana + SQLite** as a
+   non-bespoke ops view.
+
+See `RULES.md` #62–#67, `.opencode/skills/telemetry-dashboard`, `HANDOFF.md`,
+and `TODO.md` for the full queue.
+
 ## Prerequisites
 - Docker Engine (daemon reachable by current user)
 - gh (GitHub CLI), authenticated
