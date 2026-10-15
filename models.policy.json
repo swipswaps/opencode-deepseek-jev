@@ -1,5 +1,6 @@
 {
   "$comment": "Model cost policy. max_input_per_m_usd is the ceiling for a model that is not explicitly allow-listed. Direct-key free models always pass. opencode/* personal-free models are gateway-metered (Free usage exceeded governor) and must NOT auto-pass: use opencode-go/* (Go subscription pool) or direct deepseek/gemini instead. deny always fails closed.",
+  "$anthropic": "Claude/Anthropic is NOT allow-listed (input/M ~$3 > max_input_per_m_usd). scripts/ask-claude.py is a deliberate escalation ONLY: it requires --reason AND --yes after consulting the operator (RULES #68). Vision uses PaddleOCR (host) or Gemini, not Claude.",
   "max_input_per_m_usd": 0.2,
   "require_toolcall": true,
   "require_attachment": false,

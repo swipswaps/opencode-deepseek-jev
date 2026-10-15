@@ -8,6 +8,17 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] OCR/vision + **gated** Claude (per the user's order). (1) **PaddleOCR**
+      (the receipts-ocr stack) installs but its pipeline needs system libs /
+      openCV-contrib the sandbox lacks → **host-only** (that is how receipts-ocr
+      runs it); `ocr-image.sh`'s engine seam stays. (2) **(a) Gemini 2.5 Flash**
+      vision: `scripts/vision-ask.py` built + self-tests, **but `GEMINI_API_KEY`
+      is a placeholder** → needs a real key to run live. (3) **(b)
+      `scripts/ask-claude.py`**: gated reviewer — refuses unless `--reason` **and**
+      `--yes` (consult first), `--dry-run` + cost estimate; `ANTHROPIC_API_KEY`
+      added to `.env.local` (gated, never auto-used); **RULES #68** +
+      `models.policy.json` `$anthropic` + LiteLLM `claude-sonnet` entry;
+      surfaced in tools.json. Next: give Gemini a real key to finish (a).
 - [x] **Flagged panel (B)** — the incumbent patterns, in-repo. (1) A prominent
       home **Flags** card (bottlenecks · cost · slowdowns · stalls) built from
       the existing endpoints (`/api/cost`, `/api/ops`, `/api/health`), each
