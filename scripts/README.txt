@@ -460,10 +460,13 @@ web.sh
     passed.
 
 web-restart.sh
-    Restarts the opencode-web container so :5099 serves the current
+    Restarts the observability dashboard so :5099 serves the current
     checkout (`opencode-web` is a compose service name, not a command
     — this script is the command). Polls /api/rev until served==HEAD
-    or fails loudly. Host-side; needs the docker daemon.
+    or fails loudly. Two modes: `docker compose restart opencode-web`
+    when docker is present; otherwise restarts the local `dashboard.mjs`
+    process (the sandbox path — this is why :5099 went STALE after every
+    commit here).
 
 deploy.sh
     Gated promote. The 2026-10-12 lesson: rev-match is not page-works

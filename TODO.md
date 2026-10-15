@@ -94,6 +94,16 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Browser tools applied to the `:5099` pages + UX audit. Drove all six
+      (`/`, `/explore`, `/models`, `/runbooks`, `/manage`, `/docs`) through the
+      host Chrome over CDP (playwright `connect_over_cdp`): **clean** —
+      lang=en, one `<h1>`, 0 images without alt, 0 unnamed buttons/links,
+      `<main>` + skip-link present. The one issue found on every page was
+      **`STALE served 3dcbfad vs HEAD 8f1a8d2`** — the dashboard process was
+      behind. Fixed the root cause: `web-restart.sh` gained a **dockerless
+      fallback** (restart the local `dashboard.mjs` process when docker is
+      absent), so `:5099` now serves `8f1a8d2` `stale=false` (verified both
+      in-container and via `https://192.168.4.24:5099/api/rev`).
 - [x] Browser-driver **benchmark + failover** (RULES #64,
       `scripts/browser_bench.py`). Probes cdp_tab / playwright / browser_use /
       selenium against the live CDP endpoint for the same op and writes
