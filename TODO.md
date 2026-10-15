@@ -8,6 +8,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Flagged panel (B)** — the incumbent patterns, in-repo. (1) A prominent
+      home **Flags** card (bottlenecks · cost · slowdowns · stalls) built from
+      the existing endpoints (`/api/cost`, `/api/ops`, `/api/health`), each
+      flag a **count + clickable examples → `drill()`** (trace drill + rollups,
+      a la Langfuse/Phoenix). (2) **Ledger annotations on the Gantt**: `ruleX`
+      at every milestone ts, with hover. Proven: Flags renders (2 ≥ $0.10,
+      20 over-budget · 21 deny-listed, slow endpoints); Gantt = 86 bars + 204
+      annotation lines; test-dashboard-ui home+explore PASS. Option A
+      (hosted-grade Langfuse/Grafana) stays README step 4.
 - [x] **Clickable Gantt** (telemetry step 1). Each board Gantt bar is now
       `role=link` + `tabindex=0`, carries hover telemetry (`title`: model · $ ·
       in · duration), and a click/Enter handler → in-page `detail()` (session

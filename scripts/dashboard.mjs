@@ -1117,6 +1117,7 @@ ${nav("dashboard")}
 <h1>opencode observability</h1>
 <div id="session" class="muted" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
 <div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
+<div class="card" id="flags-card" style="border-color:#d29922"><h2>Flags <span class="muted">(bottlenecks · cost · slowdowns · stalls — click an example)</span></h2><div id="flags" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Search <span class="muted">(ranked FTS: title · text · commands)</span></h2><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres" aria-live="polite"></div></div>
 <div class="card"><h2>Config audit <span class="muted">(actual vs expected)</span></h2><div id="config" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span> <span class="muted" data-tz></span></h2><div id="sessions" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
@@ -1252,6 +1253,27 @@ async function refreshTodos(){
     document.getElementById('todos').innerHTML=h2||'<div class="item">(no todos)</div>';}
   else{failIfPristine('todos','(todos unavailable)');}
 }
+async function refreshFlags(){
+  // Rollup/flag strip: the four primitives the LLM-observability tools share
+  // (trace drill, cost/latency rollups, annotations, sessions), rendered as
+  // counts + example drill targets. Built from existing endpoints (no new
+  // server code); each example links to its session via drill().
+  var el=document.getElementById('flags');if(!el)return;
+  var rr=await Promise.all([j('/api/cost'),j('/api/ops'),j('/api/health')]);
+  var c=rr[0],o=rr[1],h=rr[2];
+  var rows=[];
+  if(c&&c.sessions){var hi=c.sessions.filter(function(s){return (+s.cost)>=0.10;});if(hi.length)rows.push(['cost',hi.length+' session(s) \u2265 $0.10',hi.slice(0,3).map(function(s){return {go:s.id,label:s.title||s.id,extra:'$'+(+s.cost).toFixed(3)};})]);}
+  if(h&&h.risks&&h.risks.available){var ov=h.risks.over||[],dn=h.risks.denied||[];if(ov.length||dn.length)rows.push(['risk',ov.length+' over budget \u00b7 '+dn.length+' deny-listed',ov.slice(0,3).map(function(r){return {go:r.session,label:r.session,extra:Math.round((r.ratio||0)*100)+'%'};})]);}
+  if(h&&h.findings){var st=h.findings.filter(function(f){return f.kind==='running_tool';});if(st.length)rows.push(['stall',st.length+' tool(s) stuck running',st.slice(0,3).map(function(f){return {go:f.session,label:f.session,extra:(f.tool||'?')+' '+(f.age_s||0)+'s'};})]);}
+  if(o&&o.slow_endpoints&&o.slow_endpoints.length)rows.push(['slow',o.slow_endpoints.length+' slow endpoint(s)',o.slow_endpoints.slice(0,3).map(function(s){return {label:s.path,extra:s.ms+'ms'};})]);
+  if(o&&o.errors_by_tool&&o.errors_by_tool.length){var te=0;for(var q=0;q<o.errors_by_tool.length;q++)te+=(o.errors_by_tool[q].n||0);rows.push(['error',te+' tool error(s)',o.errors_by_tool.slice(0,3).map(function(e){return {go:e.example_sid,label:e.tool,extra:'x'+e.n};})]);}
+  var hh='';
+  if(!rows.length){hh='<div class="item"><span class="tag">ok</span>no flags \u2014 nothing over budget, no stalls, no slow endpoints, no tool errors</div>';}
+  for(var i=0;i<rows.length;i++){var r=rows[i];hh+='<div class="item"><span class="tag ERR">'+esc(r[0])+'</span><b>'+esc(r[1])+'</b>';
+    for(var k=0;k<r[2].length;k++){var ex=r[2][k];hh+=' <span class="muted">'+(ex.go?('<a href="#" data-go="'+esc(ex.go)+'">'+esc(ex.label)+'</a>'):esc(ex.label))+(ex.extra?(' ('+esc(ex.extra)+')'):'')+'</span>';}
+    hh+='</div>';}
+  el.innerHTML=hh;
+}
 async function refreshBalance(){
   bal=await j('/api/balance');
   await refreshCost();
@@ -1342,6 +1364,7 @@ document.getElementById('sessions').addEventListener('keydown',function(ev){
   var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;
   if(ex&&(ev.key==='Enter'||ev.key===' ')){ev.preventDefault();toggleSessRow(ex.getAttribute('data-exp'));}
 });
+document.getElementById('flags').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){ev.preventDefault();drill(t.getAttribute('data-go'));}});
 var want=new URLSearchParams(location.search).get('session');
 if(want){drill(want);}
 refreshBalance();
@@ -1372,6 +1395,7 @@ function poll(fn,ms){
 poll(refreshCost,5000);
 poll(refreshActivity,5000);
 poll(refreshTodos,5000);
+poll(refreshFlags,15000);
 poll(refreshBalance,30000);
 poll(refreshConfig,30000);
 document.querySelectorAll('[data-tz]').forEach(function(e){e.textContent='(times '+tzname()+')';});
@@ -2337,7 +2361,7 @@ function renderBoardGantt(d){
     width:1000,height:32+Math.max(160,rows.length*7),marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
     x:{domain:[minT,maxT],ticks:6,tickFormat:function(v){return new Date(+v).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}},
     y:{axis:null,domain:rows.map(function(_,j){return j;})},
-    marks:[Plot.barX(rows,{
+    marks:[Plot.ruleX((d.milestones||[]).map(function(m){return new Date(m.ts).getTime();}).filter(function(t){return t>0;}),{stroke:'#d29922',strokeOpacity:0.35,title:function(v){return 'event '+new Date(+v).toLocaleString();}}),Plot.barX(rows,{
       x1:function(r){return r.start;},
       x2:function(r){return Math.max(r.end,r.start+pad);},
       y:function(r,j){return j;},
