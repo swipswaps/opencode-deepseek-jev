@@ -41,6 +41,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **P1 host-path contention + P2 span drill** (from the "implement all"
+      triage). **P1:** measuring showed the wire is only ~150–400 ms
+      (TLS-dominated) and the host Chrome has just 3 tabs — the 20 s stalls were
+      **single-threaded dashboard contention under the gate's own multi-page
+      polling**. Fix: cut client poll load (cost/activity 5→8 s, todos 15 s,
+      flags 30 s, balance/config 60 s). **P2 span drill:** `detail()` now shows
+      **per-part duration (+ms)** and a span summary — proven
+      `spans: 60 · total 536262ms · slowest 175440ms`. test-dashboard-ui
+      home+explore PASS.
 - [x] **Estimate Gantt + OCR crop** (per user). (1) Board **"Projected schedule
       — outstanding tasks"** Gantt: one bar per pending/in_progress card,
       projected from now, sized by the median realized session (heuristic,

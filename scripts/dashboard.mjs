@@ -1300,7 +1300,8 @@ function drillItem(x){
   if(x.type==='tool'){body=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
   else if(x.type==='reasoning'||x.type==='text'){body=esc(String(x.text||'').slice(0,600));}
   else if(x.type==='patch'){body=esc(x.files||'');}
-  return '<div class="item"><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
+  var dur=Math.max(0,(x.te||x.ts||0)-(x.ts||0));
+  return '<div class="item"><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+(dur>0?(' +'+Math.round(dur)+'ms'):'')+'</span></div>';
 }
 async function drill(id){
   drillId=id;
@@ -1321,6 +1322,9 @@ async function drill(id){
     +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=txt">[txt]</a>'
     +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=md">[md]</a>'
     +'<a href="/api/export/session?id='+encodeURIComponent(id)+'&format=json">[json]</a></div>';
+  var sp=d.parts.map(function(x){return Math.max(0,(x.te||x.ts||0)-(x.ts||0));});
+  var totms=sp.reduce(function(a,b){return a+b;},0),slowms=Math.max.apply(null,[0].concat(sp));
+  h+='<div class="muted" style="font-size:12px;margin:4px 0">spans: '+d.parts.length+' \u00b7 total '+Math.round(totms)+'ms \u00b7 slowest '+Math.round(slowms)+'ms (per-part te\u2212ts)</div>';
   for(var i=0;i<d.parts.length;i++){h+=drillItem(d.parts[i]);}
   el.innerHTML=h;
 }
@@ -1392,12 +1396,12 @@ function poll(fn,ms){
   setInterval(tick,ms);
   document.addEventListener('visibilitychange',function(){tick();});
 }
-poll(refreshCost,5000);
-poll(refreshActivity,5000);
-poll(refreshTodos,5000);
-poll(refreshFlags,15000);
-poll(refreshBalance,30000);
-poll(refreshConfig,30000);
+poll(refreshCost,8000);
+poll(refreshActivity,8000);
+poll(refreshTodos,15000);
+poll(refreshFlags,30000);
+poll(refreshBalance,60000);
+poll(refreshConfig,60000);
 document.querySelectorAll('[data-tz]').forEach(function(e){e.textContent='(times '+tzname()+')';});
 </script></body></html>`;
 
