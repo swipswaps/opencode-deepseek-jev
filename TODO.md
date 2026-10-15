@@ -94,6 +94,18 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] UX review fixes from the user's report. (1) The empty **"Session detail"**
+      card on `/explore` (rendered always-visible with only a hint + a `close`
+      button) is now **hidden until a drill**: `#detail-card hidden`, shown by
+      `detail()`, hidden by `close`. (2) The **Gantt was effectively
+      invisible** — `board` was the 9th/last tab; moved to **2nd**.
+      (3) `/api/board` pre-warmed (earlier). Verified: tab order
+      `overview,board,charts,…`; `detailHidden=true` on load.
+      **Remaining (dominant):** dashboard **slowness under load** — a fresh
+      `/explore` goto timed out at 25s while pre-warm ran (single event loop;
+      heavy endpoints block). Needs the expensive reads to yield (worker/
+      streaming), not just pre-warm. Tooling: adopt **tester-army/e2e**
+      (natural-language Playwright framework) for durable UX assertions.
 - [x] **GANTT?** — the `/explore ▸ board` Gantt works (1 SVG + 37-row table
       twin + 70 kanban cards) but had two defects, both fixed and verified via
       the host Chrome over CDP: (1) the time axis rendered raw **epoch ms**

@@ -1432,6 +1432,7 @@ ${nav("explore")}
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
   <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview <span class="tbadge" data-badge="overview"></span></button>
+  <button class="tab" data-tab="board" role="tab" id="tab-board" aria-selected="false" aria-controls="pane-board">board <span class="tbadge" data-badge="board"></span></button>
   <button class="tab" data-tab="charts" role="tab" id="tab-charts" aria-selected="false" aria-controls="pane-charts">charts <span class="tbadge" data-badge="charts"></span></button>
   <button class="tab" data-tab="signals" role="tab" id="tab-signals" aria-selected="false" aria-controls="pane-signals">signals <span class="tbadge" data-badge="signals"></span></button>
   <button class="tab" data-tab="patterns" role="tab" id="tab-patterns" aria-selected="false" aria-controls="pane-patterns">patterns <span class="tbadge" data-badge="patterns"></span></button>
@@ -1439,10 +1440,9 @@ ${nav("explore")}
   <button class="tab" data-tab="data" role="tab" id="tab-data" aria-selected="false" aria-controls="pane-data">data <span class="tbadge" data-badge="data"></span></button>
   <button class="tab" data-tab="ocr" role="tab" id="tab-ocr" aria-selected="false" aria-controls="pane-ocr">ocr <span class="tbadge" data-badge="ocr"></span></button>
   <button class="tab" data-tab="ops" role="tab" id="tab-ops" aria-selected="false" aria-controls="pane-ops">ops <span class="tbadge" data-badge="ops"></span></button>
-  <button class="tab" data-tab="board" role="tab" id="tab-board" aria-selected="false" aria-controls="pane-board">board <span class="tbadge" data-badge="board"></span></button>
 </div>
 <div class="muted" id="landing" style="margin:2px 0 8px"><span class="muted" data-loading>loading...</span></div>
-<div class="card" id="detail-card" style="border-color:#d29922"><h2 style="margin-top:0" id="detail-head">Session detail <button id="detail-close">close</button></h2><div id="detail"><span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span></div></div>
+<div class="card" id="detail-card" hidden style="border-color:#d29922"><h2 style="margin-top:0" id="detail-head">Session detail <button id="detail-close">close</button></h2><div id="detail"></div></div>
 <div class="pane" data-pane="overview" id="pane-overview" role="tabpanel" aria-labelledby="tab-overview">
 <div class="card"><h2 style="margin-top:0">Search everything</h2><input id="q2" placeholder="search titles, message text, and tool commands (ranked)" aria-label="Search everything"><div id="sres"></div></div>
 <h2>Sessions — sortable, filterable, click to open</h2>
@@ -1663,7 +1663,7 @@ document.getElementById('q2').addEventListener('keydown',function(ev){if(ev.key=
 document.getElementById('sres').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 document.getElementById('tfilter').addEventListener('input',function(){TFILTER=this.value;renderTable();});
 async function detail(id){
-  var card=document.getElementById('detail-card');if(card)card.classList.remove('collapsed');
+  var card=document.getElementById('detail-card');if(card){card.hidden=false;card.classList.remove('collapsed');}
   var el=document.getElementById('detail');
   el.innerHTML='<span class="muted">loading...</span>';
   var d=await j('/api/session?id='+encodeURIComponent(id)+'&limit=60');
@@ -1813,7 +1813,7 @@ document.addEventListener('keydown',function(ev){
   if(t==='input'||t==='textarea'||t==='select')return;
   if(ev.key==='Escape'&&document.activeElement&&document.activeElement.blur){document.activeElement.blur();}
 });
-document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='<span class="muted">click a treemap tile, scatter point, table row, or signal to drill in — without leaving this page</span>';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});document.getElementById('detail-card').classList.add('collapsed');});
+document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});document.getElementById('detail-card').hidden=true;});
 document.getElementById('detail-head').addEventListener('click',function(ev){if(ev.target&&ev.target.id==='detail-close')return;document.getElementById('detail-card').classList.toggle('collapsed');});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 async function renderOcr(){
