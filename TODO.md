@@ -6,6 +6,19 @@ date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
 Last updated: 2026-10-14
 
+## Done (most recent first)
+
+- [x] **Clickable Gantt** (telemetry step 1). Each board Gantt bar is now
+      `role=link` + `tabindex=0`, carries hover telemetry (`title`: model · $ ·
+      in · duration), and a click/Enter handler → in-page `detail()` (session
+      timeline) — the same drill contract as the treemap/table rows. Proven:
+      86 bars; clicking one reveals `#detail-card` and calls `detail()`.
+      Board heading now says "(click a bar to drill in)".
+- [x] **Offload `/api/board`** off the event loop (telemetry step 4). Ported
+      `apiBoardFresh` into `query-lib.mjs` + `query-worker.mjs`; `apiBoard()` is
+      now `asyncCached` with an inline fallback. Proven: `/` stayed ~10 ms while
+      the cold board computed; `/api/board` shape PASS. Fixes the "long delays".
+
 ## Outstanding issues (audited — resolve or explicitly accept)
 
 - [~] **Telemetry-console upgrade** (deduced from the DB's own frequency:

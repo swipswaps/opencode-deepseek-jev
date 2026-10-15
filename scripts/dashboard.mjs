@@ -1511,7 +1511,7 @@ ${nav("explore")}
 <div class="muted" style="font-size:11px">provenance — <b>db</b> = opencode todo ⨝ session (measured) · <b>md</b> = TODO.md queue (declared) · <b>derived</b> = heuristic estimate (labelled, not a promise)</div>
 <h3>Kanban — task state (pending / in-progress / completed)</h3>
 <div id="kanban" class="kanban" role="list" aria-label="Kanban columns"><span class="muted" data-loading>loading...</span></div>
-<h3>Gantt — realized sessions over time (time_created → time_updated), resources per bar</h3>
+<h3>Gantt — realized sessions over time (time_created → time_updated), resources per bar (click a bar to drill in)</h3>
 <div class="chart" id="boardgantt" role="img" aria-label="Gantt of realized sessions over time"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="board-estimates" style="font-size:11px"></div>
 <h3>Milestones — gate / advisory events (observability ledger)</h3>
@@ -2333,7 +2333,7 @@ function renderBoardGantt(d){
   if(maxT<=minT)maxT=minT+1000;
   var pad=Math.max((maxT-minT)/500,1000);
   host.innerHTML='';
-  host.appendChild(Plot.plot({
+  var chart=Plot.plot({
     width:1000,height:32+Math.max(160,rows.length*7),marginTop:8,marginRight:16,marginBottom:24,marginLeft:8,
     x:{domain:[minT,maxT],ticks:6,tickFormat:function(v){return new Date(+v).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}},
     y:{axis:null,domain:rows.map(function(_,j){return j;})},
@@ -2345,7 +2345,22 @@ function renderBoardGantt(d){
       insetTop:1,insetBottom:1,
       title:function(r){return r.title+' — '+(r.model||'')+' · $'+(+r.cost).toFixed(4)+' · in '+fmt(r.tokens_in)+' · '+Math.round(r.duration/1000)+'s';}
     })]
-  }));
+  });
+  host.appendChild(chart);
+  // Clickable bars: a bar drills into its session timeline in-page (detail),
+  // the same drill contract as the treemap/table rows. barX renders one <rect>
+  // per datum in data order, so index i maps to rows[i].
+  var rects=chart.querySelectorAll('rect');
+  for(var bi=0;bi<rects.length&&bi<rows.length;bi++){
+    (function(el,row){
+      el.style.cursor='pointer';
+      el.setAttribute('tabindex','0');
+      el.setAttribute('role','link');
+      el.setAttribute('aria-label','drill into '+(row.title||row.id));
+      el.addEventListener('click',function(){detail(row.id);});
+      el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();detail(row.id);}});
+    })(rects[bi],rows[bi]);
+  }
 }
 function renderBoardTables(d){
   var bt=document.getElementById('board-tables');if(!bt)return;
