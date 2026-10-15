@@ -17,9 +17,12 @@ Last updated: 2026-10-14
       (2) a **"flagged" panel** — bottlenecks (slow endpoints), high-cost
       ($ by session/model), slowdowns (T4) as counts + examples; (3) drill-down
       across every section; (4) offer **Grafana + SQLite** as the non-bespoke
-      ops view. Also still pending: **offload `/api/board` off the event loop**
-      (`/api/health` is already in the worker) — it is the remaining cause of
-      the freezes/`loading…`.
+      ops view. **DONE: offload `/api/board`** to `query-worker.mjs` (RULE:
+      heavy reads off the event loop) — `/api/board` now computes in the worker
+      (ported `apiBoardFresh` into `query-lib.mjs` + `query-worker.mjs`,
+      `asyncCached` + inline fallback). Proof: `/` stayed ~10 ms during the cold
+      board compute; api/board shape PASS. Next in this plan: **(1) clickable
+      Gantt**, then the flagged panel.
 
 - **Guard runtime was silently inert (root-caused + fixed).** Web sessions boot
   at `$HOME/.opencode`, so the project-scoped `{plugin,plugins}/*.{ts,js}` glob

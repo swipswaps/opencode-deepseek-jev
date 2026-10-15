@@ -7,6 +7,7 @@
 // read-only handle per call (node:sqlite handles cannot cross threads).
 // Behavior changes here must keep test-dashboard.sh endpoint shapes green.
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export function queryDb(dbPath, sql, ...args) {
@@ -16,6 +17,88 @@ export function queryDb(dbPath, sql, ...args) {
   } finally {
     db.close();
   }
+}
+
+// Board payload (Kanban + Gantt + milestones) for /api/board. Lives here so the
+// ~19s cold compute runs in query-worker (off the dashboard event loop); the
+// dashboard keeps an inline fallback with identical output (healthSync pattern).
+export function apiBoardFresh(dbPath, todoPath, obsDbPath) {
+  let cards = [];
+  try {
+    const rows = queryDb(
+      dbPath,
+      "SELECT t.session_id sid, t.content, t.status, t.priority, t.position, t.time_created tc, t.time_updated tu, " +
+        "s.title, s.model, s.cost, s.tokens_input " +
+        "FROM todo t LEFT JOIN session s ON s.id = t.session_id " +
+        "ORDER BY t.time_created DESC LIMIT 500"
+    );
+    cards = rows.map((r) => {
+      let mid = r.model;
+      try { mid = (JSON.parse(r.model) || {}).id || r.model; } catch { mid = r.model; }
+      const start = Number(r.tc) || 0, end = Number(r.tu) || 0;
+      return {
+        id: r.sid + "#" + r.position, title: String(r.content || "").replace(/\s+/g, " ").slice(0, 160),
+        state: r.status || "unknown", priority: r.priority || "", source: "db",
+        session: r.sid, session_title: r.title || "", model: mid || "",
+        cost: Number(r.cost) || 0, tokens_in: Number(r.tokens_input) || 0,
+        start, end, duration: end > start ? end - start : 0,
+      };
+    });
+  } catch { cards = []; }
+  let md = "";
+  try { md = readFileSync(todoPath, "utf8"); } catch { md = ""; }
+  const re = /^- \[([ x~])\]\s+(.+)$/gm;
+  let mm, mdi = 0;
+  while ((mm = re.exec(md))) {
+    const mark = mm[1];
+    cards.push({
+      id: "md:" + (mdi++), title: mm[2].replace(/\s+/g, " ").slice(0, 160),
+      state: mark === "x" ? "completed" : mark === "~" ? "in_progress" : "pending",
+      priority: "", source: "md", session: "", session_title: "", model: "",
+      cost: 0, tokens_in: 0, start: 0, end: 0, duration: 0,
+    });
+  }
+  let milestones = [];
+  try {
+    const db = new DatabaseSync(obsDbPath, { readOnly: true });
+    milestones = db.prepare("SELECT ts, type, verdict, source FROM ledger ORDER BY id DESC LIMIT 200").all()
+      .map((r) => ({ ts: r.ts, type: r.type, verdict: r.verdict || "", source: r.source || "" }));
+    db.close();
+  } catch { milestones = []; }
+  let sessions = [];
+  try {
+    sessions = queryDb(
+      dbPath,
+      "SELECT id, title, model, agent, cost, tokens_input, time_created, time_updated " +
+        "FROM session ORDER BY time_created DESC LIMIT 150"
+    ).map((r) => {
+      let mid = r.model;
+      try { mid = (JSON.parse(r.model) || {}).id || r.model; } catch { mid = r.model; }
+      const start = Number(r.time_created) || 0, end = Number(r.time_updated) || 0;
+      return {
+        id: r.id, title: r.title || "", model: mid || "", agent: r.agent || "",
+        cost: Number(r.cost) || 0, tokens_in: Number(r.tokens_input) || 0,
+        start, end, duration: end > start ? end - start : 0,
+      };
+    });
+  } catch { sessions = []; }
+  const median = (a) => {
+    if (!a.length) return 0;
+    const s = [...a].sort((x, y) => x - y), m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+  };
+  const spent = sessions.filter((s) => s.duration > 0);
+  return {
+    generated_at: new Date().toISOString(),
+    states: ["pending", "in_progress", "completed"],
+    cards, sessions, milestones,
+    estimates: {
+      n: spent.length,
+      median_duration_ms: median(spent.map((s) => s.duration)),
+      median_cost_usd: median(spent.map((s) => s.cost)),
+      heuristic: true,
+    },
+  };
 }
 
 const STOP = new Set(("the a an and or but if then else of to in on for with is are was were be been this that these those it its as at by from we you i he she they not no do does did can could will would should may might about into over under out up down so very just than what when where which who how all any more most other some only own same your our").split(" "));

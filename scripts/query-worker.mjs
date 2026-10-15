@@ -17,7 +17,7 @@
 import { parentPort } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh } from "./query-lib.mjs";
+import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh, apiBoardFresh } from "./query-lib.mjs";
 
 const FNS = {
   // Mirrors refreshHealthCache's sync prefix (minus live adjudication,
@@ -55,6 +55,10 @@ const FNS = {
   },
   models(dbPath) {
     return modelLedger(dbPath);
+  },
+  // /api/board payload: the cold read (~19s) that used to block the event loop.
+  board(dbPath, todoPath, obsDbPath) {
+    return apiBoardFresh(dbPath, todoPath, obsDbPath);
   },
 };
 

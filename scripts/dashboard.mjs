@@ -109,7 +109,7 @@ function nav(active) {
   }
   h += "<button id=\"theme\" class=\"tab\" title=\"toggle light/dark\" aria-label=\"toggle light or dark theme\" style=\"margin-left:auto\">&#9680; theme</button><span id=\"rev\" class=\"muted\" style=\"font-size:11px\"></span>";
   h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
-  h += "<script>(function(){var t=null;try{t=localStorage.getItem('theme');}catch(e){}var q=(location.search.match(/[?&]theme=(light|dark)/)||[])[1];if(q)t=q;if(t==='light')document.documentElement.classList.add('light');var b=document.getElementById('theme');if(b){b.textContent=(document.documentElement.classList.contains('light')?'\\u25D1 light':'\\u25D0 dark');b.addEventListener('click',function(){var on=document.documentElement.classList.toggle('light');try{localStorage.setItem('theme',on?'light':'dark');}catch(e){}b.textContent=on?'\\u25D1 light':'\\u25D0 dark';});}})();</script>";
+  h += "<script>(function(){try{var de=document.documentElement;if(!de||!de.classList)return;var t=null;try{t=localStorage.getItem('theme');}catch(e){}var q=(location.search.match(/[?&]theme=(light|dark)/)||[])[1];if(q)t=q;if(t==='light')de.classList.add('light');var b=document.getElementById('theme');if(b){b.textContent=(de.classList.contains('light')?'\\u25D1 light':'\\u25D0 dark');b.addEventListener('click',function(){var on=de.classList.toggle('light');try{localStorage.setItem('theme',on?'light':'dark');}catch(e){}b.textContent=on?'\\u25D1 light':'\\u25D0 dark';});}}catch(e){}})();</script>";
   h += "<div id=\"cmdk\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Command palette\"><div id=\"cmdk-box\"><input id=\"cmdk-input\" placeholder=\"jump to a page or tab... (Esc closes)\" aria-label=\"Command palette\" autocomplete=\"off\"><div id=\"cmdk-list\" role=\"listbox\"></div></div></div>";
   h += "<script>(function(){if(typeof document==='undefined')return;";
   h += "var overlay=document.getElementById('cmdk');if(!overlay)return;";
@@ -1014,7 +1014,7 @@ function apiBoardFresh() {
     },
   };
 }
-function apiBoard() { return ttlCached("board", CACHE_TTL_MS, apiBoardFresh); }
+async function apiBoard() { return asyncCached("board", CACHE_TTL_MS, "board", [TODO_PATH, OBS_DB_PATH], () => apiBoardFresh()); }
 
 
 
@@ -2741,7 +2741,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/words") {
     send(res, 200, JSON.stringify(await apiWords(Number(params.limit) || 80)), "application/json");
   } else if (url === "/api/board") {
-    send(res, 200, JSON.stringify(apiBoard()), "application/json");
+    send(res, 200, JSON.stringify(await apiBoard()), "application/json");
   } else if (url === "/api/export") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-sessions.csv" });
     res.end(apiExport());
@@ -2780,7 +2780,9 @@ server.listen(port, host, () => {
     );
     try { apiActivity(); console.log("pre-warm /api/activity ready"); }
     catch (e) { console.log("pre-warm /api/activity failed: " + (e && e.message ? e.message : e)); }
-    try { apiBoard(); console.log("pre-warm /api/board ready"); }
-    catch (e) { console.log("pre-warm /api/board failed: " + (e && e.message ? e.message : e)); }
+    Promise.resolve(apiBoard()).then(
+      () => console.log("pre-warm /api/board ready"),
+      (e) => console.log("pre-warm /api/board failed: " + (e && e.message ? e.message : e))
+    );
   });
 });

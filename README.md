@@ -29,10 +29,10 @@ Docker-based setup. All project code stays inside this repository.
 - Sentinel T1–T7 running; ledger deduped; handoff digests auto-written.
 - Dashboard serves HEAD after `./scripts/web-restart.sh`; all six pages pass
   `ux-smoke.py` (DOM), and `--vision` reads words in light mode.
-- **Known gap (the main UX pain):** **`/api/board` (and `/api/activity`) run
-  synchronously on the single event loop** — a cold board read (~19 s) freezes
-  every other request, which makes the UI feel slow and the UX gate flaky.
-  `/api/health` is already offloaded to `query-worker.mjs`; `/api/board` is not.
+- `/api/board` is now **offloaded to `query-worker.mjs`** (the same pattern as
+  `healthSync`): a cold board read no longer freezes the loop — `/` stays
+  ~10 ms while the board computes off-thread. Inline fallback keeps it at 200
+  if the worker is down. (`/api/activity` is still synchronous — next target.)
 
 ### Next steps (in order)
 1. **Offload `/api/board` off the event loop** (worker, like `healthSync`).
