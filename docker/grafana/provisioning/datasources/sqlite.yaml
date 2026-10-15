@@ -1,0 +1,20 @@
+# Grafana datasource provisioning — the two SQLite stores behind :5099.
+# Plugin: frser-sqlite-datasource (installed via GF_INSTALL_PLUGINS).
+# Verify the `path` key against the installed plugin version on first run.
+apiVersion: 1
+
+datasources:
+  - name: opencode
+    uid: opencode
+    type: frser-sqlite-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      path: /data/opencode.db
+
+  - name: observability
+    uid: observability
+    type: frser-sqlite-datasource
+    access: proxy
+    jsonData:
+      path: /data/observability.db

@@ -39,7 +39,16 @@ Docker-based setup. All project code stays inside this repository.
 2. **Clickable Gantt** — a bar drills to that session's timeline (`detail()`).
 3. **"Flagged" panel** — bottlenecks / high-cost / slowdowns as counts + examples.
 4. Drill-down across every section; then optionally **Grafana + SQLite** as a
-   non-bespoke ops view.
+   non-bespoke ops view (below).
+
+### Optional: a hosted-grade ops view (Grafana + SQLite)
+`docker/docker-compose.observability.yml` runs Grafana with the two SQLite
+stores mounted read-only and a provisioned `frser-sqlite-datasource`. On the
+host: `docker compose -f docker/docker-compose.observability.yml up -d` → open
+`http://127.0.0.1:3000` (anonymous viewer on localhost). Use it for metrics,
+**alerting**, **annotations**, and **saved views** instead of hand-rolling
+panels (RULE #67); `:5099` stays the in-app view. Verify the plugin id/schema on
+first run.
 
 ### Screenshots (light theme)
 

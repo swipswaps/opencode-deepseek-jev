@@ -41,6 +41,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **P5 Option A — Grafana + SQLite ops view (scaffolded).**
+      `docker/docker-compose.observability.yml` runs Grafana (plugin
+      `frser-sqlite-datasource`) with the two SQLite stores mounted **read-only**
+      and `docker/grafana/provisioning/datasources/sqlite.yaml` provisioning
+      them. Host runs it: `docker compose -f docker/docker-compose.observability.yml
+      up -d` → `http://127.0.0.1:3000`. Gives metrics, **alerting**,
+      **annotations**, **saved views** without bespoke panels (RULE #67). README
+      updated. Host-only (no docker in-sandbox) — verify plugin id/schema on
+      first run.
 - [x] **P1 host-path contention + P2 span drill** (from the "implement all"
       triage). **P1:** measuring showed the wire is only ~150–400 ms
       (TLS-dominated) and the host Chrome has just 3 tabs — the 20 s stalls were

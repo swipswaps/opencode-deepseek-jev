@@ -1,0 +1,38 @@
+# Grafana + SQLite — the "less bespoke" ops/telemetry view (RULE #67, README step 4).
+#
+# Option A: instead of hand-rolling every panel in :5099, point Grafana at the
+# SAME SQLite stores and get metrics, alerting, annotations, and saved views
+# for free. Run ON THE HOST (needs docker):
+#
+#   docker compose -f docker/docker-compose.observability.yml up -d
+#   # then open http://127.0.0.1:3000  (anonymous viewer enabled for localhost)
+#
+# The `name:` keeps this a separate compose project (never touches the agent
+# containers). DBs are mounted READ-ONLY.
+#
+# NOTE (verify on first run): the SQLite datasource plugin id is
+# `frser-sqlite-datasource`; confirm it installs and the `path` jsonData key
+# matches the plugin version (schemas change). SQLite is opened via its plugin
+# driver, which reads the file directly.
+name: observability
+
+services:
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: opencode-grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_INSTALL_PLUGINS: frser-sqlite-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../data/opencode/opencode.db:/data/opencode.db:ro
+      - ../data/observability/observability.db:/data/observability.db:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
