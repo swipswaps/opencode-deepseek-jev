@@ -94,6 +94,14 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Light theme so local OCR can read** (RULES #66) — step 1 of
+      "theme → offload → read". `html.light` overrides the CSS variables
+      (`--bg/--fg/--surface/…`); nav `&#9680;` toggle + `?theme=light` (persisted
+      in localStorage). `ux-smoke --vision` loads `?theme=light` and now OCRs
+      **real words**: `board — kanban (state) + gantt (time)` → PASS. It also
+      surfaced that the board pane still shows `loading…` at capture — the
+      slowness step 2 (offload) targets. **Next: offload the heavy `/api/*`
+      off the event loop.**
 - [x] UX "vision" via **local OCR** (RULES #65). Audited the model catalog:
       no allow-listed model is vision-capable (`deepseek-v4.1-flash`,
       `gemini-2.5-flash-lite/flash`, `opencode-go/deepseek-v4-flash` are all

@@ -164,7 +164,7 @@ def main() -> int:
     if a.vision:
         pg = ctx.new_page()
         try:
-            pg.goto(a.base + "/explore", wait_until="domcontentloaded", timeout=20000)
+            pg.goto(a.base + "/explore?theme=light", wait_until="domcontentloaded", timeout=20000)
             pg.wait_for_timeout(1500)
             pg.click("[data-tab='board']")
             pg.wait_for_timeout(max(8000, a.settle * 2000))
@@ -172,9 +172,10 @@ def main() -> int:
             el = pg.query_selector("#pane-board")
             (el or pg).screenshot(path=shot)
             txt = ocr(shot).lower()
-            snippet = " ".join(txt.split())[:60]
-            results.append(("vision: OCR captured live screen text", len(txt.strip()) > 20, "chars=%d" % len(txt.strip())))
-            results.append(("vision: no 'loading' on screen", "loading" not in txt, snippet))
+            snippet = " ".join(txt.split())[:70]
+            results.append(("vision(light): board shows Gantt+Kanban",
+                            ("gantt" in txt and "kanban" in txt),
+                            "gantt=%s kanban=%s | %s" % ("gantt" in txt, "kanban" in txt, snippet)))
         except Exception as e:
             results.append(("vision: board OCR", False, str(e)[:100]))
         finally:

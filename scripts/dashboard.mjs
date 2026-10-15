@@ -83,6 +83,9 @@ const THEME_CSS =
   ":root{--bg:#0d1117;--surface:#161b22;--fg:#e6edf3;--muted:#8b949e;" +
   "--border:#30363d;--accent:#2ea043;--danger:#ff7b72;--radius:8px;" +
   "--pill:999px;--space:8px;--e1:0 1px 3px rgba(0,0,0,.35);--e2:0 4px 10px rgba(0,0,0,.45)}" +
+  "html.light{--bg:#ffffff;--surface:#f6f8fa;--fg:#1f2328;--muted:#57606a;" +
+  "--border:#d0d7de;--accent:#1f883d;--danger:#cf222e;" +
+  "--e1:0 1px 2px rgba(0,0,0,.08);--e2:0 4px 10px rgba(0,0,0,.12)}" +
   "body{background:var(--bg);color:var(--fg)}" +
   ".card,.chart{background:var(--surface);border:1px solid var(--border);" +
   "border-radius:var(--radius);box-shadow:var(--e1)}" +
@@ -104,8 +107,9 @@ function nav(active) {
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\" aria-current=\"page\"" : "") + ">" + it[1] + "</a>";
   }
-  h += "<span id=\"rev\" class=\"muted\" style=\"margin-left:auto;font-size:11px\"></span>";
+  h += "<button id=\"theme\" class=\"tab\" title=\"toggle light/dark\" aria-label=\"toggle light or dark theme\" style=\"margin-left:auto\">&#9680; theme</button><span id=\"rev\" class=\"muted\" style=\"font-size:11px\"></span>";
   h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
+  h += "<script>(function(){var t=null;try{t=localStorage.getItem('theme');}catch(e){}var q=(location.search.match(/[?&]theme=(light|dark)/)||[])[1];if(q)t=q;if(t==='light')document.documentElement.classList.add('light');var b=document.getElementById('theme');if(b){b.textContent=(document.documentElement.classList.contains('light')?'\\u25D1 light':'\\u25D0 dark');b.addEventListener('click',function(){var on=document.documentElement.classList.toggle('light');try{localStorage.setItem('theme',on?'light':'dark');}catch(e){}b.textContent=on?'\\u25D1 light':'\\u25D0 dark';});}})();</script>";
   h += "<div id=\"cmdk\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Command palette\"><div id=\"cmdk-box\"><input id=\"cmdk-input\" placeholder=\"jump to a page or tab... (Esc closes)\" aria-label=\"Command palette\" autocomplete=\"off\"><div id=\"cmdk-list\" role=\"listbox\"></div></div></div>";
   h += "<script>(function(){if(typeof document==='undefined')return;";
   h += "var overlay=document.getElementById('cmdk');if(!overlay)return;";

@@ -308,9 +308,9 @@ ux-smoke.py
     <main>+skip, no leftover visible "loading..." after the settle wait;
     plus /explore empty Session-detail hidden on load and board Gantt+Kanban
     render. Writes data/observability/ux-smoke.json; --json; exit 2 on fail;
-    SKIP (no CDP) is not PASS. --base URL, --settle S. --vision also OCRs the
-    board screenshot with local tesseract (the free "see-it" step; RULES #65)
-    and asserts the OCR pipeline ran + no "loading" on screen.
+    SKIP (no CDP) is not PASS. --base URL, --settle S. --vision loads
+    ?theme=light, OCRs the board with local tesseract (RULES #65/#66), and
+    asserts it reads "gantt"+"kanban" (the dark theme OCRs garbled).
 
 cdp-tab.mjs
     Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
