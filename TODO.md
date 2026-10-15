@@ -94,6 +94,16 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Make it useful, round 2 (user report). (1) The home **Sessions row
+      "expands inline"** collapsed because `refreshCost()` rebuilt the whole
+      table every 5s (my earlier poll change made it worse); fixed by pinning
+      the table open while any row is expanded (`sessOpenCount`). (2) **Gantt
+      discoverability**: renamed the tab to **`board · gantt`** and added a
+      **"Gantt of sessions over time ▸"** link in the sessions footnote.
+      (3) `ux-smoke.py` now asserts the row expands AND persists past the poll.
+      Result **34/34 PASS**. Lesson: the first assertion failed on a wrong
+      selector (`#sessions .exp` matched the header `<th class="exp">↕</th>`) —
+      verify selectors against the DOM, don't assume.
 - [x] **UX smoke gate** (e2e bridge). `scripts/ux-smoke.py` drives the six
       `:5099` pages through the host browser over CDP and asserts: each loads,
       `lang`, one `<h1>`, `<main>`+skip, no leftover visible `loading…` after

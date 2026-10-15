@@ -103,6 +103,30 @@ def main() -> int:
     finally:
         pg.close()
 
+    # home: a sessions row expands INLINE and stays open across the poll that
+    # used to rebuild the whole table every 5s (which silently collapsed it).
+    pg = ctx.new_page()
+    try:
+        pg.goto(a.base + "/", wait_until="domcontentloaded", timeout=20000)
+        pg.wait_for_timeout(4000)
+        clicked = pg.evaluate(
+            "(()=>{const e=document.querySelector('#sessions td[data-exp]');"
+            "if(!e)return false;e.click();return true;})()"
+        )
+        pg.wait_for_timeout(1500)
+        now = pg.evaluate("!!document.querySelector('#sessions tr.sdetail:not([hidden])')")
+        pg.wait_for_timeout(7000)
+        after = pg.evaluate("!!document.querySelector('#sessions tr.sdetail:not([hidden])')")
+        results.append((
+            "home row expands + persists past poll",
+            bool(clicked and now and after),
+            "click=%s now=%s after_poll=%s" % (clicked, now, after),
+        ))
+    except Exception as e:
+        results.append(("home row expands + persists past poll", False, str(e)[:100]))
+    finally:
+        pg.close()
+
     b.close()
     pw.stop()
 

@@ -1162,13 +1162,13 @@ function sessOpenHref(id){
     return 'https://'+location.hostname+':4096/server/'+b64+'/session/'+encodeURIComponent(id);
   }catch(e){return 'https://'+location.hostname+':4096/';}
 }
-var sessDetailLoaded={};
+var sessDetailLoaded={},sessOpenCount=0;
 async function toggleSessRow(id){
   var dr=document.querySelector('tr.sdetail[data-for="'+id+'"]');
   if(!dr){return;}
   var cb=document.querySelector('.exp[data-exp="'+id+'"]');
-  if(!dr.hasAttribute('hidden')){dr.setAttribute('hidden','');if(cb)cb.textContent='▸';return;}
-  dr.removeAttribute('hidden');if(cb)cb.textContent='▾';
+  if(!dr.hasAttribute('hidden')){dr.setAttribute('hidden','');if(cb)cb.textContent='▸';if(sessOpenCount>0)sessOpenCount--;return;}
+  dr.removeAttribute('hidden');if(cb)cb.textContent='▾';sessOpenCount++;
   var cell=dr.querySelector('.sdetail-cell');
   if(sessDetailLoaded[id]){return;}
   cell.innerHTML='<span class="muted">loading…</span>';
@@ -1226,12 +1226,14 @@ async function refreshCost(){
       '<div class="stat"><b>'+fmt(t.i)+'</b><span>tokens in</span></div>'+
       '<div class="stat"><b>'+fmt(t.o)+'</b><span>tokens out</span></div>'+
       '<div class="stat"><b>'+fmt(t.r)+'</b><span>reasoning</span></div>';
+    if(sessOpenCount===0){
     var sh='<table><tr><th class="exp">↕</th><th>title</th><th>model</th><th>directory</th><th class="num">updated</th><th class="num">cost $</th><th class="num">in</th><th class="num">out</th><th class="num">reasoning</th><th class="num">dur</th></tr>';
     for(var i=0;i<c.sessions.length;i++){sh+=sessRow(c.sessions[i]);}
-    sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10. click a row to drill down.</div>';
+    sh+='</table><div class="muted" style="font-size:11px;margin-top:4px">in = tokens sent as context (the cost driver) · out = tokens generated · reasoning = chain-of-thought. Red = cost &ge; $0.10. click a row to drill down · <a href="/explore#board">Gantt of sessions over time ▸</a></div>';
     var sel=document.getElementById('sessions');
     sel.innerHTML=sh;
     if(drillId){var row=sel.querySelector('tr[data-id="'+drillId+'"]');if(row){row.style.background='#1f6feb33';}}
+    }
   }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
 async function refreshActivity(){
@@ -1432,7 +1434,7 @@ ${nav("explore")}
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
   <button class="tab active" data-tab="overview" role="tab" id="tab-overview" aria-selected="true" aria-controls="pane-overview">overview <span class="tbadge" data-badge="overview"></span></button>
-  <button class="tab" data-tab="board" role="tab" id="tab-board" aria-selected="false" aria-controls="pane-board">board <span class="tbadge" data-badge="board"></span></button>
+  <button class="tab" data-tab="board" role="tab" id="tab-board" aria-selected="false" aria-controls="pane-board">board · gantt <span class="tbadge" data-badge="board"></span></button>
   <button class="tab" data-tab="charts" role="tab" id="tab-charts" aria-selected="false" aria-controls="pane-charts">charts <span class="tbadge" data-badge="charts"></span></button>
   <button class="tab" data-tab="signals" role="tab" id="tab-signals" aria-selected="false" aria-controls="pane-signals">signals <span class="tbadge" data-badge="signals"></span></button>
   <button class="tab" data-tab="patterns" role="tab" id="tab-patterns" aria-selected="false" aria-controls="pane-patterns">patterns <span class="tbadge" data-badge="patterns"></span></button>
