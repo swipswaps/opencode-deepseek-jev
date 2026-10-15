@@ -94,6 +94,16 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] UX "vision" via **local OCR** (RULES #65). Audited the model catalog:
+      no allow-listed model is vision-capable (`deepseek-v4.1-flash`,
+      `gemini-2.5-flash-lite/flash`, `opencode-go/deepseek-v4-flash` are all
+      text-only), so paying for a cloud VL model isn't warranted. `ux-smoke.py
+      --vision` screenshots the board and OCRs it with **tesseract**
+      (downscaled + inverted; the dark theme reads garbled, so it asserts the
+      pipeline ran + no `loading`, not words). Result **36/36 PASS**.
+      Midscene.js assessed: the right NL/vision framework, but its vision needs
+      a VL model (out of policy) and its browsers can't launch in the sandbox —
+      host-only. Also: STALE is just a restart gap (fixed live).
 - [x] Make it useful, round 2 (user report). (1) The home **Sessions row
       "expands inline"** collapsed because `refreshCost()` rebuilt the whole
       table every 5s (my earlier poll change made it worse); fixed by pinning

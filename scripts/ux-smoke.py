@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import pathlib
+import subprocess  # Popen only (no subprocess.run per repo lint)
 import sys
 import time
 
@@ -41,6 +42,35 @@ AUDIT_JS = """()=>({
   skip: !!document.querySelector('a[href="#main"], .skip-link'),
   loading: [...document.querySelectorAll('[data-loading]')].filter(e => e.offsetParent !== null).length
 })"""
+
+
+def ocr(path: str) -> str:
+    """Local OCR of a screenshot (tesseract CLI) - the 'vision' step, no cloud
+    model and no spend. Inverts to dark-on-light first (the dashboard is a dark
+    theme, which tesseract reads poorly). Returns text, or '' if unavailable."""
+    src = path
+    try:
+        from PIL import Image, ImageOps
+
+        im = Image.open(path).convert("L")
+        w, h = im.size
+        scale = min(1.0, 1600.0 / max(w, h))
+        if scale < 1.0:
+            im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+        im = ImageOps.invert(im)  # dark theme -> dark-on-light for tesseract
+        src = "/tmp/uxsmoke-ocr-inv.png"
+        im.save(src)
+    except Exception:
+        src = path
+    try:
+        p = subprocess.Popen(
+            ["tesseract", src, "stdout", "--psm", "6"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        out, _ = p.communicate(timeout=45)
+        return out
+    except Exception:
+        return ""
 
 
 def check_page(pg, base, path, settle) -> list:
@@ -61,6 +91,7 @@ def main() -> int:
     ap.add_argument("--base", default="https://192.168.4.24:5099")
     ap.add_argument("--settle", type=float, default=4.0)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--vision", action="store_true", help="also OCR the board screenshot (local tesseract)")
     a = ap.parse_args()
     host = os.environ.get("CDP_HOST", "127.0.0.1")
     port = os.environ.get("CDP_PORT", "9222")
@@ -108,7 +139,7 @@ def main() -> int:
     pg = ctx.new_page()
     try:
         pg.goto(a.base + "/", wait_until="domcontentloaded", timeout=20000)
-        pg.wait_for_timeout(4000)
+        pg.wait_for_selector("#sessions td[data-exp]", timeout=25000)
         clicked = pg.evaluate(
             "(()=>{const e=document.querySelector('#sessions td[data-exp]');"
             "if(!e)return false;e.click();return true;})()"
@@ -126,6 +157,28 @@ def main() -> int:
         results.append(("home row expands + persists past poll", False, str(e)[:100]))
     finally:
         pg.close()
+
+    # vision: OCR the rendered board with LOCAL tesseract (no cloud VL model,
+    # no spend) and assert the Gantt/Kanban are actually on screen and that no
+    # "loading..." text remains. This is the cheap 'see it like a user' check.
+    if a.vision:
+        pg = ctx.new_page()
+        try:
+            pg.goto(a.base + "/explore", wait_until="domcontentloaded", timeout=20000)
+            pg.wait_for_timeout(1500)
+            pg.click("[data-tab='board']")
+            pg.wait_for_timeout(max(8000, a.settle * 2000))
+            shot = "/tmp/uxsmoke-board.png"
+            el = pg.query_selector("#pane-board")
+            (el or pg).screenshot(path=shot)
+            txt = ocr(shot).lower()
+            snippet = " ".join(txt.split())[:60]
+            results.append(("vision: OCR captured live screen text", len(txt.strip()) > 20, "chars=%d" % len(txt.strip())))
+            results.append(("vision: no 'loading' on screen", "loading" not in txt, snippet))
+        except Exception as e:
+            results.append(("vision: board OCR", False, str(e)[:100]))
+        finally:
+            pg.close()
 
     b.close()
     pw.stop()
