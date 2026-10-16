@@ -61,7 +61,7 @@ NEXT = {
 RUNBOOK = {
     "over_budget": "cost",
     "stall": "ux-trace",
-    "slow_fetch": "host-cpu-recovery",
+    "slow_fetch": "slow-fetch",
     "deny_listed": "cost",
     "guidance": None,
     "other": "logs",
@@ -164,7 +164,7 @@ def self_test():
     if slow["extra"].get("uri") != "GET /api/cost":
         print("FAIL: uri=%r" % slow["extra"].get("uri")); fail = 1
     body = render(groups, load_runbooks("scripts/runbooks.json"), ("2026-10-14", "2026-10-16"))
-    if "handoff-brief.sh ses_over1" not in body or "host-cpu-recovery" not in body:
+    if "handoff-brief.sh ses_over1" not in body or "slow-fetch" not in body:
         print("FAIL: render missing next/runbook"); fail = 1
     # an unknown detail must not crash and must land in 'other'
     g2 = summarize([("weird", "something unprecedented happened", "t")])
@@ -183,6 +183,7 @@ def main():
     ap.add_argument("--sink", default=None)
     ap.add_argument("--runbooks", default="scripts/runbooks.json")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--out", default=None)
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
@@ -199,6 +200,13 @@ def main():
     runbooks = load_runbooks(a.runbooks)
     ts = [g["first"] for g in groups if g["first"]] + [g["last"] for g in groups if g["last"]]
     window = (min(ts), max(ts)) if ts else None
+    human = render(groups, runbooks, window)
+    if a.out:
+        d = os.path.dirname(a.out)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        open(a.out, "w").write(human + "\n")
+        print("wrote %s" % a.out)
     if a.json:
         print(json.dumps({"distinct": len(groups),
                           "rows": sum(g["count"] for g in groups),
@@ -207,7 +215,7 @@ def main():
                                      {"next": NEXT.get(g["kind"], NEXT["other"])(g["extra"]),
                                       "runbook": RUNBOOK.get(g["kind"])} for g in groups]}, indent=2))
     else:
-        print(render(groups, runbooks, window))
+        print(human)
     return 0
 
 

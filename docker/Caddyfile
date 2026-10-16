@@ -18,6 +18,17 @@
 		output stdout
 		format json
 	}
+	# Static assets: content-hashed filenames (…-Bu_Dc9RP.js) are immutable, so
+	# the browser may cache them forever. The access log showed re-fetch storms
+	# (/favicon-v3.ico x46, /assets/* x23) and every miss queues behind the
+	# single-threaded web server, inflating its measured `duration` into the
+	# slow-fetch trip (sentinel T4). Caching at the edge removes the repeats.
+	# (Validate before reload: `docker compose ... exec caddy caddy validate
+	#  --config /etc/caddy/Caddyfile`; a header directive cannot change routing.)
+	@immutable path_regexp hashed `-[A-Za-z0-9_-]{8,}\.(js|css|woff2?|ttf|svg|png|webp)$`
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@icons path /favicon* /apple-touch-icon* /assets/Inter.ttf /assets/sprite-*.svg
+	header @icons Cache-Control "public, max-age=86400"
 	reverse_proxy opencode-web:4096
 }
 
@@ -27,5 +38,8 @@
 		output stdout
 		format json
 	}
+	# No caching here: :5099 serves the live observability dashboard (inline
+	# HTML + dynamic /api/* JSON); stale responses would be wrong. Only the
+	# opencode-web SPA on :4096 has cacheable static assets.
 	reverse_proxy opencode-web:5099
 }

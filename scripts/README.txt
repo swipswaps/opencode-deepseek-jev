@@ -546,7 +546,9 @@ sentinel.sh
     Periodic threshold monitor (user timer, every 5 min): trips only
     on actionable news — latest session over budget (T1) or on a
     deny-listed model (T2), new gateway-failure lines since cursor
-    (T3), slow caddy fetch (T4), a non-latest deny-listed (T5) or
+    (T3), slow caddy fetch (T4; SSE/long-lived streams excluded — their
+    duration is connection lifetime, not latency), a non-latest
+    deny-listed (T5) or
     over-budget (T6) session active since the last sweep, and a
     recent tool stuck in `running` (T7). History only reported. Logs
     ADVISORY rows for watchdog polling; each trip carries a STABLE

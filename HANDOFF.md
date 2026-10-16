@@ -10,6 +10,9 @@
 > #70 selectable-text/a11y + #71 alert-isn't-actioned-without-severity+runbook+next-command)
 > — **LIVE on the host** (the timer pushed a real 20-flag trip into the sink) and
 > `triage-alerts.py` turns each flag into severity + the exact next command + runbook;
+> **slow-fetch root cause** (#72: a measured `duration` is time-in-system, not handler
+> cost — both servers are single-threaded, so one blocker queues everything; T4 now
+> excludes SSE, `docker/Caddyfile` edge-caches immutable statics, runbook `slow-fetch`);
 > **semantic beforeTool guard** (`guard-classify.py`, SubQ, memoized) in
 > `blacklist-guard.js`; **durable-pi** mapping (#69) + `search-history.sh` +
 > `harden-services.sh`; ops: `web-restart.sh` **down-race fixed**,

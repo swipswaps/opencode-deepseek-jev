@@ -134,11 +134,12 @@ PYEOF
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" bash "${BASH_SOURCE[0]}" --json --no-log 2>&1)
     python3 -c 'import json,sys; d=json.load(sys.stdin); assert set(("ts","rev","tripped","trips","counts")) <= set(d), "keys"; assert d["tripped"] is True, "tripped"' <<< "$o" \
         || { printf 'FAIL json contract\n'; fail=1; }
-    printf '%s\n' '{"logger":"http.log.access.log0","ts":1791840000,"duration":44.2,"request":{"method":"GET","uri":"/session/s1/message"},"status":200}' '{"logger":"http.log.access.log0","ts":1791840001,"duration":0.2,"request":{"method":"GET","uri":"/api/health"},"status":200}' > "$work/acc.log"
+    printf '%s\n' '{"logger":"http.log.access.log0","ts":1791840000,"duration":44.2,"request":{"method":"GET","uri":"/session/s1/message"},"status":200}' '{"logger":"http.log.access.log0","ts":1791840001,"duration":0.2,"request":{"method":"GET","uri":"/api/health"},"status":200}' '{"logger":"http.log.access.log0","ts":1791840002,"duration":1422.5,"request":{"method":"GET","uri":"/global/event"},"status":200}' > "$work/acc.log"
     printf '%s' '0' > "$work/state/sentinel-access.cursor"
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_ACCESSLOG="$work/acc.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
     printf '%s' "$o" | grep -q 'TRIP T4 slow-fetch: 1 fetch' || { printf 'FAIL T4 trips on slow fetch\n'; fail=1; }
     printf '%s' "$o" | grep -q 'slowest 44.2s' || { printf 'FAIL T4 slowest reported\n'; fail=1; }
+    printf '%s' "$o" | grep -q '1422' && { printf 'FAIL T4 counted an SSE stream (cry-wolf)\n'; fail=1; }
     # T5/T6: s_old is deny-listed AND over budget; s_over is over budget but
     # ALLOW-listed. Both are NOT latest. Stamp them active 60s ago with a
     # cursor 600s old (relative offsets — immune to clock). First sweep trips
@@ -350,9 +351,14 @@ for line in fh:
         continue
     if not str(e.get("logger", "")).startswith("http.log.access"):
         continue
+    r = e.get("request", {}) or {}
+    # Streaming/long-lived responses (SSE): `duration` is the connection
+    # lifetime, NOT server latency. Counting them cry-wolfs the watchdog
+    # (a 1422s /global/event is a healthy open stream, not a stall).
+    if str(r.get("uri", "")).startswith("/global/event"):
+        continue
     dur = float(e.get("duration", 0) or 0)
     if dur >= thresh:
-        r = e.get("request", {}) or {}
         n += 1
         if dur > mx:
             mx, uri = dur, str(r.get("method", "?")) + " " + str(r.get("uri", "?"))[:70]

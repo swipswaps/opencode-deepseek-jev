@@ -8,6 +8,22 @@ Last updated: 2026-10-16
 
 ## Done (most recent first)
 
+- [x] **Triage-all + slow-fetch root cause (durable).** Ran the full sink triage in
+      the sandbox (the repo `data/` is bind-mounted): **21 distinct alerts / 200 pushed
+      rows**, dominated by `caddy access log` slow fetches. The URI histogram proved
+      the model: `/provider` **x188** (worst 137s, per-page-load), `/api/balance` x13
+      (307s), `/api/cost` 365s, `/api/schema` 112s, `/assets/*` x23, `/favicon` x46.
+      **RULES #72:** a measured `duration` is *time-in-system*, not handler cost — both
+      servers are single-threaded Node, so one blocking handler inflates every queued
+      request (M/M/1); `/api/balance` already carries a 10s timeout + 60s cache, so the
+      multi-minute durations are **queue wait**. Fixes: (1) sentinel **T4 now excludes
+      SSE** (`/global/event` 1422s = connection lifetime — a cry-wolf), with a self-test
+      that fails if a stream is counted; (2) `docker/Caddyfile` gains **immutable
+      Cache-Control** for content-hashed `/assets/*` (+ a 1-day TTL for `/favicon*`) to
+      kill the re-fetch storms; (3) new runbook **`slow-fetch`** documenting the
+      queueing model + drain order. `triage-alerts.py --out` writes a **durable report**
+      (`data/observability/triage-<date>.md`).
+
 - [x] **P4b self-hosted alerting + triage (closes detect→push→act).** No
       third-party webhook needed: `scripts/notify-sink.mjs` (zero-dep node) takes
       `POST /hook` → `data/observability/notify-sink.jsonl`; `notify-selfhost.sh`

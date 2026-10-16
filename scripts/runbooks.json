@@ -297,5 +297,19 @@
       "bash scripts/browser-python.sh scripts/ux-smoke.py --vision   # host venv"
     ],
     "note": "Grafana dashboard 'opencode \u2014 cost, sessions, flags' is provisioned (docker/grafana/provisioning/dashboards/opencode.json; datasources in ../datasources/sqlite.yaml). Sentinel timer: sentinel-install.sh writes the user unit, which loads .env.local (EnvironmentFile), so NOTIFY_WEBHOOK makes sentinel.sh call notify.sh on a trip. Caddy TLS: host-path-probe shows the hop is TLS-dominated \u2014 HTTP/2 + keep-alive are Caddy defaults; the usual fix is host CPU headroom (the lockup was CPU oversubscription). Media: panels-tour.py captures; convert webm->mp4 with ffmpeg if present."
+  },
+  {
+    "id": "slow-fetch",
+    "title": "Slow fetches: queue-wait on the single-threaded servers",
+    "purpose": "Turn sentinel T4 'N slow fetches' into a fix. The `duration` in the caddy access log is time-in-system (queue wait + service), not handler cost: both opencode-web (:4096) and the dashboard (:5099) are single-threaded Node, so when one handler blocks the loop every queued request inflates (M/M/1: wait ~ rho/(1-rho)). Diagnose in order, then fix at the source.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "python3 scripts/triage-alerts.py   # group the pushed slow fetches by URI",
+      "bash scripts/host-path-probe.sh   # host -> caddy -> container: TLS vs queue",
+      "bash scripts/latency-timeline.sh --session <sid>   # agentic loop vs slow fetches",
+      "docker compose --project-directory docker restart caddy   # after editing docker/Caddyfile"
+    ],
+    "note": "URI histogram from the real ledger (2026-10-14..16): /provider x188 (worst 137s, per-page-load), /api/balance x13 (307s), /api/cost 365s, /api/schema 112s, /assets/* x23, /favicon x46. Two drains, both durable: (1) the servers are single-threaded -> keep heavy reads OFF the loop (the dashboard already offloads board/semantic/signals/patterns/words to query-worker.mjs with TTLs; do not add synchronous scans) and keep poll load low (intervals 8/15/30/60s + SSE); (2) edge-cache the immutable statics so re-fetch storms stop queueing -- docker/Caddyfile now sets Cache-Control immutable for content-hashed /assets/* and a 1-day TTL for /favicon*. Note: /global/event in the log is an SSE stream (duration = connection lifetime); sentinel T4 now EXCLUDES it so it cannot cry-wolf the watchdog. The genuinely OURS endpoints have TTLs, and the one external call (/api/balance) has a 10s timeout. Validate a Caddyfile edit with: docker compose --project-directory docker exec caddy caddy validate --config /etc/caddy/Caddyfile"
   }
 ]
