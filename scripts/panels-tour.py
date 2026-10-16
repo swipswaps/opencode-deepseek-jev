@@ -53,7 +53,7 @@ def self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", default="http://127.0.0.1:5099")
+    ap.add_argument("--base", default="https://127.0.0.1:5099")   # host :5099 is HTTPS (caddy)
     ap.add_argument("--out", default="docs/ux")
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--self-test", action="store_true")
@@ -76,6 +76,7 @@ def main() -> int:
             print("FAIL: cannot launch chromium (%s). Run: playwright install chromium" % str(e)[:80])
             return 2
         ctx = b.new_context(viewport={"width": 1280, "height": 860},
+                            ignore_https_errors=True,   # self-signed caddy cert
                             record_video_dir=None if a.no_video else str(tmp_vid),
                             record_video_size={"width": 1280, "height": 860} if not a.no_video else None)
         pg = ctx.new_page()
@@ -97,10 +98,12 @@ def main() -> int:
         if vids:
             dst = out / "tour.webm"
             try:
-                vids[0].replace(dst)
-                print("video", dst)
+                import shutil
+                shutil.copy2(str(vids[0]), str(dst))   # cross-device safe (no rename)
+                vids[0].unlink()
+                print("video", dst, dst.stat().st_size // 1024, "KiB")
             except OSError as e:
-                print("WARN video move:", str(e)[:80])
+                print("WARN video copy:", str(e)[:80])
     return 0
 
 
