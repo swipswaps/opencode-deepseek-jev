@@ -7,6 +7,10 @@ After=network-online.target
 [Service]
 Type=oneshot
 # REPO is baked in by scripts/sentinel-install.sh (no sudo needed).
+# Load NOTIFY_WEBHOOK (alerting) + SUBQ_API_KEY etc. from .env.local; the '-'
+# makes it optional. The sentinel calls notify.sh on a trip when NOTIFY_WEBHOOK
+# is set (RULES #69 / durable-pi alerting).
+EnvironmentFile=-__REPO__/.env.local
 ExecStart=__REPO__/scripts/sentinel.sh --once
 Nice=10
 IOSchedulingClass=best-effort

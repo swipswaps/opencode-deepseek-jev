@@ -63,16 +63,18 @@ probe_rev() {
     printf '%s' "$out"
 }
 
-dashboard_pid() {
-    local p cl
+dashboard_pids() {
+    # ALL dashboard.mjs processes on :5099, space-separated (may be several after
+    # a raced restart — killing one left another holding the port).
+    local p cl out=""
     for p in /proc/[0-9]*; do
         [ -r "$p/cmdline" ] || continue
         cl=$(tr '\0' ' ' < "$p/cmdline" 2>&1)
         case "$cl" in
-            *dashboard.mjs*5099*) basename "$p"; return 0 ;;
+            *dashboard.mjs*5099*) out="$out $(basename "$p")" ;;
         esac
     done
-    return 1
+    printf '%s' "${out# }"
 }
 
 main() {
@@ -90,12 +92,17 @@ main() {
         }
     else
         printf 'mode: dockerless (local dashboard.mjs process)\n'
-        local pid args
-        pid=$(dashboard_pid) || { printf 'FAIL: no dashboard.mjs process and docker absent\n'; return 1; }
-        args=$(tr '\0' ' ' < "/proc/$pid/cmdline")   # read BEFORE killing
-        printf 'restarting dashboard pid %s\n' "$pid"
-        kill -TERM "$pid"
-        sleep 2
+        local pids first args pid k
+        pids=$(dashboard_pids)
+        [ -n "$pids" ] || { printf 'FAIL: no dashboard.mjs process and docker absent\n'; return 1; }
+        first=$(printf '%s' "$pids" | awk '{print $1}')
+        args=$(tr '\0' ' ' < "/proc/$first/cmdline")   # read BEFORE killing
+        printf 'stopping dashboard pid(s): %s\n' "$pids"
+        for pid in $pids; do kill -TERM "$pid"; done
+        k=0
+        while [ "$k" -lt 10 ] && [ -n "$(dashboard_pids)" ]; do sleep 1; k=$((k + 1)); done
+        [ -z "$(dashboard_pids)" ] || printf 'WARN: dashboard pid(s) remain: %s\n' "$(dashboard_pids)"
+        printf 'relaunching one dashboard\n'
         # shellcheck disable=SC2086
         setsid $args > /tmp/dashboard.log 2>&1 < /dev/null &
     fi
