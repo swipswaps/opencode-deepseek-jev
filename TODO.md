@@ -41,6 +41,13 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **(2) Dashboard snapshot→deltas SSE** (durable-pi pattern).
+      `/api/stream` sends `event: snapshot` on connect then `event: delta` every
+      5 s from **one server-side broadcast loop** to all clients; the client
+      renders from the event payload (`renderCost`/`renderActivity`/`renderTodos`)
+      and **falls back to polling** if `EventSource` is absent. Replaces
+      per-client polling (the single-thread contention P1). Proven:
+      `event: snapshot` returns the payload; test-dashboard-ui home+explore PASS.
 - [x] **pi-durable / durable-pi mapping + 4 durable-pattern tools.** *Recorded
       first:* `docs/pi-durable-mapping.md` + **RULE #69** (layered decisions;
       handoff = curate + reset-note + **search-history**; snapshot→deltas;

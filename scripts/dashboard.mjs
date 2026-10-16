@@ -1217,8 +1217,7 @@ function sessRow(s){
     +'<tr class="sdetail" data-for="'+id+'" hidden><td></td><td colspan="9" class="sdetail-cell"></td></tr>';
 }
 var bal=null;
-async function refreshCost(){
-  var c=await j('/api/cost');
+function renderCost(c){
   if(c){var t=c.totals;
     document.getElementById('session').innerHTML=
       'session: '+esc(c.latest||'(none)')+' — '+
@@ -1241,18 +1240,19 @@ async function refreshCost(){
     }
   }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
-async function refreshActivity(){
-  var a=await j('/api/activity');
+async function refreshCost(){ renderCost(await j('/api/cost')); }
+function renderActivity(a){
   if(a){var h='';for(var i=0;i<a.length;i++){h+=item(a[i]);}
     document.getElementById('activity').innerHTML=h||'<div class="item">(no activity)</div>';}
   else{failIfPristine('activity','(activity unavailable)');}
 }
-async function refreshTodos(){
-  var td=await j('/api/todos');
+async function refreshActivity(){ renderActivity(await j('/api/activity')); }
+function renderTodos(td){
   if(td){var h2='';for(var k=0;k<td.length;k++){h2+='<div class="item"><span class="tag">'+esc(td[k].status)+'</span>'+esc(td[k].content)+'</div>';}
     document.getElementById('todos').innerHTML=h2||'<div class="item">(no todos)</div>';}
   else{failIfPristine('todos','(todos unavailable)');}
 }
+async function refreshTodos(){ renderTodos(await j('/api/todos')); }
 async function refreshFlags(){
   // Rollup/flag strip: the four primitives the LLM-observability tools share
   // (trace drill, cost/latency rollups, annotations, sessions), rendered as
@@ -1396,9 +1396,18 @@ function poll(fn,ms){
   setInterval(tick,ms);
   document.addEventListener('visibilitychange',function(){tick();});
 }
-poll(refreshCost,8000);
-poll(refreshActivity,8000);
-poll(refreshTodos,15000);
+if(typeof EventSource!=='undefined'){
+  // snapshot -> deltas (durable-pi): one server-side loop feeds every client;
+  // reconnect gets a fresh snapshot. Falls back to polling if SSE is absent.
+  var _es=new EventSource('/api/stream');
+  var _onflow=function(ev){try{var p=JSON.parse(ev.data);}catch(e){return;}renderCost(p.cost);renderActivity(p.activity);renderTodos(p.todos);};
+  _es.addEventListener('snapshot',_onflow);
+  _es.addEventListener('delta',_onflow);
+}else{
+  poll(refreshCost,8000);
+  poll(refreshActivity,8000);
+  poll(refreshTodos,15000);
+}
 poll(refreshFlags,30000);
 poll(refreshBalance,60000);
 poll(refreshConfig,60000);
@@ -2697,12 +2706,23 @@ function send(res, code, body, type) {
   res.end(body);
 }
 
+const SSE_CLIENTS = new Set();
+function ssePayload() { return { cost: apiCost(), activity: apiActivity(), todos: apiTodos() }; }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
   if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
     res.end();
+  } else if (url === "/api/stream") {
+    // snapshot -> deltas (durable-pi pattern): one server-side broadcast loop
+    // feeds every client, so clients never poll; a reconnect gets a fresh
+    // snapshot. Replaces per-client polling (the single-thread contention).
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+    const client = { write: (ev, data) => { try { res.write("event: " + ev + "\ndata: " + JSON.stringify(data) + "\n\n"); } catch { /* client gone */ } } };
+    SSE_CLIENTS.add(client);
+    client.write("snapshot", ssePayload());
+    req.on("close", () => SSE_CLIENTS.delete(client));
   } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
   } else if (url === "/explore") {
@@ -2844,6 +2864,12 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
+setInterval(() => {
+  if (!SSE_CLIENTS.size) return;
+  let payload;
+  try { payload = ssePayload(); } catch { return; }
+  for (const c of SSE_CLIENTS) c.write("delta", payload);
+}, 5000);
 server.listen(port, host, () => {
   console.log("opencode observability: http://" + host + ":" + port + "  (db: " + dbPath + ")");
   // Pre-warm the slowest cache off the critical path: a cold /api/health
