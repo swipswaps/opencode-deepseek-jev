@@ -69,13 +69,21 @@ Regenerate every panel + a short `.webm` tour with the scripted capture:
 the host). It writes `docs/ux/status-{home,board,trends}.png` and
 `docs/ux/tour.webm`, shrinking each shot under the 150 KiB media budget.
 
-Dashboard home — sessions with tz-labelled times, cost, live activity:
+Dashboard home — **Flags** (bottlenecks · cost · slowdowns · stalls), sessions
+with tz-labelled times, cost, live activity:
 
 ![Dashboard home](docs/ux/status-home.png)
 
-`/explore ▸ board · gantt` — Kanban + the **clickable Gantt** (moved to the 2nd tab):
+`/explore ▸ board · gantt` — Kanban (pending / in-progress / completed) + the
+**clickable Gantt** + the **projected-schedule estimate**:
 
-![Explore board Gantt](docs/ux/status-board-gantt.png)
+![Explore board](docs/ux/status-board.png)
+
+`/explore ▸ charts` — **trends**: sessions & cost per day:
+
+![Trends](docs/ux/status-trends.png)
+
+A short click-through tour (screen recording): [`docs/ux/tour.webm`](docs/ux/tour.webm).
 
 Clicking a Gantt bar drills into that session's **timeline in-page** (`detail()`):
 

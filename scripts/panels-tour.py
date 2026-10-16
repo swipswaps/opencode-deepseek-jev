@@ -39,7 +39,7 @@ def shrink(path: str, repo: pathlib.Path) -> None:
     if not script.exists():
         return
     try:
-        p = subprocess.Popen(["node", str(script), path, "0.8", "153600"], cwd=str(repo))
+        p = subprocess.Popen(["node", str(script), path, "0.6", "153600"], cwd=str(repo))
         p.communicate(timeout=60)
     except Exception:
         pass
