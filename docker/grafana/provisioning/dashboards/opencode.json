@@ -1,0 +1,57 @@
+{
+  "uid": "opencode-starter",
+  "title": "opencode — cost, sessions, flags",
+  "tags": ["opencode", "sqlite"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "cost per session over time",
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "opencode" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "format": "time_series",
+          "queryText": "SELECT time_created/1000 AS time, cost FROM session ORDER BY time_created"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "top sessions by cost",
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "opencode" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "format": "table",
+          "queryText": "SELECT title, cost, tokens_input FROM session ORDER BY cost DESC LIMIT 20"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "recent ADVISORY flags (sentinel / notify)",
+      "datasource": { "type": "frser-sqlite-datasource", "uid": "observability" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "rawQuery": true,
+          "format": "table",
+          "queryText": "SELECT ts, type, verdict, resource, detail FROM ledger WHERE type='ADVISORY' ORDER BY id DESC LIMIT 50"
+        }
+      ]
+    }
+  ]
+}

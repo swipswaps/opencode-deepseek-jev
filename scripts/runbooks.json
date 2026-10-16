@@ -280,5 +280,22 @@
       "just tui attach local"
     ],
     "note": "Parallel, not a migration: opencode sessions are not importable into pi-durable. Needs Node 24, just, zsh, an OpenRouter key. Their caveats: durable = checkpointed not exactly-once; a token is a shell; LAN http is cleartext; the hub holds every token; experimental (pins 1.0.3)."
+  },
+  {
+    "id": "ops-host",
+    "title": "Ops: Grafana, sentinel timer + alerting, caddy TLS, media",
+    "purpose": "Host-side ops for the observability stack: bring :5099 to HEAD, install the sentinel timer + NOTIFY_WEBHOOK (alerting fires), stand up Grafana+SQLite, cut the caddy TLS cost, and convert the tour to mp4.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "bash scripts/web-restart.sh   # clear STALE (served==head)",
+      "docker compose -f docker/docker-compose.observability.yml up -d   # Grafana on :3000",
+      "python3 -c 'print(\"add to .env.local: NOTIFY_WEBHOOK=<your-webhook-url>\")'",
+      "bash scripts/sentinel-install.sh   # user timer; unit loads .env.local",
+      "bash scripts/host-path-probe.sh   # confirms the hop is TLS-dominated",
+      "ffmpeg -i docs/ux/tour.webm docs/ux/tour.mp4   # if ffmpeg is installed",
+      "bash scripts/browser-python.sh scripts/ux-smoke.py --vision   # host venv"
+    ],
+    "note": "Grafana dashboard 'opencode \u2014 cost, sessions, flags' is provisioned (docker/grafana/provisioning/dashboards/opencode.json; datasources in ../datasources/sqlite.yaml). Sentinel timer: sentinel-install.sh writes the user unit, which loads .env.local (EnvironmentFile), so NOTIFY_WEBHOOK makes sentinel.sh call notify.sh on a trip. Caddy TLS: host-path-probe shows the hop is TLS-dominated \u2014 HTTP/2 + keep-alive are Caddy defaults; the usual fix is host CPU headroom (the lockup was CPU oversubscription). Media: panels-tour.py captures; convert webm->mp4 with ffmpeg if present."
   }
 ]
