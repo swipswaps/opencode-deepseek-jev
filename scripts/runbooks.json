@@ -223,7 +223,7 @@
       "./scripts/models.sh --write",
       "./scripts/preflight.sh"
     ],
-    "note": "Manual: paste the key. Gemini goes through @ai-sdk/openai-compatible at https://generativelanguage.googleapis.com/v1beta/openai/. Then pick it with /models (TUI) or `opencode run -m gemini/gemini-2.5-flash`. gemini-2.5-flash and gemini-2.5-flash-lite are allow-listed in models.policy.json (Flash input is ~$0.30/1M, above the $0.20 ceiling — allowed explicitly)."
+    "note": "Manual: paste the key. Gemini goes through @ai-sdk/openai-compatible at https://generativelanguage.googleapis.com/v1beta/openai/. Then pick it with /models (TUI) or `opencode run -m gemini/gemini-2.5-flash`. gemini-2.5-flash and gemini-2.5-flash-lite are allow-listed in models.policy.json (Flash input is ~$0.30/1M, above the $0.20 ceiling \u2014 allowed explicitly)."
   },
   {
     "id": "cdp-probe",
@@ -237,5 +237,29 @@
       "node scripts/cdp-tab.mjs probe"
     ],
     "note": "Needs a browser with remote debugging (browser-use Chrome exposes it; else set CDP_PORT). OPENCODE_SERVER_PASSWORD enables the :4096 count and is never printed. Without a browser the probe prints SKIP, which is not PASS."
+  },
+  {
+    "id": "host-cpu-recovery",
+    "title": "Host recovery: docker daemon + crash-loop harness + CPU oversubscription + stale proxies",
+    "purpose": "The ws24 lockup (2026-10-16): CPU oversubscription from Chrome + the crash-looping deepseek-harness service + the host opencode TUI + the :4096 web server at once. Also covers the docker daemon being disabled and stale docker-proxy holding :4096/:5099.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "sudo systemctl enable --now docker",
+      "docker info && printf 'daemon OK\\n'",
+      "systemctl --user status deepseek-harness.service --no-pager | head -6",
+      "systemctl --user stop deepseek-harness.service",
+      "systemctl --user disable deepseek-harness.service",
+      "systemctl --user set-property deepseek-harness.service CPUQuota=25%",
+      "cat /proc/loadavg; cat /proc/pressure/cpu",
+      "ps -eo pid,pcpu,pmem,comm --sort=-pcpu | head -12",
+      "sudo ss -ltnp | grep -E ':(4096|5099)' || printf 'ports free\\n'",
+      "sudo systemctl restart docker",
+      "./scripts/web.sh",
+      "curl -k -s -o /dev/null -w '%{http_code}\\n' https://127.0.0.1:4096/",
+      "./scripts/web-logs.sh",
+      "./scripts/web-restart.sh"
+    ],
+    "note": "Manual, host only (needs sudo + docker + systemctl --user). ORDER: (1) enable --now docker (it was disabled, so it never survived a reboot); (2) stop/disable the crash-looping deepseek-harness.service, or bound it with CPUQuota=25%; (3) reduce co-tenants - do NOT run host TUI + :4096 web + dsh + Chrome-heavy at once on 8 cores; (4) only if `ss` shows a stale docker-proxy still holding :4096/:5099 after a stop, `sudo systemctl restart docker`. A 502 from web.sh means caddy is up but opencode-web is not answering on :4096 yet - health pre-warm takes ~25s, so retry, and read ./scripts/web-logs.sh if it persists (contention can delay boot)."
   }
 ]

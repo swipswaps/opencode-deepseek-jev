@@ -41,6 +41,16 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Scripted items 1–3 + 6 as a host runbook** → `host-cpu-recovery` in
+      `scripts/runbooks.json` (served at `/runbooks`): **(1)** `sudo systemctl
+      enable --now docker`; **(2)** stop/disable the crash-looping
+      `deepseek-harness.service` (or `CPUQuota=25%`); **(3)** reduce co-tenants
+      (no TUI + `:4096` web + dsh + Chrome-heavy at once); **(6)** the stale
+      `docker-proxy` `ss -ltnp` / `systemctl restart docker` sequence — with the
+      exact `systemctl`/`ss`/`curl` commands. **New symptom covered:** after the
+      user ran the TUI's fix, `web.sh` reported **HTTP 502** (caddy up,
+      `opencode-web` still booting under contention) — the runbook says retry
+      (~25 s pre-warm) + `web-logs.sh`. 21 runbooks total.
 - [x] Fixed **`pressure-watch.sh`** (the side-finding in today's TUI lockup
       audit): the `printf '--- X ---'` headers were parsed by bash as options
       (`printf: --: invalid option`); all 7 are now `printf '%s\n' '--- X ---'`.
