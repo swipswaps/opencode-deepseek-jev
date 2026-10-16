@@ -271,6 +271,13 @@ function query(sql, ...args) {
 // part-table sort) recompute on every tick and saturate the
 // single-threaded loop. 10 s staleness is invisible on glanceable panels.
 const POLL_TTL_MS = Number(process.env.POLL_TTL_MS || 10000);
+function apiTrends() {
+  // Time-series the dashboard lacked (cost/sessions per day) from the session
+  // table — the biggest remaining gap vs the LLM-observability tools.
+  return ttlCached("trends", CACHE_TTL_MS, () => query(
+    "SELECT date(time_created/1000,'unixepoch') day, COUNT(*) n, COALESCE(SUM(cost),0) c, " +
+    "COALESCE(SUM(tokens_input),0) i FROM session GROUP BY day ORDER BY day"));
+}
 function apiCost() {
   return ttlCached("cost", POLL_TTL_MS, apiCostFresh);
 }
@@ -1509,6 +1516,8 @@ ${nav("explore")}
 <h2>Where the money goes — sessions sized by cost, grouped by model</h2>
 <div class="chart" id="treemap"><span class="muted" data-loading>loading...</span></div>
 <h2>Cumulative spend vs budget — drag to filter the views below</h2>
+<h3>Trends — sessions &amp; cost per day</h3>
+<div class="chart" id="trends" role="img" aria-label="Sessions and cost per day"><span class="muted" data-loading>loading...</span></div>
 <div class="chart" id="burn"><span class="muted" data-loading>loading...</span></div>
 <h2>Latency x cost — radius = tokens, colour = model (outliers are bottlenecks)</h2>
 <div class="chart" id="scatter"><span class="muted" data-loading>loading...</span></div>
@@ -1979,7 +1988,7 @@ async function load(){
   MODEL_COLOR=d3.scaleOrdinal(['#79c0ff','#d2a8ff','#7ee787','#ffa657','#ff7b72']);
   COST=d3.scaleLinear().domain([0,d3.max(DATA,function(d){return +d.cost||0;})||1]).range(['#1b3a5c','#79c0ff']);
   renderTable();renderDupes();renderOps();renderSignals();renderGuard();renderHealth();renderPatterns();renderPivot();renderCode();renderOcr();renderIntegrations();renderAb();renderSchema();
-  renderTreemap();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
+  renderTreemap();renderTrends();renderBurn();renderScatter();renderSankey();renderGantt();renderTimeline();renderCloud();
 }
 
 async function renderTreemap(){
@@ -2023,6 +2032,22 @@ async function renderTreemap(){
     .text(function(d){return d.data.model+' · $'+(+d.value).toFixed(2);});
 }
 
+async function renderTrends(){
+  var host=document.getElementById('trends');if(!host)return;
+  if(typeof Plot==='undefined'||typeof Plot.plot!=='function'){host.textContent='Plot failed to load (/vendor/plot.umd.min.js)';return;}
+  var d=await j('/api/trends');
+  if(!d||!d.length){host.textContent='(no history)';return;}
+  host.innerHTML='';
+  host.appendChild(Plot.plot({
+    width:1000,height:220,marginLeft:56,marginBottom:34,
+    x:{type:'band'},
+    y:{grid:true,tickFormat:function(v){return '$'+v;}},
+    marks:[
+      Plot.barY(d,{x:'day',y:'c',fill:'#1f6feb',title:function(r){return r.day+': '+r.n+' sessions \u00b7 $'+(+r.c).toFixed(4)+' \u00b7 '+r.i+' in';}}),
+      Plot.ruleY([0])
+    ]
+  }));
+}
 async function renderBurn(){
   // Hybrid Plot spec (G3 migration 4/6, completes chart rendering):
   // Plot renders the step-after area/line + budget rule (same data,
@@ -2808,6 +2833,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(await apiOps()), "application/json");
   } else if (url === "/api/patterns") {
     send(res, 200, JSON.stringify(await apiPatterns(Number(params.limit) || 30)), "application/json");
+  } else if (url === "/api/trends") {
+    send(res, 200, JSON.stringify(apiTrends()), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {
