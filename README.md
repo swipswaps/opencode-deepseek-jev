@@ -2,7 +2,7 @@
 
 Docker-based setup. All project code stays inside this repository.
 
-## Status — where we are, how we got here, next steps (2026-10-15)
+## Status — where we are, how we got here, next steps (2026-10-16)
 
 ### How we got here
 - Started as a dockerized OpenCode + DeepSeek + Jev stack with a read-only
@@ -26,20 +26,31 @@ Docker-based setup. All project code stays inside this repository.
   drill-down-native; Grafana / Vega-Lite / TanStack; **not Flutter**).
 
 ### Where we are
-- Sentinel T1–T7 running; ledger deduped; handoff digests auto-written.
-- Dashboard serves HEAD after `./scripts/web-restart.sh`; all six pages pass
-  `ux-smoke.py` (DOM), and `--vision` reads words in light mode.
-- `/api/board` is now **offloaded to `query-worker.mjs`** (the same pattern as
-  `healthSync`): a cold board read no longer freezes the loop — `/` stays
-  ~10 ms while the board computes off-thread. Inline fallback keeps it at 200
-  if the worker is down. (`/api/activity` is still synchronous — next target.)
+- Sentinel **T1–T7**; ledger deduped; DB-only **digests** auto-written on a trip;
+  alerting now **fires** (`sentinel.sh` → `notify.sh` when `NOTIFY_WEBHOOK` is
+  set; the unit loads `.env.local`).
+- Dashboard: **clickable Gantt** (bar → in-page span timeline with per-part ms),
+  a **Flags** panel (bottlenecks · cost · slowdowns · stalls, clickable), a
+  **projected-schedule estimate Gantt**, **trends** (cost/sessions per day), a
+  **light theme**, and **snapshot→deltas SSE** (`/api/stream`) instead of
+  polling. `/api/board` is **offloaded** to `query-worker.mjs`.
+- Browser: `cdp-tab.mjs` (Node) + `browser_bench.py` failover; a **semantic
+  beforeTool guard** (`guard-classify.py`) layered into `blacklist-guard.js`.
+- Ops: `web-restart.sh` kills all dashboard pids before relaunch (no more `:5099`
+  down-race); `host-path-probe.sh` breaks the hop into dns/tls/ttfb; `tui-audit.py`
+  audits a TUI session causally; RULES #62–#69 + the `telemetry-dashboard` skill.
+- **Host-only, pending:** the CDP-bound screenshot/video capture (needs Chrome on
+  `:9222` or `playwright install chromium`), the host browser-venv wiring, and
+  standing up Grafana.
 
 ### Next steps (in order)
-1. **Offload `/api/board` off the event loop** (worker, like `healthSync`).
-2. **Clickable Gantt** — a bar drills to that session's timeline (`detail()`).
-3. **"Flagged" panel** — bottlenecks / high-cost / slowdowns as counts + examples.
-4. Drill-down across every section; then optionally **Grafana + SQLite** as a
-   non-bespoke ops view (below).
+1. **Capture the README media** — `python3 scripts/panels-tour.py` (per-panel
+   screenshots + a `.webm` tour); needs a launchable chromium (host).
+2. **Host browser stack** — point `ux-smoke.py` / `browser_bench.py` at the host
+   venv (`/home/owner/.venvs/browser`) so the vision/failover legs have a home.
+3. **Host path** — the probe shows the hop is **TLS-dominated**; cut the caddy
+   handshake cost (HTTP/2 keep-alive / CPU contention) or bypass it.
+4. **Grafana + SQLite** (below) as the non-bespoke ops view.
 
 ### Optional: a hosted-grade ops view (Grafana + SQLite)
 `docker/docker-compose.observability.yml` runs Grafana with the two SQLite
@@ -51,6 +62,12 @@ panels (RULE #67); `:5099` stays the in-app view. Verify the plugin id/schema on
 first run.
 
 ### Screenshots (light theme)
+
+Regenerate every panel + a short `.webm` tour with the scripted capture:
+`python3 scripts/panels-tour.py` (needs a launchable chromium —
+`playwright install chromium`; the sandbox lacks the system libs, so run it on
+the host). It writes `docs/ux/status-{home,board,trends}.png` and
+`docs/ux/tour.webm`, shrinking each shot under the 150 KiB media budget.
 
 Dashboard home — sessions with tz-labelled times, cost, live activity:
 

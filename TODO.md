@@ -8,6 +8,17 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Ops hardening + README refresh + capture tooling.** (3)
+      `web-restart.sh` now kills **all** dashboard pids, waits, then relaunches
+      one — fixes the `:5099` down-race (proven `PASS`). (4)
+      `systemd/opencode-sentinel.service` gains `EnvironmentFile=-.env.local` so
+      **NOTIFY_WEBHOOK** (alerting) + `SUBQ_API_KEY` reach the sweep (self-test
+      PASS). (6/#7) README Status refreshed to current + **capture tooled**:
+      `scripts/panels-tour.py` (per-panel PNGs + a `.webm` tour via a launched
+      chromium; self-test PASS) and `host-path-probe.sh`. **Host-only remaining:**
+      run the capture, wire the host browser venv (`/home/owner/.venvs/browser`),
+      stand up Grafana.
+
 - [x] OCR/vision + **gated** Claude (per the user's order). (1) **PaddleOCR**
       (the receipts-ocr stack) installs but its pipeline needs system libs /
       openCV-contrib the sandbox lacks → **host-only** (that is how receipts-ocr

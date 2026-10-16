@@ -532,5 +532,16 @@
       "./scripts/harden-services.sh --apply",
       "./scripts/harden-services.sh --self-test"
     ]
+  },
+  {
+    "id": "panels-tour",
+    "title": "Capture README screenshots + demo video (host)",
+    "where": "host",
+    "purpose": "Launch a chromium via Playwright and capture one PNG per panel (home Flags, board Gantt+estimate, trends) plus a short .webm tour for the README; shrinks shots under the media budget. Run where a browser can launch (host).",
+    "commands": [
+      "python3 scripts/panels-tour.py",
+      "python3 scripts/panels-tour.py --no-video",
+      "python3 scripts/panels-tour.py --self-test"
+    ]
   }
 ]
