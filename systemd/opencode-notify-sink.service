@@ -1,0 +1,18 @@
+[Unit]
+Description=opencode notify sink (local webhook receiver for sentinel alerts)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+After=network.target
+
+[Service]
+Type=simple
+# REPO is baked in by scripts/notify-selfhost.sh (no sudo needed).
+EnvironmentFile=-__REPO__/.env.local
+Environment=PORT=8788
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/env node __REPO__/scripts/notify-sink.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

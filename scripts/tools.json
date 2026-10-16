@@ -566,5 +566,16 @@
       "./scripts/notify-setup.sh --test",
       "./scripts/notify-setup.sh --self-test"
     ]
+  },
+  {
+    "id": "notify-selfhost",
+    "title": "Self-host the alert sink + point NOTIFY_WEBHOOK at it",
+    "where": "host",
+    "purpose": "One command: writes a systemd user unit for notify-sink.mjs, enables it (host), sets NOTIFY_WEBHOOK=http://127.0.0.1:PORT/hook via notify-setup.sh, and probes. Replaces the external-webhook requirement.",
+    "commands": [
+      "./scripts/notify-selfhost.sh",
+      "./scripts/notify-selfhost.sh --write-only",
+      "./scripts/notify-selfhost.sh --self-test"
+    ]
   }
 ]
