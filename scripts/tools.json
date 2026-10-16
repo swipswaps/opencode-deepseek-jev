@@ -644,5 +644,14 @@
       "./scripts/grafana-up.sh --logs",
       "./scripts/grafana-up.sh --self-test"
     ]
+  },
+  {
+    "id": "test-durable",
+    "title": "Prove the durable properties (offline)",
+    "where": "container",
+    "purpose": "A green run proves the durability mechanisms are wired: triage reads the durable source, long jobs checkpoint/resume, derived state rebuilds from storage, a read-only client attaches. Wired into test-hygiene.",
+    "commands": [
+      "./scripts/test-durable.sh"
+    ]
   }
 ]

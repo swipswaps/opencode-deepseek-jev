@@ -626,6 +626,12 @@ grafana-up.sh
     of the same committed state). up + wait for /api/health, --down,
     --logs, --self-test offline. Host-only (docker).
 
+test-durable.sh
+    Proves the durable properties offline (RULES #73/#74): triage reads
+    the durable source, durable-run checkpoints + resumes, derived
+    state rebuilds from storage, a read-only client attaches. Wired
+    into test-hygiene.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

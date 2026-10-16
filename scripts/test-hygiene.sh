@@ -365,6 +365,17 @@ main() {
         bad 'sentinel-install.sh present'
     fi
 
+    if [ -f "$REPO/scripts/test-durable.sh" ]; then
+        if bash "$REPO/scripts/test-durable.sh" > "$work/dur_st.txt" 2>&1; then
+            ok 'test-durable: durable properties (read source, checkpoint, rebuild)'
+        else
+            bad 'test-durable: durable properties (read source, checkpoint, rebuild)'
+            cat "$work/dur_st.txt"
+        fi
+    else
+        bad 'test-durable.sh present'
+    fi
+
     if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
         if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
             ok 'rotate-server-password: self-test (generate + atomic rewrite)'
