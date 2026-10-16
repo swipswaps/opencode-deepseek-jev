@@ -41,6 +41,15 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **(5) durable-pi wholesale adoption plan** — `docs/durable-pi-adoption.md`:
+      what it adds (durable checkpoints, device-owned agents, multiplayer,
+      proactive classifier, compaction/`reset`/`search_history`), why it is a
+      **parallel service, not a migration** (opencode sessions are not
+      importable into pi-durable), the exact host steps (Node 24 + OpenRouter +
+      `just net up local` …), a decision gate, and their own "still can fail"
+      caveats. **Not installed** (host-only). → **All six durable-pi answers are
+      now addressed:** (6) mapping + RULE #69; (1) `search-history.sh`;
+      (3) `guard-classify.py`; (4) `harden-services.sh`; (2) SSE; (5) this plan.
 - [x] **(2) Dashboard snapshot→deltas SSE** (durable-pi pattern).
       `/api/stream` sends `event: snapshot` on connect then `event: delta` every
       5 s from **one server-side broadcast loop** to all clients; the client
