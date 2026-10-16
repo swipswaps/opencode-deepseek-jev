@@ -41,8 +41,9 @@ bad = ("REPLACE", "PLACEHOLDER", "<", ">", "YOUR-", "your-", "example.", "PASTE"
 for b in bad:
     if b.lower() in u.lower():
         print("placeholder (%s)" % b); sys.exit(1)
-if not re.match(r"^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/?\S*$", u):
-    print("need https://host/path (got %r)" % u[:40]); sys.exit(1)
+loopback = re.match(r"^http://(127\.0\.0\.1|localhost)(:\d+)?/\S*$", u)
+if not loopback and not re.match(r"^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}/?\S*$", u):
+    print("need https://host/path or http://127.0.0.1[:port]/path (got %r)" % u[:40]); sys.exit(1)
 print("ok"); sys.exit(0)
 PYEOF
 }
