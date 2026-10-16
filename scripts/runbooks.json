@@ -311,5 +311,19 @@
       "docker compose --project-directory docker restart caddy   # after editing docker/Caddyfile"
     ],
     "note": "URI histogram from the real ledger (2026-10-14..16): /provider x188 (worst 137s, per-page-load), /api/balance x13 (307s), /api/cost 365s, /api/schema 112s, /assets/* x23, /favicon x46. Two drains, both durable: (1) the servers are single-threaded -> keep heavy reads OFF the loop (the dashboard already offloads board/semantic/signals/patterns/words to query-worker.mjs with TTLs; do not add synchronous scans) and keep poll load low (intervals 8/15/30/60s + SSE); (2) edge-cache the immutable statics so re-fetch storms stop queueing -- docker/Caddyfile now sets Cache-Control immutable for content-hashed /assets/* and a 1-day TTL for /favicon*. Note: /global/event in the log is an SSE stream (duration = connection lifetime); sentinel T4 now EXCLUDES it so it cannot cry-wolf the watchdog. The genuinely OURS endpoints have TTLs, and the one external call (/api/balance) has a 10s timeout. Validate a Caddyfile edit with: docker compose --project-directory docker exec caddy caddy validate --config /etc/caddy/Caddyfile"
+  },
+  {
+    "id": "grafana",
+    "title": "Stand up Grafana + SQLite (non-bespoke ops view)",
+    "purpose": "One command to bring the Grafana + SQLite observability view (RULE #67) up on the host; it reads the two stores read-only, so it can never disagree with the source of truth.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "./scripts/grafana-up.sh",
+      "./scripts/grafana-up.sh --logs",
+      "./scripts/grafana-up.sh --down",
+      "./scripts/grafana-up.sh --self-test"
+    ],
+    "note": "Provisioned: dashboard 'opencode \u2014 cost, sessions, flags' (docker/grafana/provisioning/dashboards/opencode.json) + two SQLite datasources (../datasources/sqlite.yaml). Open http://127.0.0.1:3000 (anonymous viewer, localhost). If a datasource errors, check the plugin id frser-sqlite-datasource and the jsonData path key against the installed plugin version."
   }
 ]

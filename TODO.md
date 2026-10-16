@@ -8,6 +8,19 @@ Last updated: 2026-10-16
 
 ## Done (most recent first)
 
+- [x] **Durable pass (pi-durable): checkpoint · rebuild · attach.** Three mechanisms
+      the *Pi Durable* post names, now scripts with self-tests. (1)
+      `scripts/durable-run.sh` — every step stores a durable checkpoint
+      (`data/observability/jobs/<job>.jsonl`); a re-run **skips** done steps
+      (adopter `caddy-reload.sh`: validate→restart→verify). (2)
+      `scripts/rebuild-derived.sh` — regenerates the alert brief + digest from
+      storage **alone** (proves "storage is the source of truth"). (3)
+      `scripts/grafana-up.sh` — the non-bespoke ops client (read-only stores) +
+      runbook `grafana`. Plus **#73** (triage reads the durable ledger, not the
+      delivery log: **124 vs 21** alerts) and **#72** (`duration` = time-in-system).
+      Durability audit vs the post in `docs/pi-durable-mapping.md`. RULES
+      #72/#73/#74; tools.json 60 · runbooks 25.
+
 - [x] **Triage-all + slow-fetch root cause (durable).** Ran the full sink triage in
       the sandbox (the repo `data/` is bind-mounted): **21 distinct alerts / 200 pushed
       rows**, dominated by `caddy access log` slow fetches. The URI histogram proved

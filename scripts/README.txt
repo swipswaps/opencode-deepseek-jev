@@ -601,6 +601,31 @@ triage-alerts.py
     selectable text (#70); --ledger DB, --last N, --out FILE, --json,
     --self-test offline.
 
+durable-run.sh
+    Checkpoint / resume for multi-step shell jobs (pi-durable: every
+    step stores a checkpoint). --job NAME --step ID -- CMD records a
+    completed step durably (data/observability/jobs/<job>.jsonl);
+    re-running the job skips done steps and resumes after a crash (a
+    failed step is NOT recorded, so it retries). --force, --status,
+    --reset, --self-test offline.
+
+caddy-reload.sh
+    The typed Caddy sequence as a checkpointed script (durable-run):
+    validate the Caddyfile -> restart caddy -> verify :5099 serves.
+    A crash mid-way resumes at the next step. --dry-run, --reset,
+    --self-test offline. Host-only (docker).
+
+rebuild-derived.sh
+    Rebuild every derived artifact from storage (pi-durable: storage is
+    the source of truth): the alert brief (ledger -> triage-<date>.md)
+    + the latest-session digest (store -> digests/<id>.md), from
+    storage ALONE. --ledger/--db/--out, --self-test offline.
+
+grafana-up.sh
+    Stand up the Grafana + SQLite ops view (one more read-only client
+    of the same committed state). up + wait for /api/health, --down,
+    --logs, --self-test offline. Host-only (docker).
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

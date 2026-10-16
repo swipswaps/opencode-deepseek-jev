@@ -13,6 +13,10 @@
 > **slow-fetch root cause** (#72: a measured `duration` is time-in-system, not handler
 > cost — both servers are single-threaded, so one blocker queues everything; T4 now
 > excludes SSE, `docker/Caddyfile` edge-caches immutable statics, runbook `slow-fetch`);
+> **durable pass** (pi-durable, RULES #73/#74): `triage-alerts.py` reads the durable
+> **ledger** not the sink (**124 vs 21** alerts), `durable-run.sh` checkpoints long jobs
+> (`caddy-reload.sh`: validate→restart→verify), `rebuild-derived.sh` regenerates all
+> derived state from storage, `grafana-up.sh` attaches a read-only ops client;
 > **semantic beforeTool guard** (`guard-classify.py`, SubQ, memoized) in
 > `blacklist-guard.js`; **durable-pi** mapping (#69) + `search-history.sh` +
 > `harden-services.sh`; ops: `web-restart.sh` **down-race fixed**,

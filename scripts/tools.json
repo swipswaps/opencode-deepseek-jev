@@ -601,5 +601,48 @@
       "python3 scripts/triage-alerts.py --json",
       "python3 scripts/triage-alerts.py --self-test"
     ]
+  },
+  {
+    "id": "durable-run",
+    "title": "Checkpoint / resume for multi-step shell jobs",
+    "where": "container",
+    "purpose": "pi-durable's 'every step stores a checkpoint': records each completed step durably (data/observability/jobs/<job>.jsonl) so re-running a job SKIPS done steps and resumes after a crash instead of repeating. --force re-runs, --status/--reset, --self-test offline.",
+    "commands": [
+      "./scripts/durable-run.sh --job NAME --step ID -- <cmd>",
+      "./scripts/durable-run.sh --job NAME --status",
+      "./scripts/durable-run.sh --self-test"
+    ]
+  },
+  {
+    "id": "caddy-reload",
+    "title": "Validate Caddyfile -> restart caddy -> verify (checkpointed)",
+    "where": "host",
+    "purpose": "The typed Caddy sequence as a checkpointed script (durable-run): validate, restart, verify :5099 serves. A crash mid-way resumes at the next step. Host-only (docker).",
+    "commands": [
+      "./scripts/caddy-reload.sh",
+      "./scripts/caddy-reload.sh --dry-run",
+      "./scripts/caddy-reload.sh --self-test"
+    ]
+  },
+  {
+    "id": "rebuild-derived",
+    "title": "Rebuild every derived artifact from storage",
+    "where": "container",
+    "purpose": "Proves pi-durable's 'storage is the source of truth': regenerates the alert brief (ledger -> data/observability/triage-<date>.md) and the latest-session digest (opencode store -> digests/<id>.md) from storage ALONE. Delete the outputs and re-run and they return.",
+    "commands": [
+      "./scripts/rebuild-derived.sh",
+      "./scripts/rebuild-derived.sh --self-test"
+    ]
+  },
+  {
+    "id": "grafana-up",
+    "title": "Stand up the Grafana + SQLite ops view",
+    "where": "host",
+    "purpose": "One command to bring up Grafana (RULE #67) reading the two SQLite stores read-only -- one more client of the same committed state. Waits for /api/health. Host-only (docker).",
+    "commands": [
+      "./scripts/grafana-up.sh",
+      "./scripts/grafana-up.sh --logs",
+      "./scripts/grafana-up.sh --self-test"
+    ]
   }
 ]
