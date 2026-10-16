@@ -6,6 +6,10 @@
 > + estimate Gantt + trends**, `/api/board` **offloaded**, **snapshot→deltas SSE**
 > (`/api/stream`) replacing polling; `ux-smoke` + **local-OCR `--vision`** (#65);
 > **`notify.sh`** wired to fire on a trip + the unit loads `.env.local`;
+> **self-hosted alert sink** (`notify-sink.mjs` + `notify-selfhost.sh`; RULES
+> #70 selectable-text/a11y + #71 alert-isn't-actioned-without-severity+runbook+next-command)
+> — **LIVE on the host** (the timer pushed a real 20-flag trip into the sink) and
+> `triage-alerts.py` turns each flag into severity + the exact next command + runbook;
 > **semantic beforeTool guard** (`guard-classify.py`, SubQ, memoized) in
 > `blacklist-guard.js`; **durable-pi** mapping (#69) + `search-history.sh` +
 > `harden-services.sh`; ops: `web-restart.sh` **down-race fixed**,

@@ -4,9 +4,25 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-14
+Last updated: 2026-10-16
 
 ## Done (most recent first)
+
+- [x] **P4b self-hosted alerting + triage (closes detect→push→act).** No
+      third-party webhook needed: `scripts/notify-sink.mjs` (zero-dep node) takes
+      `POST /hook` → `data/observability/notify-sink.jsonl`; `notify-selfhost.sh`
+      writes + enables a systemd USER unit (bakes the **absolute node path** — the
+      `/usr/bin/env node` form failed under the systemd-user `PATH`), sets
+      `NOTIFY_WEBHOOK=http://127.0.0.1:8788/hook` (loopback http now allowed by
+      `notify-setup.sh`), and polls `/health`. **Proven live on the host:** `sink
+      healthy: ok`, probe `http 200`, and the timer **pushed a real trip** (20 flags)
+      into the sink. `scripts/triage-alerts.py` then reads the sink, de-dupes the
+      stable-key ledger flags, classifies each (over_budget/stall/slow_fetch), and
+      prints severity + the **exact next command** + the runbook (plain selectable
+      text; `--in/--json/--self-test`). **RULES #70** (operator-facing text must be
+      selectable — a11y + copy/paste) + **#71** (an alert is not *actioned* until it
+      carries severity + runbook + next command). tools.json + scripts/README.txt
+      updated (notify-sink / notify / notify-selfhost / triage-alerts).
 
 - [x] **Ops hardening + README refresh + capture tooling.** (3)
       `web-restart.sh` now kills **all** dashboard pids, waits, then relaunches

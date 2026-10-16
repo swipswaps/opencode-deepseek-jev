@@ -479,7 +479,7 @@
     ]
   },
   {
-    "id": "notify-sink",
+    "id": "notify",
     "title": "Push sentinel FAIL flags to a webhook (alerting)",
     "where": "host",
     "purpose": "The alerting capability the observability tools have and this stack lacked: reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs to $NOTIFY_WEBHOOK. No webhook -> prints payload and SKIPs (exit 0). No model spend, no backend.",
@@ -576,6 +576,29 @@
       "./scripts/notify-selfhost.sh",
       "./scripts/notify-selfhost.sh --write-only",
       "./scripts/notify-selfhost.sh --self-test"
+    ]
+  },
+  {
+    "id": "notify-sink",
+    "title": "Self-hosted webhook sink (no third party)",
+    "where": "host",
+    "purpose": "Zero-dep node http sink: POST /hook appends JSONL to data/observability/notify-sink.jsonl; GET / shows recent; /health ok. Lets NOTIFY_WEBHOOK point at http://127.0.0.1:8788/hook so alerting needs no Slack/Discord URL. --self-test.",
+    "commands": [
+      "node scripts/notify-sink.mjs",
+      "PORT=8788 node scripts/notify-sink.mjs",
+      "node scripts/notify-sink.mjs --self-test"
+    ]
+  },
+  {
+    "id": "triage-alerts",
+    "title": "Triage the pushed alerts -> next command + runbook",
+    "where": "container",
+    "purpose": "Reads the sink JSONL, de-dupes the stable-key ledger FAIL flags, classifies each (over_budget/stall/slow_fetch/deny_listed), and prints severity + the exact next command + the runbook. Plain selectable text; --json for machines. Closes detect->push->act.",
+    "commands": [
+      "./scripts/triage-alerts.py",
+      "./scripts/triage-alerts.py --in data/observability/notify-sink.jsonl",
+      "python3 scripts/triage-alerts.py --json",
+      "python3 scripts/triage-alerts.py --self-test"
     ]
   }
 ]

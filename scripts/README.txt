@@ -563,6 +563,40 @@ sentinel-install.sh
     --write-only for review, --uninstall to remove, --self-test
     offline (no systemd touched).
 
+notify.sh
+    Push recent sentinel FAIL flags to the webhook ($NOTIFY_WEBHOOK).
+    Reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs;
+    no webhook -> prints the payload and exits 0 (SKIP, not a
+    failure). --last N, --dry-run, --self-test offline.
+
+notify-setup.sh
+    Scripted NOTIFY_WEBHOOK setup + probe (replace the hand-typed
+    webhook). --url set+probe, --show, --test, --unset, --self-test.
+    Validator accepts https://host/path or http://127.0.0.1[:port]/path
+    (loopback http for the self-hosted sink; remote must be https).
+
+notify-sink.mjs
+    Self-hosted webhook receiver (zero-dep node) so alerting needs NO
+    third-party URL. POST /hook appends the JSON to
+    data/observability/notify-sink.jsonl; GET / prints the last 20;
+    GET /health -> ok. env PORT (8788), HOST (127.0.0.1), SINK_FILE.
+    --self-test offline.
+
+notify-selfhost.sh
+    One command to self-host the sink: writes the systemd USER unit
+    for notify-sink.mjs (bakes the absolute node path), enables it
+    (host), sets NOTIFY_WEBHOOK=http://127.0.0.1:PORT/hook via
+    notify-setup.sh, polls /health (prints status+journal on failure).
+    --port N, --write-only, --self-test.
+
+triage-alerts.py
+    Triage the pushed alerts into an actionable brief: read the sink
+    JSONL, de-dupe the stable-key ledger FAIL flags, classify each
+    (over_budget / stall / slow_fetch / deny_listed / guidance), and
+    print severity + the exact next command + the runbook. Closes
+    detect->push->act. Plain selectable text (#70); --in FILE, --json,
+    --self-test offline.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access
