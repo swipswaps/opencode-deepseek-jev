@@ -20,3 +20,8 @@ logs/artifacts-*/stall-*/
 notes/
 logs/
 site/
+
+# vendored impeccable binary + font data (20 MB + 1 MB; install on demand,
+# keep the skill source + reference docs)
+.opencode/skills/impeccable/scripts/bin/
+.opencode/skills/impeccable/scripts/data/
