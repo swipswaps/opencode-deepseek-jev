@@ -1,14 +1,18 @@
 # Handoff — opencode-deepseek-jev
 
-> **PIN 2026-10-15 (web session `ses_ec5519e33f…`):** shipped — sentinel T1–T7 +
-> **deduped ledger**; `cdp-tab`/`browser-bench` failover (RULES #62/#64); dashboard
+> **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
+> + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
 > **local-time + light theme** (#66), **clickable Gantt + span drill + Flags panel
-> + projected-schedule estimate Gantt**, `/api/board` **offloaded** off the event
-> loop; `ux-smoke` + **local-OCR `--vision`** (#65); **`notify.sh` alerting sink**;
-> **Grafana+SQLite** scaffold (README step 4); telemetry doctrine (#67) + **gated
-> Claude** (#68); `tui-audit.py` (read-only causal audit). All pushed (`ahead=0`).
-> **Next:** fix the **host→Caddy** hop (host-only), a real `GEMINI_API_KEY` for
-> semantic vision, README screenshots for the newest panels.
+> + estimate Gantt + trends**, `/api/board` **offloaded**, **snapshot→deltas SSE**
+> (`/api/stream`) replacing polling; `ux-smoke` + **local-OCR `--vision`** (#65);
+> **`notify.sh`** wired to fire on a trip + the unit loads `.env.local`;
+> **semantic beforeTool guard** (`guard-classify.py`, SubQ, memoized) in
+> `blacklist-guard.js`; **durable-pi** mapping (#69) + `search-history.sh` +
+> `harden-services.sh`; ops: `web-restart.sh` **down-race fixed**,
+> `host-path-probe.sh`, `tui-audit.py`, `panels-tour.py`. All pushed (`ahead=0`).
+> **Next (host-only):** run `panels-tour.py` for README shots + `.webm` (needs
+> Chrome on `:9222` / `playwright install chromium`); wire the host browser venv;
+> stand up **Grafana+SQLite**; cut the **host→Caddy** TLS cost.
 
 > **Running todo:** `TODO.md` (queue) — HANDOFF.md is the durable state, TODO.md
 > is what's next. Update both at the end of a session so momentum persists.
