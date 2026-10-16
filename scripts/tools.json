@@ -320,5 +320,12 @@
     "where": "host",
     "purpose": "The alerting capability the observability tools have and this stack lacked: reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs to $NOTIFY_WEBHOOK. No webhook -> prints payload and SKIPs (exit 0). No model spend, no backend.",
     "commands": ["NOTIFY_WEBHOOK=<url> ./scripts/notify.sh --last 10", "./scripts/notify.sh --dry-run", "./scripts/notify.sh --self-test"]
+  },
+  {
+    "id": "tui-audit",
+    "title": "Read-only causal audit of a TUI session's turns",
+    "where": "container",
+    "purpose": "Answers 'why did this session have issues' from the opencode store and names the CAUSE (which tool, which blacklist rule, which error signature), not just counts. Picks the TUI session (directory != /home/node/.opencode) when --session is omitted. Read-only, no model calls.",
+    "commands": ["python3 scripts/tui-audit.py --since-hours 24", "python3 scripts/tui-audit.py --session ses_<id> --json", "python3 scripts/tui-audit.py --self-test"]
   }
 ]

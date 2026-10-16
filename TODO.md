@@ -41,6 +41,17 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Pivot to the TUI instance + read-only causal audit.** The open TUI
+      session (`ses_ec86dd329ffe…` *"Prompt loop audit for sentinel.sh"*, dir
+      `/home/owner/…/repo`): **56 msgs · 247 parts · 85 tool calls** (bash 54 ·
+      read 20 · grep 5 · MCP 5) · **1 issue · 0 stuck**. The issue's CAUSE:
+      **`sed -n '1,60p' TODO.md` blocked by the blacklist guard (rule #7)**.
+      Largest "gap" 228982 s = **overnight idle, not a stall** (session-health
+      rejects >1 h gaps). New **read-only** `scripts/tui-audit.py` names the
+      cause per issue (blacklist / permission / gateway / edit-match /
+      missing-path / timeout); picks the TUI session automatically. Proven:
+      self-test PASS; live audit found the sed cause + command. Surfaced in
+      tools.json; a **PIN** block added to HANDOFF.md.
 - [x] **P3 drill-down pass.** Wired the last session-bearing aggregates:
       **duplicate groups** (`/api/duplicates[].ids[0]`) and **patterns
       errorTools** (`example_sid`) now carry `data-go` → `detail()`. Most charts
