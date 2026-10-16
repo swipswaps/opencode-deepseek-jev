@@ -4,328 +4,533 @@
     "title": "URL harvest with provenance",
     "where": "container",
     "purpose": "Fetch -> normalize -> sha256 -> staged candidate under logs/harvest-<ts>/ (raw.bin, meta.json, candidate.md). External content stays UNTRUSTED; adoption is always an explicit edit citing the hash. Never writes docs.",
-    "commands": ["python3 scripts/harvest.py --url https://example.com", "python3 scripts/harvest.py --self-test"]
+    "commands": [
+      "python3 scripts/harvest.py --url https://example.com",
+      "python3 scripts/harvest.py --self-test"
+    ]
   },
   {
     "id": "web-restart",
     "title": "Restart the :5099 dashboard container",
     "where": "host",
     "purpose": "opencode-web is a compose service, not a command. Restarts it so :5099 serves the current checkout, then polls /api/rev until served==HEAD (stale=False) or fails loudly.",
-    "commands": ["./scripts/web-restart.sh"]
+    "commands": [
+      "./scripts/web-restart.sh"
+    ]
   },
   {
     "id": "deploy",
     "title": "Gated promote: prove the page works, then serve it",
     "where": "host",
     "purpose": "The lesson of the 2026-10-12 freeze: rev-match is not page-works. Boots the new dashboard in a scratch process, runs the inline-script execution test (the detector we dismissed), and only on PASS recreates the container + re-verifies live. Failure prints rollback; never auto-reverts.",
-    "commands": ["./scripts/deploy.sh", "./scripts/deploy.sh --verify-only", "./scripts/deploy.sh --self-test"]
+    "commands": [
+      "./scripts/deploy.sh",
+      "./scripts/deploy.sh --verify-only",
+      "./scripts/deploy.sh --self-test"
+    ]
   },
   {
     "id": "recover-4096",
     "title": ":4096 recovery probe with ledger logging",
     "where": "host",
     "purpose": "Asserts every :4096 stratum (containers, compose DNS, loopback+mesh TLS edge, dashboard, cert battery, authenticated data plane, session store readonly) with per-signature recovery hints; logs one RECOVERY row per check to observability.db for watchdog polling. Check-only by default; --recover allows one bounded restart+reprobe.",
-    "commands": ["./scripts/recover-4096.sh --session ses_<id>", "./scripts/recover-4096.sh --json --no-log", "./scripts/recover-4096.sh --self-test"]
+    "commands": [
+      "./scripts/recover-4096.sh --session ses_<id>",
+      "./scripts/recover-4096.sh --json --no-log",
+      "./scripts/recover-4096.sh --self-test"
+    ]
   },
   {
     "id": "session-guard",
     "title": "Over-budget / denied-model guidance with ledger logging",
     "where": "host",
     "purpose": "Reads session-health risks (every over/warn session, deny-listed free-tier models) and prints the numbered fresh-session guidance; logs ADVISORY rows for watchdog polling. Check-only; exit 1 when the focus is actionable.",
-    "commands": ["./scripts/session-guard.sh --session ses_<id>", "./scripts/session-guard.sh --handoff --session ses_<id>", "./scripts/session-guard.sh --json --no-log", "./scripts/session-guard.sh --self-test"]
+    "commands": [
+      "./scripts/session-guard.sh --session ses_<id>",
+      "./scripts/session-guard.sh --handoff --session ses_<id>",
+      "./scripts/session-guard.sh --json --no-log",
+      "./scripts/session-guard.sh --self-test"
+    ]
   },
   {
     "id": "handoff-brief",
     "title": "Deterministic carry-over brief from a transcript",
     "where": "host",
     "purpose": "Builds a paste-ready brief (goal, findings, recent asks, tools, open question) from logs/transcript-<id>.md without a model call; every field passes through redact.mjs. --model only prints the prompt plus the spend command after an ALLOW verdict; it never calls a model.",
-    "commands": ["./scripts/handoff-brief.sh ses_<id>", "./scripts/handoff-brief.sh ses_<id> --model deepseek/deepseek-flash", "./scripts/handoff-brief.sh --self-test"]
+    "commands": [
+      "./scripts/handoff-brief.sh ses_<id>",
+      "./scripts/handoff-brief.sh ses_<id> --model deepseek/deepseek-flash",
+      "./scripts/handoff-brief.sh --self-test"
+    ]
   },
   {
     "id": "secret-scan",
     "title": "Secrets-at-rest scan with rotation guidance",
     "where": "host",
     "purpose": "Finds secret-shaped lines (deepseek/jev keys, bearer tokens, env assignments) in artifact dirs (logs/, observability, notes). The report is value-free (file:line:kind only). Exit 1 names ./scripts/rotate-api-keys.sh plus the revoke consoles.",
-    "commands": ["./scripts/secret-scan.sh", "./scripts/secret-scan.sh --json", "./scripts/secret-scan.sh --self-test"]
+    "commands": [
+      "./scripts/secret-scan.sh",
+      "./scripts/secret-scan.sh --json",
+      "./scripts/secret-scan.sh --self-test"
+    ]
   },
   {
     "id": "rotate-keys",
     "title": "Rotate DeepSeek + JEV API keys (guided, interactive)",
     "where": "host",
     "purpose": "Browser revoke checklist, .env.local backup (0600), hidden-input new keys, atomic rewrite, container recreate, smoke test. Run in a terminal; the dashboard /manage page is read-only and cannot do this.",
-    "commands": ["./scripts/rotate-api-keys.sh", "./scripts/secret-scan.sh"]
+    "commands": [
+      "./scripts/rotate-api-keys.sh",
+      "./scripts/secret-scan.sh"
+    ]
   },
   {
     "id": "rotate-server-password",
     "title": "Rotate the :4096/:5099 Basic-auth password (guided, interactive)",
     "where": "host",
     "purpose": "Backup, token_urlsafe replacement, atomic single-line rewrite (0600), container RECREATE (env_file is creation-time; restart keeps the old value), then proves new=200 and old=401. Neither value is ever printed. Run in a terminal; /manage is read-only.",
-    "commands": ["./scripts/rotate-server-password.sh", "./scripts/rotate-server-password.sh --self-test"]
+    "commands": [
+      "./scripts/rotate-server-password.sh",
+      "./scripts/rotate-server-password.sh --self-test"
+    ]
   },
   {
     "id": "sentinel",
     "title": "Periodic threshold monitor with ledger trips",
     "where": "host",
     "purpose": "One sweep: latest-session over-budget/deny-listed trips (T1/T2) plus new gateway-failure lines since cursor (T3); history only reported. Logs ADVISORY rows for watchdog polling. Runs under systemd/opencode-sentinel.timer every 5 min (see sentinel-install).",
-    "commands": ["./scripts/sentinel.sh --once", "./scripts/sentinel.sh --json --no-log", "./scripts/sentinel-install.sh"]
+    "commands": [
+      "./scripts/sentinel.sh --once",
+      "./scripts/sentinel.sh --json --no-log",
+      "./scripts/sentinel-install.sh"
+    ]
   },
   {
     "id": "latency-timeline",
     "title": "Gantt timeline of what made a session slow",
     "where": "host",
     "purpose": "Reads part timings (readonly) plus the caddy access log and draws one session's agentic-loop cadence against the slow fetches that queued behind it. --json for machines. Shows serial-loop starvation, not averages.",
-    "commands": ["./scripts/latency-timeline.sh --session ses_<id>", "./scripts/latency-timeline.sh --session ses_<id> --json", "./scripts/latency-timeline.sh --self-test"]
+    "commands": [
+      "./scripts/latency-timeline.sh --session ses_<id>",
+      "./scripts/latency-timeline.sh --session ses_<id> --json",
+      "./scripts/latency-timeline.sh --self-test"
+    ]
   },
   {
     "id": "state-snapshot",
     "title": "Snapshot + verified restore of irreplaceable state",
     "where": "host",
     "purpose": "Copies secrets/certs/config (and the store with --with-db) into a 0700 dir with a sha256 manifest; restore verifies checksums and snapshots current state first. Nothing is printed by value. Run before risky changes.",
-    "commands": ["./scripts/state-snapshot.sh snapshot", "./scripts/state-snapshot.sh list", "./scripts/state-snapshot.sh verify --latest", "./scripts/state-snapshot.sh restore --latest --dry-run"]
+    "commands": [
+      "./scripts/state-snapshot.sh snapshot",
+      "./scripts/state-snapshot.sh list",
+      "./scripts/state-snapshot.sh verify --latest",
+      "./scripts/state-snapshot.sh restore --latest --dry-run"
+    ]
   },
   {
     "id": "extract-transcript",
     "title": "Transcript from the store, no browser required",
     "where": "host",
     "purpose": "Reads messages+parts straight from opencode.db (readonly) in the re-extract shape when the tab will not render or the message route stalls. Same caps; feeds handoff-brief.sh. Never paste the raw file (may hold pasted secrets).",
-    "commands": ["./scripts/extract-transcript.sh ses_<id>", "./scripts/extract-transcript.sh --self-test"]
+    "commands": [
+      "./scripts/extract-transcript.sh ses_<id>",
+      "./scripts/extract-transcript.sh --self-test"
+    ]
   },
   {
     "id": "media-budget",
     "title": "Committed-media size gate",
     "where": "container",
     "purpose": "Fail-closed budgets for tracked media (video <=2MiB, images <=150KiB). Wired into test-hygiene.sh.",
-    "commands": ["./scripts/media-budget.sh"]
+    "commands": [
+      "./scripts/media-budget.sh"
+    ]
   },
   {
     "id": "pressure-watch",
     "title": "Contention-evidence snapshot",
     "where": "host",
     "purpose": "Observe-only PSI/CPU/nebula/D-state/swap snapshot to logs/. Run twice ~60s apart and diff. Sends no signals.",
-    "commands": ["./scripts/pressure-watch.sh"]
+    "commands": [
+      "./scripts/pressure-watch.sh"
+    ]
   },
   {
     "id": "fix-docker-network",
     "title": "Recover host->docker port path (sudo)",
     "where": "host",
     "purpose": "Probes mapped ports; if down, restarts the docker daemon after typed YES. Nothing in-repo can fix this path.",
-    "commands": ["sudo ./scripts/fix-docker-network.sh"]
+    "commands": [
+      "sudo ./scripts/fix-docker-network.sh"
+    ]
   },
   {
     "id": "route-via-proxy",
     "title": "G4 opt-in proxy routing switch",
     "where": "host",
     "purpose": "Backs up opencode.json, swaps deepseek provider to :4000 proxy, restarts web. --revert restores. Typed YES required.",
-    "commands": ["./scripts/route-via-proxy.sh", "./scripts/route-via-proxy.sh --revert"]
+    "commands": [
+      "./scripts/route-via-proxy.sh",
+      "./scripts/route-via-proxy.sh --revert"
+    ]
   },
   {
     "id": "ledger",
     "title": "Event ledger (gates + guard verdicts)",
     "where": "container",
     "purpose": "Append-only rows in observability.db ledger (harness GATE_START/GATE, guard.log verdicts, backfill). Queryable history; read via logs.sh --source ledger. Idempotent backfill.",
-    "commands": ["python3 scripts/ledger.py show --tail 20", "python3 scripts/ledger.py backfill", "python3 scripts/ledger.py --self-test"]
+    "commands": [
+      "python3 scripts/ledger.py show --tail 20",
+      "python3 scripts/ledger.py backfill",
+      "python3 scripts/ledger.py --self-test"
+    ]
   },
   {
     "id": "harness",
     "title": "Whole-state check",
     "where": "container",
     "purpose": "Every gate (lint, test-hygiene, test-patterns, test-dashboard) + telemetry + cost + TODO in-flight. --json for wrappers.",
-    "commands": ["./scripts/harness.sh", "./scripts/harness.sh --fast", "./scripts/harness.sh --json", "./scripts/harness.sh --export"]
+    "commands": [
+      "./scripts/harness.sh",
+      "./scripts/harness.sh --fast",
+      "./scripts/harness.sh --json",
+      "./scripts/harness.sh --export"
+    ]
   },
   {
     "id": "preflight",
     "title": "Spend gate (fail closed)",
     "where": "container",
     "purpose": "Refuses (exit 1) unless keys, last gate run, balance and model policy all pass. Run before any paid session.",
-    "commands": ["./scripts/preflight.sh", "./scripts/preflight.sh --json"]
+    "commands": [
+      "./scripts/preflight.sh",
+      "./scripts/preflight.sh --json"
+    ]
   },
   {
     "id": "models",
     "title": "Model catalog + cost policy",
     "where": "container",
     "purpose": "ALLOW / ASK / BLOCK from models.policy.json; also the data behind the /models page.",
-    "commands": ["./scripts/models.sh", "./scripts/models.sh --write", "./scripts/models.sh --json"]
+    "commands": [
+      "./scripts/models.sh",
+      "./scripts/models.sh --write",
+      "./scripts/models.sh --json"
+    ]
   },
   {
     "id": "learn",
     "title": "Learned rules (corpus)",
     "where": "container",
     "purpose": "Contrastive (state, action, outcome) rules -> data/observability/learned-rules.json; the guard reads them.",
-    "commands": ["./scripts/learn-rules.py --since-days 30 --write", "./scripts/learn-rules.py --json"]
+    "commands": [
+      "./scripts/learn-rules.py --since-days 30 --write",
+      "./scripts/learn-rules.py --json"
+    ]
   },
   {
     "id": "solutions",
     "title": "Solution library",
     "where": "container",
     "purpose": "Recurring errors and the next action that fixed each -> solutions.json; shown on /explore > patterns.",
-    "commands": ["./scripts/issue-solutions.py --write", "./scripts/issue-solutions.py --json"]
+    "commands": [
+      "./scripts/issue-solutions.py --write",
+      "./scripts/issue-solutions.py --json"
+    ]
   },
   {
     "id": "search",
     "title": "Search (ranked + fuzzy)",
     "where": "container",
     "purpose": "FTS5/bm25 over every part; --fuzzy tolerates typos (edti -> edit).",
-    "commands": ["./scripts/semantic-search.sh <query>", "./scripts/semantic-search.sh --rebuild", "./scripts/semantic-search.sh --fuzzy edti", "./scripts/fuzzy-search.py <query>"]
+    "commands": [
+      "./scripts/semantic-search.sh <query>",
+      "./scripts/semantic-search.sh --rebuild",
+      "./scripts/semantic-search.sh --fuzzy edti",
+      "./scripts/fuzzy-search.py <query>"
+    ]
   },
   {
     "id": "telemetry",
     "title": "Telemetry",
     "where": "container",
     "purpose": "guard actions, tool errors + traces, events, app log, container log, packet hint.",
-    "commands": ["./scripts/logs.sh", "./scripts/logs.sh --source all --tail 60", "./scripts/logs.sh --source guard"]
+    "commands": [
+      "./scripts/logs.sh",
+      "./scripts/logs.sh --source all --tail 60",
+      "./scripts/logs.sh --source guard"
+    ]
   },
   {
     "id": "docbudget",
     "title": "Doc budget",
     "where": "container",
     "purpose": "Token size + content hash of the read-first corpus; unchanged hash = nothing new to re-learn.",
-    "commands": ["./scripts/doc-budget.sh", "./scripts/doc-budget.sh --json"]
+    "commands": [
+      "./scripts/doc-budget.sh",
+      "./scripts/doc-budget.sh --json"
+    ]
   },
   {
     "id": "guard",
     "title": "Blacklist guard self-test",
     "where": "container",
     "purpose": "Proves block/fix/warn plus interpreter-wrapper and pipe-to-shell catches.",
-    "commands": ["node scripts/blacklist-guard-self-test.mjs"]
+    "commands": [
+      "node scripts/blacklist-guard-self-test.mjs"
+    ]
   },
   {
     "id": "contracts",
     "title": "Tool contract tests",
     "where": "container",
     "purpose": "Asserts every --json tool emits the keys a wrapper reads.",
-    "commands": ["./scripts/test-tooling.sh", "./scripts/test-hygiene.sh", "./scripts/test-patterns.sh", "./scripts/test-dashboard.sh"]
+    "commands": [
+      "./scripts/test-tooling.sh",
+      "./scripts/test-hygiene.sh",
+      "./scripts/test-patterns.sh",
+      "./scripts/test-dashboard.sh"
+    ]
   },
   {
     "id": "doctor",
     "title": "Health check",
     "where": "host",
     "purpose": "Ordered tiers; --full adds the Jev proof (Tier 9) and repo gates (Tier 10).",
-    "commands": ["./scripts/doctor.sh", "./scripts/doctor.sh --full"]
+    "commands": [
+      "./scripts/doctor.sh",
+      "./scripts/doctor.sh --full"
+    ]
   },
   {
     "id": "uxtest",
     "title": "UX test (Playwright)",
     "where": "host",
     "purpose": "Asserts the served pages: console clean, no 390px overflow, tabs toggle, overview compact.",
-    "commands": ["pip install playwright && playwright install chromium", "python3 scripts/ux-test.py --check", "python3 scripts/ux-test.py http://127.0.0.1:5099"]
+    "commands": [
+      "pip install playwright && playwright install chromium",
+      "python3 scripts/ux-test.py --check",
+      "python3 scripts/ux-test.py http://127.0.0.1:5099"
+    ]
   },
   {
     "id": "uxtrace",
     "title": "UX trace (clicks/drags/scrolls + hotspots)",
     "where": "host",
     "purpose": "Logs every click/drag/scroll with screenshots + hotspots into ux.db; --ocr reads the shots back to text. The handoff substrate.",
-    "commands": ["python3 scripts/ux-trace.py --check", "python3 scripts/ux-trace.py http://127.0.0.1:5099", "python3 scripts/ux-trace.py --ocr http://127.0.0.1:5099"]
+    "commands": [
+      "python3 scripts/ux-trace.py --check",
+      "python3 scripts/ux-trace.py http://127.0.0.1:5099",
+      "python3 scripts/ux-trace.py --ocr http://127.0.0.1:5099"
+    ]
   },
   {
     "id": "ocr",
     "title": "Read a screenshot locally",
     "where": "container",
     "purpose": "OCR fallback when image input is unavailable (tesseract / PaddleOCR); searchable via /api/semantic.",
-    "commands": ["./scripts/ocr-image.sh --check", "./scripts/ocr-image.sh <image.png>"]
+    "commands": [
+      "./scripts/ocr-image.sh --check",
+      "./scripts/ocr-image.sh <image.png>"
+    ]
   },
   {
     "id": "cost",
     "title": "Cost accounting",
     "where": "container",
     "purpose": "DeepSeek balance + per-session cost + Jev count; bottlenecks, model mix, prompt cache, context budget.",
-    "commands": ["./scripts/cost.sh", "./scripts/cost.sh --estimate IN OUT REASONING", "./scripts/cost-bottlenecks.sh --top 8"]
+    "commands": [
+      "./scripts/cost.sh",
+      "./scripts/cost.sh --estimate IN OUT REASONING",
+      "./scripts/cost-bottlenecks.sh --top 8"
+    ]
   },
   {
     "id": "gh-pages",
     "title": "GitHub Pages via gh api (no clicking)",
     "where": "host",
     "purpose": "Pages source, Deploy panel dispatch (= allow-once), run watch, URL. Requires gh auth login. Dispatch replaces the Actions UI click.",
-    "commands": ["./scripts/gh-pages.sh status", "./scripts/gh-pages.sh enable", "./scripts/gh-pages.sh dispatch", "./scripts/gh-pages.sh watch", "./scripts/gh-pages.sh url", "./scripts/gh-pages.sh check"]
+    "commands": [
+      "./scripts/gh-pages.sh status",
+      "./scripts/gh-pages.sh enable",
+      "./scripts/gh-pages.sh dispatch",
+      "./scripts/gh-pages.sh watch",
+      "./scripts/gh-pages.sh url",
+      "./scripts/gh-pages.sh check"
+    ]
   },
   {
     "id": "session-health",
     "title": "Session health (stalls / blank turns)",
     "where": "container",
-    "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Surfaces at /explore ▸ signals and /api/health; --live also reads /session/status.",
-    "commands": ["node --experimental-sqlite scripts/session-health.mjs", "node --experimental-sqlite scripts/session-health.mjs --json", "node --experimental-sqlite scripts/session-health.mjs --live", "node --experimental-sqlite scripts/session-health.mjs --self-test"]
+    "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Surfaces at /explore \u25b8 signals and /api/health; --live also reads /session/status.",
+    "commands": [
+      "node --experimental-sqlite scripts/session-health.mjs",
+      "node --experimental-sqlite scripts/session-health.mjs --json",
+      "node --experimental-sqlite scripts/session-health.mjs --live",
+      "node --experimental-sqlite scripts/session-health.mjs --self-test"
+    ]
   },
   {
     "id": "quirks",
-    "title": "Quirks (symptom → known issue, fuzzy)",
+    "title": "Quirks (symptom \u2192 known issue, fuzzy)",
     "where": "container",
     "purpose": "Correlate a symptom with a vendored map of known upstream issues (fuzzy text + typo tolerant), fuzzily search the chat DB, repo code and docs, and show a per-model quirk ledger (tool-error rate + sed/2>/dev/null/subprocess usage). Offline, no network. /api/health carries the correlations and per-model ledger.",
-    "commands": ["node --experimental-sqlite scripts/quirks.mjs --self-test", "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'", "node --experimental-sqlite scripts/quirks.mjs --report"]
+    "commands": [
+      "node --experimental-sqlite scripts/quirks.mjs --self-test",
+      "node --experimental-sqlite scripts/quirks.mjs --query 'blank output'",
+      "node --experimental-sqlite scripts/quirks.mjs --report"
+    ]
   },
   {
     "id": "cdp",
     "title": "Live-page CDP probe (real Chrome)",
     "where": "host",
     "purpose": "Attaches to headed google-chrome-stable over CDP and reads rendered state: what the LIVE :5099/:4096 pages show right now (tabs, text, eval, screenshots). Zero-dependency (Node 22 fetch+WebSocket); needs the browser open with --remote-debugging-port. `probe` cross-checks :4096 session ids vs rendered :5099 rows.",
-    "commands": ["node scripts/cdp-tab.mjs --self-test", "node scripts/cdp-tab.mjs tabs", "node scripts/cdp-tab.mjs probe"]
+    "commands": [
+      "node scripts/cdp-tab.mjs --self-test",
+      "node scripts/cdp-tab.mjs tabs",
+      "node scripts/cdp-tab.mjs probe"
+    ]
   },
   {
     "id": "pages",
     "title": "GitHub Pages panel export (consent-gated)",
     "where": "container",
     "purpose": "Redacted static snapshot (aggregates + session rows, no message text) for Pages. Interactive consent: allow once / allow always / deny. CI assembles committed site-data/panel.json only; the DB never leaves the host.",
-    "commands": ["./scripts/pages-export.sh", "./scripts/pages-export.sh --shell --yes", "node scripts/pages-export.mjs --shell-only --commit site-data/panel.json --out /tmp/panel-check"]
+    "commands": [
+      "./scripts/pages-export.sh",
+      "./scripts/pages-export.sh --shell --yes",
+      "node scripts/pages-export.mjs --shell-only --commit site-data/panel.json --out /tmp/panel-check"
+    ]
   },
   {
     "id": "redact",
     "title": "Redact secrets at egress",
     "where": "container",
     "purpose": "Strips key shapes (sk-, apikey_, JWT, Bearer) and NAME=value secrets from exports (/api/export/session, sessions/patterns/guard CSVs); also a stdin filter. Defence in depth for a value already in the transcript.",
-    "commands": ["node scripts/redact.mjs --self-test", "printf 'text' | node scripts/redact.mjs"]
+    "commands": [
+      "node scripts/redact.mjs --self-test",
+      "printf 'text' | node scripts/redact.mjs"
+    ]
   },
   {
     "id": "chrome-cdp-attach",
     "title": "Make the user's own Chrome CDP-reachable + forward it",
     "where": "host",
     "purpose": "Chrome M136+ refuses --remote-debugging-port on the DEFAULT profile (\"requires a non-default data directory\") and a fresh /tmp profile is logged out. Stops any running Chrome (typed YES unless --yes), launches CDP on a NON-default --user-data-dir, and with --clone-default seeds it from ~/.config/google-chrome so logins persist; forwards the port with socat so the sandbox can attach via cdp-tab.mjs (RULES #62). UI-only GitHub steps (e.g. minting a fine-grained PAT) run here, not gh api (#63).",
-    "commands": ["bash scripts/chrome-cdp-attach.sh 'https://github.com/settings/personal-access-tokens/new'", "bash scripts/chrome-cdp-attach.sh --dry-run", "CDP_HOST=<host-ip> CDP_PORT=9223 node scripts/cdp-tab.mjs tabs"]
+    "commands": [
+      "bash scripts/chrome-cdp-attach.sh 'https://github.com/settings/personal-access-tokens/new'",
+      "bash scripts/chrome-cdp-attach.sh --dry-run",
+      "CDP_HOST=<host-ip> CDP_PORT=9223 node scripts/cdp-tab.mjs tabs"
+    ]
   },
   {
     "id": "browser-tools",
     "title": "Install browser-use + selenium into a venv",
     "where": "container",
     "purpose": "This image ships no pip/ensurepip, so the script creates a venv with --without-pip and bootstraps pip via get-pip.py, then installs browser-use + selenium. Both drive the already-open browser over CDP (RULES #62); browser-use works via pure-Python cdp-use (verified: lists host tabs). Selenium is installed but its chromedriver needs libnss3/libnspr4/libdbus-1, absent here with no sudo, so it only runs where those libs exist (e.g. the host).",
-    "commands": ["bash scripts/browser-tools-install.sh", "bash scripts/browser-tools-install.sh --dry-run", "/home/node/.venvs/browser/bin/python -c 'from browser_use import BrowserSession'"]
+    "commands": [
+      "bash scripts/browser-tools-install.sh",
+      "bash scripts/browser-tools-install.sh --dry-run",
+      "/home/node/.venvs/browser/bin/python -c 'from browser_use import BrowserSession'"
+    ]
   },
   {
     "id": "browser-bench",
     "title": "Benchmark browser drivers + emit failover order",
     "where": "container",
     "purpose": "Probes every CDP browser driver against the live endpoint (cdp_tab, playwright, browser_use, selenium) for the same op (enumerate tabs) and writes data/observability/browser-drivers.json with order[] fastest-working-first. Callers take order[0] and fail over down the list on runtime error; SKIP is not PASS. Measured: cdp_tab ~1.3s < playwright ~11s < browser_use ~25s; selenium FAIL (chromedriver needs libnss3/libnspr4/libdbus-1).",
-    "commands": ["CDP_HOST=<h> CDP_PORT=<p> python3 scripts/browser_bench.py", "python3 scripts/browser_bench.py --json", "python3 scripts/browser_bench.py --pick"]
+    "commands": [
+      "CDP_HOST=<h> CDP_PORT=<p> python3 scripts/browser_bench.py",
+      "python3 scripts/browser_bench.py --json",
+      "python3 scripts/browser_bench.py --pick"
+    ]
   },
   {
     "id": "ux-smoke",
     "title": "Live UX smoke for the :5099 pages (e2e bridge)",
     "where": "container",
     "purpose": "CDP-driven UX assertions (through the host browser, RULES #62) over all six :5099 pages: each LOADS, lang set, one h1, main+skip, no leftover 'loading...', the empty Session-detail card is hidden on load, and the board Gantt+Kanban render. Runnable-now bridge to tester-army/e2e (run the full natural-language framework on the host). Writes data/observability/ux-smoke.json; exit 2 on any failure.",
-    "commands": ["CDP_HOST=<h> CDP_PORT=<p> python3 scripts/ux-smoke.py", "python3 scripts/ux-smoke.py --json"]
+    "commands": [
+      "CDP_HOST=<h> CDP_PORT=<p> python3 scripts/ux-smoke.py",
+      "python3 scripts/ux-smoke.py --json"
+    ]
   },
   {
     "id": "vision-ask",
     "title": "Ask a vision model what is on screen (semantic UX)",
     "where": "container",
     "purpose": "POSTs a screenshot to the allow-listed gemini-2.5-flash and returns an answer, for semantic UX assertions the garbled local OCR cannot make (e.g. 'is the Gantt visible?'). Key GEMINI_API_KEY (the shipped value is a placeholder; needs a real key).",
-    "commands": ["python3 scripts/vision-ask.py --image shot.png --question 'Is a Gantt chart visible? yes/no'", "python3 scripts/vision-ask.py --self-test"]
+    "commands": [
+      "python3 scripts/vision-ask.py --image shot.png --question 'Is a Gantt chart visible? yes/no'",
+      "python3 scripts/vision-ask.py --self-test"
+    ]
   },
   {
     "id": "ask-claude",
     "title": "GATED Claude escalation/reviewer (RULES #68)",
     "where": "container",
     "purpose": "ASK-tier, deliberation-only. Refuses unless --reason AND --yes (consult the operator first); --dry-run prints plan + cost estimate. Escalation / second opinion only (fills the Jev-MCP gap); never the default, never vision. Key ANTHROPIC_API_KEY.",
-    "commands": ["python3 scripts/ask-claude.py --reason '...' --prompt-file /tmp/p.txt --dry-run", "python3 scripts/ask-claude.py --self-test"]
+    "commands": [
+      "python3 scripts/ask-claude.py --reason '...' --prompt-file /tmp/p.txt --dry-run",
+      "python3 scripts/ask-claude.py --self-test"
+    ]
   },
   {
     "id": "notify-sink",
     "title": "Push sentinel FAIL flags to a webhook (alerting)",
     "where": "host",
     "purpose": "The alerting capability the observability tools have and this stack lacked: reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs to $NOTIFY_WEBHOOK. No webhook -> prints payload and SKIPs (exit 0). No model spend, no backend.",
-    "commands": ["NOTIFY_WEBHOOK=<url> ./scripts/notify.sh --last 10", "./scripts/notify.sh --dry-run", "./scripts/notify.sh --self-test"]
+    "commands": [
+      "NOTIFY_WEBHOOK=<url> ./scripts/notify.sh --last 10",
+      "./scripts/notify.sh --dry-run",
+      "./scripts/notify.sh --self-test"
+    ]
   },
   {
     "id": "tui-audit",
     "title": "Read-only causal audit of a TUI session's turns",
     "where": "container",
     "purpose": "Answers 'why did this session have issues' from the opencode store and names the CAUSE (which tool, which blacklist rule, which error signature), not just counts. Picks the TUI session (directory != /home/node/.opencode) when --session is omitted. Read-only, no model calls.",
-    "commands": ["python3 scripts/tui-audit.py --since-hours 24", "python3 scripts/tui-audit.py --session ses_<id> --json", "python3 scripts/tui-audit.py --self-test"]
+    "commands": [
+      "python3 scripts/tui-audit.py --since-hours 24",
+      "python3 scripts/tui-audit.py --session ses_<id> --json",
+      "python3 scripts/tui-audit.py --self-test"
+    ]
+  },
+  {
+    "id": "search-history",
+    "title": "Search stored history (durable search_history)",
+    "where": "container",
+    "purpose": "Search the opencode store's parts (text/tool/reasoning) by substring, read-only, so a fresh session after a handoff can still reach the transcript it left behind (pi-durable search_history).",
+    "commands": [
+      "./scripts/search-history.sh login --limit 20",
+      "./scripts/search-history.sh blacklist --session ses_<id> --json",
+      "./scripts/search-history.sh --self-test"
+    ]
+  },
+  {
+    "id": "guard-classify",
+    "title": "Semantic beforeTool guard (memoized)",
+    "where": "container",
+    "purpose": "durable-pi jev-damage-control analog: ask the cheap SubQ Snap classifier whether a shell command is irreversible/destructive and BLOCK it; the verdict is a durable memo (a restart never re-asks); fails open if unreachable. Exit 1 = BLOCK.",
+    "commands": [
+      "./scripts/guard-classify.py --command \"rm -rf /data\"",
+      "./scripts/guard-classify.py --command \"ls -la\" --json",
+      "./scripts/guard-classify.py --self-test"
+    ]
+  },
+  {
+    "id": "harden-services",
+    "title": "Bound crash-looping/oversubscribing services",
+    "where": "host",
+    "purpose": "Emit (or --apply) a systemd user drop-in for deepseek-harness.service with Restart/StartLimitBurst/CPUQuota/MemoryMax, plus the docker compose cpus note, so a crash loop cannot starve the box (ws24 lockup).",
+    "commands": [
+      "./scripts/harden-services.sh",
+      "./scripts/harden-services.sh --apply",
+      "./scripts/harden-services.sh --self-test"
+    ]
   }
 ]

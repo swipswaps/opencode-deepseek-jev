@@ -41,6 +41,20 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **pi-durable / durable-pi mapping + 4 durable-pattern tools.** *Recorded
+      first:* `docs/pi-durable-mapping.md` + **RULE #69** (layered decisions;
+      handoff = curate + reset-note + **search-history**; snapshot→deltas;
+      **memoized beforeTool guard**; checkpointed/supervised jobs). *Then:*
+      **(1)** `scripts/search-history.sh` — search the stored history after a
+      handoff (durable `search_history`); self-test PASS, live 3 matches.
+      **(3)** `scripts/guard-classify.py` — the `jev-damage-control` analog:
+      SubQ classifier + **durable memo**; proven `rm -rf /data/opencode` →
+      **BLOCK (p=0.98)**, `ls -la` → ALLOW, repeat → memoized; self-test PASS.
+      **(4)** `scripts/harden-services.sh` — systemd `Restart`/`StartLimitBurst`/
+      `CPUQuota` drop-in for the crash-looping `deepseek-harness.service` (+ the
+      compose `cpus` note); `--print`/`--apply`/`--self-test`. **Remaining:**
+      (2) dashboard **snapshot→deltas SSE**; (5) durable-pi **wholesale**
+      adoption (host/docs).
 - [x] **Scripted items 1–3 + 6 as a host runbook** → `host-cpu-recovery` in
       `scripts/runbooks.json` (served at `/runbooks`): **(1)** `sudo systemctl
       enable --now docker`; **(2)** stop/disable the crash-looping
