@@ -543,5 +543,16 @@
       "python3 scripts/panels-tour.py --no-video",
       "python3 scripts/panels-tour.py --self-test"
     ]
+  },
+  {
+    "id": "browser-python",
+    "title": "Resolve the browser venv python (host)",
+    "where": "host",
+    "purpose": "Picks a Python with the browser stack (playwright/browser-use/selenium): BROWSER_VENV, else ~/.venvs/browser, else /home/owner/.venvs/browser, then execs a script with it. Makes ux-smoke/browser_bench/panels-tour durable across container resets. Run where the browser lives (the host) - the container's python is a different version.",
+    "commands": [
+      "./scripts/browser-python.sh scripts/ux-smoke.py --vision",
+      "./scripts/browser-python.sh scripts/browser_bench.py --pick",
+      "BROWSER_VENV=/path/venv ./scripts/browser-python.sh <script> [args]"
+    ]
   }
 ]
