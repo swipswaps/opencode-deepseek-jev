@@ -261,5 +261,24 @@
       "./scripts/web-restart.sh"
     ],
     "note": "Manual, host only (needs sudo + docker + systemctl --user). ORDER: (1) enable --now docker (it was disabled, so it never survived a reboot); (2) stop/disable the crash-looping deepseek-harness.service, or bound it with CPUQuota=25%; (3) reduce co-tenants - do NOT run host TUI + :4096 web + dsh + Chrome-heavy at once on 8 cores; (4) only if `ss` shows a stale docker-proxy still holding :4096/:5099 after a stop, `sudo systemctl restart docker`. A 502 from web.sh means caddy is up but opencode-web is not answering on :4096 yet - health pre-warm takes ~25s, so retry, and read ./scripts/web-logs.sh if it persists (contention can delay boot)."
+  },
+  {
+    "id": "adopt-durable-pi",
+    "title": "Adopt durable-pi (device-owned agent network)",
+    "purpose": "Run disler/durable-pi as a PARALLEL host service (Node 24 + OpenRouter), not a migration. See docs/durable-pi-adoption.md for the decision gate + caveats.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "git clone https://github.com/disler/durable-pi && cd durable-pi",
+      "cp .env.example .env",
+      "cp dpi-network.example.yaml dpi-network.yaml",
+      "just install",
+      "just net up local",
+      "just hub build",
+      "just backend run",
+      "just hub start",
+      "just tui attach local"
+    ],
+    "note": "Parallel, not a migration: opencode sessions are not importable into pi-durable. Needs Node 24, just, zsh, an OpenRouter key. Their caveats: durable = checkpointed not exactly-once; a token is a shell; LAN http is cleartext; the hub holds every token; experimental (pins 1.0.3)."
   }
 ]
