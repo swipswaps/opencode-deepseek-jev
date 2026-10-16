@@ -50,3 +50,30 @@ is a separate, larger decision (see "Adopt durable-pi wholesale").
 3. **One reducer, two renderers.** Committed state → any client renders the same
    view; that is what makes snapshot→deltas possible (and why our polling is the
    thing to remove).
+
+## Durability audit vs the post (2026-10-16)
+
+A re-read of Pi Durable against what we actually built, marked
+**have / partial / gap**. North star = the post's own law: *storage is the source
+of truth; every delivery, client, and report is a projection that can be
+rebuilt.*
+
+| Pi Durable mechanism | Here | Note |
+|---|---|---|
+| one process owns storage; clients attach | **have** | dashboard + `/api/stream` are the client surface |
+| **hello → snapshot → deltas** | **have** | SSE `/api/stream` (snapshot on connect, deltas after) |
+| checkpointed tasks; resume after a crash | **partial** | sentinel cursors (`sentinel-*.cursor`) resume; long shell jobs (`rotate-api-keys`, `recover-4096`) are not checkpointed yet |
+| exactly-once submission (`requestId`) | **have (analog)** | stable per-incident ledger keys (`UNIQUE(source,key)`) — a re-sweep is a no-op |
+| `reset(note)` + `search_history` | **have** | `handoff-brief.sh` (curate + note) + `search-history.sh` |
+| background **compaction** | **partial** | `session-digest.sh` curates a ~1.5 KB digest at trip time; not a model summarizer |
+| app state in **durable documents** | **gap (accepted)** | the ledger is a *derived* sidecar, not an atomic commit with the opencode transcript — that store is read-only, so we cannot join the commit. We chose *derived + de-duped* instead of faking atomicity. |
+| **malleable** registry (swap tools while running) | **n/a** | we do not own the tool registry; the guard plugin is the one runtime hook |
+| multiplayer steering | **partial** | any client attaches to the dashboard; steering stays the TUI's job |
+| **read the durable source, not the delivery log** | **have (#73)** | `triage-alerts.py` reads the ledger (`--in` = the sink); proved 124 vs 21 |
+| `duration` is time-in-system, not handler cost | **have (#72)** | single-thread M/M/1; T4 excludes SSE |
+
+**Net:** the two mechanisms adopted this pass — **#73 read-the-source** and **#72
+time-in-system** — are exactly what the post's *crash-survival* and *long-run*
+laws demand. The one real gap (atomic durable documents) is **blocked by design**
+(opencode owns and locks the transcript store); we accept a derived, de-duped,
+rebuildable sidecar and document it rather than pretend otherwise.

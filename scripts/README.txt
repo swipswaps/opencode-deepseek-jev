@@ -592,11 +592,13 @@ notify-selfhost.sh
     --port N, --write-only, --self-test.
 
 triage-alerts.py
-    Triage the pushed alerts into an actionable brief: read the sink
-    JSONL, de-dupe the stable-key ledger FAIL flags, classify each
-    (over_budget / stall / slow_fetch / deny_listed / guidance), and
-    print severity + the exact next command + the runbook. Closes
-    detect->push->act. Plain selectable text (#70); --in FILE, --json,
+    Triage the alerts into an actionable brief: read the DURABLE
+    ledger (source of truth — an alert that failed to POST is still
+    triaged; --in FILE reads the delivery-log sink instead), de-dupe
+    the stable-key FAIL rows, classify each (over_budget / stall /
+    slow_fetch / deny_listed / guidance), and print severity + the
+    exact next command + the runbook. Closes detect->push->act. Plain
+    selectable text (#70); --ledger DB, --last N, --out FILE, --json,
     --self-test offline.
 
 latency-timeline.sh

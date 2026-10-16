@@ -593,9 +593,10 @@
     "id": "triage-alerts",
     "title": "Triage the pushed alerts -> next command + runbook",
     "where": "container",
-    "purpose": "Reads the sink JSONL, de-dupes the stable-key ledger FAIL flags, classifies each (over_budget/stall/slow_fetch/deny_listed), and prints severity + the exact next command + the runbook. Plain selectable text; --json for machines. Closes detect->push->act.",
+    "purpose": "Reads the DURABLE ledger (source of truth -- so an alert that failed to POST is still triaged; --in reads the delivery-log sink instead), de-dupes the stable-key FAIL flags, classifies each (over_budget/stall/slow_fetch/deny_listed), and prints severity + the exact next command + the runbook. Plain selectable text; --json for machines; --out writes the brief. Closes detect->push->act.",
     "commands": [
       "./scripts/triage-alerts.py",
+      "./scripts/triage-alerts.py --out data/observability/triage.md",
       "./scripts/triage-alerts.py --in data/observability/notify-sink.jsonl",
       "python3 scripts/triage-alerts.py --json",
       "python3 scripts/triage-alerts.py --self-test"

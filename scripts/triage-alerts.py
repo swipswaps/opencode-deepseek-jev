@@ -2,15 +2,19 @@
 """triage-alerts.py -- turn the alert sink's pushed ledger FAIL flags into an
 actionable, human-readable brief.
 
-The sentinel pushes its FAIL/ADVISORY ledger rows to the self-hosted sink
-(scripts/notify-sink.mjs -> data/observability/notify-sink.jsonl). This reads
-that JSONL, de-duplicates the flags (the ledger keys are stable, so the same
-chronic condition repeats every sweep), classifies each one, and prints severity,
-the exact next command, and the runbook that covers it. Plain selectable text.
+The sentinel records FAIL/ADVISORY rows in the DURABLE ledger
+(data/observability/observability.db) and also pushes them to a delivery log
+(the self-hosted sink, scripts/notify-sink.mjs -> notify-sink.jsonl). This reads
+the DURABLE ledger first -- the source of truth -- so an alert that failed to
+POST is still triaged; --in reads the delivery log instead. It de-duplicates the
+stable-key rows (one chronic condition = one row per sweep), classifies each, and
+prints severity, the exact next command, and the runbook. Plain selectable text.
 
 Usage:
-  ./scripts/triage-alerts.py                       # read the sink JSONL
-  ./scripts/triage-alerts.py --in FILE             # another sink file
+  ./scripts/triage-alerts.py                       # DURABLE ledger (source of truth)
+  ./scripts/triage-alerts.py --in FILE             # a delivery-log (sink) file
+  ./scripts/triage-alerts.py --ledger DB --last N  # another ledger
+  ./scripts/triage-alerts.py --out FILE            # also write the brief (durable)
   ./scripts/triage-alerts.py --json                # machine form
   ./scripts/triage-alerts.py --self-test           # offline fixture
 
@@ -20,9 +24,14 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import sys
 
 DEFAULT_SINK = "data/observability/notify-sink.jsonl"
+# The DURABLE source of truth (pi-durable: "a new process opens the same storage
+# and continues"). The sink is only the *delivery log*; a dropped POST would
+# silently lose an alert, so triage reads the ledger first.
+DEFAULT_LEDGER = "data/observability/observability.db"
 
 # kind -> (severity rank, label, runbook id or None, next-command builder)
 SEV = {"high": 0, "medium": 1, "low": 2}
@@ -103,6 +112,25 @@ def read_flags(path, stream):
             yield (f.get("resource", "?"), f.get("detail", ""), f.get("ts", ""))
 
 
+def read_ledger(path, limit):
+    """Yield (resource, detail, ts) from the DURABLE ledger (source of truth).
+
+    Same rows notify.sh pushes, but read from storage rather than the delivery
+    log -- so an alert that failed to POST is still triaged. Read-only.
+    """
+    con = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    try:
+        rows = list(con.execute(
+            "SELECT ts,resource,detail FROM ledger WHERE type='ADVISORY' "
+            "AND verdict='FAIL' ORDER BY ts DESC LIMIT ?", (limit,)))
+    except sqlite3.Error:
+        rows = []
+    finally:
+        con.close()
+    for ts, resource, detail in rows:
+        yield (resource or "?", detail or "", ts or "")
+
+
 def summarize(recs):
     """recs: iterable of (resource, detail, ts). Dedupe by (resource, detail)."""
     groups = {}
@@ -173,6 +201,20 @@ def self_test():
     # empty sink
     if "clean" not in render(summarize([]), [], None):
         print("FAIL: empty not clean"); fail = 1
+    # durable ledger reader (source of truth), independent of the delivery log
+    import tempfile
+    d = tempfile.mkdtemp()
+    lp = os.path.join(d, "o.db")
+    c = sqlite3.connect(lp)
+    c.execute("CREATE TABLE ledger(id INTEGER PRIMARY KEY, ts TEXT, resource TEXT, "
+              "detail TEXT, type TEXT, verdict TEXT)")
+    c.execute("INSERT INTO ledger(ts,resource,detail,type,verdict) VALUES"
+              "('2026-01-01T00:00:00Z','caddy access log',"
+              "'slow fetches x5, slowest 20.0s (GET /provider)','ADVISORY','FAIL')")
+    c.commit(); c.close()
+    lrecs = list(read_ledger(lp, 10))
+    if len(lrecs) != 1 or "slow fetches" not in lrecs[0][1]:
+        print("FAIL: read_ledger (%r)" % lrecs); fail = 1
     print("triage-alerts: self-test %s" % ("PASS" if not fail else "FAIL"))
     return fail
 
@@ -181,6 +223,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="infile", default=None)
     ap.add_argument("--sink", default=None)
+    ap.add_argument("--ledger", default=None)
+    ap.add_argument("--last", type=int, default=200)
     ap.add_argument("--runbooks", default="scripts/runbooks.json")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out", default=None)
@@ -188,14 +232,24 @@ def main():
     a = ap.parse_args()
     if a.self_test:
         return self_test()
-    path = a.infile or a.sink or DEFAULT_SINK
-    if path == "-":
-        recs = list(read_flags(None, sys.stdin))
-    elif os.path.isfile(path):
-        recs = list(read_flags(path, None))
+    if a.infile or a.sink:
+        path = a.infile or a.sink
+        if path == "-":
+            recs = list(read_flags(None, sys.stdin))
+        elif os.path.isfile(path):
+            recs = list(read_flags(path, None))
+        else:
+            print("no sink file at %s (nothing pushed yet, or wrong --in)" % path)
+            return 0
     else:
-        print("no sink file at %s (nothing pushed yet, or wrong --in)" % path)
-        return 0
+        led = a.ledger or DEFAULT_LEDGER
+        if os.path.isfile(led):
+            recs = list(read_ledger(led, a.last))
+        elif os.path.isfile(DEFAULT_SINK):
+            recs = list(read_flags(DEFAULT_SINK, None))
+        else:
+            print("no ledger (%s) or sink (%s) found" % (led, DEFAULT_SINK))
+            return 0
     groups = summarize(recs)
     runbooks = load_runbooks(a.runbooks)
     ts = [g["first"] for g in groups if g["first"]] + [g["last"] for g in groups if g["last"]]
