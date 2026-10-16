@@ -554,5 +554,17 @@
       "./scripts/browser-python.sh scripts/browser_bench.py --pick",
       "BROWSER_VENV=/path/venv ./scripts/browser-python.sh <script> [args]"
     ]
+  },
+  {
+    "id": "notify-setup",
+    "title": "Scripted NOTIFY_WEBHOOK setup + probe",
+    "where": "host",
+    "purpose": "Replaces hand-typing: validates a webhook URL (rejects placeholders like REPLACE-WITH-YOUR-UUID / <url> / example.), writes it to .env.local (0600), and proves it with a real POST so the sentinel timer (EnvironmentFile) pushes on a trip. --show/--test/--unset/--self-test.",
+    "commands": [
+      "./scripts/notify-setup.sh --url https://hooks.slack.com/services/...",
+      "./scripts/notify-setup.sh --show",
+      "./scripts/notify-setup.sh --test",
+      "./scripts/notify-setup.sh --self-test"
+    ]
   }
 ]
