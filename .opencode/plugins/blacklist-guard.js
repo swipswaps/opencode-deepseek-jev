@@ -34,6 +34,7 @@
 // so the file keeps no escaped regex literals.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 // The observability directory is anchored to THIS file's location, not to the
 // session/project `directory` opencode passes in. Interactive sessions can run
@@ -41,6 +42,32 @@ import { fileURLToPath } from "node:url";
 // guard write its log somewhere that never got read — making a mis-load
 // indistinguishable from "no matches yet". Anchor to <repo>/data/observability.
 const DEFAULT_OBS = fileURLToPath(new URL("../../data/observability/", import.meta.url)).replace(/\/+$/, "");
+
+// Semantic layer (durable-pi's beforeTool guard): beyond the fixed PATTERN
+// rules below, ask the cheap SubQ classifier whether a command is
+// irreversible/destructive, and block it if so. Best-effort + FAIL-OPEN: any
+// error (missing script, no key, network, timeout) leaves the command alone —
+// exactly like durable-pi's jev-damage-control ("unreachable guard runs the
+// command"). Verdicts are memoized in guard-classify.py, so a repeated command
+// is free. Disable with OPENCODE_SEMANTIC_GUARD=off.
+const REPO = fileURLToPath(new URL("../../", import.meta.url)).replace(/\/+$/, "");
+const SEM_SCRIPT = REPO + "/scripts/guard-classify.py";
+const SEM_ENV = REPO + "/.env.local";
+export function semanticVerdict(command) {
+  try {
+    execFileSync("python3",
+      [SEM_SCRIPT, "--command", String(command), "--json", "--env-file", SEM_ENV],
+      { encoding: "utf8", timeout: 15000 });
+    return { block: false };
+  } catch (e) {
+    const out = String((e && e.stdout) || "");
+    try {
+      const j = JSON.parse(out);
+      if (j && j.verdict === "BLOCK") return { block: true, verdict: j };
+    } catch { /* not a structured block -> allow */ }
+    return { block: false };
+  }
+}
 
 const RULES = [
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
@@ -298,6 +325,24 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
           "See RULES.md \"Substitutions for the blacklist\". " +
           "Set OPENCODE_BLACKLIST_GUARD=warn to downgrade, or =off to disable."
         );
+      }
+
+      // Semantic layer: pattern rules passed, but the command may still be
+      // irreversible. Ask the classifier; block only on a confident BLOCK.
+      if (m === "block" && process.env.OPENCODE_SEMANTIC_GUARD !== "off") {
+        let sv = { block: false };
+        try { sv = semanticVerdict(command); } catch { /* fail open */ }
+        if (sv.block) {
+          const p = sv.verdict && sv.verdict.noul;
+          record("block", "semantic guard blocked irreversible command", { command: command.slice(0, 200), noul: p });
+          await log("error", "semantic guard blocked (irreversible)", { command: command.slice(0, 200), noul: p });
+          throw new Error(
+            "semantic-guard blocked this command as irreversible/destructive" +
+            (p != null ? (" (subq noul=" + p + ")") : "") +
+            ".\nSplit it, use a reversible form, or confirm intent. " +
+            "Set OPENCODE_SEMANTIC_GUARD=off to disable."
+          );
+        }
       }
 
       if (m === "block" && hits.some((h) => h.sev === "fix")) {

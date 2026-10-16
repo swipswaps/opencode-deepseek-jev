@@ -41,6 +41,14 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] **Semantic layer in `blacklist-guard.js`.** After the fixed pattern rules,
+      the guard now calls `scripts/guard-classify.py` (SubQ) and **blocks
+      irreversible/destructive commands**, fail-open (unreachable → runs),
+      **memoized** (a repeat is free), disabled with `OPENCODE_SEMANTIC_GUARD=off`.
+      `semanticVerdict` exported. Proven: `rm -rf /data/opencode` →
+      `{block:true}` (SubQ noul memoized), `ls -la` → `{block:false}`;
+      `blacklist-guard-self-test.mjs` PASS. Takes effect on the next opencode
+      restart (plugins load at startup).
 - [x] **(5) durable-pi wholesale adoption plan** — `docs/durable-pi-adoption.md`:
       what it adds (durable checkpoints, device-owned agents, multiplayer,
       proactive classifier, compaction/`reset`/`search_history`), why it is a

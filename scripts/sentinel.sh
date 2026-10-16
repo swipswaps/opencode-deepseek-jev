@@ -454,6 +454,11 @@ PYEOF
             printf 'clean: no actionable trips (history reported above)\n'
         fi
     fi
+    # Alerting sink: on a trip, push the FAIL flags to $NOTIFY_WEBHOOK if set.
+    # notify.sh builds the payload from the ledger; a no-op without the webhook.
+    if [ "$NTRIP" -gt 0 ] && [ -n "${NOTIFY_WEBHOOK:-}" ] && [ -x "$REPO/scripts/notify.sh" ]; then
+        "$REPO/scripts/notify.sh" --last 20 || printf 'WARN: notify.sh post failed\n'
+    fi
     export RUN_TS REV GWCOUNT="$gwcount"
     if [ -n "$TRIPMSG" ]; then return 1; fi
     return 0
