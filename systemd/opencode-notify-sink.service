@@ -9,7 +9,7 @@ Type=simple
 EnvironmentFile=-__REPO__/.env.local
 Environment=PORT=8788
 Environment=HOST=127.0.0.1
-ExecStart=/usr/bin/env node __REPO__/scripts/notify-sink.mjs
+ExecStart=__NODE__ __REPO__/scripts/notify-sink.mjs
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

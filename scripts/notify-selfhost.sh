@@ -42,22 +42,39 @@ main() {
         esac
     done
     have node || { printf 'GATE FAIL: node required (notify-sink.mjs)\n'; return 1; }
+    local NODE; NODE=$(command -v node)
+    [ -n "$NODE" ] || { printf 'GATE FAIL: cannot resolve node path\n'; return 1; }
     local DEST="$HOME/.config/systemd/user"
     mkdir -p "$DEST" || { printf 'FAIL: cannot create %s\n' "$DEST"; return 1; }
-    python3 - "$REPO/systemd/opencode-notify-sink.service" "$DEST/opencode-notify-sink.service" "$REPO" "$PORT" << 'PYEOF'
+    python3 - "$REPO/systemd/opencode-notify-sink.service" "$DEST/opencode-notify-sink.service" "$REPO" "$PORT" "$NODE" << 'PYEOF'
 import sys
-src, dst, repo, port = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-t = open(src).read().replace("__REPO__", repo).replace("PORT=8788", "PORT=" + port)
+src, dst, repo, port, node = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+t = (open(src).read().replace("__REPO__", repo).replace("__NODE__", node)
+     .replace("PORT=8788", "PORT=" + port))
 open(dst, "w").write(t)
-print("wrote " + dst)
+print("wrote " + dst + "  (node=" + node + ")")
 PYEOF
     if [ "$WRITEONLY" -eq 1 ] || ! have systemctl; then
         printf 'unit written; enable on the host: systemctl --user enable --now opencode-notify-sink.service\n'
     else
         systemctl --user daemon-reload || { printf 'FAIL: daemon-reload\n'; return 1; }
         systemctl --user enable --now opencode-notify-sink.service || { printf 'FAIL: enable/start\n'; return 1; }
-        sleep 1
-        printf 'health: '; curl -s --max-time 5 "http://127.0.0.1:$PORT/health" || printf '(no response)\n'
+        local k=0 up=""
+        while [ "$k" -lt 8 ]; do
+            sleep 1
+            up=$(curl -s --max-time 3 "http://127.0.0.1:$PORT/health" || true)
+            [ "$up" = "ok" ] && break
+            k=$((k + 1))
+        done
+        if [ "$up" = "ok" ]; then
+            printf 'sink healthy: %s\n' "$up"
+        else
+            printf 'FAIL: sink not healthy after 8s. status:\n'
+            systemctl --user --no-pager status opencode-notify-sink.service 2>&1 | tail -12
+            printf 'journal:\n'
+            journalctl --user -u opencode-notify-sink.service --no-pager -n 12 2>&1 | tail -12
+            return 1
+        fi
     fi
     printf 'setting NOTIFY_WEBHOOK -> http://127.0.0.1:%s/hook\n' "$PORT"
     bash "$REPO/scripts/notify-setup.sh" --url "http://127.0.0.1:$PORT/hook" || {
