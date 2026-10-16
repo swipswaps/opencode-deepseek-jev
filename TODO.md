@@ -41,6 +41,12 @@ Last updated: 2026-10-14
 
 ## Done (most recent first)
 
+- [x] Fixed **`pressure-watch.sh`** (the side-finding in today's TUI lockup
+      audit): the `printf '--- X ---'` headers were parsed by bash as options
+      (`printf: --: invalid option`); all 7 are now `printf '%s\n' '--- X ---'`.
+      Proven: header renders clean, `bash -n` OK, scan-constraints PASS. (The
+      host tools `free`/`ps` are absent in-sandbox, so only the host runs it
+      fully — it is a host monitor.)
 - [x] **Pivot to the TUI instance + read-only causal audit.** The open TUI
       session (`ses_ec86dd329ffe…` *"Prompt loop audit for sentinel.sh"*, dir
       `/home/owner/…/repo`): **56 msgs · 247 parts · 85 tool calls** (bash 54 ·

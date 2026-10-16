@@ -47,23 +47,23 @@ main() {
     log="$REPO_DIR/logs/pressure-$ts.log"
     {
         printf '=== pressure-watch %s ===\n' "$ts"
-        printf '--- PSI ---\n'
+        printf '%s\n' '--- PSI ---'
         printf 'cpu: '; cat /proc/pressure/cpu 2>&1 | head -1
         printf 'io: '; cat /proc/pressure/io 2>&1 | head -1
         printf 'memory: '; cat /proc/pressure/memory 2>&1 | head -1
-        printf '--- memory/swap ---\n'
+        printf '%s\n' '--- memory/swap ---'
         free -m 2>&1 | head -3
-        printf '--- top CPU ---\n'
+        printf '%s\n' '--- top CPU ---'
         ps -o pid,pcpu,pmem,etime,comm -e --sort=-%cpu 2>&1 | head -9
-        printf '--- top MEM ---\n'
+        printf '%s\n' '--- top MEM ---'
         ps -o pid,pcpu,pmem,etime,comm -e --sort=-%mem 2>&1 | head -9
-        printf '--- nebula liveness ---\n'
+        printf '%s\n' '--- nebula liveness ---'
         ps -o pid,lstart,etime,args -e 2>&1 | grep '[n]ebula' | head -3
         systemctl show nebula -p NRestarts 2>&1 | head -1
-        printf '--- D-state blockers ---\n'
+        printf '%s\n' '--- D-state blockers ---'
         ps -o pid,stat,comm -e 2>&1 | awk '$2 ~ /^D/' | head -8
         printf '(end; blank above means none)\n'
-        printf '--- orphans from this repo work (host cleanup, NOT killed here) ---\n'
+        printf '%s\n' '--- orphans from this repo work (host cleanup, NOT killed here) ---'
         ps -o pid,etime,args -e 2>&1 | grep -E '[c]hromium-browser --headless|[d]ashboard.mjs [0-9]{4}' | head -8
         printf '(end)\n'
     } | tee "$log" | head -40
