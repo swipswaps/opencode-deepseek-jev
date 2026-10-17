@@ -398,6 +398,17 @@ main() {
         bad 'locate-prune-snapshots.sh present'
     fi
 
+    if [ -f "$REPO/scripts/proc-progress.sh" ]; then
+        if bash "$REPO/scripts/proc-progress.sh" --self-test > "$work/pp_st.txt" 2>&1; then
+            ok 'proc-progress: self-test (silent-process monitor)'
+        else
+            bad 'proc-progress: self-test (silent-process monitor)'
+            cat "$work/pp_st.txt"
+        fi
+    else
+        bad 'proc-progress.sh present'
+    fi
+
     if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
         if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
             ok 'rotate-server-password: self-test (generate + atomic rewrite)'

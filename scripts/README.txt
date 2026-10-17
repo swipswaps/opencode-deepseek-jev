@@ -654,6 +654,13 @@ locate-prune-snapshots.sh
     yields to your work. --paths to override, --no-updatedb to edit only,
     dry-run default, --self-test.
 
+proc-progress.sh
+    Live progress for a silent process (updatedb prints nothing and
+    looks hung). Every few seconds: state/elapsed/CPU, /proc read
+    counters, and the process cwd (for a tree walker, cwd IS the
+    progress bar). Read-only; Ctrl-C stops the view, not the job.
+    sudo for /proc/<pid>/io. --self-test.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

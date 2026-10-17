@@ -689,5 +689,16 @@
       "sudo bash scripts/locate-prune-snapshots.sh --disable-timer",
       "sudo bash scripts/locate-prune-snapshots.sh --enable-timer"
     ]
+  },
+  {
+    "id": "proc-progress",
+    "title": "Live progress for a silent process",
+    "where": "host",
+    "purpose": "Background jobs like updatedb print nothing and look hung. Prints every few seconds: state/elapsed/CPU, /proc read counters, and the process cwd (for a tree walker, cwd is the progress bar). Read-only; never signals the process. Run with sudo for /proc/<pid>/io.",
+    "commands": [
+      "sudo bash scripts/proc-progress.sh updatedb",
+      "sudo bash scripts/proc-progress.sh <pid> 10",
+      "bash scripts/proc-progress.sh --self-test"
+    ]
   }
 ]
