@@ -76,6 +76,15 @@ main() {
 
     local work="/tmp/dash-test-$(date -u +%H%M%S)"
     mkdir -p "$work"
+    # A small fixture store for the semantic/rebuild legs only (the live 626 MB
+    # DB made the index rebuild ~90s). The SERVED dashboard keeps the live store
+    # so data-dependent checks (e.g. /api/overview cache-by-limit) stay meaningful.
+    local fixdb=""
+    if [ -x "$REPO/scripts/test-fixture-db.sh" ]; then
+        if "$REPO/scripts/test-fixture-db.sh" --out "$work/opencode.db" > /dev/null 2>&1; then
+            fixdb="$work/opencode.db"
+        fi
+    fi
 
     printf '=== test-dashboard.sh ===\n'
     printf 'port: %s\n' "$PORT"
@@ -354,7 +363,7 @@ PY
     fi
 
     if [ -x "$REPO/scripts/cost-bottlenecks.sh" ]; then
-        "$REPO/scripts/cost-bottlenecks.sh" --top 3 > "$work/cb.txt" 2>&1
+        "$REPO/scripts/cost-bottlenecks.sh" --top 3 --db "${fixdb:-$db}" > "$work/cb.txt" 2>&1
         local cb_rc=$?
         if [ "$cb_rc" -eq 0 ] && has 'per_1k_in' "$work/cb.txt"; then ok 'cost-bottlenecks.sh runs'; else bad 'cost-bottlenecks.sh runs'; fi
     else
@@ -362,27 +371,34 @@ PY
     fi
 
     if [ -x "$REPO/scripts/semantic-search.sh" ]; then
-        "$REPO/scripts/semantic-search.sh" --rebuild > "$work/idx.txt" 2>&1
+        "$REPO/scripts/semantic-search.sh" --rebuild --db "${fixdb:-$db}" > "$work/idx.txt" 2>&1
         local si_rc=$?
         if [ "$si_rc" -eq 0 ] && has 'indexed' "$work/idx.txt"; then ok 'semantic-search.sh builds index'; else bad 'semantic-search.sh builds index'; fi
     else
         bad 'semantic-search.sh present'
     fi
 
-    if [ -x "$REPO/scripts/lint.sh" ]; then
-        "$REPO/scripts/lint.sh" > "$work/lint.txt" 2>&1
-        local lint_rc=$?
-        if [ "$lint_rc" -eq 0 ]; then ok 'lint.sh passes'; else bad 'lint.sh passes'; tail -6 "$work/lint.txt"; fi
+    if [ "${GATES_RUN_BY_PARENT:-0}" = "1" ]; then
+        # The parent harness already ran lint + test-hygiene; running them again
+        # here nearly DOUBLED the whole gate (~4.6 min of the ~9). Standalone runs
+        # still run them.
+        ok 'lint.sh + test-hygiene.sh (run by parent harness)'
     else
-        bad 'lint.sh present'
-    fi
+        if [ -x "$REPO/scripts/lint.sh" ]; then
+            "$REPO/scripts/lint.sh" > "$work/lint.txt" 2>&1
+            local lint_rc=$?
+            if [ "$lint_rc" -eq 0 ]; then ok 'lint.sh passes'; else bad 'lint.sh passes'; tail -6 "$work/lint.txt"; fi
+        else
+            bad 'lint.sh present'
+        fi
 
-    if [ -x "$REPO/scripts/test-hygiene.sh" ]; then
-        "$REPO/scripts/test-hygiene.sh" > "$work/hygiene.txt" 2>&1
-        local hyg_rc=$?
-        if [ "$hyg_rc" -eq 0 ]; then ok 'test-hygiene.sh passes'; else bad 'test-hygiene.sh passes'; tail -6 "$work/hygiene.txt"; fi
-    else
-        bad 'test-hygiene.sh present'
+        if [ -x "$REPO/scripts/test-hygiene.sh" ]; then
+            "$REPO/scripts/test-hygiene.sh" > "$work/hygiene.txt" 2>&1
+            local hyg_rc=$?
+            if [ "$hyg_rc" -eq 0 ]; then ok 'test-hygiene.sh passes'; else bad 'test-hygiene.sh passes'; tail -6 "$work/hygiene.txt"; fi
+        else
+            bad 'test-hygiene.sh present'
+        fi
     fi
 
     if [ -f "$REPO/scripts/ocr-tesseractjs.mjs" ]; then

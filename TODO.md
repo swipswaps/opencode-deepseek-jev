@@ -8,6 +8,15 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
+      lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —
+      the real reason test-dashboard was >9 min. Under harness it now sets
+      `GATES_RUN_BY_PARENT=1` and skips the nested pair (standalone still runs
+      them); its served dashboard keeps the live store (data-dependent checks
+      stay valid) while the semantic index rebuild uses the fixture store
+      (~90s→~17s). `semantic-search.sh`/`cost-bottlenecks.sh` gained `--db`.
+      test-dashboard under harness 473s→196s (120/0).
+
 - [x] **Fixture-DB for the contract tests (gates faster still).** New
       `test-fixture-db.sh` seeds a few-KB opencode.db (session/message/part/
       todo); `test-tooling.sh` and `test-hygiene.sh` now run the DB-reading

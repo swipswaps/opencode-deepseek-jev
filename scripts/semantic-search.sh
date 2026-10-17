@@ -120,6 +120,7 @@ main() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
+            --db) DB="${2:-}"; shift 2 ;;
             --rebuild) REBUILD=1; shift ;;
             --fuzzy) FUZZY=1; shift ;;
             --limit)

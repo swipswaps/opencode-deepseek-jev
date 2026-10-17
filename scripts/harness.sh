@@ -122,7 +122,11 @@ main() {
     if [ "$FAST" -eq 1 ]; then
         skip 'gate test-dashboard (--fast)'
     else
+        # lint + test-hygiene already ran above; tell the dashboard gate so it
+        # does not re-run them (that double-run nearly doubled the whole suite).
+        export GATES_RUN_BY_PARENT=1
         run_gate test-dashboard
+        unset GATES_RUN_BY_PARENT
     fi
 
     if [ "$JSON" -eq 0 ]; then
@@ -170,7 +174,8 @@ main() {
     else
         section "summary"
         printf 'gates passed: %d   gates failed: %d\n' "$PASS_GATES" "$FAILED_GATES"
-        printf 'note: test-dashboard.sh already runs lint.sh and test-hygiene.sh.\n'
+        printf 'note: test-dashboard.sh re-runs lint + test-hygiene only when run STANDALONE;\n'
+        printf '      under harness.sh they run once (GATES_RUN_BY_PARENT).\n'
         printf '@@END harness passed=%d failed=%d ts=%s\n' "$PASS_GATES" "$FAILED_GATES" "$TS"
         if [ "$EXPORT" -eq 1 ]; then
             local rep="$REPO/logs/harness-$TS.md"

@@ -47,6 +47,18 @@ main() {
         return 2
     fi
     DB="$REPO/data/opencode/opencode.db"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --db) DB="${2:-}"; shift 2 ;;
+            --top)
+                case "${2:-}" in
+                    ''|*[!0-9]*) usage; return 2 ;;
+                    *) TOP="$2"; shift 2 ;;
+                esac
+                ;;
+            *) usage; return 2 ;;
+        esac
+    done
     if [ ! -f "$DB" ]; then
         printf 'FAIL: no database at %s\n' "$DB"
         return 1
@@ -55,17 +67,6 @@ main() {
         printf 'FAIL: sqlite3 required\n'
         return 1
     fi
-
-    case "${1:-}" in
-        "") ;;
-        --top)
-            case "${2:-}" in
-                ''|*[!0-9]*) usage; return 2 ;;
-                *) TOP="$2" ;;
-            esac
-            ;;
-        *) usage; return 2 ;;
-    esac
 
     printf '=== cost-bottlenecks.sh ===\n'
     printf 'db:  %s\n' "$DB"

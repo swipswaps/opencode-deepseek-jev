@@ -31,9 +31,12 @@ con.execute("CREATE TABLE message(id TEXT PRIMARY KEY, session_id TEXT, time_cre
 con.execute("CREATE TABLE part(id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT)")
 con.execute("CREATE TABLE todo(session_id TEXT, content TEXT, status TEXT, priority TEXT, position INTEGER, time_created INTEGER, time_updated INTEGER)")
 con.execute("CREATE TABLE session_message(id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, time_created INTEGER, time_updated INTEGER, data TEXT)")
+con.execute("CREATE TABLE project(id TEXT PRIMARY KEY, worktree TEXT, vcs TEXT, name TEXT, icon_url TEXT, icon_url_override TEXT, icon_color TEXT, time_created INTEGER, time_updated INTEGER, time_initialized INTEGER, sandboxes TEXT, commands TEXT)")
+con.execute("CREATE TABLE workspace(id TEXT PRIMARY KEY, type TEXT, name TEXT, branch TEXT, directory TEXT, extra TEXT, project_id TEXT, time_used INTEGER)")
 
 now = 1792000000000
 model = json.dumps({"id": "deepseek-v4.1-flash", "providerID": "deepseek"})
+con.execute("INSERT INTO project VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", ("prj1", "/workspace", "git", "repo", None, None, None, now - 60000, now, None, "[]", None))
 con.execute("INSERT INTO session(id,project_id,slug,directory,title,version,cost,tokens_input,tokens_output,tokens_reasoning,model,time_created,time_updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ("ses_fixture1", "prj1", "fixture", "/workspace", "Fixture session", "1.0", 0.02, 1234, 200, 0, model, now - 60000, now))
 con.execute("INSERT INTO message VALUES(?,?,?,?,?)", ("msg_u1", "ses_fixture1", now - 60000, now - 60000, json.dumps({"role": "user"})))
