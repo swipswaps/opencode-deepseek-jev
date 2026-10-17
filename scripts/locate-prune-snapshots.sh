@@ -91,14 +91,27 @@ PYEOF
 }
 
 run_updatedb() {
-    printf 'running updatedb in the background at IDLE priority (silent; can take many minutes)\n'
+    printf 'running updatedb at IDLE priority in the background (silent; can take minutes)\n'
     if have ionice && have nice; then
         ionice -c3 nice -n19 updatedb &
     else
         updatedb &
     fi
-    local u=$!
-    printf 'updatedb pid=%s  monitor: grep read_bytes /proc/%s/io ; iostat -x 2\n' "$u" "$u"
+    local u=$! t0=$SECONDS rb cwd
+    printf 'updatedb pid=%s -- progress every 5s (Ctrl-C leaves it running; kill -TERM %s to stop)\n' "$u" "$u"
+    # updatedb is silent; poll /proc for bytes read + the dir it is scanning.
+    # Stop when it is gone or a zombie (state Z) so wait() below can reap it.
+    local state=""
+    while [ -d "/proc/$u" ]; do
+        sleep 5
+        [ -r "/proc/$u/stat" ] || break
+        state=$(awk '{print $3}' "/proc/$u/stat")
+        case "$state" in Z*) break ;; esac
+        [ -r "/proc/$u/io" ] || break
+        rb=$(awk '/^read_bytes/{print $2}' "/proc/$u/io")
+        cwd=$(readlink "/proc/$u/cwd" 2>&1)
+        printf '  [%4ss] read_bytes=%s  scanning=%s\n' "$((SECONDS - t0))" "${rb:-?}" "${cwd:-?}"
+    done
     if wait "$u"; then printf 'updatedb: done\n'; else printf 'WARN: updatedb failed (run: sudo updatedb)\n'; fi
 }
 
