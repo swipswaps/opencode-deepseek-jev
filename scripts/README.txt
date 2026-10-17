@@ -661,6 +661,13 @@ proc-progress.sh
     progress bar). Read-only; Ctrl-C stops the view, not the job.
     sudo for /proc/<pid>/io. --self-test.
 
+ffind.sh
+    File search that prefers fd and falls back to find. fd is installed
+    on the host (fast, .gitignore-aware, no whole-tree index) -- the
+    on-demand replacement for locate on a slow disk. FFIND_ALL=1 for
+    fd -u -H. find stays the tool for -delete/-printf/exact scripts.
+    --self-test.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

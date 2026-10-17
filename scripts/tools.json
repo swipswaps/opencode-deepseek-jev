@@ -700,5 +700,16 @@
       "sudo bash scripts/proc-progress.sh <pid> 10",
       "bash scripts/proc-progress.sh --self-test"
     ]
+  },
+  {
+    "id": "ffind",
+    "title": "File search: fd (fallback find)",
+    "where": "container",
+    "purpose": "fd is installed on the host: fast, .gitignore-aware, no whole-tree index -- the on-demand replacement for locate on a slow disk. ffind prefers fd and falls back to find where fd is absent (e.g. this container). find stays the right tool for -delete/-printf/exact-name scripts.",
+    "commands": [
+      "./scripts/ffind.sh PATTERN [PATH...]",
+      "FFIND_ALL=1 ./scripts/ffind.sh PATTERN",
+      "./scripts/ffind.sh --self-test"
+    ]
   }
 ]
