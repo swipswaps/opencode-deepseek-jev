@@ -645,11 +645,14 @@ snapshot-audit.sh
     --self-test offline.
 
 locate-prune-snapshots.sh
-    Keep /.snapshots out of the locate index (updatedb indexes every
-    snapshot unless PRUNEPATHS prunes it; bloats the db + slows
-    updatedb on a USB-HDD root). Adds /.snapshots to PRUNEPATHS
-    idempotently with a timestamped backup, then runs updatedb.
-    Dry-run default; --apply (sudo); --file for a fixture; --self-test.
+    Keep heavy trees out of the locate index (updatedb walks the whole
+    tree unless PRUNEPATHS prunes it; snapshots + docker/flatpak/virt
+    bloat the db and slow updatedb on a USB-HDD root). Adds the costly
+    paths (default /.snapshots /var/lib/docker /var/lib/flatpak
+    /var/lib/libvirt /mnt) idempotently with a timestamped backup, then
+    rebuilds with updatedb at IDLE priority (ionice -c3 nice -n19) so it
+    yields to your work. --paths to override, --no-updatedb to edit only,
+    dry-run default, --self-test.
 
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings

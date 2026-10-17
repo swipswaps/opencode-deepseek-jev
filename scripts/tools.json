@@ -678,12 +678,13 @@
   },
   {
     "id": "locate-prune-snapshots",
-    "title": "Keep /.snapshots out of the locate index",
+    "title": "Keep heavy trees out of the locate index",
     "where": "host",
-    "purpose": "updatedb indexes every BTRFS snapshot unless PRUNEPATHS prunes it (bloats the db, slows updatedb on a USB-HDD root). Adds /.snapshots to PRUNEPATHS idempotently with a timestamped backup, then runs updatedb. Dry-run default; --apply (sudo).",
+    "purpose": "updatedb walks the whole tree unless PRUNEPATHS prunes it. Adds the costly paths (default: /.snapshots /var/lib/docker /var/lib/flatpak /var/lib/libvirt /mnt) idempotently with a timestamped backup, then rebuilds with updatedb at IDLE priority (ionice -c3 nice -n19) so it yields to your work. --paths to override; --no-updatedb to edit only.",
     "commands": [
       "bash scripts/locate-prune-snapshots.sh",
       "sudo bash scripts/locate-prune-snapshots.sh --apply",
+      "sudo bash scripts/locate-prune-snapshots.sh --apply --no-updatedb",
       "bash scripts/locate-prune-snapshots.sh --self-test"
     ]
   }
