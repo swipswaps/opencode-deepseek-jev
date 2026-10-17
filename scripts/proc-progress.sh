@@ -37,8 +37,15 @@ probe() {
     else
         line="(ps unavailable; io/cwd still shown)"
     fi
-    io=$(awk '/^(rchar|syscr|read_bytes|write_bytes)/{printf "%s %s  ", $1, $2}' "/proc/$pid/io" 2>&1)
+    if [ -r "/proc/$pid/io" ]; then
+        io=$(awk '/^(rchar|syscr|read_bytes|write_bytes)/{printf "%s %s  ", $1, $2}' "/proc/$pid/io")
+    else
+        io="(run with sudo to read /proc/$pid/io)"
+    fi
     cwd=$(readlink "/proc/$pid/cwd" 2>&1)
+    case "$cwd" in
+        *"Permission denied"*|*"No such file"*) cwd="(run with sudo to see cwd)" ;;
+    esac
     printf '[%4ss] %s\n' "$((SECONDS - t0))" "$line"
     printf '        io:  %s\n' "${io:-?}"
     printf '        cwd: %s\n' "${cwd:-?}"
