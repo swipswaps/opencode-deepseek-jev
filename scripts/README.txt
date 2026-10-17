@@ -232,8 +232,16 @@ test-tooling.sh
     Contract test for the tooling's machine interfaces: proves every tool that
     advertises --json emits parseable JSON with the keys a wrapper reads
     (preflight, doc-budget, learn-rules, issue-solutions, audit-tool-calls,
-    prompt-lint --last, models --catalog) plus logs.sh. Never calls
-    harness.sh. Safe from test-hygiene.
+    prompt-lint --last, models --catalog) plus logs.sh. Launches the independent
+    contracts in PARALLEL (each to its own temp file) so the live-DB scans
+    overlap. Never calls harness.sh. Safe from test-hygiene.
+
+test-fixture-db.sh
+    Build a small opencode.db fixture (session/message/part/todo +
+    session_message, a few realistic rows) so the DB-reading tools run in ms
+    instead of scanning the live 626 MB store. Used by test-tooling.sh and
+    test-hygiene.sh to keep the gates fast. --out PATH (default: a temp dir);
+    --self-test.
 
 ux-audit.py
     Host-side Playwright UX audit of /explore: page height vs viewport,

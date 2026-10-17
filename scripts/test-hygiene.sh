@@ -88,8 +88,14 @@ main() {
         tail -6 "$work/mb.txt"
     fi
 
+    local fixdb=""
+    if [ -x "$REPO/scripts/test-fixture-db.sh" ]; then
+        fixdb="$work/live.db"
+        "$REPO/scripts/test-fixture-db.sh" --out "$fixdb" > /dev/null 2>&1 || fixdb=""
+    fi
+
     if [ -f "$db" ]; then
-        if python3 "$REPO/scripts/audit-tool-calls.py" --json > "$work/atc.json" 2>&1; then
+        if python3 "$REPO/scripts/audit-tool-calls.py" --db "${fixdb:-$db}" --json > "$work/atc.json" 2>&1; then
             ok 'audit-tool-calls: runs'
         else
             bad 'audit-tool-calls: runs'
@@ -101,7 +107,7 @@ main() {
             bad 'audit-tool-calls: JSON schema'
         fi
 
-        if python3 "$REPO/scripts/prompt-lint.py" --last --json > "$work/pl_last.json" 2>&1; then
+        if python3 "$REPO/scripts/prompt-lint.py" --last --db "${fixdb:-$db}" --json > "$work/pl_last.json" 2>&1; then
             ok 'prompt-lint: --last runs'
         else
             bad 'prompt-lint: --last runs'
@@ -645,7 +651,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-trace.py present'
     fi
 
-    rm -f "$work"/*.txt "$work"/*.json
+    rm -f "$work"/*.txt "$work"/*.json "$work/live.db"
     rmdir "$work"
 
     if [ -n "$SLOW_MSG" ]; then

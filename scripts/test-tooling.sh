@@ -99,6 +99,13 @@ main() {
     printf '=== test-tooling.sh ===\n'
 
     local ltw=""
+    local FIXDB="$work/live.db"
+    if [ -x "$REPO/scripts/test-fixture-db.sh" ]; then
+        "$REPO/scripts/test-fixture-db.sh" --out "$FIXDB" > /dev/null 2>&1 || FIXDB=""
+    else
+        FIXDB=""
+    fi
+    : > "$work/app.log"
     local phase_start
     phase_start=$(now_ms)
 
@@ -124,19 +131,19 @@ main() {
     fi
 
     if [ -f "$REPO/scripts/learn-rules.py" ]; then
-        start "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d' python3 "$REPO/scripts/learn-rules.py" --json
+        start "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d' python3 "$REPO/scripts/learn-rules.py" --db "$FIXDB" --json
     fi
 
     if [ -f "$REPO/scripts/issue-solutions.py" ]; then
-        start "issue-solutions.py --json" "$work/sol.json" '"issues" in d and "total_errors" in d' python3 "$REPO/scripts/issue-solutions.py" --json
+        start "issue-solutions.py --json" "$work/sol.json" '"issues" in d and "total_errors" in d' python3 "$REPO/scripts/issue-solutions.py" --db "$FIXDB" --json
     fi
 
     if [ -f "$REPO/scripts/audit-tool-calls.py" ]; then
-        start "audit-tool-calls.py --json" "$work/atc.json" '"blacklist_hits" in d and "patterns" in d' python3 "$REPO/scripts/audit-tool-calls.py" --json
+        start "audit-tool-calls.py --json" "$work/atc.json" '"blacklist_hits" in d and "patterns" in d' python3 "$REPO/scripts/audit-tool-calls.py" --db "$FIXDB" --json
     fi
 
     if [ -f "$REPO/scripts/prompt-lint.py" ]; then
-        start "prompt-lint.py --last --json" "$work/pl.json" '"category" in d and "flags" in d' python3 "$REPO/scripts/prompt-lint.py" --last --json
+        start "prompt-lint.py --last --json" "$work/pl.json" '"category" in d and "flags" in d' python3 "$REPO/scripts/prompt-lint.py" --last --db "$FIXDB" --json
     fi
 
     local cat="$REPO/data/observability/models.json"
@@ -149,11 +156,11 @@ main() {
     fi
 
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
-        start "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4' bash "$REPO/scripts/session-guard.sh" --json --no-log
+        start "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4' bash "$REPO/scripts/session-guard.sh" --json --no-log --db "$FIXDB"
     fi
 
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
-        start "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d' bash "$REPO/scripts/sentinel.sh" --json --no-log
+        start "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d' env SENTINEL_DB="$FIXDB" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/senstate" SENTINEL_NODOCKER=1 bash "$REPO/scripts/sentinel.sh" --json --no-log
     fi
 
     if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
@@ -221,8 +228,9 @@ if (!(root.x1 > 0)) throw new Error("layout did not run");
     if [ -n "$SLOW_MSG" ]; then
         printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
     fi
-    rm -f "$work"/*.json "$work"/*.txt "$work/pr-state.json"
+    rm -f "$work"/*.json "$work"/*.txt "$work/pr-state.json" "$work/live.db" "$work/app.log"
     [ -d "$work/jobs" ] && rm -r "$work/jobs" || true
+    [ -d "$work/senstate" ] && rm -r "$work/senstate" || true
     rmdir "$work"
 
     printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"

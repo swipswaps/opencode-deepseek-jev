@@ -8,6 +8,15 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **Fixture-DB for the contract tests (gates faster still).** New
+      `test-fixture-db.sh` seeds a few-KB opencode.db (session/message/part/
+      todo); `test-tooling.sh` and `test-hygiene.sh` now run the DB-reading
+      contracts (audit-tool-calls, prompt-lint, issue-solutions, learn-rules,
+      sentinel, session-guard) against it instead of the live 626 MB store —
+      each drops from 7–16s to <1s. test-tooling 42s→16s; test-hygiene
+      202s→149s (from 243s at session start). Same checks, 0 fail; the live-DB
+      presence is still asserted.
+
 - [x] **Gate speedups (so review cycles can be frequent).** `test-tooling.sh`
       now launches its independent contracts **in parallel** (79s→42s; the
       626MB-DB scans overlap instead of summing). `sentinel.sh` self-test no
