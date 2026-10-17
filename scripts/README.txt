@@ -97,12 +97,15 @@ nebula-restart-trace.py
     offline --self-test. Read-only: no signals, kills nothing.
 
 nebula-systemd-override.sh
-    NEBULA-1 fix: the trace proved systemd (PID 1) is the restarter, so nebula
-    is crash-looping. Writes an idempotent drop-in
+    NEBULA-1 fix: the trace named systemd (PID 1) as the parent, but the live
+    --diagnose FALSIFIED the churn premise (NRestarts=0, one stable PID; the
+    recurring event is a TUNNEL flap). Writes an idempotent drop-in
     (etc/systemd/system/nebula.service.d/override.conf): StartLimitIntervalSec
     =300/StartLimitBurst=5 + CPUWeight/IOWeight=50 + MemoryMax=512M +
-    LogRateLimit*. Dry-run by default; --apply/--revert/--show; --restart
-    opt-in; --file seam; offline --self-test. Sudo only on write.
+    LogRateLimit* as a defensive ceiling, and CLASSIFIES restart-churn vs
+    tunnel-flap. Dry-run by default; --show/--diagnose/--apply/--revert;
+    --restart opt-in; --file/--systemctl-file/--journal-file seams; offline
+    --self-test. Sudo only on write.
 
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared

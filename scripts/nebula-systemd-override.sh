@@ -88,20 +88,63 @@ reload_unit() {
     fi
 }
 
-show_state() {
-    if have systemctl; then
+read_sysctl() {
+    if [ -n "$SYSTEMCTL_FILE" ] && [ -f "$SYSTEMCTL_FILE" ]; then
+        cat "$SYSTEMCTL_FILE"
+    elif have systemctl; then
         systemctl show "$UNIT" -p CPUWeight -p IOWeight -p MemoryMax \
             -p StartLimitIntervalUSec -p StartLimitBurst -p LogRateLimitBurst \
-            -p NRestarts 2>&1
+            -p NRestarts -p MainPID -p ActiveEnterTimestamp 2>&1
     else
-        printf 'systemctl not available here (host only)\n'
+        printf '(systemctl not available here; host only)\n'
     fi
+}
+
+read_journal() {
+    if [ -n "$JOURNAL_FILE" ] && [ -f "$JOURNAL_FILE" ]; then
+        cat "$JOURNAL_FILE"
+    elif have journalctl; then
+        journalctl -u "$UNIT" -n 200 --no-pager 2>&1
+    else
+        printf '(journalctl not available here; host only)\n'
+    fi
+}
+
+# diagnose SYS JRN -- separate PROCESS-restart churn from a TUNNEL flap.
+# The live evidence (2026-10-17) falsified the "3 PIDs/10 min crash-loop"
+# premise: NRestarts=0, one stable PID, and the only recurring event was a
+# tunnel teardown to a peer. Naming the right class stops us rate-limiting
+# systemd restarts that never happen.
+diagnose() {
+    local sys="$1" jrn="$2" nrest tunnel lifecycle
+    nrest=$(printf '%s\n' "$sys" | awk -F= '/^NRestarts=/{print $2; exit}')
+    # tunnel evidence: nebula app lines about a peer link (not PID 1).
+    tunnel=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
+    # lifecycle evidence: systemd (PID 1) messages about the unit.
+    lifecycle=$(printf '%s\n' "$jrn" | grep -cE 'systemd\[[0-9]+\]: *'"${UNIT%%.*}"'\.service')
+    printf '%s\n' '--- diagnosis ---'
+    printf 'NRestarts=%s  tunnel-events=%s  systemd-lifecycle-lines=%s\n' \
+        "${nrest:-?}" "$tunnel" "$lifecycle"
+    if [ "${nrest:-0}" = "0" ] && [ "$lifecycle" -eq 0 ]; then
+        if [ "$tunnel" -gt 0 ]; then
+            printf 'verdict: NO process churn (NRestarts=0) — the recurring event is a TUNNEL flap (%s teardowns/handshakes). Fix the peer/lighthouse link, not systemd.\n' "$tunnel"
+        else
+            printf 'verdict: NO process churn and no tunnel flap in this window — the restart-churn premise is not reproduced.\n'
+        fi
+        printf 'note: the drop-in is a defensive ceiling only (restarts that are not happening); --revert if undesired.\n'
+    else
+        printf 'verdict: RESTART churn present (NRestarts=%s, %s systemd lifecycle lines) — rate-limited by the drop-in; re-check with --show after apply.\n' "${nrest:-?}" "$lifecycle"
+    fi
+}
+
+show_state() {
+    local sys jrn
+    sys=$(read_sysctl)
+    jrn=$(read_journal)
+    printf '%s\n' "$sys"
     printf '%s\n' '--- recent unit log (exit/restart reason) ---'
-    if have journalctl; then
-        journalctl -u "$UNIT" -n 15 --no-pager 2>&1
-    else
-        printf 'journalctl not available here\n'
-    fi
+    printf '%s\n' "$jrn"
+    diagnose "$sys" "$jrn"
 }
 
 self_test() {
@@ -119,23 +162,45 @@ self_test() {
     [ "$n" -eq 1 ] || { printf 'FAIL: duplicated body (count=%s)\n' "$n"; fail=1; }
     bash "${BASH_SOURCE[0]}" --file "$dest" --revert --no-reload >"$w/r1" 2>&1 || { printf 'FAIL: revert\n'; fail=1; }
     [ ! -e "$dest" ] || { printf 'FAIL: revert left the drop-in\n'; fail=1; }
+
+    # classifier: NRestarts=0 + tunnel lines (no systemd lifecycle) -> TUNNEL
+    printf '%s\n' 'NRestarts=0' 'MainPID=1111684' >"$w/sys1"
+    printf '%s\n' \
+        'Oct 17 18:52:39 ws24 nebula[1111684]: msg="Close tunnel received, tearing down." vpnIp=10.100.0.1' \
+        'Oct 17 18:52:41 ws24 nebula[1111684]: msg="Taking new handshake" vpnIp=10.100.0.1' \
+        'Oct 17 18:53:09 ws24 nebula[1111684]: msg="Tunnel status" tunnelCheck="map[state:dead]"' >"$w/jrn1"
+    out=$(bash "${BASH_SOURCE[0]}" --diagnose --systemctl-file "$w/sys1" --journal-file "$w/jrn1" 2>&1)
+    case "$out" in *TUNNEL*) : ;; *) printf 'FAIL: classifier missed tunnel flap (%s)\n' "$out"; fail=1 ;; esac
+
+    # classifier: systemd lifecycle + NRestarts>0 -> RESTART
+    printf '%s\n' 'NRestarts=3' 'MainPID=999' >"$w/sys2"
+    printf '%s\n' \
+        'Oct 17 18:52:00 ws24 systemd[1]: nebula.service: Scheduled restart job, restart counter is at 3.' \
+        'Oct 17 18:52:00 ws24 systemd[1]: nebula.service: Main process exited, code=exited, status=1/FAILURE' >"$w/jrn2"
+    out=$(bash "${BASH_SOURCE[0]}" --diagnose --systemctl-file "$w/sys2" --journal-file "$w/jrn2" 2>&1)
+    case "$out" in *RESTART*) : ;; *) printf 'FAIL: classifier missed restart churn (%s)\n' "$out"; fail=1 ;; esac
+
     printf 'nebula-systemd-override: self-test %s\n' "$([ "$fail" -eq 0 ] && printf PASS || printf FAIL)"
     return "$fail"
 }
 
 main() {
-    local DROPIN="$DEF_DROPIN" APPLY=0 REVERT=0 SHOW=0 RESTART=0 NO_RELOAD=0
+    local DROPIN="$DEF_DROPIN" APPLY=0 REVERT=0 SHOW=0 DIAGNOSE=0 RESTART=0 NO_RELOAD=0
+    local SYSTEMCTL_FILE="" JOURNAL_FILE=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --file) DROPIN="${2:-}"; shift 2 ;;
             --apply) APPLY=1; shift ;;
             --revert) REVERT=1; shift ;;
             --show) SHOW=1; shift ;;
+            --diagnose) DIAGNOSE=1; shift ;;
+            --systemctl-file) SYSTEMCTL_FILE="${2:-}"; shift 2 ;;
+            --journal-file) JOURNAL_FILE="${2:-}"; shift 2 ;;
             --restart) RESTART=1; shift ;;
             --no-reload) NO_RELOAD=1; shift ;;
             --self-test) self_test; return "$?" ;;
             -h | --help)
-                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show] [--restart] [--no-reload] [--self-test]\n' "$0"
+                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show|--diagnose] [--systemctl-file F] [--journal-file F] [--restart] [--no-reload] [--self-test]\n' "$0"
                 return 0
                 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
@@ -143,6 +208,11 @@ main() {
     done
 
     if [ "$SHOW" -eq 1 ]; then show_state; return $?; fi
+
+    if [ "$DIAGNOSE" -eq 1 ]; then
+        diagnose "$(read_sysctl)" "$(read_journal)"
+        return $?
+    fi
 
     if [ "$REVERT" -eq 1 ]; then
         remove_file "$DROPIN" || return 1

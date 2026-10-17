@@ -8,18 +8,19 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
-- [x] **NEBULA-1 diagnostic + fix, both scripted.** `nebula-restart-trace.py`
-      reads `/proc/<pid>/stat` + the parent's comm/cmdline for every nebula
-      process; a non-PID-1 parent is the restarter. `--watch SECS` reports
-      births+parents live; `--json`; `--proc-root` seam; offline `--self-test`.
-      Live host result: **systemd (PID 1) is the parent** → nebula crash-loops
-      under systemd (not another supervisor). Fix is scripted:
-      `nebula-systemd-override.sh` — idempotent drop-in (StartLimit*/Burst in
-      `[Unit]`, CPUWeight/IOWeight/MemoryMax/LogRateLimit in `[Service]`),
-      dry-run default, `--show`/`--apply`/`--revert`/`--restart`. Wired:
-      test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 → 17/0),
-      tools.json + scripts/README. Gate: lint /0, hygiene 58/0, tooling 17/0.
-      Applying the drop-in is the operator's call (queue).
+- [x] **NEBULA-1 diagnostic + fix, both scripted (premise falsified).**
+      `nebula-restart-trace.py` reads `/proc/<pid>/stat` + the parent's
+      comm/cmdline for every nebula process; a non-PID-1 parent is the restarter.
+      `--watch SECS`; `--json`; `--proc-root` seam; offline `--self-test`. Live
+      result: **systemd (PID 1) is the parent** — but `nebula-systemd-override.sh
+      --show` then showed **NRestarts=0 + one stable PID**, so the "3 PIDs/10 min
+      crash-loop" premise is NOT reproduced; the recurring event is a **tunnel
+      flap** to lighthouse-01. `nebula-systemd-override.sh` writes an idempotent
+      defensive drop-in (StartLimit*/Burst in `[Unit]`, CPU/IO/Memory/LogRateLimit
+      in `[Service]`) and `--diagnose` **classifies restart-churn vs tunnel-flap**.
+      Wired: test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 →
+      17/0), tools.json + scripts/README. Applying/reverting the drop-in is the
+      operator's call (queue).
 
 - [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
       lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —
@@ -366,19 +367,19 @@ Last updated: 2026-10-17
 
 ## Queue (ranked, top first)
 
-- [~] NEBULA-1: **restarter named (systemd) + fix scripted; applying it is the
-      operator's call.** `scripts/nebula-restart-trace.py` read the live host and
-      the `--watch 60` result was decisive: **systemd (PID 1) is the parent of
-      the new nebula PID** — so nebula is crash-looping under systemd, not being
-      restarted by another project's supervisor (the earlier hypothesis). Fix is
-      now a script, `scripts/nebula-systemd-override.sh`: an idempotent systemd
-      drop-in (StartLimitIntervalSec=300/StartLimitBurst=5 in `[Unit]`;
-      CPUWeight/IOWeight=50; MemoryMax=512M; LogRateLimit*) that rate-limits the
-      loop; dry-run by default, `--show` reads the current limits + exit reason,
-      `--apply`/`--revert` write under sudo. Remaining (operator, host):
-      `bash scripts/nebula-systemd-override.sh --show` (read the exit reason),
-      then `sudo bash scripts/nebula-systemd-override.sh --apply`. Evidence:
-      logs/pressure-*.log (gitignored) + the trace watch output.
+- [~] NEBULA-1: **premise falsified by live evidence — the event is a tunnel
+      flap, not a process restart.** `scripts/nebula-restart-trace.py` named the
+      parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the
+      host showed **NRestarts=0, one stable PID (1111684) over minutes**, and the
+      only recurring log signal was a **tunnel teardown to `lighthouse-01`
+      (vpnIp 10.100.0.1)** (`Close tunnel received, tearing down.` / `Taking new
+      handshake` / `tunnelCheck state:dead`). So systemd is not restarting
+      anything and the earlier "3 PIDs/10 min crash-loop" was misattributed.
+      `--diagnose` now classifies restart-churn vs tunnel-flap (offline
+      self-test). The applied drop-in is a **defensive ceiling only** — the
+      operator may `--revert` it. Real fix is out of this repo (D): the
+      peer/lighthouse tunnel in `proxmox-dual-plane-mesh`. Evidence: the live
+      `--show` output + logs/pressure-*.log (gitignored).
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

@@ -21,13 +21,15 @@
 > telemetry-console residual (drill-down on remaining sections); quirks held-out
 > recall (40%); the live-DB-bound dashboard checks + lint shellcheck (~130s) are
 > the remaining gate cost.
-> **NEBULA-1:** restarter **named = systemd (PID 1)** — the live
-> `nebula-restart-trace.py --watch 60` caught a systemd-parented nebula birth,
-> so nebula crash-loops under systemd (not another supervisor). Both ends are
-> scripted: the read-only `nebula-restart-trace.py` (name the parent) and
-> `nebula-systemd-override.sh` (idempotent drop-in: StartLimit* + CPU/IO/Memory
-> ceiling; `--show`/`--apply`/`--revert`). Applying it (sudo) is the operator's
-> call.
+> **NEBULA-1:** the premise was **falsified by live evidence.** The trace named
+> systemd (PID 1) as the parent, but `nebula-systemd-override.sh --show` on the
+> host showed **NRestarts=0 + one stable PID** — no restart churn at all. The
+> only recurring signal is a **tunnel flap to lighthouse-01 (10.100.0.1)**
+> (`Close tunnel received` / `state:dead`). Both ends are scripted: the read-only
+> `nebula-restart-trace.py` (name the parent) and `nebula-systemd-override.sh`
+> (`--diagnose` classifies restart-churn vs tunnel-flap; `--apply`/`--revert` a
+> defensive drop-in). The applied drop-in is a harmless ceiling; the real fix is
+> the peer tunnel (external, `proxmox-dual-plane-mesh`).
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
