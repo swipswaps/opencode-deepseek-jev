@@ -44,10 +44,10 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null 2>&1; }
 
 report() {
-    # report REPO HEAD AHEAD DIRTY COMMITS_JSON — one python pass over the store.
-    local REPO="$1" HEAD="$2" AHEAD="$3" DIRTY="$4" COMMITS="$5"
+    # report REPO HEAD AHEAD MODIFIED UNTRACKED COMMITS — one python pass.
+    local REPO="$1" HEAD="$2" AHEAD="$3" DIRTY="$4" UNTRACKED="$5" COMMITS="$6"
     NEXT_ACTION_REPO="$REPO" NA_HEAD="$HEAD" NA_AHEAD="$AHEAD" NA_DIRTY="$DIRTY" \
-    NA_COMMITS="$COMMITS" NA_JSON="$JSON" \
+    NA_UNTRACKED="$UNTRACKED" NA_COMMITS="$COMMITS" NA_JSON="$JSON" \
     LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" \
     python3 - <<'PY'
 import json, os, sqlite3, datetime, re
@@ -56,6 +56,7 @@ repo = os.environ["NEXT_ACTION_REPO"]
 head = os.environ.get("NA_HEAD", "?")
 ahead = os.environ.get("NA_AHEAD", "?")
 dirty = os.environ.get("NA_DIRTY", "?")
+untracked = os.environ.get("NA_UNTRACKED", "0")
 commits = [c for c in (os.environ.get("NA_COMMITS", "") or "").splitlines() if c.strip()]
 as_json = os.environ.get("NA_JSON") == "1"
 
@@ -129,7 +130,7 @@ except Exception:
 
 out = {
     "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "rev": head, "ahead": ahead, "dirty": dirty,
+    "rev": head, "ahead": ahead, "dirty": dirty, "untracked": untracked,
     "last_gate": {"ts": gate.get("ts", "?"), "passed": gate.get("passed"), "failed": gate.get("failed")},
     "docs": {"tier1_tokens": tier1, "budget": budget, "over": docs_over},
     "since_gate": {"rev": gate_rev, "commits": commits, "n_commits": len(commits), "events": events_since},
@@ -142,7 +143,7 @@ if as_json:
     raise SystemExit
 
 print("=== next-action @ %s ===" % out["ts"])
-print("rev:  %s  ahead=%s  dirty=%s" % (head, ahead, dirty))
+print("rev:  %s  ahead=%s  dirty=%s  untracked=%s" % (head, ahead, dirty, untracked))
 lg = out["last_gate"]
 print("last gate: %s pass / %s fail  @%s" % (lg["passed"], lg["failed"], lg["ts"]))
 if tier1 is not None:
@@ -226,12 +227,14 @@ main() {
         return 2
     fi
 
-    local HEAD AHEAD DIRTY COMMITS
+    local HEAD AHEAD MODIFIED UNTRACKED COMMITS
     HEAD=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
     AHEAD=$(git -C "$REPO" rev-list --count origin/main..HEAD 2>&1 || printf 0)
     case "$AHEAD" in ''|*[!0-9]*) AHEAD=0 ;; esac
-    DIRTY=$(git -C "$REPO" status --porcelain 2>&1 | grep -c . || true)
-    case "$DIRTY" in ''|*[!0-9]*) DIRTY=0 ;; esac
+    MODIFIED=$(git -C "$REPO" status --porcelain 2>&1 | grep -v '^??' | grep -c . || true)
+    case "$MODIFIED" in ''|*[!0-9]*) MODIFIED=0 ;; esac
+    UNTRACKED=$(git -C "$REPO" status --porcelain 2>&1 | grep -c '^??' || true)
+    case "$UNTRACKED" in ''|*[!0-9]*) UNTRACKED=0 ;; esac
     local grev=""
     grev=$(LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" python3 "$REPO/scripts/ledger.py" show --json --tail 300 2>&1 | python3 -c 'import json,sys
 try:
@@ -246,7 +249,7 @@ print(r[-1]["rev"] if r else "")' 2>&1 || true)
         COMMITS=""
     fi
 
-    report "$REPO" "$HEAD" "$AHEAD" "$DIRTY" "$COMMITS"
+    report "$REPO" "$HEAD" "$AHEAD" "$MODIFIED" "$UNTRACKED" "$COMMITS"
     return 0
 }
 
