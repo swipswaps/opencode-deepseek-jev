@@ -1,0 +1,16 @@
+[Unit]
+Description=opencode dev-loop progress review (one sweep, ledger-logged)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/progress-review-install.sh (no sudo needed).
+# Load NOTIFY_WEBHOOK (alerting) + keys from .env.local; '-' makes it optional.
+EnvironmentFile=-__REPO__/.env.local
+ExecStart=__REPO__/scripts/progress-review.sh --once
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true

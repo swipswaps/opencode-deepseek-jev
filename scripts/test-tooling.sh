@@ -103,6 +103,11 @@ main() {
         validate_json "next-action.sh --json" "$work/na.json" '"rev" in d and "last_gate" in d and "since_gate" in d and "next" in d and "blockers" in d'
     fi
 
+    if [ -x "$REPO/scripts/progress-review.sh" ]; then
+        run_json "$work/pr.json" env PROGRESS_STATE="$work/pr-state.json" PROGRESS_STALL_TICKS=2 bash "$REPO/scripts/progress-review.sh" --once --no-log --json
+        validate_json "progress-review.sh --json" "$work/pr.json" '"decision" in d and "rev" in d and "ticks" in d and "next" in d'
+    fi
+
     if [ -f "$REPO/scripts/learn-rules.py" ]; then
         run_json "$work/rules.json" python3 "$REPO/scripts/learn-rules.py" --json
         validate_json "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d'

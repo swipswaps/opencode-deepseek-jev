@@ -8,6 +8,14 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **`progress-review.sh` — the loop reviews itself on a timer (#79).**
+      Sentinel sibling for pi-durable's other half: a 15-min sweep reads
+      `next-action` and records a durable PASS row on a rev/gate advance or a
+      FAIL row when the loop stalls (no advance for `PROGRESS_STALL_TICKS`
+      sweeps; stable keys, only news trips). `--once/--json/--no-log/--self-test`
+      + `progress-review-install.sh` + systemd units. Wired into `tools.json` +
+      `test-tooling` + `scripts/README.txt`. Gate: both self-tests PASS.
+
 - [x] **`next-action.sh` — the durable next-action / progress consumer (#78).**
       pi-durable's "a new process opens the same storage and continues" was
       missing its consumer for the dev loop. This reads git state +

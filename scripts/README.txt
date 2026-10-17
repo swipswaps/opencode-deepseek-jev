@@ -184,6 +184,18 @@ next-action.sh
     transcript replay. Read-only, no model call. --json; --self-test;
     NEXT_ACTION_REPO / LEDGER_DB seams.
 
+progress-review.sh
+    Sentinel sibling: supervisor of the DEV LOOP's progression. One sweep reads
+    next-action and records a durable PASS row on a rev/gate advance, or a FAIL
+    row when the loop stalls (no advance for PROGRESS_STALL_TICKS sweeps;
+    stable keys, only news trips). --once, --json, --no-log, --self-test;
+    PROGRESS_STATE / PROGRESS_STALL_TICKS / LEDGER_DB seams.
+    progress-review-install.sh installs the user timer (every 15 min; no sudo).
+
+progress-review-install.sh
+    Installs the user-level progress-review timer (bakes the repo path, enables
+    via systemctl --user). Idempotent; --write-only, --uninstall, --self-test.
+
 learn-rules.py
     Contrastive corpus learning: builds (state, action, outcome) triples from
     the tool-call log and emits advisory avoid/prefer/recovery rules to

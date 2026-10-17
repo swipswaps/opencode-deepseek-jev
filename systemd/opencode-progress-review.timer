@@ -1,0 +1,12 @@
+[Unit]
+Description=Review the opencode dev loop for progression every 15 minutes
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=45
+Unit=opencode-progress-review.service
+
+[Install]
+WantedBy=timers.target

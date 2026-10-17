@@ -722,5 +722,16 @@
       "./scripts/next-action.sh --json",
       "./scripts/next-action.sh --self-test"
     ]
+  },
+  {
+    "id": "progress-review",
+    "title": "Dev-loop progress supervisor (timer)",
+    "where": "container",
+    "purpose": "Sentinel sibling for pi-durable's other half: is the loop still advancing? Records a durable PASS row on a rev/gate advance and a FAIL row when the loop stalls (no advance for PROGRESS_STALL_TICKS sweeps). Stable per-incident keys; only news trips. Install: ./scripts/progress-review-install.sh.",
+    "commands": [
+      "./scripts/progress-review.sh --once",
+      "./scripts/progress-review.sh --self-test",
+      "./scripts/progress-review-install.sh --write-only"
+    ]
   }
 ]
