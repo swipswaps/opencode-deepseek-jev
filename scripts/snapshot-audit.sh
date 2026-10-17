@@ -47,12 +47,17 @@ main() {
 
     printf '\n== snapper retention limits (/etc/snapper/configs/*) ==\n'
     if have snapper; then
-        local c found=0
+        local c found=0 out
         for c in /etc/snapper/configs/*; do
             [ -f "$c" ] || continue
             found=1
             printf -- '-- %s\n' "$(basename "$c")"
-            grep -E '^(TIMELINE_LIMIT_|NUMBER_LIMIT|SPACE_LIMIT|BACKGROUND_COMPARISON)' "$c" 2>&1
+            out=$(grep -E '^(TIMELINE_LIMIT_|NUMBER_LIMIT|SPACE_LIMIT|BACKGROUND_COMPARISON)' "$c" 2>&1)
+            case "$out" in
+                *"Permission denied"*|*"permission denied"*)
+                    printf '  (needs root: sudo snapper -c %s get-config | grep -E "TIMELINE|NUMBER|SPACE")\n' "$(basename "$c")" ;;
+                *) printf '%s\n' "$out" ;;
+            esac
         done
         [ "$found" -eq 1 ] || printf '(no configs)\n'
         printf '  snapshot count:  sudo snapper list | tail -n +3 | wc -l\n'
@@ -71,7 +76,18 @@ main() {
     else
         printf '(no /etc/updatedb.conf)\n'
     fi
-    ls -lh /var/lib/mlocate/mlocate.db 2>&1 || printf '(no mlocate.db)\n'
+    local db n=0
+    for db in /var/lib/plocate/plocate.db /var/lib/mlocate/mlocate.db; do
+        if [ -e "$db" ]; then ls -lh "$db"; n=$((n + 1)); fi
+    done
+    [ "$n" -eq 0 ] && printf '(no plocate/mlocate db found; run: sudo updatedb)\n'
+    if have plocate; then printf '  (plocate in use -> db at /var/lib/plocate/plocate.db)\n'; fi
+
+    printf '\n== reading ==\n'
+    printf '%s\n' '- compress=zstd:1 (if shown) -> write I/O is compressed; good on a slow disk.'
+    printf '%s\n' '- Quota "Enabled: no" -> no qgroup cost; skip recommendation 3.'
+    printf '%s\n' '- BTRFS allocates in chunks: a Data chunk near 95% is normal while unallocated space remains.'
+    printf '%s\n' '- PRUNEPATHS/PRUNEFS in /etc/updatedb.conf drive BOTH mlocate and plocate.'
 
     printf '\n== recommended (run on the host) ==\n'
     printf '%s\n' '1) Cap retention, e.g.: sudo snapper -c root set-config TIMELINE_LIMIT_HOURLY=6 TIMELINE_LIMIT_DAILY=7 TIMELINE_LIMIT_WEEKLY=4 TIMELINE_LIMIT_MONTHLY=2 TIMELINE_LIMIT_YEARLY=0'
