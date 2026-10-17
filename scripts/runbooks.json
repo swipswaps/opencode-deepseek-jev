@@ -342,5 +342,20 @@
       "sudo bash scripts/locate-prune-snapshots.sh --enable-timer   # re-enable the timer"
     ],
     "note": "Snapshots do not slow the OS by existing, but three costs are real: (1) locate/updatedb indexing /.snapshots bloats mlocate.db and is slow on a USB-HDD root -- add /.snapshots to PRUNEPATHS, then sudo updatedb; (2) CoW snapshots pin old blocks and fragment writes; (3) BTRFS qgroups (btrfs quota) are a known snapper drag -- sudo btrfs quota disable / removes it. Cap retention: sudo snapper -c root set-config TIMELINE_LIMIT_HOURLY=6 TIMELINE_LIMIT_DAILY=7 TIMELINE_LIMIT_WEEKLY=4 TIMELINE_LIMIT_MONTHLY=2 TIMELINE_LIMIT_YEARLY=0, NUMBER_LIMIT=20, then sudo snapper -c root cleanup number. Keep btrfs balance rare on a USB HDD. Note: the host lockup was CPU starvation, not disk. The locate fix is scripted: locate-prune-snapshots.sh (idempotent, backs up /etc/updatedb.conf, runs updatedb). Live: a plocate rebuild ran 76+ min reading 3.7GB (docker overlay2, ~1400 files/s) -- if locate is not essential, disable the updatedb timer instead of rebuilding. On a slow USB-HDD root, prefer on-demand search over maintaining the locate index: fd (installed) or scripts/ffind.sh (fd->find fallback); the updatedb timer is disabled."
+  },
+  {
+    "id": "progress-timer",
+    "title": "Start the dev-loop progress-review timer (host)",
+    "purpose": "Install + enable the user-level systemd timer that runs progress-review.sh every 15 min: it records a durable PASS row on a rev/gate advance and a FAIL row when the loop stalls. No sudo (user timer).",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "bash scripts/progress-review-install.sh",
+      "systemctl --user list-timers opencode-progress-review.timer",
+      "systemctl --user status opencode-progress-review.timer",
+      "./scripts/progress-review.sh --once   # run one sweep now",
+      "./scripts/logs.sh --source ledger | grep progress"
+    ],
+    "note": "Install once FROM THE HOST repo -- the timer must run where the repo + store live (this sandbox has no systemd). progress-review reads next-action (git rev, last-gate, next queue unit) and logs to the observability ledger with stable keys progress-advance-<rev>/progress-stall-<rev>, so a persisting stall is ONE row. NOTIFY_WEBHOOK (if set in .env.local) gets a push on a stall. Pair with the sentinel timer (health, 5 min) + this (progression, 15 min). Uninstall: bash scripts/progress-review-install.sh --uninstall."
   }
 ]

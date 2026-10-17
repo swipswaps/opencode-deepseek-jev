@@ -15,6 +15,8 @@ Last updated: 2026-10-17
       sweeps; stable keys, only news trips). `--once/--json/--no-log/--self-test`
       + `progress-review-install.sh` + systemd units. Wired into `tools.json` +
       `test-tooling` + `scripts/README.txt`. Gate: both self-tests PASS.
+      A `progress-timer` runbook (host) makes the enable step copy-paste; this
+      sandbox has no systemd (`pid1=opencode`), so it installs on ws24.
 
 - [x] **`next-action.sh` — the durable next-action / progress consumer (#78).**
       pi-durable's "a new process opens the same storage and continues" was
