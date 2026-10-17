@@ -8,6 +8,15 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **`next-action.sh` — the durable next-action / progress consumer (#78).**
+      pi-durable's "a new process opens the same storage and continues" was
+      missing its consumer for the dev loop. This reads git state +
+      `last-gate.json` + the ledger + TODO's queue + `docs.json` and prints the
+      exact next unit and what changed since the last gate, with zero
+      re-derivation. `--json`, `--self-test`, `NEXT_ACTION_REPO`/`LEDGER_DB`
+      seams; wired into `tools.json` + `test-tooling.sh` + `/status` step 0.
+      Gate: self-test PASS, scan-constraints PASS, lint 251/0.
+
 - [x] **test-dashboard: derive the runbook count from source.** The gate
       hard-coded `count=20` while `scripts/runbooks.json` grew to 26 — a brittle
       magic number that failed the dashboard gate. It now compares the served

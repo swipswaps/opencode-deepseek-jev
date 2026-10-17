@@ -711,5 +711,16 @@
       "FFIND_ALL=1 ./scripts/ffind.sh PATTERN",
       "./scripts/ffind.sh --self-test"
     ]
+  },
+  {
+    "id": "next-action",
+    "title": "Durable next-action / progress consumer",
+    "where": "container",
+    "purpose": "Consumes the durable store a session leaves behind (git state, last-gate.json, the ledger, TODO's queue, docs.json) and prints the exact next unit plus what changed since the last gate. A fresh session starts here with zero re-derivation -- no transcript replay. Read-only, no model call.",
+    "commands": [
+      "./scripts/next-action.sh",
+      "./scripts/next-action.sh --json",
+      "./scripts/next-action.sh --self-test"
+    ]
   }
 ]

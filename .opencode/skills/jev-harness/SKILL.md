@@ -11,14 +11,17 @@ Follow it instead of re-deriving the workflow each session.
 
 ## 1. Search first (before writing anything)
 
-1. Read `HANDOFF.md` (durable state), `RULES.md` (constraints), `TODO.md` (queue).
-2. Run `./scripts/preflight.sh`. If it prints **STOP**, fix that cause first —
+1. Run `./scripts/next-action.sh` — the durable resume (#78): it prints the rev,
+   the last-gate verdict, what changed since the last gate, and the exact next
+   queue unit, straight from the store (no transcript replay).
+2. Read `HANDOFF.md` (durable state), `RULES.md` (constraints), `TODO.md` (queue).
+3. Run `./scripts/preflight.sh`. If it prints **STOP**, fix that cause first —
    it is fail-closed on missing keys, a red last-gate marker, balance below
    `MIN_BALANCE`, a model outside `models.policy.json`, **or an over-budget
    current session** (→ hand off: `./scripts/session-guard.sh --handoff`, paste
    the brief into a fresh session; never `--fork`/`--continue`). The budget STOP
    is per **#76** — watch it every turn, not when asked.
-3. Run `./scripts/harness.sh --fast` for the current state (gates + telemetry +
+4. Run `./scripts/harness.sh --fast` for the current state (gates + telemetry +
    cost + TODO) without the slow dashboard gate.
 
 ## 2. Constraints that are enforced, not advised

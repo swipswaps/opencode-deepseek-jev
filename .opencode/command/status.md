@@ -10,6 +10,11 @@ Source of truth: `TODO.md` (queue), `HANDOFF.md` (state), `RULES.md`.
 
 Optional focus: $ARGUMENTS
 
+## 0. Resume from the durable store first
+Run `./scripts/next-action.sh` — it prints the rev, last-gate verdict, what
+changed since the last gate, and the exact next queue unit (then skip step 1's
+re-derivation of state). No transcript replay: the store already holds it.
+
 ## 1. List outstanding issues — both senses
 - **Unresolved**, each with a disposition (resolved / accepted / deferred +
   why). 

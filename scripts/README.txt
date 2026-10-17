@@ -175,6 +175,15 @@ preflight.sh
     latest session exceeds CONTEXT_BUDGET (#76). --json; --allow-pro skips the
     model checks. Run before any paid session.
 
+next-action.sh
+    The durable "where are we / what changed / what's next" (pi-durable: a
+    fresh process opens the same storage and continues). Reads the store a
+    session leaves behind — git state, data/observability/last-gate.json, the
+    ledger, TODO's queue, docs.json — and prints the exact next unit plus what
+    changed since the last gate. A fresh session starts here with no
+    transcript replay. Read-only, no model call. --json; --self-test;
+    NEXT_ACTION_REPO / LEDGER_DB seams.
+
 learn-rules.py
     Contrastive corpus learning: builds (state, action, outcome) triples from
     the tool-call log and emits advisory avoid/prefer/recovery rules to
