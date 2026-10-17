@@ -49,13 +49,19 @@ PYEOF
 }
 
 owner() {
+    local out=""
     if command -v ss >/dev/null 2>&1; then
-        ss -ltnp "sport = :$1" 2>&1 | tail -n +2 | head -3
+        out=$(ss -ltnp "sport = :$1" 2>&1 | tail -n +2 | head -3)
     elif command -v lsof >/dev/null 2>&1; then
-        lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>&1 | head -5
+        out=$(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>&1 | head -5)
     else
-        printf '(no ss/lsof; cannot name the holder)\n'
+        printf '(no ss/lsof; cannot name the holder)\n'; return 0
     fi
+    printf '%s\n' "$out"
+    case "$out" in
+        *'users:'*) : ;;
+        *) printf '(no PID shown: the holder is likely another user/root — ss needs privilege; try: sudo ss -ltnp %s)\n' "'sport = :$1'" ;;
+    esac
 }
 
 self_test() {

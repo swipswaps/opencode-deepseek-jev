@@ -84,17 +84,21 @@ main() {
         GF_PORT="$np"
     fi
     export GF_PORT
-    docker compose -f "$C" up -d || { printf 'FAIL: compose up\n'; return 1; }
+    docker compose -f "$C" up -d --force-recreate || { printf 'FAIL: compose up\n'; return 1; }
+    local pub
+    pub=$(docker port opencode-grafana 2>&1 | head -1)
+    printf 'grafana-up: container published -> %s (GF_PORT=%s)\n' "$pub" "$GF_PORT"
     local k=0 h=""
-    while [ "$k" -lt 30 ]; do
-        sleep 2
+    while [ "$k" -lt 40 ]; do
+        sleep 3
         h=$(curl -s --max-time 3 "http://127.0.0.1:$GF_PORT/api/health" || true)
         case "$h" in *'"database":"ok"'*) break ;; esac
         k=$((k + 1))
+        [ "$k" -eq 10 ] && printf 'grafana-up: still starting (first boot installs the sqlite plugin; allow ~1-2 min)...\n'
     done
     case "$h" in
         *'"database":"ok"'*) printf 'grafana-up: healthy -> http://127.0.0.1:%s (dashboards provisioned)\n' "$GF_PORT"; return 0 ;;
-        *) printf 'grafana-up: not healthy after 60s; run --logs\n'; return 1 ;;
+        *) printf 'grafana-up: not healthy after 120s; run --logs\n'; return 1 ;;
     esac
 }
 
