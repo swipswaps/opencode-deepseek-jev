@@ -404,6 +404,17 @@ main() {
         bad 'locate-prune-snapshots.sh present'
     fi
 
+    if [ -f "$REPO/scripts/nebula-restart-trace.py" ]; then
+        if python3 "$REPO/scripts/nebula-restart-trace.py" --self-test > "$work/nrt_st.txt" 2>&1; then
+            ok 'nebula-restart-trace: self-test (parent-chain restarter id)'
+        else
+            bad 'nebula-restart-trace: self-test (parent-chain restarter id)'
+            cat "$work/nrt_st.txt"
+        fi
+    else
+        bad 'nebula-restart-trace.py present'
+    fi
+
     if [ -f "$REPO/scripts/proc-progress.sh" ]; then
         if bash "$REPO/scripts/proc-progress.sh" --self-test > "$work/pp_st.txt" 2>&1; then
             ok 'proc-progress: self-test (silent-process monitor)'

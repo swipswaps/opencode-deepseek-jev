@@ -89,6 +89,13 @@ pressure-watch.sh
     logs/pressure-<ts>.log. Sends no signals, touches no other project's
     services. Run twice ~60s apart and diff.
 
+nebula-restart-trace.py
+    Names WHAT issues the external nebula restarts (3 PIDs/10 min, never
+    systemd-counted): reads /proc/<pid>/stat + the parent's comm/cmdline for
+    every nebula process; a parent that is not PID 1 is the restarter.
+    --watch SECS reports births + parents live; --json; --proc-root seam;
+    offline --self-test. Read-only: no signals, kills nothing.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the

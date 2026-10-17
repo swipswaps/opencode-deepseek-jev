@@ -157,6 +157,18 @@
     ]
   },
   {
+    "id": "nebula-restart-trace",
+    "title": "Name the nebula restarter (read-only)",
+    "where": "host",
+    "purpose": "Another project's supervisor restarts nebula (3 PIDs/10 min) and systemd never counts it. This reads /proc parent chains and names the restarter (WATCH SECS catches churn live). Read-only: no signals, kills nothing.",
+    "commands": [
+      "python3 scripts/nebula-restart-trace.py",
+      "python3 scripts/nebula-restart-trace.py --watch 60",
+      "python3 scripts/nebula-restart-trace.py --json",
+      "python3 scripts/nebula-restart-trace.py --self-test"
+    ]
+  },
+  {
     "id": "fix-docker-network",
     "title": "Recover host->docker port path (sudo)",
     "where": "host",

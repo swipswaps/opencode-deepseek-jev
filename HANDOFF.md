@@ -21,6 +21,10 @@
 > telemetry-console residual (drill-down on remaining sections); quirks held-out
 > recall (40%); the live-DB-bound dashboard checks + lint shellcheck (~130s) are
 > the remaining gate cost.
+> **NEBULA-1:** the external nebula restarter is now nameable —
+> `scripts/nebula-restart-trace.py` reads the `/proc` parent chain (a parent
+> that is not PID 1 is the restarter); `--watch SECS` catches the churn live.
+> Read-only; the override still needs operator approval.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard

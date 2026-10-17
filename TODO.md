@@ -8,6 +8,16 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **NEBULA-1 diagnostic — name the nebula restarter.** `nebula-restart-trace.py`
+      reads `/proc/<pid>/stat` + the parent's comm/cmdline for every nebula
+      process; a non-PID-1 parent is the restarter (the churn is another
+      project's supervisor, never systemd-counted). `--watch SECS` reports
+      births+parents live, `--json`, `--proc-root` seam, offline `--self-test`.
+      Read-only, no signals. Wired: test-hygiene self-test (+1 → 57/0),
+      test-tooling `--json` contract (+1 → 17/0), tools.json + scripts/README.
+      Gate: lint 262/0, hygiene 57/0, tooling 17/0. The **override** remains
+      operator-approval-required (queue).
+
 - [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
       lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —
       the real reason test-dashboard was >9 min. Under harness it now sets
@@ -353,14 +363,17 @@ Last updated: 2026-10-17
 
 ## Queue (ranked, top first)
 
-- [ ] NEBULA-1 (operator approval required): tame external restart
-      churn (3 PIDs/10 min, never systemd-counted — another project's
-      supervisor). Proposed override (NOT applied):
-      StartLimitIntervalSec=300/StartLimitBurst=5, CPUWeight=50,
-      IOWeight=50, MemoryMax=512M, LogRateLimitBurst=100, via
-      `sudo systemctl edit nebula`. Kill the restarter, not the
-      restarts: find what issues the external restarts first.
-      Evidence: logs/pressure-*.log (this repo, gitignored).
+- [~] NEBULA-1: **name the restarter first — done; the override still needs
+      operator approval.** New `scripts/nebula-restart-trace.py` reads the
+      `/proc` parent chain for every nebula process and names the process that
+      issues the restarts (a parent that is not PID 1 is it); `--watch SECS`
+      catches the churn live (3 PIDs/10 min, never systemd-counted), `--json`,
+      offline `--self-test`. Read-only (no signals). Remaining (operator, host):
+      run `python3 scripts/nebula-restart-trace.py --watch 60` to identify the
+      other project's supervisor, then apply the override via
+      `sudo systemctl edit nebula` (StartLimitIntervalSec=300/StartLimitBurst=5,
+      CPUWeight=50, IOWeight=50, MemoryMax=512M, LogRateLimitBurst=100) — or fix
+      the parent, not the restarts. Evidence: logs/pressure-*.log (gitignored).
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

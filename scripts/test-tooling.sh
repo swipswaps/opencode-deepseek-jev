@@ -159,6 +159,10 @@ main() {
         start "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4' bash "$REPO/scripts/session-guard.sh" --json --no-log --db "$FIXDB"
     fi
 
+    if [ -f "$REPO/scripts/nebula-restart-trace.py" ]; then
+        start "nebula-restart-trace.py --json" "$work/nrt.json" '"nebula" in d and "verdict" in d and "boot_epoch" in d' python3 "$REPO/scripts/nebula-restart-trace.py" --json
+    fi
+
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
         start "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d' env SENTINEL_DB="$FIXDB" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/senstate" SENTINEL_NODOCKER=1 bash "$REPO/scripts/sentinel.sh" --json --no-log
     fi
