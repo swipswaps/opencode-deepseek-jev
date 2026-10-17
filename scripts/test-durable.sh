@@ -33,6 +33,8 @@ chk "caddy-reload self-test (checkpointed adopter)" bash "$REPO/scripts/caddy-re
 chk "rebuild-derived self-test (rebuild from storage)" bash "$REPO/scripts/rebuild-derived.sh" --self-test
 # one more client of the same committed state.
 chk "grafana-up self-test (attach a read-only client)" bash "$REPO/scripts/grafana-up.sh" --self-test
+# never assume a port (conflicts recur).
+chk "free-port self-test (discover, not assume)" bash "$REPO/scripts/free-port.sh" --self-test
 # the delivery channel itself.
 chk "notify-sink self-test (delivery log)" node "$REPO/scripts/notify-sink.mjs" --self-test
 

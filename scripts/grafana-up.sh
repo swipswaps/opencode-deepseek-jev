@@ -53,14 +53,15 @@ self_test() {
 }
 
 main() {
-    local REPO C
+    local REPO C GF_PORT="${GF_PORT:-3000}" PORT_GIVEN=0
     REPO=$(resolve_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")
     [ -z "$REPO" ] && REPO=$(resolve_repo "$PWD")
     [ -z "$REPO" ] && { printf 'GATE FAIL: cannot resolve repo root\n'; return 2; }
     C="$REPO/docker/docker-compose.observability.yml"
     case "${1:-}" in
         --self-test) self_test; return "$?" ;;
-        -h | --help) printf 'usage: %s [--down|--logs|--self-test]\n' "$0"; return 0 ;;
+        --port) GF_PORT="${2:-3000}"; PORT_GIVEN=1; shift 2 ;;
+        -h | --help) printf 'usage: %s [--port N|--down|--logs|--self-test]\n' "$0"; return 0 ;;
     esac
     have docker || { printf 'GATE FAIL: docker required (host-only)\n'; return 1; }
     case "${1:-}" in
@@ -69,16 +70,30 @@ main() {
         "") : ;;
         *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
     esac
+    # Never assume the port: discover a free one (deploy.sh does the same).
+    if ! bash "$REPO/scripts/free-port.sh" --check "$GF_PORT" > /dev/null; then
+        printf 'grafana-up: port %s busy -- holder:\n' "$GF_PORT"
+        bash "$REPO/scripts/free-port.sh" --owner "$GF_PORT"
+        if [ "$PORT_GIVEN" -eq 1 ]; then
+            printf 'FAIL: --port %s is busy; free it or pass another\n' "$GF_PORT"; return 1
+        fi
+        local np
+        np=$(bash "$REPO/scripts/free-port.sh" "$GF_PORT" 50)
+        [ -n "$np" ] || { printf 'FAIL: no free port near %s\n' "$GF_PORT"; return 1; }
+        printf 'grafana-up: using free port %s instead\n' "$np"
+        GF_PORT="$np"
+    fi
+    export GF_PORT
     docker compose -f "$C" up -d || { printf 'FAIL: compose up\n'; return 1; }
     local k=0 h=""
     while [ "$k" -lt 30 ]; do
         sleep 2
-        h=$(curl -s --max-time 3 "http://127.0.0.1:3000/api/health" || true)
+        h=$(curl -s --max-time 3 "http://127.0.0.1:$GF_PORT/api/health" || true)
         case "$h" in *'"database":"ok"'*) break ;; esac
         k=$((k + 1))
     done
     case "$h" in
-        *'"database":"ok"'*) printf 'grafana-up: healthy -> http://127.0.0.1:3000 (dashboards provisioned)\n'; return 0 ;;
+        *'"database":"ok"'*) printf 'grafana-up: healthy -> http://127.0.0.1:%s (dashboards provisioned)\n' "$GF_PORT"; return 0 ;;
         *) printf 'grafana-up: not healthy after 60s; run --logs\n'; return 1 ;;
     esac
 }

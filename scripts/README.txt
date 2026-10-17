@@ -632,6 +632,12 @@ test-durable.sh
     state rebuilds from storage, a read-only client attaches. Wired
     into test-hygiene.
 
+free-port.sh
+    Find / test a free TCP port (never assume one; port conflicts recur).
+    Prints the first free loopback port >= START (default 3000); --check
+    PORT (exit 0 free / 1 busy), --owner PORT (best effort), --self-test
+    offline. Used by grafana-up.sh to auto-pick a port.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

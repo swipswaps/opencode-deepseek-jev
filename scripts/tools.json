@@ -653,5 +653,17 @@
     "commands": [
       "./scripts/test-durable.sh"
     ]
+  },
+  {
+    "id": "free-port",
+    "title": "Find / test a free TCP port (never assume one)",
+    "where": "container",
+    "purpose": "Port conflicts recur (18x 'already in use' in the chat DB). Any script that binds/publishes a port should discover it, not assume it. Prints the first free loopback port >= START; --check PORT (exit 0/1), --owner PORT (best effort), --self-test offline.",
+    "commands": [
+      "./scripts/free-port.sh",
+      "./scripts/free-port.sh --check 3000",
+      "./scripts/free-port.sh --owner 3000",
+      "./scripts/free-port.sh --self-test"
+    ]
   }
 ]

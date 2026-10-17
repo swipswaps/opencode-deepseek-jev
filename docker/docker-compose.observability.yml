@@ -21,7 +21,7 @@ services:
     image: grafana/grafana-oss:latest
     container_name: opencode-grafana
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${GF_PORT:-3000}:3000"
     environment:
       GF_INSTALL_PLUGINS: frser-sqlite-datasource
       GF_AUTH_ANONYMOUS_ENABLED: "true"
