@@ -54,6 +54,9 @@ def classify(resource, detail):
         return "slow_fetch", "medium", {"n": int(m.group(1)), "slowest": float(m.group(2))}
     if re.search(r"deny-listed", detail, re.I):
         return "deny_listed", "medium", {"sid": sid}
+    if re.search(r"tunnel flap", detail, re.I):
+        m = re.search(r"nebula/tunnel/(\S+)", resource)
+        return "tunnel_flap", "medium", {"peer": m.group(1) if m else "?"}
     if re.search(r"guidance issued", detail, re.I):
         return "guidance", "low", {"sid": sid}
     return "other", "low", {"sid": sid}
@@ -64,6 +67,7 @@ NEXT = {
     "stall": lambda x: "./scripts/handoff-brief.sh %s   # inspect first: ./scripts/tui-audit.py" % (x.get("sid") or "<sid>"),
     "slow_fetch": lambda x: "./scripts/host-path-probe.sh   # decompose host->caddy->container for the slow %s" % (x.get("uri") or "endpoint"),
     "deny_listed": lambda x: "./scripts/handoff-brief.sh %s" % (x.get("sid") or "<sid>"),
+    "tunnel_flap": lambda x: "./scripts/nebula-systemd-override.sh --diagnose   # classify + count the flap to %s" % (x.get("peer") or "peer"),
     "guidance": lambda x: "none (informational)",
     "other": lambda x: "./scripts/logs.sh   # no rule; inspect the ledger row",
 }
@@ -72,6 +76,7 @@ RUNBOOK = {
     "stall": "ux-trace",
     "slow_fetch": "slow-fetch",
     "deny_listed": "cost",
+    "tunnel_flap": "tunnel-flap",
     "guidance": None,
     "other": "logs",
 }
@@ -198,6 +203,14 @@ def self_test():
     g2 = summarize([("weird", "something unprecedented happened", "t")])
     if g2[0]["kind"] != "other":
         print("FAIL: unknown not classified as other"); fail = 1
+    # T8 tunnel-flap: names the peer + points at the classifier/runbook
+    tf = summarize([("nebula/tunnel/10.100.0.1",
+                     "tunnel flap: 6 teardown/re-handshake event(s); nebula process healthy (not a restart) — fix the peer/lighthouse link",
+                     "t")])
+    if tf[0]["kind"] != "tunnel_flap" or tf[0]["extra"].get("peer") != "10.100.0.1":
+        print("FAIL: tunnel_flap classify (%r)" % tf); fail = 1
+    if not any(r.get("id") == "tunnel-flap" for r in load_runbooks("scripts/runbooks.json")):
+        print("FAIL: tunnel-flap runbook missing"); fail = 1
     # empty sink
     if "clean" not in render(summarize([]), [], None):
         print("FAIL: empty not clean"); fail = 1

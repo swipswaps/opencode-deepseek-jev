@@ -313,6 +313,20 @@
     "note": "URI histogram from the real ledger (2026-10-14..16): /provider x188 (worst 137s, per-page-load), /api/balance x13 (307s), /api/cost 365s, /api/schema 112s, /assets/* x23, /favicon x46. Two drains, both durable: (1) the servers are single-threaded -> keep heavy reads OFF the loop (the dashboard already offloads board/semantic/signals/patterns/words to query-worker.mjs with TTLs; do not add synchronous scans) and keep poll load low (intervals 8/15/30/60s + SSE); (2) edge-cache the immutable statics so re-fetch storms stop queueing -- docker/Caddyfile now sets Cache-Control immutable for content-hashed /assets/* and a 1-day TTL for /favicon*. Note: /global/event in the log is an SSE stream (duration = connection lifetime); sentinel T4 now EXCLUDES it so it cannot cry-wolf the watchdog. The genuinely OURS endpoints have TTLs, and the one external call (/api/balance) has a 10s timeout. Validate a Caddyfile edit with: docker compose --project-directory docker exec caddy caddy validate --config /etc/caddy/Caddyfile"
   },
   {
+    "id": "tunnel-flap",
+    "title": "Nebula peer tunnel flapping (NEBULA-1)",
+    "purpose": "Turn sentinel T8 'N tunnel-flap events' into a fix. The NEBULA-1 investigation proved the nebula PROCESS is healthy (systemd NRestarts=0, one stable PID); the recurring event is a peer/lighthouse tunnel teardown + re-handshake (`Close tunnel received, tearing down.` / `Taking new handshake` / `tunnelCheck state:dead`), typically to lighthouse-01 (vpnIp 10.100.0.1). This is a network/link problem, NOT a systemd restart problem -- do not rate-limit systemd.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "bash scripts/nebula-systemd-override.sh --diagnose   # classify restart-churn vs tunnel-flap + count it",
+      "python3 scripts/nebula-restart-trace.py --watch 60   # confirm it is not the process restarting",
+      "python3 scripts/triage-alerts.py   # group the T8 flags + de-dupe the stable key",
+      "journalctl -u nebula --since '-15min' | grep -E 'Close tunnel|Taking new handshake|state:dead'"
+    ],
+    "note": "Root cause lives in the peer/lighthouse repo (proxmox-dual-plane-mesh) -- this repo only watches and hands off. The handshake log shows UDP to 192.168.4.45:4242 and 100.70.43.78:4242 with `tunnelCheck state:dead` on vpnIp 10.100.0.1; check the lighthouse's UDP reachability (firewall/NAT/MTU) and the peer's reload cadence. A systemd drop-in (nebula-systemd-override.sh --apply) does NOT fix this: it only bounds restarts that are not happening. Threshold is SENTINEL_TUNNEL_MIN (default 4 flap events per sweep)."
+  },
+  {
     "id": "grafana",
     "title": "Stand up Grafana + SQLite (non-bespoke ops view)",
     "purpose": "One command to bring the Grafana + SQLite observability view (RULE #67) up on the host; it reads the two stores read-only, so it can never disagree with the source of truth.",

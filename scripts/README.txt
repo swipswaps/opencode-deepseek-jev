@@ -503,7 +503,10 @@ sentinel.sh
     actionable news — T1 latest over budget, T2 latest on a deny-listed model,
     T3 new gateway-failure lines since cursor, T4 slow caddy fetch (SSE/long-
     lived streams excluded), T5 non-latest deny-listed, T6 non-latest
-    over-budget, T7 a tool stuck `running` — active since the last sweep.
+    over-budget, T7 a tool stuck `running`, T8 a flapping peer tunnel
+    (>= SENTINEL_TUNNEL_MIN, default 4, teardown/re-handshake events for the
+    nebula unit — the NEBULA-1 finding: the process is healthy, the link is
+    not) — active since the last sweep.
     History only reported. Logs ADVISORY rows with a STABLE per-incident
     ledger key (a persisting condition stays ONE row via UNIQUE(source,key));
     writes a DB-only digest next to each non-latest trip. --once (default),

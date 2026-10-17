@@ -33,6 +33,14 @@
 #      blocked on — S0) and started since the last sweep. Cursor-bounded like
 #      T3/T5/T6: the first sweep initialises silently, so an archival "running"
 #      part (e.g. a 12-day-old entry) is history, not news.
+#   T8 >= SENTINEL_TUNNEL_MIN (default 4) NEW peer-tunnel flap events since the
+#      cursor (Close tunnel received | Taking new handshake | state:dead) for
+#      the nebula unit — the NEBULA-1 finding: the process is healthy
+#      (systemd NRestarts=0), so the recurring event is a tunnel to a
+#      neighbour (lighthouse-01 / vpnIp 10.100.0.1), not a restart. Source is
+#      `journalctl -u <unit> --since`; a file seam (SENTINEL_TUNNEL_LOG) makes
+#      it offline-testable. Cursor-bounded like T3/T4: the first sweep
+#      initialises silently.
 # REPORT-only (exit stays 0): total over/warn/denied counts across recent 40.
 # A permanently-red monitor desensitizes (cry-wolf); history is reported,
 # only news trips.
@@ -42,7 +50,9 @@
 #
 # Env seams: SENTINEL_DB, SENTINEL_APP, SENTINEL_STATE, LEDGER_DB,
 # SENTINEL_ACCESSLOG (file instead of `docker logs`), SENTINEL_NODOCKER=1
-# (skip T4), SENTINEL_SLOW_SEC (default 10).
+# (skip T4), SENTINEL_SLOW_SEC (default 10), SENTINEL_TUNNEL_LOG (file instead
+# of `journalctl`), SENTINEL_TUNNEL_MIN (default 4), SENTINEL_UNIT (default
+# nebula).
 # Exit 0 clean-or-report, 1 tripped, 2 usage/resolve error.
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
@@ -118,6 +128,9 @@ self_test() {
     work=$(mktemp -d)
     mkdir -p "$work/state"
     export CONTEXT_BUDGET=1000
+    # Force the T8 file seam for EVERY sweep so the self-test never shells out
+    # to journalctl (a dev machine may have a real nebula unit).
+    export SENTINEL_TUNNEL_LOG="$work/neb.log"
     python3 - "$work/fix.db" << 'PYEOF'
 import sqlite3, sys
 con = sqlite3.connect(sys.argv[1])
@@ -148,6 +161,23 @@ PYEOF
     printf '%s' "$o" | grep -q 'TRIP T4 slow-fetch: 1 fetch' || { printf 'FAIL T4 trips on slow fetch\n'; fail=1; }
     printf '%s' "$o" | grep -q 'slowest 44.2s' || { printf 'FAIL T4 slowest reported\n'; fail=1; }
     printf '%s' "$o" | grep -q '1422' && { printf 'FAIL T4 counted an SSE stream (cry-wolf)\n'; fail=1; }
+    # T8: a flapping neighbour tunnel (file seam, no journalctl) trips; below
+    # threshold does not. The nebula process is healthy — the event is a peer
+    # link, not a restart.
+    printf '%s\n' \
+        'Close tunnel received, tearing down. vpnIp=10.100.0.1' \
+        'Taking new handshake vpnIp=10.100.0.1' \
+        'Tunnel status tunnelCheck="map[method:active state:dead]" vpnIp=10.100.0.1' \
+        'Close tunnel received, tearing down. certName=lighthouse-01' \
+        'Handshake message sent vpnIp=10.100.0.1' > "$work/neb.log"
+    printf '%s' '0' > "$work/state/sentinel-tunnel.cursor"
+    o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_TUNNEL_LOG="$work/neb.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'TRIP T8 tunnel-flap: 4 flap' || { printf 'FAIL T8 trips on tunnel flap\n'; fail=1; }
+    printf '%s' "$o" | grep -q '10.100.0.1' || { printf 'FAIL T8 names the peer\n'; fail=1; }
+    printf '%s\n' 'Close tunnel received, tearing down. vpnIp=10.100.0.1' > "$work/neb2.log"
+    printf '%s' '0' > "$work/state/sentinel-tunnel.cursor"
+    o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_TUNNEL_LOG="$work/neb2.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
+    printf '%s' "$o" | grep -q 'TRIP T8' && { printf 'FAIL T8 fired below threshold\n'; fail=1; }
     # T5/T6: s_old is deny-listed AND over budget; s_over is over budget but
     # ALLOW-listed. Both are NOT latest. Stamp them active 60s ago with a
     # cursor 600s old (relative offsets — immune to clock). First sweep trips
@@ -188,7 +218,7 @@ PYEOF
     SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_DIGEST_DIR="$work/digests" LEDGER_DB="$work/obs.db" bash "${BASH_SOURCE[0]}" --once > /dev/null 2>&1
     n2=$(LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep sentinel 2>&1 | grep -c 'ADVISORY')
     [ "$n1" = "$n2" ] && [ "$n1" -gt 0 ] || { printf 'FAIL ledger not idempotent (n1=%s n2=%s)\n' "$n1" "$n2"; fail=1; }
-    rm -f "$work/digests/"*.md "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor"
+    rm -f "$work/digests/"*.md "$work/fix.db" "$work/obs.db" "$work/app.log" "$work/acc.log" "$work/neb.log" "$work/neb2.log" "$work/state/sentinel.cursor" "$work/state/sentinel-access.cursor" "$work/state/sentinel-t5.cursor" "$work/state/sentinel-tunnel.cursor"
     rmdir "$work/digests" "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'sentinel: self-test PASS\n'; else printf 'sentinel: self-test FAIL\n'; fi
     return "$fail"
@@ -454,10 +484,67 @@ PYEOF
         done <<< "$t5_hits"
     fi
     printf '%s' "$(date +%s)" > "$t5_cur"
+    # T8: a neighbour tunnel flapping since the last sweep (NEBULA-1). The
+    # nebula PROCESS is healthy (systemd NRestarts=0) — the recurring event is
+    # a peer tunnel teardown/re-handshake (lighthouse-01 / vpnIp 10.100.0.1),
+    # so this is a host/network signal, not a process restart. Cursor-bounded
+    # like T4: first run initialises silently; SENTINEL_TUNNEL_LOG is the
+    # offline file seam (the self-test path must pass with no journalctl).
+    local TUN_MIN="${SENTINEL_TUNNEL_MIN:-4}"
+    local tun_n=0 tun_peer=""
+    if { [ -n "${SENTINEL_TUNNEL_LOG:-}" ] || have journalctl; } && have python3; then
+        local tun_cur="$STATE/sentinel-tunnel.cursor" tun_since="" tun_src="" tun_tmp=""
+        if [ -f "$tun_cur" ]; then
+            tun_since=$(tr -d ' ' < "$tun_cur")
+        fi
+        case "$tun_since" in ''|*[!0-9]*) tun_since="" ;; esac
+        if [ -n "${SENTINEL_TUNNEL_LOG:-}" ]; then
+            tun_src="$SENTINEL_TUNNEL_LOG"
+        elif [ -n "$tun_since" ]; then
+            tun_tmp=$(mktemp)
+            journalctl -u "${SENTINEL_UNIT:-nebula}" --since "@$tun_since" -o cat > "$tun_tmp" 2>&1 || true
+            tun_src="$tun_tmp"
+        fi
+        if [ -n "$tun_src" ]; then
+            local tun_out=""
+            tun_out=$(python3 - "$TUN_MIN" "$tun_src" << 'PYEOF'
+import re, sys
+thresh = int(sys.argv[1])
+n = 0
+peers = []
+rx = re.compile(r'Close tunnel received|Taking new handshake|state:dead')
+prx = re.compile(r'vpnIp=([0-9.]+)|certName=([\w.\-]+)')
+try:
+    fh = open(sys.argv[2], encoding="utf-8", errors="replace")
+except OSError:
+    fh = []
+for line in fh:
+    if not rx.search(line):
+        continue
+    n += 1
+    m = prx.search(line)
+    if m:
+        p = m.group(1) or m.group(2)
+        if p and p not in peers:
+            peers.append(p)
+print("%d|%s" % (n, ",".join(peers[:3])))
+PYEOF
+            )
+            tun_n=${tun_out%%|*}
+            tun_peer=$(printf '%s' "$tun_out" | cut -d'|' -f2-)
+            case "$tun_n" in ''|*[!0-9]*) tun_n=0 ;; esac
+        fi
+        printf '%s' "$(date +%s)" > "$tun_cur"
+        if [ "$tun_n" -ge "$TUN_MIN" ]; then
+            trip "TRIP T8 tunnel-flap: $tun_n flap event(s) to ${tun_peer:-peer} since last sweep" "nebula/tunnel/${tun_peer:-peer}" "tunnel flap: $tun_n teardown/re-handshake event(s); nebula process healthy (not a restart) — fix the peer/lighthouse link, not systemd (./scripts/nebula-systemd-override.sh --diagnose)" "sentinel-t8-${tun_peer:-peer}"
+        fi
+        [ -n "$tun_tmp" ] && rm -f "$tun_tmp"
+    fi
     export T5_N="$t5_n" T6_N="$t6_n" T7_N="$t7_n"
     export SLOW_N="$slow_n" SLOW_MAX="$slow_max"
+    export TUN_N="$tun_n" TUN_MIN="$TUN_MIN" TUN_PEER="$tun_peer"
     if [ "$JSON" -eq 1 ]; then
-        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0 or int(os.environ.get("T7_N","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "stall_active": int(os.environ.get("T7_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}}))'
+        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0 or int(os.environ.get("T7_N","0"))>0 or int(os.environ.get("TUN_N","0"))>=int(os.environ.get("TUN_MIN","4")), "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "stall_active": int(os.environ.get("T7_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}, "tunnel": {"threshold": int(os.environ.get("TUN_MIN","4")), "n": int(os.environ.get("TUN_N","0")), "peers": os.environ.get("TUN_PEER","")}}))'
     else
         printf '=== sentinel @ %s ===\n' "$RUN_TS"
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'

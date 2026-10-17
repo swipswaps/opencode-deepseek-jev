@@ -98,7 +98,7 @@
     "id": "sentinel",
     "title": "Periodic threshold monitor with ledger trips",
     "where": "host",
-    "purpose": "One sweep: latest-session over-budget/deny-listed trips (T1/T2) plus new gateway-failure lines since cursor (T3); history only reported. Logs ADVISORY rows for watchdog polling. Runs under systemd/opencode-sentinel.timer every 5 min (see sentinel-install).",
+    "purpose": "One sweep: latest-session over-budget/deny-listed trips (T1/T2), new gateway-failure lines since cursor (T3), slow caddy fetches (T4), non-latest deny-listed/over-budget active sessions (T5/T6), a stalled running tool (T7), and a flapping peer tunnel (T8: >= SENTINEL_TUNNEL_MIN, default 4, teardown/re-handshake events for the nebula unit). History only reported. Logs ADVISORY rows for watchdog polling. Runs under systemd/opencode-sentinel.timer every 5 min (see sentinel-install).",
     "commands": [
       "./scripts/sentinel.sh --once",
       "./scripts/sentinel.sh --json --no-log",

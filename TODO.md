@@ -8,6 +8,20 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **Sentinel T8 — peer-tunnel flap detector (NEBULA-1 follow-up).** The
+      recurring event is a tunnel, not a restart, so sentinel now trips on it:
+      **T8** counts teardown/re-handshake/`state:dead` events for the nebula
+      unit since the cursor (>= `SENTINEL_TUNNEL_MIN`, default 4;
+      `journalctl -u <unit> --since` source + `SENTINEL_TUNNEL_LOG` file seam,
+      cursor-bounded like T4). Logs a stable-key ADVISORY
+      (`sentinel-t8-<peer>`) → the **existing** notify sink + `triage-alerts.py`,
+      which gains a `tunnel_flap` kind (severity medium,
+      next = `nebula-systemd-override.sh --diagnose`) + runbook **`tunnel-flap`**.
+      Reuses the sentinel timer/install — no new daemon. Wired: sentinel
+      self-test (T8 trips / names the peer / below-threshold silent),
+      triage-alerts self-test (`test-durable`), runbooks 27→28.
+      Gate: lint 264/0, hygiene 58/0, tooling 17/0.
+
 - [x] **NEBULA-1 diagnostic + fix, both scripted (premise falsified).**
       `nebula-restart-trace.py` reads `/proc/<pid>/stat` + the parent's
       comm/cmdline for every nebula process; a non-PID-1 parent is the restarter.
@@ -379,12 +393,18 @@ Last updated: 2026-10-17
       drop-in was applied then **reverted on the host** (`--revert` + confirm
       2026-10-17). Evidence: the live `--show` output + logs/pressure-*.log.
       Carry-forward: the tunnel itself is external (below).
-- [ ] **TUNNEL-1 (external, D): `lighthouse-01` link flaps.** vpnIp
-      `10.100.0.1` tears down / re-handshakes repeatedly (`state:dead`) while the
-      nebula process is healthy. Fix lives in the peer/lighthouse repo
-      (`proxmox-dual-plane-mesh`), not here. Tooling ready to hand off:
-      `nebula-systemd-override.sh --diagnose` (classifies + counts the flap).
-      Evidence: journal `-u nebula` around 18:50–18:53 on ws24.
+- [~] **TUNNEL-1: detector shipped (sentinel T8); the link fix is external (D).**
+      vpnIp `10.100.0.1` (lighthouse-01) tears down / re-handshakes repeatedly
+      (`state:dead`) while the nebula process is healthy. **Watch:** sentinel
+      gains **T8 tunnel-flap** (>= `SENTINEL_TUNNEL_MIN` default 4
+      teardown/re-handshake events since the cursor for the nebula unit;
+      `journalctl --since` source, `SENTINEL_TUNNEL_LOG` file seam) → a
+      stable-key ADVISORY the existing notify sink + `triage-alerts.py`
+      (`tunnel_flap` kind → runbook `tunnel-flap`) deliver and act on. **Hand
+      off:** `journalctl -u nebula | grep -E 'Close tunnel|state:dead'` +
+      `nebula-systemd-override.sh --diagnose`. **Fix (external):** the
+      peer/lighthouse link in `proxmox-dual-plane-mesh` — UDP reachability
+      (firewall/NAT/MTU) and reload cadence.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

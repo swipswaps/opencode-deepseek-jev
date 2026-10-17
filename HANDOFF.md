@@ -30,6 +30,10 @@
 > and `nebula-systemd-override.sh` (`--diagnose` classifies restart-churn vs
 > tunnel-flap; the defensive drop-in was applied then `--revert`ed). Residual is
 > external: the peer tunnel (`proxmox-dual-plane-mesh`) — see TODO `TUNNEL-1`.
+> **Detector shipped:** sentinel **T8** now trips on the flap itself
+> (`>= SENTINEL_TUNNEL_MIN` teardown/re-handshake events for the nebula unit;
+> stable key → the existing notify sink + `triage-alerts.py` `tunnel_flap` kind
+> → runbook `tunnel-flap`). Watch closure without a human in the loop.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
