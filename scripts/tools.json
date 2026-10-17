@@ -675,5 +675,16 @@
       "bash scripts/snapshot-audit.sh",
       "bash scripts/snapshot-audit.sh --self-test"
     ]
+  },
+  {
+    "id": "locate-prune-snapshots",
+    "title": "Keep /.snapshots out of the locate index",
+    "where": "host",
+    "purpose": "updatedb indexes every BTRFS snapshot unless PRUNEPATHS prunes it (bloats the db, slows updatedb on a USB-HDD root). Adds /.snapshots to PRUNEPATHS idempotently with a timestamped backup, then runs updatedb. Dry-run default; --apply (sudo).",
+    "commands": [
+      "bash scripts/locate-prune-snapshots.sh",
+      "sudo bash scripts/locate-prune-snapshots.sh --apply",
+      "bash scripts/locate-prune-snapshots.sh --self-test"
+    ]
   }
 ]

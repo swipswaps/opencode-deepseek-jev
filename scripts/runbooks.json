@@ -336,8 +336,9 @@
       "bash scripts/snapshot-audit.sh",
       "sudo snapper list | tail -n +3 | wc -l",
       "sudo btrfs quota status /",
-      "grep -E '^(PRUNEPATHS|PRUNEFS)' /etc/updatedb.conf"
+      "grep -E '^(PRUNEPATHS|PRUNEFS)' /etc/updatedb.conf",
+      "sudo bash scripts/locate-prune-snapshots.sh --apply"
     ],
-    "note": "Snapshots do not slow the OS by existing, but three costs are real: (1) locate/updatedb indexing /.snapshots bloats mlocate.db and is slow on a USB-HDD root -- add /.snapshots to PRUNEPATHS, then sudo updatedb; (2) CoW snapshots pin old blocks and fragment writes; (3) BTRFS qgroups (btrfs quota) are a known snapper drag -- sudo btrfs quota disable / removes it. Cap retention: sudo snapper -c root set-config TIMELINE_LIMIT_HOURLY=6 TIMELINE_LIMIT_DAILY=7 TIMELINE_LIMIT_WEEKLY=4 TIMELINE_LIMIT_MONTHLY=2 TIMELINE_LIMIT_YEARLY=0, NUMBER_LIMIT=20, then sudo snapper -c root cleanup number. Keep btrfs balance rare on a USB HDD. Note: the host lockup was CPU starvation, not disk."
+    "note": "Snapshots do not slow the OS by existing, but three costs are real: (1) locate/updatedb indexing /.snapshots bloats mlocate.db and is slow on a USB-HDD root -- add /.snapshots to PRUNEPATHS, then sudo updatedb; (2) CoW snapshots pin old blocks and fragment writes; (3) BTRFS qgroups (btrfs quota) are a known snapper drag -- sudo btrfs quota disable / removes it. Cap retention: sudo snapper -c root set-config TIMELINE_LIMIT_HOURLY=6 TIMELINE_LIMIT_DAILY=7 TIMELINE_LIMIT_WEEKLY=4 TIMELINE_LIMIT_MONTHLY=2 TIMELINE_LIMIT_YEARLY=0, NUMBER_LIMIT=20, then sudo snapper -c root cleanup number. Keep btrfs balance rare on a USB HDD. Note: the host lockup was CPU starvation, not disk. The locate fix is scripted: locate-prune-snapshots.sh (idempotent, backs up /etc/updatedb.conf, runs updatedb)."
   }
 ]

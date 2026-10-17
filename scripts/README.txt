@@ -644,6 +644,13 @@ snapshot-audit.sh
     whether locate indexes /.snapshots, then the exact tuning commands.
     --self-test offline.
 
+locate-prune-snapshots.sh
+    Keep /.snapshots out of the locate index (updatedb indexes every
+    snapshot unless PRUNEPATHS prunes it; bloats the db + slows
+    updatedb on a USB-HDD root). Adds /.snapshots to PRUNEPATHS
+    idempotently with a timestamped backup, then runs updatedb.
+    Dry-run default; --apply (sudo); --file for a fixture; --self-test.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

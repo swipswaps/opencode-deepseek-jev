@@ -387,6 +387,17 @@ main() {
         bad 'snapshot-audit.sh present'
     fi
 
+    if [ -f "$REPO/scripts/locate-prune-snapshots.sh" ]; then
+        if bash "$REPO/scripts/locate-prune-snapshots.sh" --self-test > "$work/lps_st.txt" 2>&1; then
+            ok 'locate-prune-snapshots: self-test (idempotent PRUNEPATHS edit)'
+        else
+            bad 'locate-prune-snapshots: self-test (idempotent PRUNEPATHS edit)'
+            cat "$work/lps_st.txt"
+        fi
+    else
+        bad 'locate-prune-snapshots.sh present'
+    fi
+
     if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
         if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
             ok 'rotate-server-password: self-test (generate + atomic rewrite)'
