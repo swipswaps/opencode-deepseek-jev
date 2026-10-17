@@ -61,13 +61,14 @@ self_test() {
 }
 
 main() {
-    local CONF="/etc/updatedb.conf" APPLY=0
+    local CONF="/etc/updatedb.conf" APPLY=0 NO_UPDATE=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --file) CONF="${2:-}"; shift 2 ;;
             --apply) APPLY=1; shift ;;
+            --no-updatedb) NO_UPDATE=1; shift ;;
             --self-test) self_test; return "$?" ;;
-            -h | --help) printf 'usage: %s [--file CONF] [--apply] [--self-test]\n' "$0"; return 0 ;;
+            -h | --help) printf 'usage: %s [--file CONF] [--apply] [--no-updatedb] [--self-test]\n' "$0"; return 0 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
         esac
     done
@@ -83,10 +84,18 @@ main() {
     fi
     local bak="$CONF.bak.$(date +%s)"
     cp "$CONF" "$bak" || { printf 'FAIL: backup\n'; return 1; }
-    conf_add "$CONF" || { printf 'FAIL: edit\n'; return 1; }
     printf 'backup: %s\n' "$bak"
+    conf_add "$CONF" || { printf 'FAIL: edit\n'; return 1; }
+    if [ "$NO_UPDATE" -eq 1 ]; then
+        printf 'PRUNEPATHS updated; rebuild when ready: sudo updatedb\n'; return 0
+    fi
     if have updatedb; then
-        if updatedb; then printf 'updatedb: done\n'; else printf 'WARN: updatedb failed (run: sudo updatedb)\n'; fi
+        printf 'running updatedb in the background (silent; can take many minutes on a USB-HDD)\n'
+        updatedb &
+        local u=$!
+        printf 'updatedb pid=%s\n' "$u"
+        printf '  monitor from another terminal: grep read_bytes /proc/%s/io ; iostat -x 2\n' "$u"
+        if wait "$u"; then printf 'updatedb: done\n'; else printf 'WARN: updatedb failed (run: sudo updatedb)\n'; fi
     else
         printf '(updatedb not on PATH; run it from a root shell)\n'
     fi
