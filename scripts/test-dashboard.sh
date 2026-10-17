@@ -238,7 +238,15 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
-    has 'count=20' "$work/rbcheck.txt" && ok 'runbooks count=20' || bad 'runbooks count=20'
+    local rb_exp=""
+    if [ -f "$REPO/scripts/runbooks.json" ]; then
+        rb_exp=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$REPO/scripts/runbooks.json")
+    fi
+    if [ -n "$rb_exp" ]; then
+        has "count=$rb_exp" "$work/rbcheck.txt" && ok "runbooks count=$rb_exp (matches runbooks.json)" || bad "runbooks count != $rb_exp (runbooks.json)"
+    else
+        bad 'runbooks count (scripts/runbooks.json missing)'
+    fi
 
     if [ -x "$REPO/scripts/runbook.sh" ]; then
         "$REPO/scripts/runbook.sh" --list > "$work/rblist.txt"

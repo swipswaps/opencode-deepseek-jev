@@ -8,6 +8,12 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **test-dashboard: derive the runbook count from source.** The gate
+      hard-coded `count=20` while `scripts/runbooks.json` grew to 26 — a brittle
+      magic number that failed the dashboard gate. It now compares the served
+      count to `len(runbooks.json)`. (Found while verifying the doc-budget
+      change; observed `runbooks count=26 (matches runbooks.json)` PASS.)
+
 - [x] **Doc-budget tiering (#77) + doc trim.** `doc-budget.sh` now charges only
       the session-start set (HANDOFF/RULES/TODO + `skills/*`) to the budget and
       **reports** README/DESIGN/scripts-README as on-demand — the WARN was
