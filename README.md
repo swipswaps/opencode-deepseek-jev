@@ -5,25 +5,17 @@ Docker-based setup. All project code stays inside this repository.
 ## Status — where we are, how we got here, next steps (2026-10-16)
 
 ### How we got here
-- Started as a dockerized OpenCode + DeepSeek + Jev stack with a read-only
-  observability dashboard on `:5099`.
-- Added a fail-closed monitoring family — **sentinel T1–T7** (over-budget,
-  deny-listed, gateway, slow-fetch, non-latest deny/over, DB-native stall),
-  cursor-bounded and driven from the SQLite stores, then **de-cry-wolfed** with
-  stable per-incident ledger keys.
-- Proved the browser path: **`cdp-tab.mjs`** (zero-dep CDP) drives the
-  already-open browser (RULES #62), benchmarked against playwright / browser-use
-  / selenium with a failover order (RULE #64).
-- Fixed served-page defects the operator hit: local-time + tz labels, a poll
-  loop that froze the page, the **STALE-rev** banner (dockerless restart), the
-  empty **Session-detail** card, the inline-expand that collapsed every 5 s, and
-  the **buried Gantt** (moved to the 2nd tab + a home link).
-- Added a UX gate **`ux-smoke.py`** (DOM + local-OCR `--vision`), a **light
-  theme** so tesseract can read (RULES #65/#66), and a DB-only session digest
-  for cheap handoffs.
-- Codified the telemetry doctrine: **RULE #67** +
-  `.opencode/skills/telemetry-dashboard` (declarative, DB-driven,
-  drill-down-native; Grafana / Vega-Lite / TanStack; **not Flutter**).
+A dockerized OpenCode + DeepSeek + Jev stack with a read-only `:5099` dashboard,
+grown a fail-closed monitoring family (**sentinel T1–T7**, cursor-bounded,
+de-cry-wolfed via stable per-incident ledger keys), a zero-dep CDP browser path
+(**`cdp-tab.mjs`**, RULES #62/#64), a UX gate (**`ux-smoke.py`**, DOM +
+local-OCR `--vision`) with a **light theme** so tesseract can read (RULES
+#65/#66), and the telemetry doctrine (**RULE #67** +
+`.opencode/skills/telemetry-dashboard`: declarative, DB-driven,
+drill-down-native; Grafana/Vega-Lite/TanStack; not Flutter). Fixed the
+served-page defects the operator hit (tz labels, poll-loop freeze, STALE-rev
+banner, empty Session-detail, inline-expand collapse, buried Gantt). Full causal
+chain in `HANDOFF.md`.
 
 ### Where we are
 - Sentinel **T1–T7**; ledger deduped; DB-only **digests** auto-written on a trip;
@@ -842,51 +834,31 @@ Silent stall during smoke test: process substitution ensures live
   streaming. If this recurs, check that bash is version 4+ (process
   substitution is a bash feature).
 
-## References (every link verified 200 on 2026-09-30)
+## References (links verified 200 on 2026-09-30)
 
-Specs and standards the code depends on:
+Specs/standards: W3C ARIA APG tabs
+https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ · WCAG 2.1
+https://www.w3.org/TR/WCAG21/ · RFC 5861 stale-while-revalidate
+https://httpwg.org/specs/rfc5861.html · Go singleflight
+https://pkg.go.dev/golang.org/x/sync/singleflight · CSP3 script-src
+https://www.w3.org/TR/CSP3/ · SQLite WAL https://www.sqlite.org/wal.html ·
+JSON1 https://www.sqlite.org/json1.html · window functions
+https://www.sqlite.org/windowfunctions.html · FTS5+BM25
+https://www.sqlite.org/fts5.html
 
-- W3C ARIA Authoring Practices, tabs pattern (explore tablist):
-  https://www.w3.org/WAI/ARIA/apg/patterns/tabs/
-- WCAG 2.1 (keyboard operability, labels, focus, tables):
-  https://www.w3.org/TR/WCAG21/
-- RFC 5861, stale-while-revalidate (TTL cache doctrine):
-  https://httpwg.org/specs/rfc5861.html
-- Go x/sync singleflight (recompute deduplication):
-  https://pkg.go.dev/golang.org/x/sync/singleflight
-- Content Security Policy 3, script-src (why the harness never
-  `wait_for_function`s a string): https://www.w3.org/TR/CSP3/
-- SQLite WAL mode: https://www.sqlite.org/wal.html
-- SQLite JSON1: https://www.sqlite.org/json1.html
-- SQLite window functions: https://www.sqlite.org/windowfunctions.html
-- SQLite FTS5 + BM25: https://www.sqlite.org/fts5.html
+API/library docs: Observable Plot https://github.com/observablehq/plot ·
+d3-brush https://github.com/d3/d3-brush · d3-sankey
+https://github.com/d3/d3-sankey · LiteLLM retries
+https://docs.litellm.ai/docs/completion/reliable_completions · budgets
+https://docs.litellm.ai/docs/proxy/virtual_keys · DeepSeek JSON mode
+https://api-docs.deepseek.com/guides/json_mode · Meta structured output
+https://ai.developer.meta.com/docs/features/structured-output · Playwright
+evaluating https://playwright.dev/docs/evaluating · opencode CLI
+https://dev.opencode.ai/docs/cli · opencode MCP
+https://opencode.ai/docs/mcp-servers · GitHub REST pagination
+https://docs.github.com/en/rest/using-the-rest-api · Stripe pagination
+https://stripe.com/docs/api/pagination
 
-API and library docs:
-
-- Observable Plot (vendored specs): https://github.com/observablehq/plot
-- d3-brush (chart filter overlay): https://github.com/d3/d3-brush
-- d3-sankey (token-flow layout): https://github.com/d3/d3-sankey
-- LiteLLM retries: https://docs.litellm.ai/docs/completion/reliable_completions
-- LiteLLM budgets: https://docs.litellm.ai/docs/proxy/virtual_keys
-- DeepSeek JSON mode (json_schema rejected on both tiers, measured):
-  https://api-docs.deepseek.com/guides/json_mode
-- Meta structured output (Muse Spark JSON Schema support, documented):
-  https://ai.developer.meta.com/docs/features/structured-output
-- Playwright evaluating (poll via evaluate, never string waits):
-  https://playwright.dev/docs/evaluating
-- opencode CLI attach/session (the resume path):
-  https://dev.opencode.ai/docs/cli
-- opencode MCP servers: https://opencode.ai/docs/mcp-servers
-- GitHub REST pagination (per_page + cursors):
-  https://docs.github.com/en/rest/using-the-rest-api
-- Stripe pagination (cursor + hard limit, fail fast):
-  https://stripe.com/docs/api/pagination
-
-Books (ISBNs):
-
-- Raymond, The Art of Unix Programming (Addison-Wesley, 2003),
-  ISBN 978-0131429017 — cited in scripts/README.txt (clarity,
-  pasteability, Rule of Clarity §1.6.2).
-- Kleppmann, Designing Data-Intensive Applications (O'Reilly,
-  2017), ISBN 978-1449373320 — derived-data caching, ch. 11
-  (dashboard TTL doctrine).
+Books (ISBNs): Raymond, The Art of Unix Programming (AW, 2003, 978-0131429017)
+— clarity/pasteability, §1.6.2. Kleppmann, Designing Data-Intensive
+Applications (O'Reilly, 2017, 978-1449373320) — derived-data caching, ch. 11.

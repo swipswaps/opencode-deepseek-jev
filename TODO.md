@@ -109,8 +109,6 @@ Last updated: 2026-10-17
       now `asyncCached` with an inline fallback. Proven: `/` stayed ~10 ms while
       the cold board computed; `/api/board` shape PASS. Fixes the "long delays".
 
-## Done (most recent first)
-
 - [x] **Semantic layer in `blacklist-guard.js`.** After the fixed pattern rules,
       the guard now calls `scripts/guard-classify.py` (SubQ) and **blocks
       irreversible/destructive commands**, fail-open (unreachable → runs),
