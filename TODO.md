@@ -8,6 +8,14 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **Gate speedups (so review cycles can be frequent).** `test-tooling.sh`
+      now launches its independent contracts **in parallel** (79s→42s; the
+      626MB-DB scans overlap instead of summing). `sentinel.sh` self-test no
+      longer emits digests on `--no-log` (was: needless node + writing into the
+      *real* digests dir from a `--no-log` run) and honors `SENTINEL_ACCESSLOG`
+      regardless of `SENTINEL_NODOCKER` (offline-robust); its self-test 43s→34s.
+      test-hygiene 243s→~186s. Same checks, 0 fail.
+
 - [x] **`loop-state.sh` — checkpoint the in-flight loop segment (#80).** The
       dev loop now records its current segment durably (on `durable-run.sh`'s
       job store, job `dev-loop`): `--begin UNIT` (unit + rev), `--end UNIT`

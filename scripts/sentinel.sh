@@ -94,11 +94,16 @@ trip() {
 emit_digest() {
     # emit_digest SID DB — best-effort DB-only digest written next to the trip,
     # so the operator (or a consumer) can hand off WITHOUT replaying the
-    # transcript into a model. Never fails the sweep.
+    # transcript into a model. Never fails the sweep. Skipped when not logging
+    # (--no-log): a digest accompanies a LOGGED trip, and emitting it anyway
+    # both runs node needlessly and writes into the real digests dir from a
+    # --no-log run (the self-test / CI path).
+    [ "$DOLOG" -eq 1 ] || return 0
     local sid="$1" dbf="$2"
     [ -n "$sid" ] && [ -f "$REPO/scripts/session-digest.sh" ] || return 0
     have python3 || return 0
     mkdir -p "$DIGEST_DIR" || return 0
+    [ -f "$DIGEST_DIR/$sid.md" ] && return 0
     bash "$REPO/scripts/session-digest.sh" "$sid" --db "$dbf" > "$DIGEST_DIR/$sid.md" 2>&1 || true
     return 0
 }
@@ -107,6 +112,9 @@ self_test() {
     local fail=0 work="" n1 n2
     have node || { printf 'FAIL node missing\n'; return 1; }
     have python3 || { printf 'FAIL python3 missing\n'; return 1; }
+    # Offline: never touch docker. The T4 sweep still runs via SENTINEL_ACCESSLOG
+    # (honored regardless of NODOCKER), so the fixture path is exercised.
+    export SENTINEL_NODOCKER=1
     work=$(mktemp -d)
     mkdir -p "$work/state"
     export CONTEXT_BUDGET=1000
@@ -313,7 +321,7 @@ PYEOF
     # have no docker CLI at all).
     local SLOW_SEC="${SENTINEL_SLOW_SEC:-10}"
     local slow_n=0 slow_max=0 slow_uri=""
-    if [ "${SENTINEL_NODOCKER:-0}" -eq 0 ] && { have docker || [ -n "${SENTINEL_ACCESSLOG:-}" ]; } && have python3; then
+    if { [ -n "${SENTINEL_ACCESSLOG:-}" ] || { [ "${SENTINEL_NODOCKER:-0}" -eq 0 ] && have docker; }; } && have python3; then
         local acc_cur="$STATE/sentinel-access.cursor" acc_since="" acc_new=0
         if [ -f "$acc_cur" ]; then
             acc_since=$(tr -d ' ' < "$acc_cur")
