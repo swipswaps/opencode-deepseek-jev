@@ -88,17 +88,25 @@ main() {
     local pub
     pub=$(docker port opencode-grafana 2>&1 | head -1)
     printf 'grafana-up: container published -> %s (GF_PORT=%s)\n' "$pub" "$GF_PORT"
-    local k=0 h=""
-    while [ "$k" -lt 40 ]; do
+    local k=0 h="" hin="" WAIT="${GF_WAIT:-180}"
+    while [ "$((k * 3))" -lt "$WAIT" ]; do
         sleep 3
         h=$(curl -s --max-time 3 "http://127.0.0.1:$GF_PORT/api/health" || true)
         case "$h" in *'"database":"ok"'*) break ;; esac
         k=$((k + 1))
-        [ "$k" -eq 10 ] && printf 'grafana-up: still starting (first boot installs the sqlite plugin; allow ~1-2 min)...\n'
+        [ "$k" -eq 10 ] && printf 'grafana-up: still starting (first boot; allow ~1-2 min)...\n'
     done
     case "$h" in
         *'"database":"ok"'*) printf 'grafana-up: healthy -> http://127.0.0.1:%s (dashboards provisioned)\n' "$GF_PORT"; return 0 ;;
-        *) printf 'grafana-up: not healthy after 120s; run --logs\n'; return 1 ;;
+    esac
+    # Host path did not answer: distinguish "Grafana down" from "host mapping".
+    hin=$(docker compose -f "$C" exec -T grafana wget -qO- http://localhost:3000/api/health 2>&1 || true)
+    case "$hin" in
+        *'"database":"ok"'*)
+            printf 'grafana-up: Grafana is HEALTHY INSIDE the container, but host port %s did not answer.\n' "$GF_PORT"
+            printf '  check: docker port opencode-grafana ; curl -s http://127.0.0.1:%s/api/health\n' "$GF_PORT"
+            return 1 ;;
+        *) printf 'grafana-up: not healthy after %ss; run --logs\n' "$WAIT"; return 1 ;;
     esac
 }
 
