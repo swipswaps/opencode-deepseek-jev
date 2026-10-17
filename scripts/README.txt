@@ -1,715 +1,587 @@
 scripts/ — operating scripts for the OpenCode + DeepSeek + Jev environment
 ===========================================================================
 
-Two tools run the environment. Two more manage the workflow.
+Two tools run the environment; two more manage the workflow. One entry per
+script: what it does, its flags/seams, and any gate. Conventions + paths are
+at the end.
 
 Operate the environment
 -----------------------
 
 deploy-dockge.sh
-    Start the Dockge web UI on http://localhost:5001. Idempotent.
-    Dockge manages every compose stack discovered under
-    $HOME/dockge-stacks.
+    Start the Dockge web UI on http://localhost:5001. Idempotent. Manages
+    every compose stack under $HOME/dockge-stacks.
 
 flatten-dockge-stacks.sh
-    Refresh the flat symlink directory at $HOME/dockge-stacks. Run after
-    adding a new docker-compose.yml under $HOME/Documents. Dockge scans
-    that directory non-recursively, so new projects need this step.
+    Refresh the flat symlink dir $HOME/dockge-stacks (Dockge scans it
+    non-recursively). Run after adding a docker-compose.yml under
+    $HOME/Documents.
 
 Check the environment
 ---------------------
 
 doctor.sh
-    Ordered health check: binaries, docker daemon, keys, provider
-    liveness, image presence, and an end-to-end model round-trip.
-    Fast mode (no arguments) is free.
-    --full adds plugin/MCP checks, a live model call (~$1e-4), a
-    Jev functional proof (Tier 9, invokes jev_review for real), and the
-    repo gates (Tier 10: test-hygiene + test-patterns, both local).
-
-    Exit 0 on success, non-zero on failure. The output is the diagnostic.
+    Ordered health check: binaries, docker daemon, keys, provider liveness,
+    image presence, an end-to-end model round-trip. Fast mode (no args) is
+    free; --full adds plugin/MCP checks, a live model call (~$1e-4), a Jev
+    functional proof (Tier 9), and the repo gates (Tier 10). Exit 0 on
+    success, non-zero otherwise; the output is the diagnostic.
 
 Monitor cost and activity
 -------------------------
 
 cost.sh
-    DeepSeek cost accounting: totals from the opencode database (sessions,
-    USD cost, input/output/reasoning/cache tokens), the DeepSeek balance
-    endpoint, and a Jev usage count (jev_review invocations; TypeSafe has
-    no public balance API). Reads DEEPSEEK_API_KEY from .env.local; never
-    prints it. Works on the host and in the container.
-    --estimate IN OUT [REASONING] projects the cost of a planned run
-    using your effective blended $/token rate.
+    DeepSeek cost accounting: totals from the opencode db (sessions, USD,
+    in/out/reasoning/cache tokens), the balance endpoint, and a Jev usage
+    count. Reads DEEPSEEK_API_KEY, never prints it. Host or container.
+    --estimate IN OUT [REASONING].
 
 dashboard.sh
     Read-only observability sidecar on http://127.0.0.1:5099 (DASH_PORT/
-    DASH_HOST override); reads the DB read-only, no docker/external deps.
-    Cost cards + live activity + todos; /api/session?id= (detail + parts) and
-    /api/export/session?id=&format=txt|md|json (redacted download); /api/search.
-    /api/health is CACHED (HEALTH_TTL_MS, default 15s): it does ~7s of
-    synchronous aggregation (healthReport + modelLedger) and, in a single Node
-    process, that would block every other request (a trivial /api/rev measured
-    4.8s while it computed). Repeats are served from memory with cached/age_ms.
-    /explore (alias /viz) is the visual layer: cost treemap, brushable burn-down
-    (linked views), latency×cost scatter, part timeline, and a pattern bigram
-    pivot — d3 + Observable Plot vendored under scripts/vendor/, served at
-    /vendor/*. /runbooks renders the runbooks (/api/runbooks is the data).
+    DASH_HOST). Reads the DB read-only, no docker/external deps. Cost cards +
+    live activity + todos; /api/session?id= (detail + parts) and
+    /api/export/session?id=&format=txt|md|json (redacted); /api/search.
+    /api/health is CACHED (HEALTH_TTL_MS 15s): ~7s of sync aggregation that
+    would otherwise block every other request in the single Node process.
+    /explore (alias /viz): cost treemap, brushable burn-down, latency×cost
+    scatter, part timeline, bigram pivot (d3 + Observable Plot vendored under
+    scripts/vendor/). /runbooks renders the runbooks (/api/runbooks is data).
 
 cost-bottlenecks.sh
-    Ranks where API cost goes: totals + effective $/1k-input, top sessions
-    by cost and by input tokens (context is the cost driver), worst
-    effective $/1k-input, the fixed overhead of tiny sessions, and a
-    per-model breakdown. Read-only; host or container. --top N.
+    Ranks where API cost goes: totals + effective $/1k-input, top sessions by
+    cost and by input tokens, worst effective $/1k-input, tiny-session
+    overhead, and a per-model breakdown. Read-only. --top N.
 
 semantic-search.sh
-    Ranked full-text search across every session (SQLite FTS5/bm25) over
-    text, reasoning, and tool commands. Persists an index at
-    data/search/opencode-index.db (gitignored); the dashboard builds the
-    same index in memory for /api/semantic. --rebuild rebuilds; --limit N
-    caps results; --fuzzy delegates to fuzzy-search.py for typo tolerance.
-    Host or container.
+    Ranked full-text search (SQLite FTS5/bm25) over text, reasoning, tool
+    commands; index at data/search/opencode-index.db (gitignored). --rebuild,
+    --limit N, --fuzzy (delegates to fuzzy-search.py).
 
 fuzzy-search.py
-    Typo-tolerant search over the on-disk index. Tokenizes the query and each
-    part, scores exact hits plus near-matches (diflib), and ranks — so a
-    mistyped token ("edti") still finds "edit". Free, local, read-only, no
-    model call. Used by `semantic-search.sh --fuzzy`. --limit N, --json,
-    --self-test.
+    Typo-tolerant search over the on-disk index: exact hits + near-matches
+    (diflib) ranked, so "edti" still finds "edit". Free, local, read-only,
+    no model call. --limit N, --json, --self-test.
 
 harvest.py
     Fetch a URL into a provenance-chained research candidate: raw bytes,
-    sha256-pinned meta.json, and candidate.md staged under
-    logs/harvest-<ts>/ (gitignored). Fetched content is labeled UNTRUSTED
-    (never instructions); adoption is always an explicit edit citing the
-    hash — the script cannot write docs. Exits 0 stored, 2 fetch failure,
-    3 unsupported type/oversize. Stdlib only, no model call. Host or
-    container. --url URL, --outdir, --max-bytes, --timeout, --self-test.
+    sha256-pinned meta.json, candidate.md under logs/harvest-<ts>/
+    (gitignored). Fetched content is UNTRUSTED; adoption is an explicit edit
+    citing the hash — the script cannot write docs. Exits 0 stored, 2 fetch
+    failure, 3 unsupported type/oversize. Stdlib only. --url, --outdir,
+    --max-bytes, --timeout, --self-test.
 
 ledger.py
-    Append-only event ledger in data/observability/observability.db
-    (table ledger): harness GATE_START/GATE rows (wired non-fatally in
-    harness.sh; LEDGER_DB overrides the path), guard.log verdicts via
-    ingest-guard (offset-tracked), history via backfill (guard.log +
-    last-gate.json + harness exports; idempotent through
-    UNIQUE(source,source_key)). Read with `logs.sh --source ledger`
-    or `ledger.py show --tail/--since/--type/--grep/--json`.
-    Stdlib only. --self-test.
+    Append-only event ledger (observability.db table ledger): harness
+    GATE_START/GATE rows (wired non-fatally in harness.sh; LEDGER_DB
+    overrides), guard verdicts via ingest-guard, history via backfill;
+    idempotent through UNIQUE(source,source_key). Read with
+    `logs.sh --source ledger` or `ledger.py show --tail/--since/--type/
+    --grep/--json`. Stdlib only. --self-test.
 
 media-budget.sh
-    Fail-closed size gate for committed media: video <= 2 MiB, images
-    <= 150 KiB (tracked files only via git ls-files, so scratch and
-    logs never trip it). Wired into test-hygiene.sh.
+    Fail-closed size gate for committed media: video <= 2 MiB, images <= 150
+    KiB (tracked files only via git ls-files, so scratch/logs never trip it).
+    Wired into test-hygiene.sh.
 
 pressure-watch.sh
     Observe-only contention snapshot: PSI, top CPU/MEM holders, nebula
-    liveness (PID/start/NRestarts), D-state blockers, swap — archived
-    to logs/pressure-<ts>.log. Run twice ~60s apart and diff. Sends
-    no signals, touches no other project's services.
+    liveness (PID/start/NRestarts), D-state blockers, swap — archived to
+    logs/pressure-<ts>.log. Sends no signals, touches no other project's
+    services. Run twice ~60s apart and diff.
 
 query-lib.mjs
-    Pure read-only aggregations (signals/patterns/words query bodies)
-    shared by dashboard.mjs and query-worker.mjs: single source of
-    truth so the worker cannot drift. Every function is
-    (dbPath, ...) -> plain JSON with its own read-only handle.
+    Pure read-only aggregations (signals/patterns/words query bodies) shared
+    by dashboard.mjs and query-worker.mjs: single source of truth so the
+    worker cannot drift. Every function is (dbPath, ...) -> plain JSON with
+    its own read-only handle.
 
 query-worker.mjs
-    node:worker_threads entry running query-lib (plus health/model
-    bundles) off the dashboard event loop. Protocol: {id, fn,
-    dbPath, args} in, {id, ok, value|error} out. Spawned by URL from
-    dashboard.mjs with a 60 s guard; all failures fall back inline.
+    node:worker_threads entry running query-lib (plus health/model bundles)
+    off the dashboard event loop. Protocol {id, fn, dbPath, args} in,
+    {id, ok, value|error} out; spawned with a 60s guard, failures fall back
+    inline.
 
 fix-docker-network.sh
-    Host-side recovery for a broken host->docker port path (RUN WITH
-    SUDO): probes mapped ports, restarts the daemon after typed YES,
-    re-probes. Nothing in-repo can fix that path; this is the button.
+    Host-side recovery for a broken host->docker port path (SUDO): probes
+    mapped ports, restarts the daemon after typed YES, re-probes.
 
 route-via-proxy.sh
-    G4 opt-in switch: backs up opencode.json, points the deepseek
-    provider at the :4000 proxy (model id unchanged), restarts web.
-    --revert restores the newest backup. Typed YES required; never
-    prints secrets.
+    G4 opt-in switch: backs up opencode.json, points the deepseek provider at
+    the :4000 proxy (model id unchanged), restarts web. --revert restores the
+    newest backup. Typed YES required; never prints secrets.
 
 ocr-image.sh
-    Local OCR fallback for reading screenshots/scans when API models can't
-    ingest images. Tries tesseract CLI (apt, in the image), then
-    tesseract.js (npm, pinned in package.json), then PaddleOCR (pip).
-    Persists each run to data/observability/ocr_run (surfaced at /api/ocr,
-    /api/export/ocr, and searchable via /api/semantic).
-    Usage: ./scripts/ocr-image.sh <image> [lang] | --check. Host or
-    container; no API model required.
+    Local OCR fallback for reading screenshots/scans when API models cannot
+    ingest images. Tries tesseract CLI, then tesseract.js, then PaddleOCR.
+    Persists each run to observability.ocr_run (surfaced at /api/ocr,
+    /api/export/ocr, searchable via /api/semantic). Usage:
+    `ocr-image.sh <image> [lang]` | --check. No API model required.
 
 lint.sh
-    Static gate: bash -n on every script, shellcheck (optional), node
-    --check on JS, py_compile on Python, a subprocess.run check, a
-    scan-constraints.py pass over scripts/*.sh (code vs string/comment),
-    and a RULES grep (no sed, no 2>/dev/null). Exits non-zero on any
-    failure; also run by test-dashboard.sh.
+    Static gate: bash -n on every script, shellcheck (optional), node --check
+    on JS, py_compile on Python, a subprocess.run check, a scan-constraints.py
+    pass over scripts/*.sh (code vs string/comment), and a RULES grep (no sed,
+    no 2>/dev/null). Exits non-zero on any failure; also run by
+    test-dashboard.sh.
 
 scan-constraints.py
     Classifier-backed scan of shell scripts for the blacklist (sed,
-    2>/dev/null, rm -rf, set -e, exit 1, subprocess.run, bare kill),
-    reporting each match as code / string / comment and failing only on
-    code. lint.sh runs it on scripts/*.sh (archive excluded).
+    2>/dev/null, rm -rf, set -e, exit 1, subprocess.run, bare kill), reporting
+    each match as code/string/comment and failing only on code. lint.sh runs it
+    on scripts/*.sh (archive excluded).
 
 audit-tool-calls.py
-    Audits the agent's OWN runtime tool calls (not files) for the same
-    blacklist, read-only from data/opencode/opencode.db: every tool call
-    is a part row whose data.state.input.command holds the command. Strips
-    quoted regions so `grep 'sed'` is not counted as `sed`. Prints counts,
-    sessions, samples and the sanctioned substitute (see RULES.md
-    "Substitutions for the blacklist"). --recent N, --json, --fail.
+    Audits the agent's own runtime tool calls (read-only from opencode.db) for
+    the same blacklist; strips quoted regions so `grep 'sed'` is not counted.
+    Prints counts, sessions, samples, the sanctioned substitute. --recent N,
+    --json, --fail.
 
 prompt-lint.py
-    Fuzzy classifier + preference linter for user prompts. Reads the DB
-    read-only and the repo's own preference sources (RULES.md, HANDOFF.md,
-    README.txt, opencode.json) to (1) classify the prompt into a repo topic,
-    (2) fuzzy-match it against past user prompts (token Jaccard) so a
-    repeated request is visible before it is answered again, (3) surface
-    recurring error tool calls, and (4) flag blacklisted-tool mentions,
-    leaked secrets, underspecified asks and missing acceptance criteria.
-    Advisory; --last lints the latest prompt in the DB, --fail gates.
+    Fuzzy classifier + preference linter for user prompts. Reads the DB and
+    the repo's preference sources (RULES.md, HANDOFF.md, README.txt,
+    opencode.json) to classify a prompt into a repo topic, fuzzy-match it
+    against past prompts (token Jaccard), surface recurring error calls, and
+    flag blacklisted-tool mentions, leaked secrets, underspecified asks and
+    missing acceptance criteria. Advisory; --last lints the latest prompt,
+    --fail gates.
 
 issue-solutions.py
-    Mine the chat database for recurring errors and the command that fixed
-    each, proven by the logs. Pairs an error tool call (state.status='error')
-    with the next completed call in the same session, normalises the error
-    into a signature, and ranks the (issue, fix) pairs. Free, local, no
-    model call; read-only over data/opencode/opencode.db. --recent N,
-    --top N, --json, --write (persists data/observability/solutions.json for
-    the /api/solutions endpoint and the "known fixes" list on /explore),
-    --self-test.
+    Mines the chat database for recurring errors and the command that fixed
+    each: pairs an error call with the next completed call in the session,
+    normalises into a signature, ranks (issue, fix) pairs. Free, local,
+    read-only. --recent N, --top N, --json, --write, --self-test.
 
 logs.sh
     Aggregate actionable telemetry, local and read-only. Sources: guard
-    (data/observability/guard.log — every blacklist block/fix/warn the
-    agent's "Thinking" triggered, plus a `loaded` heartbeat and a one-time
-    `hook` marker so "not loaded" is distinguishable from "idle"), error
-    (opencode.db tool failures with the
-    stack-trace text), event (the opencode event bus), app (~/.local/share/
-    opencode/log/opencode.log), system (docker logs of opencode-web; host
-    only), packet (the exact tcpdump command; not run). --source S,
-    --since MIN, --tail N, --grep RE.
+    (guard.log — every blacklist block/fix/warn + a `loaded` heartbeat and a
+    one-time `hook` marker), error (tool failures + stack text), event (the
+    event bus), app (opencode.log), system (docker logs of opencode-web; host
+    only), packet (the exact tcpdump command; not run). --source S, --since
+    MIN, --tail N, --grep RE.
 
 harness.sh
-    One command for the whole state. Runs every gate (lint, test-hygiene,
-    test-patterns, test-dashboard), then the live telemetry, the cost
-    headline and the TODO "in flight" list, and prints a summary. --fast
-    skips the slow dashboard gate; --export writes logs/harness-<UTC>.md;
-    --json emits ONLY {ts,rev,passed,failed,gates[]} for a wrapper.
-    Robust: a failing gate is reported and the run continues; a missing gate
-    is SKIP, not pass. Exits non-zero only if a gate failed. Records
+    One command for the whole state: every gate (lint, test-hygiene,
+    test-patterns, test-dashboard), live telemetry, the cost headline and the
+    TODO "in flight" list, then a summary. --fast skips the slow dashboard
+    gate; --export writes logs/harness-<UTC>.md; --json emits ONLY
+    {ts,rev,passed,failed,gates[]}. A failing gate is reported and the run
+    continues; a missing gate is SKIP, not pass. Records
     data/observability/last-gate.json for preflight.sh.
 
 preflight.sh
-    Fail-closed spend gate. Refuses (exit 1) unless: the repo and database
-    exist, .env.local has all three keys, the last harness.sh gate run passed,
-    the DeepSeek balance is >= MIN_BALANCE ($1.00 default), and the model is
-    deepseek-flash (config and last session). --json for a wrapper/plugin;
-    --allow-pro skips the model checks. Run it before any paid session.
+    Fail-closed spend gate (exit 1) unless: repo+database exist, .env.local
+    has all three keys, the last harness gate passed, the balance is >=
+    MIN_BALANCE ($1.00), and the model is deepseek-flash. Also STOPs once the
+    latest session exceeds CONTEXT_BUDGET (#76). --json; --allow-pro skips the
+    model checks. Run before any paid session.
 
 learn-rules.py
-    Contrastive corpus learning. From the tool-call log it builds (state,
-    action, outcome) triples — the error signature, the shape of the next
-    call, and whether it completed — and emits advisory avoid / prefer /
-    recovery rules to data/observability/learned-rules.json. The guard reads
-    those and records 'learned' advisories; nothing is blocked until a human
-    promotes a confirmed pattern into RULES.md / the fixed blacklist.
-    --since-days N bounds the window (a rotated key must not be enforced
-    forever); --write persists; --self-test.
+    Contrastive corpus learning: builds (state, action, outcome) triples from
+    the tool-call log and emits advisory avoid/prefer/recovery rules to
+    learned-rules.json. The guard reads them (learned advisories); nothing is
+    blocked until a human promotes a rule into RULES.md / the fixed blacklist.
+    --since-days N, --write, --self-test.
 
 models.sh / models.py
-    Model catalog + cost policy. models.sh wraps `opencode models --verbose`
+    Model catalog + cost policy: models.sh wraps `opencode models --verbose`
     and pipes it to models.py, which applies models.policy.json
-    (max_input_per_m_usd, allow, deny; free models always pass) and returns
-    ALLOW / ASK / BLOCK for the current model, with a recommendation and the
-    cheaper alternatives. --json machine output; --write persists
-    data/observability/models.json for the /models UI page. preflight.sh uses
-    the verdict; nothing hard-codes a single model name.
+    (max_input_per_m_usd, allow, deny; free always pass) and returns ALLOW /
+    ASK / BLOCK with a recommendation and cheaper alternatives. --json,
+    --write (observability/models.json for /models). preflight.sh uses the
+    verdict; nothing hard-codes a single model name.
 
 doc-budget.sh
     Measure the read-first doc corpus (RULES, TODO, README, HANDOFF, DESIGN,
     scripts/README, skills) in tokens (~bytes/4), compare to DOC_BUDGET_TOKENS
     (default 35000), and record a content hash + sizes to
-    data/observability/docs.json. An unchanged hash means nothing new to
-    re-learn (the ECC context-budget / content-hash-cache pattern). --json;
-    --fail exits 1 when over budget.
+    data/observability/docs.json (an unchanged hash means nothing new to
+    re-learn). --json; --fail exits 1 when over budget.
 
 test-tooling.sh
-    Contract test for the harness tooling's machine interfaces. Proves every
-    tool that advertises --json emits parseable JSON with the keys a wrapper
-    reads (preflight, doc-budget, learn-rules, issue-solutions,
-    audit-tool-calls, prompt-lint --last, models --catalog) plus logs.sh.
-    Never calls harness.sh (would recurse), so it is safe from test-hygiene.
+    Contract test for the tooling's machine interfaces: proves every tool that
+    advertises --json emits parseable JSON with the keys a wrapper reads
+    (preflight, doc-budget, learn-rules, issue-solutions, audit-tool-calls,
+    prompt-lint --last, models --catalog) plus logs.sh. Never calls
+    harness.sh. Safe from test-hygiene.
 
 ux-audit.py
-    Host-side Playwright UX audit of /explore: reports page height vs
-    viewport, panel/tab counts, tab toggle, and page errors, then writes a
-    full-page screenshot to logs/ux/. Needs playwright on the host (the
-    container has no browser).
+    Host-side Playwright UX audit of /explore: page height vs viewport,
+    panel/tab counts, tab toggle, page errors; writes a full-page screenshot to
+    logs/ux/. Needs playwright on the host.
 
 ux-test.py
-    Host-side Playwright UX TEST (assertions, not just a report). For each
-    page (/, /explore, /runbooks, /models, /docs) it asserts: no console
-    errors, no horizontal scroll at 390px, not an unscrollable wall, and on
-    /explore that every tab toggles its pane and the overview stays compact.
-    Exits non-zero on failure. If playwright is absent it prints SKIP (not a
-    pass) and exits 0. --check reports playwright/chromium/server readiness
-    with the exact install commands. Screenshots to logs/ux/. There is a
-    "ux-test" runbook (host) so it is one copy-paste away.
+    Host-side Playwright UX TEST (assertions). For each page (/, /explore,
+    /runbooks, /models, /docs) asserts: no console errors, no horizontal
+    scroll at 390px, not an unscrollable wall, and on /explore every tab
+    toggles its pane and the overview stays compact. Exit non-zero on failure;
+    SKIP (no playwright) is not a pass. --check reports readiness + install
+    commands. Screenshots to logs/ux/. Runbook "ux-test".
 
 ux-trace.py
-    Host-side Playwright UX trace that proves the journey, not just asserts
-    it: injects a recorder before navigation so every click/drag/scroll is
-    logged (element + coords) with a per-step screenshot, then enumerates every
-    interactive element as a "hotspot" (bounding box + numbered overlay).
-    Persists runs/events/hotspots/findings to data/observability/ux.db and a
-    handoff report to logs/ux/report.md (a handoff reads the DB, not a re-run).
-    Findings: console/page errors, 390px overflow, page-wall height, click
-    targets <24px, overlaps. --check prerequisites; --self-test offline (gated
-    in test-hygiene.sh); --json; --ocr reads each shot back to text (tesseract)
-    into the `ux_shot` table — text is untrusted data. Runbook "ux-trace" (host).
+    Host-side Playwright UX trace that proves the journey: injects a recorder
+    before navigation (every click/drag/scroll logged with a per-step
+    screenshot), then enumerates every interactive element as a hotspot.
+    Persists runs/events/hotspots/findings to observability.ux.db and a
+    handoff report to logs/ux/report.md. Findings: console/page errors, 390px
+    overflow, page-wall height, click targets <24px, overlaps. --check,
+    --self-test (gated in test-hygiene.sh), --json, --ocr (reads each shot back
+    to text via tesseract; text is untrusted). Runbook "ux-trace".
 
 chrome-cdp-attach.sh
-    Run ON THE HOST to make the USER'S Chrome CDP-reachable on the user's OWN
-    profile (logins persist) and forward the debug port for the sandbox.
-    Chrome M136+ REFUSES --remote-debugging-port on the DEFAULT profile
-    ("requires a non-default data directory") and a fresh /tmp profile is
-    logged out. So this stops any running Chrome (typed YES unless --yes),
-    launches CDP on a NON-default --user-data-dir, and with --clone-default
-    seeds that dir from ~/.config/google-chrome so logins persist. Verifies
-    the banner, then starts an idempotent socat forward. Attach with
+    Run ON THE HOST to make the user's Chrome CDP-reachable on their own
+    profile (logins persist) and forward the debug port. Chrome M136+ refuses
+    --remote-debugging-port on the default profile and a fresh /tmp profile is
+    logged out, so this stops any running Chrome (typed YES unless --yes),
+    launches CDP on a non-default --user-data-dir, and --clone-default seeds
+    logins. Verifies the banner, then an idempotent socat forward. Attach:
     CDP_HOST=<host-ip> CDP_PORT=<fwd> node scripts/cdp-tab.mjs ... (#62).
-    --dry-run prints the plan.
+    --dry-run.
 
 browser-tools-install.sh
     Installs browser_use + selenium into a venv (default ~/.venvs/browser).
-    This image ships no pip and no ensurepip, so the script makes the venv
-    with --without-pip and bootstraps pip from bootstrap.pypa.io/get-pip.py.
-    Both stacks drive the already-open browser over CDP (RULES #62);
-    browser_use works via pure-Python cdp-use (verified: lists the host's
-    tabs at CDP_HOST/CDP_PORT). Selenium is installed but its chromedriver
-    needs libnss3/libnspr4/libdbus-1, absent in this sandbox with no sudo,
-    so selenium only runs where those libs exist (e.g. the host).
-    --venv DIR, --with-browsers (playwright chromium), --dry-run.
+    No pip/ensurepip in the image, so it builds the venv --without-pip and
+    bootstraps pip. Both drive the already-open browser over CDP (RULES #62).
+    Selenium's chromedriver needs libnss3/libnspr4/libdbus-1 (absent here), so
+    it runs only where those exist. --venv DIR, --with-browsers, --dry-run.
 
 browser_bench.py
-    Probes each CDP browser driver against the live endpoint for the same
-    op (enumerate tabs) and writes data/observability/browser-drivers.json
-    with order[] fastest-working-first. Callers take order[0] and fail over
-    down the list; SKIP is not PASS (#37). Run with the venv python so the
-    imports resolve. Measured: cdp_tab ~1.3s < playwright ~11s <
-    browser_use ~25s; selenium FAIL (chromedriver libs). --json, --runs N,
-    --pick prints the fastest working driver (exit 2 if none).
+    Probes each CDP driver against the live endpoint for the same op and
+    writes observability/browser-drivers.json with order[] fastest-first.
+    Callers take order[0] and fail over; SKIP is not PASS (#37). Measured:
+    cdp_tab ~1.3s < playwright ~11s < browser_use ~25s; selenium FAIL. --json,
+    --runs N, --pick (exit 2 if none).
 
 ux-smoke.py
-    Live UX smoke for the six :5099 pages, driven through the host browser
-    over CDP (RULES #62; runnable-now bridge to tester-army/e2e, whose own
-    browsers can't launch in this sandbox). Per page: loads, lang, one <h1>,
-    <main>+skip, no leftover visible "loading..." after the settle wait;
-    plus /explore empty Session-detail hidden on load and board Gantt+Kanban
-    render. Writes data/observability/ux-smoke.json; --json; exit 2 on fail;
-    SKIP (no CDP) is not PASS. --base URL, --settle S. --vision loads
-    ?theme=light, OCRs the board with local tesseract (RULES #65/#66), and
-    asserts it reads "gantt"+"kanban" (the dark theme OCRs garbled).
+    Live UX smoke for the six :5099 pages through the host browser over CDP
+    (RULES #62). Per page: loads, lang, one <h1>, <main>+skip, no leftover
+    "loading..." after the settle wait; plus /explore empty Session-detail
+    hidden on load and board Gantt+Kanban render. Writes
+    observability/ux-smoke.json; --json; exit 2 on fail; SKIP is not PASS.
+    --base URL, --settle S. --vision loads ?theme=light, OCRs the board with
+    local tesseract, asserts it reads "gantt"+"kanban" (RULES #65/#66).
 
 cdp-tab.mjs
-    Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket;
-    no Playwright, no X11). Attaches to the browser that is ALREADY open
-    (discovers --remote-debugging-port from /proc, else CDP_PORT, else 9222)
-    and drives the LIVE page: tabs, open <url>, openauth <url>,
-    text <match>, eval <match> <js>, fill <match> <sel> <value>,
-    click <match> <sel>, waitfor <match> <sel>, shot <match> <png>, probe.
-    fill sets the value through the prototype setter and dispatches
-    input+change (React/Vue ignore a bare assignment). Run it where the
-    browser runs — scripts/chrome-cdp-up.sh starts google-chrome-stable with
-    the debug port; the sandbox reaches it only if that port is exposed.
-    UI-only GitHub steps (e.g. minting a fine-grained PAT) go here, not
-    `gh api`. --self-test offline.
+    Zero-dependency Chrome DevTools Protocol client (Node fetch/WebSocket; no
+    Playwright, no X11). Attaches to the browser ALREADY open (discovers the
+    debug port from /proc, else CDP_PORT, else 9222) and drives the live page:
+    tabs, open <url>, openauth <url>, text, eval, fill, click, waitfor, shot,
+    probe. fill sets the value via the prototype setter and dispatches
+    input+change (React/Vue ignore a bare assignment). Run where the browser
+    runs (scripts/chrome-cdp-up.sh starts google-chrome-stable with the debug
+    port). UI-only GitHub steps go here, not `gh api`. --self-test offline.
 
 re-extract-session.sh
     Reproduce a browser-extracted session transcript log: opens the session in
     the live browser (cdp-tab.mjs openauth), pulls /session/<id>/message in
-    chunks behind the UI, then verifies (id uniformity, reassembled length and
-    in-page sha256 cross-check) BEFORE writing. Growth mid-pull aborts unless
-    --allow-growth. Out defaults to logs/ses_<id>.txt (gitignored). --check
-    reports prerequisites; --self-test runs offline against a stub node
-    (end-to-end minus CDP). Gated in test-hygiene.sh.
+    chunks, verifies (id uniformity, reassembled length, in-page sha256)
+    BEFORE writing; growth mid-pull aborts unless --allow-growth. Out defaults
+    to logs/ses_<id>.txt. --check, --self-test. Gated in test-hygiene.sh.
 
 runbook.sh
-    Host-side multiple-choice runner for the runbooks shown at
-    /runbooks on the dashboard. Reads the same scripts/runbooks.json the
-    dashboard serves, so the two never drift. No args = interactive menu;
-    --list = id|where|title; run <id> = one runbook. Runbooks flagged
-    "manual" (browser steps, long-running servers, secrets edits) are
-    displayed but not executed.
+    Host-side multiple-choice runner for the runbooks at /runbooks. Reads the
+    same scripts/runbooks.json the dashboard serves, so they never drift. No
+    args = menu; --list = id|where|title; run <id> = one runbook. "manual"
+    runbooks (browser steps, long servers, secret edits) are shown but not
+    executed.
 
 test-dashboard.sh
-    End-to-end gate for dashboard.mjs: starts it on a scratch port and
-    asserts the served HTML, the /api/* payloads, and that the inline
-    browser script on BOTH / and /runbooks parses (node --check). It then
-    runs test-dashboard-ui.mjs, which executes the page script in a minimal
-    DOM and asserts the panes populate. Together these catch escape
-    regressions and runtime client bugs that a substring grep misses.
-    Exits non-zero on any failed assert.
+    End-to-end gate for dashboard.mjs: starts it on a scratch port, asserts
+    the served HTML and /api/* payloads, and that the inline browser script on
+    BOTH / and /runbooks parses (node --check); then runs
+    test-dashboard-ui.mjs. Exits non-zero on any failed assert.
 
 test-dashboard-ui.mjs
     Headless execution test: fetches the served / page, runs its inline
-    <script> in a minimal DOM shim against the live server, fires the
-    interval refreshers once, and asserts #session/#stats/#sessions/
-    #activity/#config populate. No browser required.
+    <script> in a minimal DOM shim against the live server, fires the interval
+    refreshers once, asserts #session/#stats/#sessions/#activity/#config
+    populate. No browser required.
 
 thinking.sh
-    Live view of what the agent is doing while "thinking". Tails the
-    opencode database and prints step boundaries, tool calls (with state
-    and command), reasoning text, and answer text as they are written.
-    Polls every 2s by default (THINKING_POLL=1 for 1s).
+    Live view of what the agent is doing while "thinking": tails the opencode
+    db and prints step boundaries, tool calls (state + command), reasoning
+    text and answer text as written. Polls every 2s (THINKING_POLL=1 for 1s).
 
 session-health.mjs
-    Read-only, browser-independent detection of stalled and blank turns
-    straight from data/opencode/opencode.db (no model call, no browser):
-    a tool part still "running" past the deadline, and a recent session
-    whose last part is a tool with no text after it. The naive "long gap"
-    signal is deliberately NOT a finding (~100% user-idle false positives).
-    Exports healthReport() to dashboard.mjs (/api/health, /explore ▸
-    signals panel); --json, --live (adds GET /session/status), and
-    --self-test (offline fixtures) run from the CLI. Exports
-    handoffAdvice() too (latest input vs CONTEXT_BUDGET: ok / warn /
-    over with an action; carried on /api/health, bannered on the
-    signals panel, and printed as a handoff: verdict line by
-    cost-bottlenecks.sh).
+    Read-only, browser-independent detection of stalled/blank turns from the
+    opencode db (no model call): a tool part still "running" past the
+    deadline, and a recent session whose last part is a tool with no text
+    after it. The naive "long gap" signal is deliberately NOT a finding
+    (~100% user-idle false positives). Exports healthReport() (/api/health,
+    /explore ▸ signals) and handoffAdvice() (latest input vs CONTEXT_BUDGET:
+    ok/warn/over + an action). --json, --live, --self-test.
 
 quirks.mjs
     Correlates a symptom with a vendored map of known upstream issues
     (scripts/known-issues.json) and fuzzily searches the chat DB, repo code
-    and docs for where it appears. matchIssues() is fuzzy and typo-tolerant
-    ("blnak" -> "blank", Levenshtein); annotateReport() is the cheap form
-    used on every /api/health page load; modelLedger() joins each model to its
-    tool-error rate and blacklist-construct usage (sed / 2>/dev/null /
-    subprocess.run) so per-model quirks are measured; corpusHits() (DB LIKE +
-    doc/code scan) is CLI-only. --self-test is offline; --query TEXT is
-    ad-hoc; --report annotates the live session-health report; --check-issues
-    validates the vendored map offline (structural errors fail; a stale
-    `verified` date only warns); --eval scores matchIssues() against a frozen
-    labeled set (`scripts/quirks-eval.json`, the answer key — do not tune it)
-    and prints precision/recall/FPR plus a threshold sweep, persisting
-    data/observability/quirks-eval.json. `matchIssues` default threshold is
-    0.5 (the sweep knee; 0.15 over-fired at FPR 67% vs 44%). The set has a
-    TRAIN block (`cases` — patterns may be chosen against it) and a HELD-OUT
-    block (`heldout` — reported, never tuned on; measured recall 40% / FPR 20%
-    at the 0.5 default, i.e. the matcher is precision-leaning and weak on
-    paraphrases for free text). Offline, no network.
+    and docs. matchIssues() is fuzzy + typo-tolerant ("blnak" -> "blank");
+    annotateReport() is the cheap form used on every /api/health load;
+    modelLedger() joins each model to its tool-error rate and blacklist-
+    construct usage; corpusHits() (DB LIKE + doc/code scan) is CLI-only.
+    --self-test, --query TEXT, --report, --check-issues, --eval (scores
+    matchIssues against the frozen key scripts/quirks-eval.json; prints
+    precision/recall/FPR + a sweep). Default threshold 0.5. Offline.
 
 redact.mjs
     Strips secrets at egress: key shapes (sk-, apikey_, JWT, Bearer) and
-    NAME=value assignments (API_KEY / PASSWORD / SECRET / TOKEN). Imported by
-    dashboard.mjs and applied to /api/export/session and the sessions/patterns/
-    guard CSVs; `node scripts/redact.mjs` also filters stdin->stdout. It is
-    defence in depth (a value already in the transcript) and never replaces
-    not leaking. Conservative: ordinary prose is untouched. `--self-test` is
-    offline and gated in test-hygiene.sh.
+    NAME=value assignments (API_KEY/PASSWORD/SECRET/TOKEN). Imported by
+    dashboard.mjs for /api/export/session and the sessions/patterns/guard
+    CSVs; `node scripts/redact.mjs` filters stdin->stdout. Defence in depth
+    (no replacement for not leaking). --self-test (gated in test-hygiene.sh).
 
 test-patterns.sh
-    Read-only proof of the tool-sequence substrate behind the "patterns
-    view (tool-sequence n-grams)" candidate. Opens the opencode database
-    read-only and asserts that tool calls are recoverable as ordered
-    per-session sequences and countable as n-grams (lead() window query):
-    tool parts, distinct tools, >=1 bigram, and the error-tool share.
-    Exits non-zero unless the tool-use method is real. Host or container;
-    no writes to the database.
+    Read-only proof of the tool-sequence substrate behind the "patterns view
+    (tool-sequence n-grams)" candidate: opens the db read-only and asserts
+    tool calls are recoverable as ordered per-session sequences and countable
+    as n-grams (lead() window), plus the error-tool share. Exits non-zero
+    unless the method is real.
 
 test-jev-functional.sh
-    Behavioral Jev proof: invokes the jev-review MCP tool and fails
-    (non-zero) unless it fires and returns an applicable metric with a
-    score. Host-side; also run by doctor.sh --full as Tier 9.
+    Behavioral Jev proof: invokes the jev-review MCP tool and fails unless it
+    fires and returns an applicable metric with a score. Host-side; also run
+    by doctor.sh --full as Tier 9.
 
 cleanup-baks.sh
-    List or remove the *.bak.* snapshot files that accumulate during
-    script iteration (including stale .env.local.bak.* key backups).
-    List-only by default; --apply gitignores *.bak.* and removes them.
+    List or remove the *.bak.* snapshots that accumulate during iteration
+    (including stale .env.local.bak.*). List-only by default; --apply
+    gitignores *.bak.* and removes them.
 
 ensure-env.sh
-    Idempotent .env.local self-heal (run by web.sh on every start). A rerun
-    with nothing to change is a strict no-op (no write, no backup, no password
-    on stdout). Preserves every key already present — including unknown keys,
-    comments and blank lines. Regenerates OPENCODE_SERVER_PASSWORD only when it
-    is missing/empty or --rotate is passed; a short-but-present password only
-    warns. Writes atomically (temp + rename) and makes one backup per actual
-    change; prints names/lengths only, and announces PASSWORD_ROTATED (so the
-    caller can say "re-login") when it generates. --repo <dir> is the test seam.
-    Behavior gate: scripts/test-ensure-env.sh (in test-hygiene.sh).
+    Idempotent .env.local self-heal (run by web.sh every start). A rerun with
+    nothing to change is a strict no-op (no write, no backup, no password on
+    stdout). Preserves every key present (including unknown keys, comments,
+    blank lines). Regenerates OPENCODE_SERVER_PASSWORD only when missing/empty
+    or --rotate; a short-present password only warns. Writes atomically, one
+    backup per change; announces PASSWORD_ROTATED. --repo <dir> is the test
+    seam. Gate: scripts/test-ensure-env.sh.
 
 monitor-snapshot.sh
-    One-shot repo health snapshot from the databases/logs (read-only; names/
-    codes/counts only, safe to paste or store under notes/): DB/utils counts,
-    guard.log tail, opencode.log tail, docker ps, :4096/:5099 probes, key
-    names. --json, --no-docker, --db PATH, --self-test (offline fixture).
+    One-shot repo health snapshot from the databases/logs (read-only;
+    names/codes/counts only, safe to paste or store under notes/): DB/utils
+    counts, guard.log/opencode.log tails, docker ps, :4096/:5099 probes, key
+    names. --json, --no-docker, --db PATH, --self-test.
 
 watch.sh
     Read-only live problem monitor (no daemon, no model call). One sweep by
-    default; --loop SEC repeats. Reports the gate state, the session-health
-    verdicts (running / dead / blank), and only NEW guard block/fix/advisory
-    and NEW opencode.log ERROR/WARN lines since the last sweep. The FIRST sweep
-    initialises the cursor at EOF, so historical lines are never echoed as if
-    live (the archival-as-alarm failure it exists to stop). State is two byte
-    offsets under data/observability/.watch/ (gitignored); the DB is never
-    written. --self-test is offline. Gated in test-hygiene.sh.
+    default; --loop SEC repeats. Reports gate state, session-health verdicts
+    (running/dead/blank), and only NEW guard block/fix/advisory and NEW
+    opencode.log ERROR/WARN lines since the last sweep. The FIRST sweep
+    initialises the cursor at EOF (history is never echoed as live). State is
+    two byte offsets under data/observability/.watch/. --self-test.
 
 capabilities.mjs
-    Read-only capability registry checker. For each declared capability in
-    scripts/capabilities.json it checks the four links that can silently
-    diverge (the guard-was-configured-but-inert class): IMPLEMENTATION (file
-    exists), REGISTRATION (wired in — symlink/exists/contains), TEST, and
-    EVIDENCE (an observed-execution marker). GREEN needs impl+registration+test;
-    DEGRADED means impl present but wiring/tests missing; MISSING means no impl.
-    Evidence level per RULES.md "Evidence levels" (E5 = test+marker, E3 = one,
-    E2 = impl only, E0 = nothing). --json, --self-test (offline fixtures).
-    Gated in test-hygiene.sh.
+    Read-only capability registry checker. For each capability in
+    scripts/capabilities.json it checks the four links that silently diverge
+    (guard-was-configured-but-inert class): IMPLEMENTATION (file exists),
+    REGISTRATION (wired in), TEST, EVIDENCE (observed-execution marker).
+    GREEN needs impl+registration+test; DEGRADED = impl present but
+    wiring/tests missing; MISSING = no impl. Evidence levels per RULES.md.
+    --json, --self-test. Gated in test-hygiene.sh.
 
 web.sh
-    Starts the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD;
-    refuses to start an unauthenticated server unless --insecure is
-    passed.
+    Start the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD; refuses
+    to start an unauthenticated server unless --insecure.
 
 web-restart.sh
-    Restarts the observability dashboard so :5099 serves the current
-    checkout (`opencode-web` is a compose service name, not a command
-    — this script is the command). Polls /api/rev until served==HEAD
-    or fails loudly. Two modes: `docker compose restart opencode-web`
-    when docker is present; otherwise restarts the local `dashboard.mjs`
-    process (the sandbox path — this is why :5099 went STALE after every
-    commit here).
+    Restart the observability dashboard so :5099 serves the current checkout.
+    Polls /api/rev until served==HEAD or fails loudly. Uses
+    `docker compose restart opencode-web` when docker is present; otherwise
+    restarts the local dashboard.mjs process.
 
 deploy.sh
-    Gated promote. The 2026-10-12 lesson: rev-match is not page-works
-    (a bad inline script froze the page while /api/rev matched HEAD).
-    D2 parses served .mjs; D3 boots the new dashboard in a scratch
-    process and runs test-dashboard-ui.mjs (executes the served inline
-    scripts); only on PASS does D4 recreate the container; D5 verifies
-    live. Failure prints rollback, never auto-reverts. --verify-only,
-    --skip-gates, --port, --self-test.
+    Gated promote. rev-match is not page-works (a bad inline script can freeze
+    the page while /api/rev matches HEAD), so: D2 parses served .mjs; D3 boots
+    the new dashboard in a scratch process and runs test-dashboard-ui.mjs;
+    only on PASS does D4 recreate the container; D5 verifies live. Failure
+    prints rollback, never auto-reverts. --verify-only, --skip-gates, --port,
+    --self-test.
 
 recover-4096.sh
-    Automated :4096 recovery probe: asserts containers, compose DNS,
-    loopback + mesh TLS edge (401 healthy, 000/400/502 classified),
-    dashboard, cert battery, authenticated data plane (secret by name
-    only) and the session store (read-only). One bounded restart plus
-    re-probe with --recover; one RECOVERY ledger row per check for
-    watchdog polling. --json, --no-log, --db/--session/--rev seams,
-    --self-test offline. Gated in test-hygiene.sh.
+    Automated :4096 recovery probe: asserts containers, compose DNS, loopback
+    + mesh TLS edge (401 healthy; 000/400/502 classified), dashboard, cert
+    battery, authenticated data plane (secret by name only) and the session
+    store (read-only). --recover adds one bounded restart + re-probe; one
+    RECOVERY ledger row per check. --json, --no-log, --db/--session/--rev,
+    --self-test. Gated in test-hygiene.sh.
 
 session-guard.sh
-    The 4-step over-budget / denied-model guidance as code: reads
-    session-health risks (every over/warn session, deny-listed
-    gateway-metered free tiers), prints numbered fresh-session steps
-    (pause, fresh session, brief, allow-listed model), logs ADVISORY
-    rows. FAIL means action due now (a routine handoff, nothing
-    broken) — the wording says so; exit 1 is for the watchdog.
-    --handoff runs the whole offer (brief + leak check + ledger).
-    --json, --session, --no-log, --db/--rev seams, --self-test.
+    The over-budget / denied-model guidance as code: reads session-health
+    risks (over/warn sessions, deny-listed gateway-metered free tiers), prints
+    numbered fresh-session steps, logs ADVISORY rows. FAIL means action due
+    now (a routine handoff, nothing broken). --handoff runs the whole offer
+    (brief + leak check + ledger). --json, --session, --no-log, --db/--rev,
+    --self-test.
 
 handoff-brief.sh
     Deterministic carry-over brief from logs/transcript-<id>.md (goal,
-    findings, recent asks, tools, open question); every field passes
-    through redact.mjs. Refuses missing transcripts (points at
-    re-extract-session.sh) and --fork/--continue. --model only prints
-    the prompt plus the spend command after an ALLOW verdict; it never
-    calls a model. --out, --self-test offline.
+    findings, recent asks, tools, open question); every field passes through
+    redact.mjs. Refuses missing transcripts (points at re-extract-session.sh)
+    and --fork/--continue. --model only prints the prompt + spend command
+    after an ALLOW verdict; never calls a model. --out, --self-test.
 
 session-digest.sh
-    Deterministic, DB-ONLY digest of ONE session (~1.5 KB): title,
-    model, budget ratio, cost, last user ask, last assistant text, open
-    todos, running tool, and an over-budget directive. Curates the
-    critical facts for a FRESH session instead of replaying a huge
-    transcript into a model — no model call, no transcript at rest.
-    Read-only (mode=ro), redacted. --db, --max-bytes, --self-test.
-    The sentinel writes one such digest per T5/T6/T7 trip to
-    data/observability/digests/<id>.md (SENTINEL_DIGEST_DIR overrides).
+    Deterministic DB-ONLY digest of ONE session (~1.5 KB): title, model,
+    budget ratio, cost, last user ask, last assistant text, open todos,
+    running tool, over-budget directive. Curates the critical facts for a
+    fresh session instead of replaying a transcript — no model call, no
+    transcript at rest. Read-only, redacted. --db, --max-bytes, --self-test.
+    sentinel.sh writes one per T5/T6/T7 trip to digests/<id>.md.
 
 subq_snap.py
-    Client for SubQ's Decisions API (Snap): model subq-snap-preview,
-    POST /v1/systemone, typed questions (noul / choice / score), billed
-    on input only ($0.05 / 1M). A cheap FIRST-PASS triage gate — run it
-    on a bounded digest before an expensive second opinion (e.g. the Jev
-    review MCP). Key SUBQ_API_KEY (env or .env.local); seams SUBQ_MODEL,
-    SUBQ_URL. --state/--state-file, --question, --type, --criteria,
-    --true/--false, --json, --dry-run, --self-test offline.
+    Client for SubQ's Decisions API (Snap): model subq-snap-preview, POST
+    /v1/systemone, typed questions (noul/choice/score), billed on input only
+    ($0.05/1M). A cheap first-pass triage gate before an expensive second
+    opinion. Key SUBQ_API_KEY; seams SUBQ_MODEL, SUBQ_URL. --state/
+    --state-file, --question, --type, --criteria, --true/--false, --json,
+    --dry-run, --self-test.
 
 secret-scan.sh
-    Secrets-at-rest scan over artifact dirs (logs/, observability,
-    notes/): deepseek/jev keys, bearer tokens, env assignments. The
-    report is value-free (file:line:kind only, safe to paste).
-    Exit 1 names ./scripts/rotate-api-keys.sh plus both revoke
-    consoles. handoff-brief.sh runs it on its source transcript.
-    --paths, --json, --quiet, --self-test offline.
-
-sentinel.sh
-    Periodic threshold monitor (user timer, every 5 min): trips only
-    on actionable news — latest session over budget (T1) or on a
-    deny-listed model (T2), new gateway-failure lines since cursor
-    (T3), slow caddy fetch (T4; SSE/long-lived streams excluded — their
-    duration is connection lifetime, not latency), a non-latest
-    deny-listed (T5) or
-    over-budget (T6) session active since the last sweep, and a
-    recent tool stuck in `running` (T7). History only reported. Logs
-    ADVISORY rows for watchdog polling; each trip carries a STABLE
-    per-incident ledger key, so a condition that persists across sweeps
-    stays ONE row (UNIQUE(source,key)) instead of one per sweep — no
-    cry-wolf, and writes a DB-only session-digest next to each
-    non-latest trip (data/observability/digests/<id>.md).
-    --once (default), --json, --no-log, --self-test offline.
-    Install: ./scripts/sentinel-install.sh (no sudo).
-
-sentinel-install.sh
-    Installs the user-level sentinel timer (writes units with the repo
-    path baked in, enables via systemctl --user). Idempotent;
-    --write-only for review, --uninstall to remove, --self-test
-    offline (no systemd touched).
-
-notify.sh
-    Push recent sentinel FAIL flags to the webhook ($NOTIFY_WEBHOOK).
-    Reads observability.db ledger (ADVISORY/FAIL), builds JSON, POSTs;
-    no webhook -> prints the payload and exits 0 (SKIP, not a
-    failure). --last N, --dry-run, --self-test offline.
-
-notify-setup.sh
-    Scripted NOTIFY_WEBHOOK setup + probe (replace the hand-typed
-    webhook). --url set+probe, --show, --test, --unset, --self-test.
-    Validator accepts https://host/path or http://127.0.0.1[:port]/path
-    (loopback http for the self-hosted sink; remote must be https).
-
-notify-sink.mjs
-    Self-hosted webhook receiver (zero-dep node) so alerting needs NO
-    third-party URL. POST /hook appends the JSON to
-    data/observability/notify-sink.jsonl; GET / prints the last 20;
-    GET /health -> ok. env PORT (8788), HOST (127.0.0.1), SINK_FILE.
-    --self-test offline.
-
-notify-selfhost.sh
-    One command to self-host the sink: writes the systemd USER unit
-    for notify-sink.mjs (bakes the absolute node path), enables it
-    (host), sets NOTIFY_WEBHOOK=http://127.0.0.1:PORT/hook via
-    notify-setup.sh, polls /health (prints status+journal on failure).
-    --port N, --write-only, --self-test.
-
-triage-alerts.py
-    Triage the alerts into an actionable brief: read the DURABLE
-    ledger (source of truth — an alert that failed to POST is still
-    triaged; --in FILE reads the delivery-log sink instead), de-dupe
-    the stable-key FAIL rows, classify each (over_budget / stall /
-    slow_fetch / deny_listed / guidance), and print severity + the
-    exact next command + the runbook. Closes detect->push->act. Plain
-    selectable text (#70); --ledger DB, --last N, --out FILE, --json,
-    --self-test offline.
-
-durable-run.sh
-    Checkpoint / resume for multi-step shell jobs (pi-durable: every
-    step stores a checkpoint). --job NAME --step ID -- CMD records a
-    completed step durably (data/observability/jobs/<job>.jsonl);
-    re-running the job skips done steps and resumes after a crash (a
-    failed step is NOT recorded, so it retries). --force, --status,
-    --reset, --self-test offline.
-
-caddy-reload.sh
-    The typed Caddy sequence as a checkpointed script (durable-run):
-    validate the Caddyfile -> restart caddy -> verify :5099 serves.
-    A crash mid-way resumes at the next step. --dry-run, --reset,
-    --self-test offline. Host-only (docker).
-
-rebuild-derived.sh
-    Rebuild every derived artifact from storage (pi-durable: storage is
-    the source of truth): the alert brief (ledger -> triage-<date>.md)
-    + the latest-session digest (store -> digests/<id>.md), from
-    storage ALONE. --ledger/--db/--out, --self-test offline.
-
-grafana-up.sh
-    Stand up the Grafana + SQLite ops view (one more read-only client
-    of the same committed state). up + wait for /api/health, --down,
-    --logs, --self-test offline. Host-only (docker).
-
-test-durable.sh
-    Proves the durable properties offline (RULES #73/#74): triage reads
-    the durable source, durable-run checkpoints + resumes, derived
-    state rebuilds from storage, a read-only client attaches. Wired
-    into test-hygiene.
-
-free-port.sh
-    Find / test a free TCP port (never assume one; port conflicts recur).
-    Prints the first free loopback port >= START (default 3000); --check
-    PORT (exit 0 free / 1 busy), --owner PORT (best effort), --self-test
-    offline. Used by grafana-up.sh to auto-pick a port.
-
-snapshot-audit.sh
-    Is the BTRFS snapshot system costing us? (host). Read-only: root
-    mount, btrfs usage, quota/qgroups, snapper retention limits, and
-    whether locate indexes /.snapshots, then the exact tuning commands.
-    --self-test offline.
-
-locate-prune-snapshots.sh
-    Keep heavy trees out of the locate index (updatedb walks the whole
-    tree unless PRUNEPATHS prunes it; snapshots + docker/flatpak/virt
-    bloat the db and slow updatedb on a USB-HDD root). Adds the costly
-    paths (default /.snapshots /var/lib/docker /var/lib/flatpak
-    /var/lib/libvirt /mnt) idempotently with a timestamped backup, then
-    rebuilds with updatedb at IDLE priority (ionice -c3 nice -n19) so it
-    yields to your work. --paths to override, --no-updatedb to edit only,
-    dry-run default, --self-test.
-
-proc-progress.sh
-    Live progress for a silent process (updatedb prints nothing and
-    looks hung). Every few seconds: state/elapsed/CPU, /proc read
-    counters, and the process cwd (for a tree walker, cwd IS the
-    progress bar). Read-only; Ctrl-C stops the view, not the job.
-    sudo for /proc/<pid>/io. --self-test.
-
-ffind.sh
-    File search that prefers fd and falls back to find. fd is installed
-    on the host (fast, .gitignore-aware, no whole-tree index) -- the
-    on-demand replacement for locate on a slow disk. FFIND_ALL=1 for
-    fd -u -H. find stays the tool for -delete/-printf/exact scripts.
+    Secrets-at-rest scan over logs/, observability, notes/: deepseek/jev keys,
+    bearer tokens, env assignments. Report is value-free (file:line:kind).
+    Exit 1 names rotate-api-keys.sh plus both revoke consoles. Called by
+    handoff-brief.sh on its source transcript. --paths, --json, --quiet,
     --self-test.
 
+sentinel.sh
+    Periodic threshold monitor (user timer, every 5 min): trips only on
+    actionable news — T1 latest over budget, T2 latest on a deny-listed model,
+    T3 new gateway-failure lines since cursor, T4 slow caddy fetch (SSE/long-
+    lived streams excluded), T5 non-latest deny-listed, T6 non-latest
+    over-budget, T7 a tool stuck `running` — active since the last sweep.
+    History only reported. Logs ADVISORY rows with a STABLE per-incident
+    ledger key (a persisting condition stays ONE row via UNIQUE(source,key));
+    writes a DB-only digest next to each non-latest trip. --once (default),
+    --json, --no-log, --self-test. Install: sentinel-install.sh (no sudo).
+
+sentinel-install.sh
+    Installs the user-level sentinel timer (writes units with the repo path
+    baked in, enables via systemctl --user). Idempotent; --write-only,
+    --uninstall, --self-test (no systemd touched).
+
+notify.sh
+    Push recent sentinel FAIL flags to the webhook ($NOTIFY_WEBHOOK). Reads
+    the ledger, builds JSON, POSTs; no webhook -> prints the payload and exits
+    0 (SKIP). --last N, --dry-run, --self-test.
+
+notify-setup.sh
+    Scripted NOTIFY_WEBHOOK setup + probe. --url set+probe, --show, --test,
+    --unset, --self-test. Validator accepts https://host/path or
+    http://127.0.0.1[:port]/path (loopback http for the self-hosted sink;
+    remote must be https).
+
+notify-sink.mjs
+    Self-hosted webhook receiver (zero-dep node) so alerting needs no
+    third-party URL. POST /hook appends JSON to notify-sink.jsonl; GET /
+    prints the last 20; GET /health -> ok. env PORT (8788), HOST (127.0.0.1),
+    SINK_FILE. --self-test.
+
+notify-selfhost.sh
+    One command to self-host the sink: writes the systemd USER unit for
+    notify-sink.mjs (bakes the absolute node path), enables it (host), sets
+    NOTIFY_WEBHOOK=http://127.0.0.1:PORT/hook via notify-setup.sh, polls
+    /health. --port N, --write-only, --self-test.
+
+triage-alerts.py
+    Triage alerts into an actionable brief: read the DURABLE ledger (source of
+    truth — an alert that failed to POST is still triaged; --in FILE reads the
+    delivery-log sink), de-dupe stable-key FAIL rows, classify each
+    (over_budget/stall/slow_fetch/deny_listed/guidance), and print severity +
+    the exact next command + the runbook. Plain selectable text (#70);
+    --ledger DB, --last N, --out FILE, --json, --self-test.
+
+durable-run.sh
+    Checkpoint / resume for multi-step shell jobs: --job NAME --step ID -- CMD
+    records a completed step durably (jobs/<job>.jsonl); re-running skips done
+    steps and resumes after a crash (a failed step is not recorded, so it
+    retries). --force, --status, --reset, --self-test.
+
+caddy-reload.sh
+    The typed Caddy sequence as a checkpointed script (durable-run): validate
+    the Caddyfile -> restart caddy -> verify :5099 serves; a crash mid-way
+    resumes at the next step. --dry-run, --reset, --self-test. Host-only.
+
+rebuild-derived.sh
+    Rebuild every derived artifact from storage alone: the alert brief
+    (ledger -> triage-<date>.md) + the latest-session digest (store ->
+    digests/<id>.md). --ledger/--db/--out, --self-test.
+
+grafana-up.sh
+    Stand up the Grafana + SQLite ops view (a read-only client of the same
+    state). up + wait for /api/health, --down, --logs, --self-test.
+    Host-only.
+
+test-durable.sh
+    Proves the durable properties offline (RULES #73/#74): triage reads the
+    durable source, durable-run checkpoints + resumes, derived state rebuilds,
+    a read-only client attaches. Wired into test-hygiene.
+
+free-port.sh
+    Find / test a free TCP port (never assume one; conflicts recur). Prints
+    the first free loopback port >= START (default 3000); --check PORT (exit 0
+    free / 1 busy), --owner PORT, --self-test. Used by grafana-up.sh.
+
+snapshot-audit.sh
+    Is the BTRFS snapshot system costing us? (host). Read-only: root mount,
+    btrfs usage, quota/qgroups, snapper retention limits, whether locate
+    indexes /.snapshots, then the exact tuning commands. --self-test.
+
+locate-prune-snapshots.sh
+    Keep heavy trees out of the locate index (updatedb walks the whole tree
+    unless PRUNEPATHS prunes it; snapshots + docker/flatpak/virt bloat the db
+    on a USB-HDD root). Adds the costly paths (default /.snapshots
+    /var/lib/docker /var/lib/flatpak /var/lib/libvirt /mnt) idempotently with
+    a timestamped backup, then rebuilds with updatedb at IDLE priority
+    (ionice -c3 nice -n19). --paths, --no-updatedb, dry-run default,
+    --self-test.
+
+proc-progress.sh
+    Live progress for a silent process (updatedb prints nothing and looks
+    hung). Every few seconds: state/elapsed/CPU, /proc read counters, and the
+    process cwd (for a tree walker, cwd IS the progress bar). Read-only;
+    Ctrl-C stops the view, not the job. sudo for /proc/<pid>/io. --self-test.
+
+ffind.sh
+    File search that prefers fd and falls back to find. fd is fast,
+    .gitignore-aware, no whole-tree index — the on-demand replacement for
+    locate on a slow disk. FFIND_ALL=1 for fd -u -H. find stays the tool for
+    -delete/-printf/exact scripts. --self-test.
+
 latency-timeline.sh
-    Gantt-style timeline of what made a session slow: part timings
-    (read-only) on one axis against slow caddy fetches from the access
-    log — serial-loop starvation made visible, not averaged away.
-    --session (required), --window/--width/--min-fetch, --json,
-    --db/--access-log seams, --self-test offline.
+    Gantt-style timeline of what made a session slow: part timings (read-only)
+    on one axis against slow caddy fetches from the access log — serial-loop
+    starvation made visible, not averaged away. --session (required),
+    --window/--width/--min-fetch, --json, --db/--access-log, --self-test.
 
 state-snapshot.sh
-    Snapshot + verified restore of the state you cannot regenerate:
-    .env.local, TLS certs, compose/Caddy/config (and the store with
-    --with-db, copied consistently via the sqlite backup API). Each
-    snapshot carries a sha256 manifest; restore verifies checksums and
-    snapshots current state first (reversible). 0700 dirs, secrets
-    never printed. Commands: snapshot/list/verify/restore, --dry-run,
-    --keep N, --self-test offline.
+    Snapshot + verified restore of the state you cannot regenerate: .env.local,
+    TLS certs, compose/Caddy/config (and the store with --with-db, copied via
+    the sqlite backup API). Each snapshot carries a sha256 manifest; restore
+    verifies checksums and snapshots current state first. 0700 dirs, secrets
+    never printed. Commands snapshot/list/verify/restore, --dry-run, --keep N,
+    --self-test.
 
 extract-transcript.sh
-    Transcript straight from opencode.db (read-only) in the
-    re-extract shape: use when the tab will not render or the message
-    route stalls. Same fidelity caps; feeds handoff-brief.sh via
-    logs/ses_<id>.txt. Never paste the raw file (may hold pasted
-    secrets). --out/--out-dir/--max-parts/--db, --self-test offline.
+    Transcript straight from the db (read-only) in the re-extract shape: use
+    when the tab will not render or the message route stalls. Feeds
+    handoff-brief.sh via logs/ses_<id>.txt. Never paste the raw file (may hold
+    pasted secrets). --out/--out-dir/--max-parts/--db, --self-test.
 
 rotate-server-password.sh
-    Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth
-    password): backup, token_urlsafe replacement, atomic single-line
-    rewrite (0600 kept), container RECREATE (env_file is read at
-    creation, so restart would keep the old value), then proves
-    new=200 and old=401. Neither value is ever printed. Interactive
-    "write" gate; prints rollback on mismatch. --env, --self-test.
+    Rotates OPENCODE_SERVER_PASSWORD (the :4096/:5099 Basic-auth password):
+    backup, token_urlsafe replacement, atomic single-line rewrite (0600 kept),
+    container RECREATE (env_file is read at creation), then proves new=200 and
+    old=401. Neither value is ever printed. Interactive "write" gate; prints
+    rollback on mismatch. --env, --self-test.
 
 verify-from-inside.sh
-    In-container self-check (no docker): opencode binary, auth.json,
-    key env vars, opencode.json parse, jev-review server.js. --full adds
-    a live "PONG" round-trip. Counterpart to the host-side
-    verify-api-keys.sh.
+    In-container self-check (no docker): opencode binary, auth.json, key env
+    vars, opencode.json parse, jev-review server.js. --full adds a live "PONG"
+    round-trip. Counterpart to the host-side verify-api-keys.sh.
 
 test-sidebar-streaming.sh
-    Regression test that a session appears in the sidebar while it is
-    processing: opens the /api/event SSE stream, triggers a real session,
-    and asserts session.created + message.updated events are emitted.
-    Host-side; requires OPENCODE_SERVER_PASSWORD (or --insecure).
+    Regression test that a session appears in the sidebar while processing:
+    opens the /api/event SSE stream, triggers a real session, asserts
+    session.created + message.updated are emitted. Host-side; requires
+    OPENCODE_SERVER_PASSWORD (or --insecure).
 
 Work with the model
 -------------------
@@ -721,16 +593,16 @@ ask.sh
         ./scripts/ask.sh --dir /some/path "Summarize this directory"
         ./scripts/ask.sh --json "Return a JSON object"
 
-    Mounts the target directory at /workspace inside the container and
-    runs `opencode run --model deepseek/deepseek-flash`. Returns 0 if
-    the model produced any output, non-zero otherwise.
+    Mounts the target dir at /workspace in the container and runs
+    `opencode run --model deepseek/deepseek-flash`. Returns 0 if the model
+    produced output, non-zero otherwise.
 
 Work with chat logs
 -------------------
 
 chatlog.sh
-    Manage the chat logs that live in the notes directory beside the
-    repo. Default location is ../notes relative to this script.
+    Manage the chat logs that live in the notes dir beside the repo (default
+    ../notes).
 
         ./scripts/chatlog.sh list -l
         ./scripts/chatlog.sh search "no fail"
@@ -741,38 +613,31 @@ chatlog.sh
         ./scripts/chatlog.sh ask <file> "What did we conclude about X?"
         ./scripts/chatlog.sh repo-ask "How is the Dockerfile structured?"
 
-    The ask/summarize/decisions/todos/repo-ask subcommands mount the
-    relevant directory into the opencode container and pass a prompt
-    that names the target file. The model reads the file via its own
-    file access. No content is inlined into the prompt.
+    The ask/summarize/decisions/todos/repo-ask subcommands mount the relevant
+    dir into the container and pass a prompt naming the target file; no content
+    is inlined.
 
 Verify the repository
 ---------------------
 
 test-repo.sh
-    Eight gates verifying the repository is in its expected final
-    state and that the environment it describes is functional.
+    Eight gates verifying the repo is in its expected final state.
 
         ./scripts/test-repo.sh              report
         ./scripts/test-repo.sh --archive    archive one-shots first
 
-    Report mode is read-only. It checks:
-      G1  required binaries
-      G2  .env.local with both keys, mode 0600
-      G3  opencode.json parses and references the expected identifiers
-      G4  docker/Dockerfile contains the expected build directives
-      G5  repo root contains only expected entries
-      G6  operating scripts present
-      G7  one-shot scripts archived
-      G8  doctor.sh passes end-to-end
+    Report mode is read-only: G1 required binaries; G2 .env.local both keys +
+    0600; G3 opencode.json parses + expected identifiers; G4 Dockerfile build
+    directives; G5 repo root only expected entries; G6 operating scripts
+    present; G7 one-shots archived; G8 doctor.sh passes end-to-end.
 
 Archive
 -------
 
 archive/
-    one-shot/           migration, prune, diagnose scripts
-    forensics/          recovery tools from the container-loss incident
-    logs/               log files from the archived scripts
+    one-shot/             migration, prune, diagnose scripts
+    forensics/            recovery tools from the container-loss incident
+    logs/                 log files from the archived scripts
     stage-opencode-repo/  historical staging script versions
     migration-notes.txt   the Docker data-root migration record
 
@@ -780,8 +645,7 @@ Paths used by the tools
 -----------------------
 
   repo root       resolved from the script's own location
-  notes           sibling directory of repo, override with --dir or
-                  CHATLOG_DIR
+  notes           sibling dir of repo; override with --dir or CHATLOG_DIR
   docker image    opencode-deepseek-jev:robust
   model           opencode-go/deepseek-v4.1-flash
   opencode.json   at repo root
@@ -790,35 +654,18 @@ Paths used by the tools
 Scripting conventions
 ---------------------
 
-Every operation that can be typed is scripted. Scripts live in the repo
-under scripts/ or scripts/archive/one-shot/. Nothing lives only in /tmp
-and nothing lives only in a chat transcript.
+Every operation that can be typed is scripted, under scripts/ or
+scripts/archive/one-shot/. Nothing lives only in /tmp or only in a transcript.
 
-A response that emits multiple files does so through one script. That
-script creates each file via a heredoc. The recipient pastes the whole
-script once. Prose, if any, comes before the script or after it, never
-between heredocs.
+A response that emits multiple files does so through one script, each file via
+a heredoc; the recipient pastes the whole script once. Prose comes before or
+after the script, never between heredocs — the shell reads a heredoc from its
+opening marker to the matching delimiter at column zero, so interleaving breaks
+pasteability silently. Use a distinct delimiter per nesting level (SCRIPT_EOF,
+PATCH_EOF, WATCH_EOF), on a line of its own with no leading whitespace.
 
-Rationale: the shell reads a heredoc from its opening marker to the
-matching closing delimiter at column zero. Any text between the marker
-and the delimiter becomes file content. Any heredoc whose closing
-delimiter is not at column zero is unterminated and the entire input is
-discarded. Interleaving breaks pasteability silently.
-
-  POSIX shell, here-documents:
+  POSIX here-documents:
     https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
-  Bash manual, here-documents:
+  Bash here-documents:
     https://www.gnu.org/software/bash/manual/html_node/Here-Documents.html
-
-  Raymond, "The Art of Unix Programming", Addison-Wesley, 2003,
-  ISBN-13: 978-0131429017, §1.6.2 "Rule of Clarity": complexity is a
-  cost; a pasteable script is a clear interface.
-
-Indent control
---------------
-
-When writing a heredoc whose content is itself a shell script, avoid
-closing the outer heredoc with a delimiter that also appears inside the
-inner script. Use a distinct delimiter per nesting level, e.g.
-SCRIPT_EOF, PATCH_EOF, WATCH_EOF. The delimiter must appear on a line
-of its own with no leading whitespace.
+  Raymond, "The Art of Unix Programming", AW, 2003, §1.6.2 "Rule of Clarity".
