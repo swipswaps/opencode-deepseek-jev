@@ -1,5 +1,27 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-10-17 (fresh session `ses_eb53d9a62f…`):** the **durable loop is
+> complete** — pi-durable's missing *consumer*. `next-action.sh` (#78) resumes
+> from the store (rev, last-gate, Δ since gate, next queue unit, **in-flight
+> segment**, blockers); `loop-state.sh` (#80) checkpoints the in-flight loop
+> segment on `durable-run.sh`'s job store (resume/skip across handoffs);
+> `progress-review.sh` (#79) + a 15-min user timer records a durable PASS on an
+> advance / FAIL on a stall (host runbook `progress-timer`). The jev-harness
+> skill step 1 now runs `next-action` first.
+> **Docs:** doc-budget is **tier-aware** (#77: budget the session-start set —
+> HANDOFF/RULES/TODO + skills; report README/DESIGN/scripts-README on-demand);
+> TODO's old Done archived to `docs/todo-archive-2026.md`.
+> **Gates sped up** (loop can be frequent): `test-fixture-db.sh` seeds a small
+> store for the contract tools; `test-tooling` contracts run in parallel; the
+> sentinel self-test no longer digests on `--no-log`; `test-dashboard` no longer
+> re-runs lint/test-hygiene under harness (`GATES_RUN_BY_PARENT`) and rebuilds
+> the semantic index on the fixture. Full `harness.sh` ~15min → **9.5min, all 4
+> gates green** (lint 261 · hygiene 56 · patterns 6 · dashboard 120).
+> **Next:** enable `progress-timer` + `sentinel` user timers on the host;
+> telemetry-console residual (drill-down on remaining sections); quirks held-out
+> recall (40%); the live-DB-bound dashboard checks + lint shellcheck (~130s) are
+> the remaining gate cost.
+
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
 > **local-time + light theme** (#66), **clickable Gantt + span drill + Flags panel
