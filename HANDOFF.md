@@ -21,10 +21,13 @@
 > telemetry-console residual (drill-down on remaining sections); quirks held-out
 > recall (40%); the live-DB-bound dashboard checks + lint shellcheck (~130s) are
 > the remaining gate cost.
-> **NEBULA-1:** the external nebula restarter is now nameable —
-> `scripts/nebula-restart-trace.py` reads the `/proc` parent chain (a parent
-> that is not PID 1 is the restarter); `--watch SECS` catches the churn live.
-> Read-only; the override still needs operator approval.
+> **NEBULA-1:** restarter **named = systemd (PID 1)** — the live
+> `nebula-restart-trace.py --watch 60` caught a systemd-parented nebula birth,
+> so nebula crash-loops under systemd (not another supervisor). Both ends are
+> scripted: the read-only `nebula-restart-trace.py` (name the parent) and
+> `nebula-systemd-override.sh` (idempotent drop-in: StartLimit* + CPU/IO/Memory
+> ceiling; `--show`/`--apply`/`--revert`). Applying it (sudo) is the operator's
+> call.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard

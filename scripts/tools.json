@@ -169,6 +169,19 @@
     ]
   },
   {
+    "id": "nebula-systemd-override",
+    "title": "Rate-limit + right-size nebula (host, sudo)",
+    "where": "host",
+    "purpose": "The trace proved systemd (PID 1) is the restarter, so nebula is crash-looping and needs a start-limit + resource ceiling. Writes the systemd drop-in idempotently (StartLimitIntervalSec=300/Burst=5; CPUWeight/IOWeight=50; MemoryMax=512M; LogRateLimit*). Dry-run by default; --apply/--revert/--show; sudo only on write.",
+    "commands": [
+      "bash scripts/nebula-systemd-override.sh",
+      "bash scripts/nebula-systemd-override.sh --show",
+      "sudo bash scripts/nebula-systemd-override.sh --apply",
+      "sudo bash scripts/nebula-systemd-override.sh --revert",
+      "bash scripts/nebula-systemd-override.sh --self-test"
+    ]
+  },
+  {
     "id": "fix-docker-network",
     "title": "Recover host->docker port path (sudo)",
     "where": "host",

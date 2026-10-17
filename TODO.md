@@ -8,15 +8,18 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
-- [x] **NEBULA-1 diagnostic — name the nebula restarter.** `nebula-restart-trace.py`
+- [x] **NEBULA-1 diagnostic + fix, both scripted.** `nebula-restart-trace.py`
       reads `/proc/<pid>/stat` + the parent's comm/cmdline for every nebula
-      process; a non-PID-1 parent is the restarter (the churn is another
-      project's supervisor, never systemd-counted). `--watch SECS` reports
-      births+parents live, `--json`, `--proc-root` seam, offline `--self-test`.
-      Read-only, no signals. Wired: test-hygiene self-test (+1 → 57/0),
-      test-tooling `--json` contract (+1 → 17/0), tools.json + scripts/README.
-      Gate: lint 262/0, hygiene 57/0, tooling 17/0. The **override** remains
-      operator-approval-required (queue).
+      process; a non-PID-1 parent is the restarter. `--watch SECS` reports
+      births+parents live; `--json`; `--proc-root` seam; offline `--self-test`.
+      Live host result: **systemd (PID 1) is the parent** → nebula crash-loops
+      under systemd (not another supervisor). Fix is scripted:
+      `nebula-systemd-override.sh` — idempotent drop-in (StartLimit*/Burst in
+      `[Unit]`, CPUWeight/IOWeight/MemoryMax/LogRateLimit in `[Service]`),
+      dry-run default, `--show`/`--apply`/`--revert`/`--restart`. Wired:
+      test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 → 17/0),
+      tools.json + scripts/README. Gate: lint /0, hygiene 58/0, tooling 17/0.
+      Applying the drop-in is the operator's call (queue).
 
 - [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
       lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —
@@ -363,17 +366,19 @@ Last updated: 2026-10-17
 
 ## Queue (ranked, top first)
 
-- [~] NEBULA-1: **name the restarter first — done; the override still needs
-      operator approval.** New `scripts/nebula-restart-trace.py` reads the
-      `/proc` parent chain for every nebula process and names the process that
-      issues the restarts (a parent that is not PID 1 is it); `--watch SECS`
-      catches the churn live (3 PIDs/10 min, never systemd-counted), `--json`,
-      offline `--self-test`. Read-only (no signals). Remaining (operator, host):
-      run `python3 scripts/nebula-restart-trace.py --watch 60` to identify the
-      other project's supervisor, then apply the override via
-      `sudo systemctl edit nebula` (StartLimitIntervalSec=300/StartLimitBurst=5,
-      CPUWeight=50, IOWeight=50, MemoryMax=512M, LogRateLimitBurst=100) — or fix
-      the parent, not the restarts. Evidence: logs/pressure-*.log (gitignored).
+- [~] NEBULA-1: **restarter named (systemd) + fix scripted; applying it is the
+      operator's call.** `scripts/nebula-restart-trace.py` read the live host and
+      the `--watch 60` result was decisive: **systemd (PID 1) is the parent of
+      the new nebula PID** — so nebula is crash-looping under systemd, not being
+      restarted by another project's supervisor (the earlier hypothesis). Fix is
+      now a script, `scripts/nebula-systemd-override.sh`: an idempotent systemd
+      drop-in (StartLimitIntervalSec=300/StartLimitBurst=5 in `[Unit]`;
+      CPUWeight/IOWeight=50; MemoryMax=512M; LogRateLimit*) that rate-limits the
+      loop; dry-run by default, `--show` reads the current limits + exit reason,
+      `--apply`/`--revert` write under sudo. Remaining (operator, host):
+      `bash scripts/nebula-systemd-override.sh --show` (read the exit reason),
+      then `sudo bash scripts/nebula-systemd-override.sh --apply`. Evidence:
+      logs/pressure-*.log (gitignored) + the trace watch output.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;
@@ -395,7 +400,6 @@ Last updated: 2026-10-17
   guide embedding 7 docs/ux shots (Playwright-captured, <=100KB);
   whitelist/corpus/registry refs updated. Gates: lint 110, hygiene
   37, dashboard 116, ux-test 26/0.
-- [ ] G4: wire `docker/litellm.config.yaml` `max_budget` into routing (needs proxy)
 - [ ] G5: Laya self-host (cuts Jev only, ~11 calls); embeddings rerank over FTS5
       + redaction + hard request cap
 - [ ] G6: run `doctor.sh --full` from a host

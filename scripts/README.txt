@@ -96,6 +96,14 @@ nebula-restart-trace.py
     --watch SECS reports births + parents live; --json; --proc-root seam;
     offline --self-test. Read-only: no signals, kills nothing.
 
+nebula-systemd-override.sh
+    NEBULA-1 fix: the trace proved systemd (PID 1) is the restarter, so nebula
+    is crash-looping. Writes an idempotent drop-in
+    (etc/systemd/system/nebula.service.d/override.conf): StartLimitIntervalSec
+    =300/StartLimitBurst=5 + CPUWeight/IOWeight=50 + MemoryMax=512M +
+    LogRateLimit*. Dry-run by default; --apply/--revert/--show; --restart
+    opt-in; --file seam; offline --self-test. Sudo only on write.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the

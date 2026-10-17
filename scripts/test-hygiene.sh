@@ -415,6 +415,17 @@ main() {
         bad 'nebula-restart-trace.py present'
     fi
 
+    if [ -f "$REPO/scripts/nebula-systemd-override.sh" ]; then
+        if bash "$REPO/scripts/nebula-systemd-override.sh" --self-test > "$work/nso_st.txt" 2>&1; then
+            ok 'nebula-systemd-override: self-test (idempotent drop-in apply/revert)'
+        else
+            bad 'nebula-systemd-override: self-test (idempotent drop-in apply/revert)'
+            cat "$work/nso_st.txt"
+        fi
+    else
+        bad 'nebula-systemd-override.sh present'
+    fi
+
     if [ -f "$REPO/scripts/proc-progress.sh" ]; then
         if bash "$REPO/scripts/proc-progress.sh" --self-test > "$work/pp_st.txt" 2>&1; then
             ok 'proc-progress: self-test (silent-process monitor)'

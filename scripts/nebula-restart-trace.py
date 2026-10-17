@@ -147,8 +147,9 @@ def verdict(rows):
                 "text": "external supervisor restarts nebula: " + ", ".join(named)
                         + " -- this is the restarter, NOT systemd"}
     return {"code": "systemd",
-            "text": "all nebula parents are PID 1 -- systemd owns it "
-                    "(check: systemctl show nebula -p NRestarts; journalctl -u nebula)"}
+            "text": "systemd (PID 1) owns AND restarts nebula -- it is crash-looping; "
+                    "read the exit reason (journalctl -u nebula), then rate-limit with "
+                    "./scripts/nebula-systemd-override.sh --show / --apply"}
 
 
 def print_snapshot(snap):
