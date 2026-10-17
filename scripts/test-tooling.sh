@@ -5,8 +5,13 @@
 # The gates prove the repo compiles and serves; the tools' `--self-test`s prove
 # their internal logic. This proves the USER-FACING CONTRACTS a wrapper or
 # plugin depends on: every tool that advertises `--json` emits parseable JSON
-# with the keys t callers read. It deliberately does NOT call harness.sh (which
+# with the keys callers read. It deliberately does NOT call harness.sh (which
 # would recurse), so it is safe to run from test-hygiene.sh.
+#
+# The contracts are independent and read-only, so they are LAUNCHED IN PARALLEL
+# (each writes its own temp file) and only the cheap JSON assertions run serially
+# — the live-DB scans overlap instead of summing. This is what keeps the gate
+# fast on a large store. Same idiom as lint.sh's parallel shellcheck.
 #
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit, no rm -rf,
 #   no subprocess.run, no bare kill, printf only, main() wrapper.
@@ -65,9 +70,15 @@ assert $expr
     fi
 }
 
-run_json() {  # tool... > file ; returns rc
-    local file="$1"; shift
-    "$@" > "$file" 2>&1
+# start NAME FILE EXPR CMD...  — launch CMD in the background, writing FILE.
+# The (name,file,expr) triple is queued for the serial validate pass.
+NAMES=()
+FILES=()
+EXPRS=()
+start() {
+    local name="$1" file="$2" expr="$3"; shift 3
+    NAMES+=("$name"); FILES+=("$file"); EXPRS+=("$expr")
+    ( "$@" > "$file" 2>&1 ) &
 }
 
 main() {
@@ -87,84 +98,66 @@ main() {
 
     printf '=== test-tooling.sh ===\n'
 
-    # preflight: exit 0 or 1 both valid (STOP is a valid answer); JSON contract matters.
+    local ltw=""
+    local phase_start
+    phase_start=$(now_ms)
+
+    # preflight: exit 0 or 1 both valid (STOP is a valid answer); JSON matters.
     if [ -x "$REPO/scripts/preflight.sh" ]; then
-        "$REPO/scripts/preflight.sh" --json > "$work/preflight.json" 2>&1
-        validate_json "preflight.sh --json" "$work/preflight.json" '"ready" in d and "critical" in d and "warn" in d'
+        start "preflight.sh --json" "$work/preflight.json" '"ready" in d and "critical" in d and "warn" in d' "$REPO/scripts/preflight.sh" --json
     fi
 
     if [ -x "$REPO/scripts/doc-budget.sh" ]; then
-        run_json "$work/docs.json" "$REPO/scripts/doc-budget.sh" --json
-        validate_json "doc-budget.sh --json" "$work/docs.json" '"total_tokens" in d and "budget" in d'
+        start "doc-budget.sh --json" "$work/docs.json" '"total_tokens" in d and "budget" in d' "$REPO/scripts/doc-budget.sh" --json
     fi
 
     if [ -x "$REPO/scripts/next-action.sh" ]; then
-        run_json "$work/na.json" bash "$REPO/scripts/next-action.sh" --json
-        validate_json "next-action.sh --json" "$work/na.json" '"rev" in d and "last_gate" in d and "since_gate" in d and "next" in d and "blockers" in d'
+        start "next-action.sh --json" "$work/na.json" '"rev" in d and "last_gate" in d and "since_gate" in d and "next" in d and "blockers" in d' bash "$REPO/scripts/next-action.sh" --json
     fi
 
     if [ -x "$REPO/scripts/progress-review.sh" ]; then
-        run_json "$work/pr.json" env PROGRESS_STATE="$work/pr-state.json" PROGRESS_STALL_TICKS=2 bash "$REPO/scripts/progress-review.sh" --once --no-log --json
-        validate_json "progress-review.sh --json" "$work/pr.json" '"decision" in d and "rev" in d and "ticks" in d and "next" in d'
+        start "progress-review.sh --json" "$work/pr.json" '"decision" in d and "rev" in d and "ticks" in d and "next" in d' env PROGRESS_STATE="$work/pr-state.json" PROGRESS_STALL_TICKS=2 bash "$REPO/scripts/progress-review.sh" --once --no-log --json
     fi
 
     if [ -x "$REPO/scripts/loop-state.sh" ]; then
-        run_json "$work/ls.json" env DURABLE_JOB_DIR="$work/jobs" bash "$REPO/scripts/loop-state.sh" --show --json
-        validate_json "loop-state.sh --show --json" "$work/ls.json" '"in_flight" in d and "last_done" in d and "n_in_flight" in d'
+        start "loop-state.sh --show --json" "$work/ls.json" '"in_flight" in d and "last_done" in d and "n_in_flight" in d' env DURABLE_JOB_DIR="$work/jobs" bash "$REPO/scripts/loop-state.sh" --show --json
     fi
 
     if [ -f "$REPO/scripts/learn-rules.py" ]; then
-        run_json "$work/rules.json" python3 "$REPO/scripts/learn-rules.py" --json
-        validate_json "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d'
+        start "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d' python3 "$REPO/scripts/learn-rules.py" --json
     fi
 
     if [ -f "$REPO/scripts/issue-solutions.py" ]; then
-        run_json "$work/sol.json" python3 "$REPO/scripts/issue-solutions.py" --json
-        validate_json "issue-solutions.py --json" "$work/sol.json" '"issues" in d and "total_errors" in d'
+        start "issue-solutions.py --json" "$work/sol.json" '"issues" in d and "total_errors" in d' python3 "$REPO/scripts/issue-solutions.py" --json
     fi
 
     if [ -f "$REPO/scripts/audit-tool-calls.py" ]; then
-        run_json "$work/atc.json" python3 "$REPO/scripts/audit-tool-calls.py" --json
-        validate_json "audit-tool-calls.py --json" "$work/atc.json" '"blacklist_hits" in d and "patterns" in d'
+        start "audit-tool-calls.py --json" "$work/atc.json" '"blacklist_hits" in d and "patterns" in d' python3 "$REPO/scripts/audit-tool-calls.py" --json
     fi
 
     if [ -f "$REPO/scripts/prompt-lint.py" ]; then
-        run_json "$work/pl.json" python3 "$REPO/scripts/prompt-lint.py" --last --json
-        validate_json "prompt-lint.py --last --json" "$work/pl.json" '"category" in d and "flags" in d'
+        start "prompt-lint.py --last --json" "$work/pl.json" '"category" in d and "flags" in d' python3 "$REPO/scripts/prompt-lint.py" --last --json
     fi
 
     local cat="$REPO/data/observability/models.json"
     if [ -f "$REPO/scripts/models.py" ] && [ -f "$cat" ]; then
-        run_json "$work/models.json" python3 "$REPO/scripts/models.py" --catalog "$cat" --json
-        validate_json "models.py --catalog --json" "$work/models.json" '"verdict" in d and "models" in d and "recommended" in d'
-    fi
-
-    if [ -x "$REPO/scripts/logs.sh" ]; then
-        if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
-            ok "logs.sh --source packet runs"
-        else
-            bad "logs.sh --source packet runs"
-        fi
+        start "models.py --catalog --json" "$work/models.json" '"verdict" in d and "models" in d and "recommended" in d' python3 "$REPO/scripts/models.py" --catalog "$cat" --json
     fi
 
     if [ -f "$REPO/scripts/recover-4096.sh" ]; then
-        run_json "$work/rec.json" bash "$REPO/scripts/recover-4096.sh" --json --no-log
-        validate_json "recover-4096.sh --json" "$work/rec.json" '"checks" in d and "passed" in d and "failed" in d and "skipped" in d'
+        start "recover-4096.sh --json" "$work/rec.json" '"checks" in d and "passed" in d and "failed" in d and "skipped" in d' bash "$REPO/scripts/recover-4096.sh" --json --no-log
     fi
 
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
-        run_json "$work/sguard.json" bash "$REPO/scripts/session-guard.sh" --json --no-log
-        validate_json "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4'
+        start "session-guard.sh --json" "$work/sguard.json" '"session" in d and "verdict" in d and "meaning" in d and "guidance" in d and len(d["guidance"]) == 4' bash "$REPO/scripts/session-guard.sh" --json --no-log
     fi
 
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
-        run_json "$work/sen.json" bash "$REPO/scripts/sentinel.sh" --json --no-log
-        validate_json "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d'
+        start "sentinel.sh --json" "$work/sen.json" '"tripped" in d and "trips" in d and "counts" in d and "latest" in d and "slow" in d' bash "$REPO/scripts/sentinel.sh" --json --no-log
     fi
 
     if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
         # Offline contract: fixture DB + fixture access log, no docker needed.
-        local ltw
         ltw=$(mktemp -d)
         python3 - "$ltw/fix.db" << 'PYEOF'
 import sqlite3, sys, time
@@ -177,10 +170,34 @@ con.execute("INSERT INTO part VALUES('p1','m','s1',?,?,?)", (now - 5000, now - 1
 con.commit()
 PYEOF
         printf '%s\n' '{"logger":"http.log.access.log0","ts":1750000000,"duration":2.5,"request":{"method":"GET","uri":"/x"},"status":200}' > "$ltw/acc.log"
-        run_json "$work/lt.json" bash "$REPO/scripts/latency-timeline.sh" --session s1 --db "$ltw/fix.db" --access-log "$ltw/acc.log" --window 60 --json
-        validate_json "latency-timeline.sh --json" "$work/lt.json" '"session" in d and "parts" in d and "fetches" in d and "summary" in d'
+        start "latency-timeline.sh --json" "$work/lt.json" '"session" in d and "parts" in d and "fetches" in d and "summary" in d' bash "$REPO/scripts/latency-timeline.sh" --session s1 --db "$ltw/fix.db" --access-log "$ltw/acc.log" --window 60 --json
+    fi
+
+    # The live-DB scans run concurrently above; wait for all, then assert.
+    wait
+    local phase_ms
+    phase_ms=$(( $(now_ms) - phase_start ))
+    LAST_MS=$(now_ms)
+    SLOW_MS=$phase_ms
+    SLOW_MSG="contracts in parallel (${#NAMES[@]} tools)"
+
+    local i
+    for i in "${!NAMES[@]}"; do
+        validate_json "${NAMES[$i]}" "${FILES[$i]}" "${EXPRS[$i]}"
+    done
+
+    if [ -n "$ltw" ]; then
         rm -f "$ltw/fix.db" "$ltw/acc.log"
         rmdir "$ltw"
+    fi
+
+    # Non-JSON checks (cheap; run after the parallel phase).
+    if [ -x "$REPO/scripts/logs.sh" ]; then
+        if "$REPO/scripts/logs.sh" --source packet > "$work/logs.txt" 2>&1; then
+            ok "logs.sh --source packet runs"
+        else
+            bad "logs.sh --source packet runs"
+        fi
     fi
 
     # The explore treemap uses the vendored d3. The page must call it as a
@@ -204,7 +221,8 @@ if (!(root.x1 > 0)) throw new Error("layout did not run");
     if [ -n "$SLOW_MSG" ]; then
         printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
     fi
-    rm -f "$work"/*.json "$work"/*.txt
+    rm -f "$work"/*.json "$work"/*.txt "$work/pr-state.json"
+    [ -d "$work/jobs" ] && rm -r "$work/jobs" || true
     rmdir "$work"
 
     printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"
