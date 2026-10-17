@@ -21,6 +21,26 @@ set -o pipefail
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+disable_timer() {
+    local u s found=0
+    for u in plocate-updatedb.timer mlocate-updatedb.timer updatedb.timer; do
+        s=$(systemctl list-unit-files "$u" 2>&1)
+        case "$s" in
+            *"$u"*)
+                found=1
+                printf 'disabling %s (stops the recurring background crawl)\n' "$u"
+                systemctl disable --now "$u" || printf 'WARN: could not disable %s\n' "$u"
+                ;;
+        esac
+    done
+    if [ "$found" -eq 0 ]; then
+        printf '(no updatedb timer unit found; check: systemctl list-timers | grep -i updatedb)\n'
+    else
+        printf '(re-enable later: sudo systemctl enable --now <unit>)\n'
+    fi
+    return 0
+}
+
 DEF_PATHS="/.snapshots /var/lib/docker /var/lib/flatpak /var/lib/libvirt /mnt"
 
 # conf_has FILE "p1 p2 ..." -> exit 0 if ALL are in PRUNEPATHS
@@ -82,18 +102,20 @@ self_test() {
 }
 
 main() {
-    local CONF="/etc/updatedb.conf" APPLY=0 NO_UPDATE=0 PATHS="$DEF_PATHS"
+    local CONF="/etc/updatedb.conf" APPLY=0 NO_UPDATE=0 PATHS="$DEF_PATHS" DISABLE_TIMER=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --file) CONF="${2:-}"; shift 2 ;;
             --paths) PATHS="${2:-}"; shift 2 ;;
             --apply) APPLY=1; shift ;;
             --no-updatedb) NO_UPDATE=1; shift ;;
+            --disable-timer) DISABLE_TIMER=1; shift ;;
             --self-test) self_test; return "$?" ;;
-            -h | --help) printf 'usage: %s [--file CONF] [--paths "P ..."] [--apply] [--no-updatedb] [--self-test]\n' "$0"; return 0 ;;
+            -h | --help) printf 'usage: %s [--file CONF] [--paths "P ..."] [--apply] [--no-updatedb] [--disable-timer] [--self-test]\n' "$0"; return 0 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
         esac
     done
+    if [ "$DISABLE_TIMER" -eq 1 ]; then disable_timer; return $?; fi
     [ -f "$CONF" ] || { printf 'GATE FAIL: no %s\n' "$CONF"; return 1; }
     printf 'paths to prune: %s\n' "$PATHS"
     if conf_has "$CONF" "$PATHS"; then
