@@ -21,15 +21,15 @@
 > telemetry-console residual (drill-down on remaining sections); quirks held-out
 > recall (40%); the live-DB-bound dashboard checks + lint shellcheck (~130s) are
 > the remaining gate cost.
-> **NEBULA-1:** the premise was **falsified by live evidence.** The trace named
-> systemd (PID 1) as the parent, but `nebula-systemd-override.sh --show` on the
-> host showed **NRestarts=0 + one stable PID** — no restart churn at all. The
-> only recurring signal is a **tunnel flap to lighthouse-01 (10.100.0.1)**
-> (`Close tunnel received` / `state:dead`). Both ends are scripted: the read-only
-> `nebula-restart-trace.py` (name the parent) and `nebula-systemd-override.sh`
-> (`--diagnose` classifies restart-churn vs tunnel-flap; `--apply`/`--revert` a
-> defensive drop-in). The applied drop-in is a harmless ceiling; the real fix is
-> the peer tunnel (external, `proxmox-dual-plane-mesh`).
+> **NEBULA-1:** **closed — the event is a tunnel flap, not a process restart;
+> the drop-in was reverted.** The trace named systemd (PID 1) as the parent, but
+> `nebula-systemd-override.sh --show` on the host showed **NRestarts=0 + one
+> stable PID** — no restart churn. The only recurring signal is a **tunnel flap
+> to lighthouse-01 (10.100.0.1)** (`Close tunnel received` / `state:dead`). Both
+> ends are scripted: the read-only `nebula-restart-trace.py` (name the parent)
+> and `nebula-systemd-override.sh` (`--diagnose` classifies restart-churn vs
+> tunnel-flap; the defensive drop-in was applied then `--revert`ed). Residual is
+> external: the peer tunnel (`proxmox-dual-plane-mesh`) — see TODO `TUNNEL-1`.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard

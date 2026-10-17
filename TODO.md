@@ -19,8 +19,8 @@ Last updated: 2026-10-17
       defensive drop-in (StartLimit*/Burst in `[Unit]`, CPU/IO/Memory/LogRateLimit
       in `[Service]`) and `--diagnose` **classifies restart-churn vs tunnel-flap**.
       Wired: test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 →
-      17/0), tools.json + scripts/README. Applying/reverting the drop-in is the
-      operator's call (queue).
+      17/0), tools.json + scripts/README. Drop-in applied then **reverted on the
+      host (2026-10-17)**; real issue carried forward as TUNNEL-1 (external).
 
 - [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
       lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —
@@ -367,19 +367,24 @@ Last updated: 2026-10-17
 
 ## Queue (ranked, top first)
 
-- [~] NEBULA-1: **premise falsified by live evidence — the event is a tunnel
-      flap, not a process restart.** `scripts/nebula-restart-trace.py` named the
+- [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
+      restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
       parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the
       host showed **NRestarts=0, one stable PID (1111684) over minutes**, and the
       only recurring log signal was a **tunnel teardown to `lighthouse-01`
       (vpnIp 10.100.0.1)** (`Close tunnel received, tearing down.` / `Taking new
-      handshake` / `tunnelCheck state:dead`). So systemd is not restarting
-      anything and the earlier "3 PIDs/10 min crash-loop" was misattributed.
-      `--diagnose` now classifies restart-churn vs tunnel-flap (offline
-      self-test). The applied drop-in is a **defensive ceiling only** — the
-      operator may `--revert` it. Real fix is out of this repo (D): the
-      peer/lighthouse tunnel in `proxmox-dual-plane-mesh`. Evidence: the live
-      `--show` output + logs/pressure-*.log (gitignored).
+      handshake` / `tunnelCheck state:dead`). So systemd restarts nothing and the
+      earlier "3 PIDs/10 min crash-loop" was misattributed. `--diagnose`
+      classifies restart-churn vs tunnel-flap (offline self-test). The defensive
+      drop-in was applied then **reverted on the host** (`--revert` + confirm
+      2026-10-17). Evidence: the live `--show` output + logs/pressure-*.log.
+      Carry-forward: the tunnel itself is external (below).
+- [ ] **TUNNEL-1 (external, D): `lighthouse-01` link flaps.** vpnIp
+      `10.100.0.1` tears down / re-handshakes repeatedly (`state:dead`) while the
+      nebula process is healthy. Fix lives in the peer/lighthouse repo
+      (`proxmox-dual-plane-mesh`), not here. Tooling ready to hand off:
+      `nebula-systemd-override.sh --diagnose` (classifies + counts the flap).
+      Evidence: journal `-u nebula` around 18:50–18:53 on ws24.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;
