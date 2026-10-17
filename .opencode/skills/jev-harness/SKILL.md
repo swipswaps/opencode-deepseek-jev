@@ -14,7 +14,10 @@ Follow it instead of re-deriving the workflow each session.
 1. Read `HANDOFF.md` (durable state), `RULES.md` (constraints), `TODO.md` (queue).
 2. Run `./scripts/preflight.sh`. If it prints **STOP**, fix that cause first —
    it is fail-closed on missing keys, a red last-gate marker, balance below
-   `MIN_BALANCE`, or a model outside `models.policy.json`.
+   `MIN_BALANCE`, a model outside `models.policy.json`, **or an over-budget
+   current session** (→ hand off: `./scripts/session-guard.sh --handoff`, paste
+   the brief into a fresh session; never `--fork`/`--continue`). The budget STOP
+   is per **#76** — watch it every turn, not when asked.
 3. Run `./scripts/harness.sh --fast` for the current state (gates + telemetry +
    cost + TODO) without the slow dashboard gate.
 
@@ -42,8 +45,11 @@ Follow it instead of re-deriving the workflow each session.
 - `./scripts/models.sh` shows the catalog and the ALLOW / ASK / BLOCK verdict
   from `models.policy.json`. Prefer free models or `deepseek-flash`; `v4-pro`
   is deny-listed (2.9x).
-- Keep sessions short (context is the cost driver) and check
-  `./scripts/cost-bottlenecks.sh` "model mix" after anything unusual.
+- Keep sessions short (context is the cost driver). The budget is a **hard STOP
+  (#76)**: `preflight.sh` fails closed once the current session is over
+  `CONTEXT_BUDGET` — hand off (`./scripts/session-guard.sh --handoff`) and
+  continue in a fresh session. Check `./scripts/cost-bottlenecks.sh` "model mix"
+  after anything unusual.
 - The interactive chooser is the `/models` page on the observer UI.
 
 ## 4. Deliver gate (before every push)

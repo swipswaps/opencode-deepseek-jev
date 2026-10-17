@@ -191,9 +191,12 @@ except Exception:
     fi
     [ -f "$REPO/data/observability/guard.log" ] || warn "no guard.log yet (plugin loads on restart)"
 
-    # Context budget is advisory (WARN, never STOP): an over-budget latest
-    # session still answers, it just re-sends history every turn. Deny-listed
-    # models already STOP above; budget only advises a fresh session.
+    # Context budget is FAIL-CLOSED (STOP), not advice. An over-budget session
+    # still "works" but re-sends its whole history every turn (minutes + real
+    # money). The standing stipulation is to WATCH this, so it is a gate: the
+    # harness loop's step 1 (preflight -> fix any STOP first) now forces a
+    # handoff. (Previously advisory-only: 'WARN, never STOP', which is why a
+    # session could sail to 30x budget.)
     if [ -f "$db" ] && have sqlite3; then
         local lasttok budget over
         budget="${CONTEXT_BUDGET:-200000}"
@@ -203,7 +206,7 @@ except Exception:
             *)
                 if [ "$lasttok" -ge "$budget" ]; then
                     over=$(python3 -c 'import sys;print("%.1f"%(float(sys.argv[1])/float(sys.argv[2])))' "$lasttok" "$budget" 2>&1)
-                    warn "latest session ${over}x over budget ($lasttok/$budget in) — ./scripts/session-guard.sh, then a fresh session"
+                    crit "latest session ${over}x over budget ($lasttok/$budget in) — STOP: hand off NOW (./scripts/session-guard.sh --handoff), then a fresh session"
                 else
                     good "latest session within budget ($lasttok/$budget in)"
                 fi
