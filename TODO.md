@@ -8,6 +8,14 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **`loop-state.sh` — checkpoint the in-flight loop segment (#80).** The
+      dev loop now records its current segment durably (on `durable-run.sh`'s
+      job store, job `dev-loop`): `--begin UNIT` (unit + rev), `--end UNIT`
+      (gate green/red; `--red`), `--show`. A fresh session **resumes or skips**
+      the segment instead of re-deriving "where was I"; `next-action.sh`
+      surfaces the in-flight unit. Wired into `tools.json` + `test-tooling` +
+      `scripts/README.txt`. Gate: self-test PASS, test-tooling 16/0, lint 259/0.
+
 - [x] **`progress-review.sh` — the loop reviews itself on a timer (#79).**
       Sentinel sibling for pi-durable's other half: a 15-min sweep reads
       `next-action` and records a durable PASS row on a rev/gate advance or a

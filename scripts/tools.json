@@ -733,5 +733,17 @@
       "./scripts/progress-review.sh --self-test",
       "./scripts/progress-review-install.sh --write-only"
     ]
+  },
+  {
+    "id": "loop-state",
+    "title": "Durable dev-loop segment checkpoint",
+    "where": "container",
+    "purpose": "Checkpoint the in-flight loop segment on durable-run.sh's job store (job dev-loop): --begin records the unit + rev, --end records the gate result; --show reports the in-flight segment and the last done unit. A fresh session resumes/skips the segment instead of re-deriving it.",
+    "commands": [
+      "./scripts/loop-state.sh --begin \"unit text\"",
+      "./scripts/loop-state.sh --end \"unit text\" [--red]",
+      "./scripts/loop-state.sh --show --json",
+      "./scripts/loop-state.sh --self-test"
+    ]
   }
 ]

@@ -196,6 +196,14 @@ progress-review-install.sh
     Installs the user-level progress-review timer (bakes the repo path, enables
     via systemctl --user). Idempotent; --write-only, --uninstall, --self-test.
 
+loop-state.sh
+    Durable checkpoint of the in-flight DEV LOOP segment, on durable-run.sh's
+    job store (job `dev-loop`): --begin records the unit + rev, --end records
+    the gate result (--red for a failed gate), --show prints the in-flight
+    segment + last done. A fresh session resumes/skips the segment instead of
+    re-deriving it; next-action.sh surfaces the in-flight unit. --self-test;
+    DURABLE_JOB_DIR seam.
+
 learn-rules.py
     Contrastive corpus learning: builds (state, action, outcome) triples from
     the tool-call log and emits advisory avoid/prefer/recovery rules to

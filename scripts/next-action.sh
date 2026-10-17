@@ -128,6 +128,34 @@ try:
 except Exception:
     pass
 
+# Loop checkpoint (dev-loop job, written by loop-state.sh): the in-flight
+# segment, if any — so a fresh session resumes it instead of re-deriving it.
+loop_cur = None
+try:
+    lpath = os.path.join(repo, "data/observability/jobs", "dev-loop.jsonl")
+    begins, ended = {}, set()
+    if os.path.exists(lpath):
+        for line in open(lpath, encoding="utf-8", errors="replace"):
+            line = line.strip()
+            if not line:
+                continue
+            e = json.loads(line)
+            step = str(e.get("step", ""))
+            if step.startswith("b:") and e.get("ok"):
+                p = step.split(":")
+                if len(p) >= 2:
+                    begins[p[1]] = (p[2] if len(p) > 2 else "", e.get("ts") or 0)
+            elif step.startswith("e:") and e.get("ok"):
+                p = step.split(":")
+                if len(p) >= 2:
+                    ended.add(p[1])
+    inflight = [(s, v) for s, v in begins.items() if s not in ended]
+    if inflight:
+        s, (revv, ts) = max(inflight, key=lambda x: x[1][1])
+        loop_cur = {"unit": s, "rev": revv}
+except Exception:
+    loop_cur = None
+
 out = {
     "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "rev": head, "ahead": ahead, "dirty": dirty, "untracked": untracked,
@@ -135,6 +163,7 @@ out = {
     "docs": {"tier1_tokens": tier1, "budget": budget, "over": docs_over},
     "since_gate": {"rev": gate_rev, "commits": commits, "n_commits": len(commits), "events": events_since},
     "next": {"text": next_text, "source": next_source},
+    "loop": loop_cur,
     "blockers": blockers,
 }
 
@@ -152,6 +181,8 @@ sg = out["since_gate"]
 print("since last gate (%s): %s commit(s), %s ledger event(s)" % (sg["rev"] or "?", sg["n_commits"], sg["events"]))
 for c in commits[:5]:
     print("   " + c)
+if loop_cur:
+    print("in-flight: %s (at %s) — resume it, or loop-state.sh --end \"%s\" when green" % (loop_cur["unit"], loop_cur["rev"], loop_cur["unit"]))
 if next_text:
     print("next unit: %s" % next_text)
     print("  source:   %s" % next_source)

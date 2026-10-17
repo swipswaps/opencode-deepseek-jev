@@ -108,6 +108,11 @@ main() {
         validate_json "progress-review.sh --json" "$work/pr.json" '"decision" in d and "rev" in d and "ticks" in d and "next" in d'
     fi
 
+    if [ -x "$REPO/scripts/loop-state.sh" ]; then
+        run_json "$work/ls.json" env DURABLE_JOB_DIR="$work/jobs" bash "$REPO/scripts/loop-state.sh" --show --json
+        validate_json "loop-state.sh --show --json" "$work/ls.json" '"in_flight" in d and "last_done" in d and "n_in_flight" in d'
+    fi
+
     if [ -f "$REPO/scripts/learn-rules.py" ]; then
         run_json "$work/rules.json" python3 "$REPO/scripts/learn-rules.py" --json
         validate_json "learn-rules.py --json" "$work/rules.json" '"shapes" in d and "avoid" in d and "recovery" in d'
