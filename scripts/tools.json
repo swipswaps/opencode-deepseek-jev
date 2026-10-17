@@ -686,7 +686,8 @@
       "sudo bash scripts/locate-prune-snapshots.sh --apply",
       "sudo bash scripts/locate-prune-snapshots.sh --apply --no-updatedb",
       "bash scripts/locate-prune-snapshots.sh --self-test",
-      "sudo bash scripts/locate-prune-snapshots.sh --disable-timer"
+      "sudo bash scripts/locate-prune-snapshots.sh --disable-timer",
+      "sudo bash scripts/locate-prune-snapshots.sh --enable-timer"
     ]
   }
 ]
