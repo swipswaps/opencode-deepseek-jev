@@ -6,7 +6,7 @@ Recorded so a conflict is **identified, not rediscovered** (RULES #75). When a
 
 | port | who | notes |
 |------|-----|-------|
-| **3000** | **foreign `node` process** (`pid` varies, `*:3000`) | **Not ours.** Observed 2026-10-16: `sudo ss -ltnp 'sport = :3000'` → `users:(("node",pid=2402,fd=21))`. An unrelated node app on the host. Grafana's default 3000 collides, so `grafana-up.sh` auto-picks a free port. |
+| **3000** | **`websocket-broker` — a foreign Node daemon** (`node /usr/local/bin/websocket_broker_secure.js`, `websocket-broker.service`) | **Not ours** — it lives in another project: `/home/owner/Documents/6a071452-…/observability-platform/systemd/websocket-broker.service`. Verified 2026-10-17: `sudo ss -ltnp 'sport = :3000'` → `users:(("node",pid=2402))`. Owns 3000 permanently, so Grafana's default collides and `grafana-up.sh` auto-picks a free port. |
 | **3001** | Grafana (`opencode-grafana`) | `127.0.0.1:3001 -> 3000`; set `GF_PORT` to force another. Up: `./scripts/grafana-up.sh`. |
 | 4000 | LiteLLM proxy (opt-in) | `docker/docker-compose.litellm.yml`; not started by default. |
 | 4096 | opencode-web (TUI / JSON API) | TLS via Caddy; `401` unauthenticated by design. |

@@ -638,6 +638,12 @@ free-port.sh
     PORT (exit 0 free / 1 busy), --owner PORT (best effort), --self-test
     offline. Used by grafana-up.sh to auto-pick a port.
 
+snapshot-audit.sh
+    Is the BTRFS snapshot system costing us? (host). Read-only: root
+    mount, btrfs usage, quota/qgroups, snapper retention limits, and
+    whether locate indexes /.snapshots, then the exact tuning commands.
+    --self-test offline.
+
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings
     (read-only) on one axis against slow caddy fetches from the access

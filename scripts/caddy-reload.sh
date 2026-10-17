@@ -29,16 +29,15 @@ resolve_repo() {
 }
 
 self_test() {
-    local fail=0 s
-    s=$(cat "${BASH_SOURCE[0]}")
-    printf '%s' "$s" | grep -q 'durable-run.sh' || { printf 'FAIL: not checkpointed\n'; fail=1; }
+    local fail=0 step
+    grep -q 'durable-run.sh' "${BASH_SOURCE[0]}" || { printf 'FAIL: not checkpointed\n'; fail=1; }
     for step in validate restart verify; do
-        printf '%s' "$s" | grep -q -- "--step $step" || { printf 'FAIL: missing step %s\n' "$step"; fail=1; }
+        grep -q -- "--step $step" "${BASH_SOURCE[0]}" || { printf 'FAIL: missing step %s\n' "$step"; fail=1; }
     done
     local o
     o=$(bash "${BASH_SOURCE[0]}" --dry-run 2>&1)
-    printf '%s' "$o" | grep -q 'validate' || { printf 'FAIL: dry-run lacks validate\n'; fail=1; }
-    printf '%s' "$o" | grep -q 'restart' || { printf 'FAIL: dry-run lacks restart\n'; fail=1; }
+    case "$o" in *validate*) : ;; *) printf 'FAIL: dry-run lacks validate\n'; fail=1 ;; esac
+    case "$o" in *restart*) : ;; *) printf 'FAIL: dry-run lacks restart\n'; fail=1 ;; esac
     printf 'caddy-reload: self-test %s\n' "$([ "$fail" -eq 0 ] && printf PASS || printf FAIL)"
     return "$fail"
 }

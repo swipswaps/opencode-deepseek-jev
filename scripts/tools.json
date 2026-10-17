@@ -665,5 +665,15 @@
       "./scripts/free-port.sh --owner 3000",
       "./scripts/free-port.sh --self-test"
     ]
+  },
+  {
+    "id": "snapshot-audit",
+    "title": "Audit the BTRFS snapshot system (is it costing us?)",
+    "where": "host",
+    "purpose": "snapper-on-BTRFS root (/.snapshots/NNNN/snapshot): read-only check of retention limits, pinned CoW space, whether qgroups/quota are on, and whether locate indexes every snapshot. Prints the exact tuning commands.",
+    "commands": [
+      "bash scripts/snapshot-audit.sh",
+      "bash scripts/snapshot-audit.sh --self-test"
+    ]
   }
 ]

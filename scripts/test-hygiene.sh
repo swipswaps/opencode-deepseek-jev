@@ -376,6 +376,17 @@ main() {
         bad 'test-durable.sh present'
     fi
 
+    if [ -f "$REPO/scripts/snapshot-audit.sh" ]; then
+        if bash "$REPO/scripts/snapshot-audit.sh" --self-test > "$work/snap_st.txt" 2>&1; then
+            ok 'snapshot-audit: self-test (btrfs/snapper probes present)'
+        else
+            bad 'snapshot-audit: self-test (btrfs/snapper probes present)'
+            cat "$work/snap_st.txt"
+        fi
+    else
+        bad 'snapshot-audit.sh present'
+    fi
+
     if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
         if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
             ok 'rotate-server-password: self-test (generate + atomic rewrite)'

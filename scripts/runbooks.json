@@ -325,5 +325,19 @@
       "./scripts/grafana-up.sh --self-test"
     ],
     "note": "Provisioned: dashboard 'opencode \u2014 cost, sessions, flags' (docker/grafana/provisioning/dashboards/opencode.json) + two SQLite datasources (../datasources/sqlite.yaml). Open http://127.0.0.1:3000 (anonymous viewer, localhost). If a datasource errors, check the plugin id frser-sqlite-datasource and the jsonData path key against the installed plugin version. Port: GF_PORT (default 3000); grafana-up.sh auto-picks a free port if the default is taken and names the holder (free-port.sh --owner). Tips: port 3000 is held by a FOREIGN node process (pid varies) -- see docs/known-ports.md; grafana-up auto-picks the next free port. If the host port does not answer but the container is healthy, check 'docker port opencode-grafana'."
+  },
+  {
+    "id": "host-snapshots",
+    "title": "Audit the BTRFS snapshot system (is it costing us?)",
+    "purpose": "snapper-on-BTRFS root (/.snapshots/NNNN/snapshot): check retention limits, space pinned by CoW, whether qgroups/quota are enabled, and whether locate indexes every snapshot. Read-only; prints the tuning commands.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "bash scripts/snapshot-audit.sh",
+      "sudo snapper list | tail -n +3 | wc -l",
+      "sudo btrfs quota status /",
+      "grep -E '^(PRUNEPATHS|PRUNEFS)' /etc/updatedb.conf"
+    ],
+    "note": "Snapshots do not slow the OS by existing, but three costs are real: (1) locate/updatedb indexing /.snapshots bloats mlocate.db and is slow on a USB-HDD root -- add /.snapshots to PRUNEPATHS, then sudo updatedb; (2) CoW snapshots pin old blocks and fragment writes; (3) BTRFS qgroups (btrfs quota) are a known snapper drag -- sudo btrfs quota disable / removes it. Cap retention: sudo snapper -c root set-config TIMELINE_LIMIT_HOURLY=6 TIMELINE_LIMIT_DAILY=7 TIMELINE_LIMIT_WEEKLY=4 TIMELINE_LIMIT_MONTHLY=2 TIMELINE_LIMIT_YEARLY=0, NUMBER_LIMIT=20, then sudo snapper -c root cleanup number. Keep btrfs balance rare on a USB HDD. Note: the host lockup was CPU starvation, not disk."
   }
 ]
