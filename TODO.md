@@ -8,6 +8,16 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **triage de-dup by condition, not text (kills the 130-alert cry-wolf).**
+      The live T8 proof showed **130 distinct alerts from 200 ledger rows**,
+      nearly all `slow_fetch` to `GET /provider` — each row differs only in
+      `slowest`, so the `(kind, resource, detail)` key never collapsed them.
+      `summarize()` now keys `slow_fetch` by **URI** and `tunnel_flap` by
+      resource; a merged `slow_fetch` row reports the **max** slowest (e.g.
+      `97 slow-fetch row(s) to GET /provider (slowest 93.0s)`). Live: **130 → 35
+      distinct**. Self-test asserts the URI grouping. Gate: lint 264/0,
+      hygiene 58/0 (via `test-durable`).
+
 - [x] **Sentinel T8 — peer-tunnel flap detector (NEBULA-1 follow-up).** The
       recurring event is a tunnel, not a restart, so sentinel now trips on it:
       **T8** counts teardown/re-handshake/`state:dead` events for the nebula

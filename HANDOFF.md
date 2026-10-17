@@ -34,6 +34,10 @@
 > (`>= SENTINEL_TUNNEL_MIN` teardown/re-handshake events for the nebula unit;
 > stable key → the existing notify sink + `triage-alerts.py` `tunnel_flap` kind
 > → runbook `tunnel-flap`). Watch closure without a human in the loop.
+> **Proven live:** T8 → ledger → triage showed `tunnel_flap … lighthouse-01`;
+> and that run exposed a cry-wolf — **130 distinct alerts from 200 rows** — so
+> `triage-alerts.py` now de-dupes `slow_fetch` **by URI** (max slowest) and
+> `tunnel_flap` by resource: **130 → 35 distinct**.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard

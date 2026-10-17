@@ -137,23 +137,46 @@ def read_ledger(path, limit):
 
 
 def summarize(recs):
-    """recs: iterable of (resource, detail, ts). Dedupe by (resource, detail)."""
+    """recs: iterable of (resource, detail, ts). Dedupe by a stable identity.
+
+    The identity must be the *condition*, not the exact text: a chronic
+    slow-fetch to one endpoint repeats with a slightly different `slowest` each
+    time, so keying on `detail` never collapses it (the live 2026-10-17 ledger:
+    130 distinct alerts from 200 rows, nearly all GET /provider). So
+    slow_fetch groups by URI and tunnel_flap by resource; everything else keeps
+    the full (kind, resource, detail) identity.
+    """
     groups = {}
     for resource, detail, ts in recs:
         kind, sev, extra = classify(resource, detail)
         m = re.search(r"\((GET [^)]+|/[^)]*)\)", detail)
         if m:
             extra["uri"] = m.group(1)
-        key = (kind, resource, detail)
+        if kind == "slow_fetch" and extra.get("uri"):
+            key = (kind, extra["uri"])
+        elif kind == "tunnel_flap":
+            key = (kind, resource)
+        else:
+            key = (kind, resource, detail)
         g = groups.setdefault(key, {"kind": kind, "sev": sev, "resource": resource,
                                     "detail": detail, "extra": extra,
                                     "count": 0, "first": ts, "last": ts})
         g["count"] += 1
+        if kind == "slow_fetch":
+            mm = re.search(r"slowest ([\d.]+)s", detail)
+            if mm:
+                g["extra"]["slowest_max"] = max(g["extra"].get("slowest_max", 0.0),
+                                                float(mm.group(1)))
         if ts and (not g["first"] or ts < g["first"]):
             g["first"] = ts
         if ts and (not g["last"] or ts > g["last"]):
             g["last"] = ts
     out = list(groups.values())
+    # A merged slow_fetch row keeps the worst case, not the first row's seconds.
+    for g in out:
+        if g["kind"] == "slow_fetch":
+            g["detail"] = "%d slow-fetch row(s) to %s (slowest %.1fs)" % (
+                g["count"], g["extra"].get("uri", "?"), g["extra"].get("slowest_max", 0.0))
     out.sort(key=lambda g: (SEV.get(g["sev"], 3), -g["count"], g["kind"]))
     return out
 
@@ -211,6 +234,18 @@ def self_test():
         print("FAIL: tunnel_flap classify (%r)" % tf); fail = 1
     if not any(r.get("id") == "tunnel-flap" for r in load_runbooks("scripts/runbooks.json")):
         print("FAIL: tunnel-flap runbook missing"); fail = 1
+    # chronic slow-fetch de-dupes by URI, not by the varying `slowest` seconds
+    # (the live 2026-10-17 ledger: 130 distinct alerts, nearly all GET /provider).
+    sf = summarize([
+        ("caddy access log", "slow fetches x7, slowest 29.2s (GET /provider)", "t1"),
+        ("caddy access log", "slow fetches x8, slowest 137.0s (GET /provider)", "t2"),
+        ("caddy access log", "slow fetches x5, slowest 30.0s (GET /api/cost)", "t3"),
+    ])
+    sfp = [g for g in sf if g["extra"].get("uri") == "GET /provider"]
+    if len(sf) != 2 or not sfp or sfp[0]["count"] != 2:
+        print("FAIL: slow_fetch not grouped by uri (%r)"
+              % [(g["kind"], g["extra"].get("uri"), g["count"]) for g in sf])
+        fail = 1
     # empty sink
     if "clean" not in render(summarize([]), [], None):
         print("FAIL: empty not clean"); fail = 1
