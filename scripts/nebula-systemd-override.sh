@@ -216,6 +216,7 @@ main() {
 
     if [ "$REVERT" -eq 1 ]; then
         remove_file "$DROPIN" || return 1
+        printf 'note: a running unit keeps its current cgroup limits until it next starts (revert does not restart it).\n'
         [ "$NO_RELOAD" -eq 1 ] || reload_unit
         return 0
     fi
