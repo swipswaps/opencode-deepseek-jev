@@ -191,11 +191,13 @@ models.sh / models.py
     verdict; nothing hard-codes a single model name.
 
 doc-budget.sh
-    Measure the read-first doc corpus (RULES, TODO, README, HANDOFF, DESIGN,
-    scripts/README, skills) in tokens (~bytes/4), compare to DOC_BUDGET_TOKENS
-    (default 35000), and record a content hash + sizes to
-    data/observability/docs.json (an unchanged hash means nothing new to
-    re-learn). --json; --fail exits 1 when over budget.
+    Measure the agent-facing doc corpus in tokens (~bytes/4), split by ACTUAL
+    session-start cost: TIER 1 (budgeted) = HANDOFF/RULES/TODO + skills/*/SKILL.md
+    (what the jev-harness skill tells a fresh session to read); TIER 2 (reported
+    only) = README/DESIGN/scripts/README (on-demand reference). Budget =
+    DOC_BUDGET_TOKENS (default 35000) on tier 1 only. Records a content hash +
+    sizes to data/observability/docs.json. --json; --fail exits 1 when tier 1 is
+    over budget; --self-test offline (DOC_BUDGET_REPO is the test seam).
 
 test-tooling.sh
     Contract test for the tooling's machine interfaces: proves every tool that

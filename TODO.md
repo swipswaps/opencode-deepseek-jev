@@ -8,6 +8,14 @@ Last updated: 2026-10-17
 
 ## Done (most recent first)
 
+- [x] **Doc-budget tiering (#77) + doc trim.** `doc-budget.sh` now charges only
+      the session-start set (HANDOFF/RULES/TODO + `skills/*`) to the budget and
+      **reports** README/DESIGN/scripts-README as on-demand — the WARN was
+      permanently red by scoping, not just size (cry-wolf). Trimmed
+      `scripts/README.txt` (−21%), archived TODO's old Done to
+      `docs/todo-archive-2026.md`, condensed README history/references. Tier-1
+      ~31.4k < 35k (was ~65k total). +`--self-test`; gate: lint 251/0.
+
 - [x] **Queue reconciliation (2026-10-17, fresh session).** Re-audited the
       handoff brief against live state: every `scripts/sentinel.sh` change prior
       sessions suggested is applied and pushed — T4 `SENTINEL_ACCESSLOG` guard
