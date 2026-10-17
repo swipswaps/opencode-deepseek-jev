@@ -4,9 +4,23 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-16
+Last updated: 2026-10-17
 
 ## Done (most recent first)
+
+- [x] **Queue reconciliation (2026-10-17, fresh session).** Re-audited the
+      handoff brief against live state: every `scripts/sentinel.sh` change prior
+      sessions suggested is applied and pushed — T4 `SENTINEL_ACCESSLOG` guard
+      (`have docker || [ -n "$SENTINEL_ACCESSLOG" ]`), T5 non-latest denied, T6
+      non-latest over-budget, T7 stalled tool, and the stable per-incident
+      ledger key — and the deduced option (`preflight` budget watch) is now a
+      **hard STOP** (#76). Closed the stale **Telemetry-console `[~]`**:
+      clickable **Gantt** (`GANTT_WIRED` + `drill()`) and the **Flags panel**
+      (`#flags-card` = bottlenecks · cost · slowdowns · stalls, click-to-drill
+      via `data-go`) are shipped; residual plan items (3) drill-down on the
+      remaining sections and (4) Grafana+SQLite (host) remain. Evidence:
+      `ffind --self-test` PASS · `quirks --self-test` PASS · `preflight` READY
+      · lint 251/0 · `ahead=0`.
 
 - [x] **Durable pass (pi-durable): checkpoint · rebuild · attach.** Three mechanisms
       the *Pi Durable* post names, now scripts with self-tests. (1)
@@ -206,7 +220,7 @@ Last updated: 2026-10-16
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
-- [~] **Telemetry-console upgrade** (deduced from the DB's own frequency:
+- [x] **Telemetry-console upgrade** (deduced from the DB's own frequency:
       `ux 66 / telemetry 60 / dashboard 54 / cost 27 / drill 15 / slow 15 /
       flag 14`). Doctrine codified as **RULE #67** +
       `.opencode/skills/telemetry-dashboard/SKILL.md` (declarative + DB-driven +
@@ -219,8 +233,11 @@ Last updated: 2026-10-16
       heavy reads off the event loop) — `/api/board` now computes in the worker
       (ported `apiBoardFresh` into `query-lib.mjs` + `query-worker.mjs`,
       `asyncCached` + inline fallback). Proof: `/` stayed ~10 ms during the cold
-      board compute; api/board shape PASS. Next in this plan: **(1) clickable
-      Gantt**, then the flagged panel.
+      board compute; api/board shape PASS. **Shipped (2026-10-17 audit):**
+      clickable **Gantt** → session timeline (`GANTT_WIRED` + the `drill()`
+      listener) and the **Flags panel** (`#flags-card` — bottlenecks · cost ·
+      slowdowns · stalls, each example click-to-drill via `data-go`). Residual:
+      (3) drill-down on the remaining sections, (4) Grafana+SQLite offer (host).
 
 - **Guard runtime was silently inert (root-caused + fixed).** Web sessions boot
   at `$HOME/.opencode`, so the project-scoped `{plugin,plugins}/*.{ts,js}` glob
