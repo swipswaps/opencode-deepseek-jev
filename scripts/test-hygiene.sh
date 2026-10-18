@@ -191,6 +191,17 @@ main() {
         fi
     fi
 
+    if have node && [ -f "$REPO/scripts/rerank.mjs" ]; then
+        if node --experimental-sqlite "$REPO/scripts/rerank.mjs" --self-test > "$work/rr_st.txt" 2>&1; then
+            ok 'rerank: self-test (local embed + redaction-mandatory external + FTS5 pull + caps)'
+        else
+            bad 'rerank: self-test (local embed + redaction-mandatory external + FTS5 pull + caps)'
+            cat "$work/rr_st.txt"
+        fi
+    else
+        bad 'rerank.mjs present + node'
+    fi
+
     # Regression: the web UI creates sessions rooted at $HOME/.opencode, not
     # /workspace, so the project-scoped plugin glob misses the guard. The
     # entrypoint must link it into the GLOBAL plugin dir. Assert the wiring is

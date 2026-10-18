@@ -207,6 +207,7 @@ is its own segment); TTLs (`HEALTH_TTL_MS`, `POLL_TTL_MS`, …) are the knobs.
 | `test-dashboard-ui.mjs` | headless DOM execution of the served page script; asserts panes populate (no browser) |
 | `cost-bottlenecks.sh [--top N]` | rank cost drivers: $/1k-input, top sessions by cost/context, tiny-session overhead, per model |
 | `semantic-search.sh [--rebuild] [--fuzzy] <q>` | ranked FTS5/bm25 search across sessions; persistent index at `data/search/`; dashboard serves the same index in memory via `query-worker.mjs` (`/api/semantic`); `--fuzzy` = typo tolerance |
+| `rerank.mjs --query Q (--fts IDX | --docs FILE\|-) [--limit N] [--json]` | rerank FTS5/bm25 candidates by **embedding cosine** — the semantic step over lexical search. **Offline by default** (deterministic hashing embedder); the external path refuses unless `RERANK_ALLOW=1`, redacts every text via `redact.mjs` **before egress**, and enforces `RERANK_MAX_TEXTS`/`RERANK_MAX_REQUESTS` (over cap = refusal). `--self-test` |
 | `fuzzy-search.py <q>` | tokenize + exact hits + `difflib` near-matches over the on-disk index; `edti` finds `edit`; `--limit N`, `--json`, `--self-test` |
 | `ocr-image.sh <img> [lang]` / `ocr-tesseractjs.mjs` | local OCR (tesseract CLI / tesseract.js / PaddleOCR); downscales oversized images; persists to `data/observability/ocr_run`, surfaced at `/api/ocr`, searchable via `/api/semantic` |
 | `lint.sh` | static gate: `bash -n`, `shellcheck` (parallel), `node --check`, `py_compile`, `scan-constraints.py`, RULES grep; prints `ms=` per check and names the slowest |

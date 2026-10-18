@@ -8,6 +8,19 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Embeddings rerank over FTS5 (`scripts/rerank.mjs`) — 2026-10-18.** The
+      semantic step over lexical search, with the three standing constraints
+      baked in: (1) **offline by default** — a deterministic, dependency-free
+      hashing embedder (word unigrams+bigrams, L2-normalised), no model/key;
+      (2) **redaction is mandatory** on the external path (every text through
+      `redact.mjs` *before* egress — proven: a live-looking `sk-…` becomes
+      `[REDACTED]` in the request body); (3) a **hard cap** (`RERANK_MAX_TEXTS`
+      per call, `RERANK_MAX_REQUESTS` per process — over cap is a **refusal**,
+      not a truncation) *and* an explicit `RERANK_ALLOW=1` gate (an agent never
+      auto-spends). `--fts data/search/opencode-index.db` pulls bm25 candidates
+      straight from the FTS5 index and reranks; `--docs FILE|-` takes JSONL.
+      Wired into test-hygiene. Self-test 14/0.
+
 - [x] **Per-model adaptation (not just the ledger) — 2026-10-18.** `quirks.mjs`
       gains `adaptModel(ledgerRow)`: the measured per-model ledger (tool-error
       rate, blacklist-construct usage) becomes a thresholded verdict
@@ -233,8 +246,11 @@ Last updated: 2026-10-18
   guide embedding 7 docs/ux shots (Playwright-captured, <=100KB);
   whitelist/corpus/registry refs updated. Gates: lint 110, hygiene
   37, dashboard 116, ux-test 26/0.
-- [ ] G5: Laya self-host (cuts Jev only, ~11 calls); embeddings rerank over FTS5
-      + redaction + hard request cap
+- [ ] G5: Laya self-host (cuts Jev only, ~11 calls). **Embeddings rerank over
+      FTS5 shipped 2026-10-18** (`scripts/rerank.mjs`: offline by default,
+      redaction-mandatory external path, hard caps) — remaining: point it at a
+      real embedder provider (Laya/OpenAI-compatible) and wire into
+      `/api/semantic`.
 - [ ] G6: run `doctor.sh --full` from a host
 - [ ] G7: Blockly (vendored) rule/runbook authoring; n8n scheduled jobs (host)
 

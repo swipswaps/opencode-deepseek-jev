@@ -57,6 +57,17 @@ semantic-search.sh
     commands; index at data/search/opencode-index.db (gitignored). --rebuild,
     --limit N, --fuzzy (delegates to fuzzy-search.py).
 
+rerank.mjs
+    Rerank FTS5/bm25 candidates by embedding cosine -- the missing semantic
+    step over lexical search. OFFLINE by default: a deterministic, dependency-
+    free hashing embedder (word unigrams + bigrams, L2-normalised). The
+    external path is gated: it refuses unless RERANK_ALLOW=1, passes every text
+    through redact.mjs BEFORE egress (mandatory), and obeys RERANK_MAX_TEXTS /
+    RERANK_MAX_REQUESTS (over cap = refusal, not truncation). --query Q with
+    --fts data/search/opencode-index.db (pulls candidates from the FTS5 index)
+    or --docs FILE|- (JSONL {id,text}); --limit N, --json, --self-test. No
+    model call on the default path.
+
 fuzzy-search.py
     Typo-tolerant search over the on-disk index: exact hits + near-matches
     (diflib) ranked, so "edti" still finds "edit". Free, local, read-only,

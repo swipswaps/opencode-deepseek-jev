@@ -773,5 +773,16 @@
       "./scripts/loop-state.sh --show --json",
       "./scripts/loop-state.sh --self-test"
     ]
+  },
+  {
+    "id": "rerank",
+    "title": "Embeddings rerank over FTS5 (redaction + hard cap)",
+    "where": "container",
+    "purpose": "Rerank bm25 candidates by embedding cosine. OFFLINE by default (deterministic hashing embedder); the external path refuses unless RERANK_ALLOW=1, passes every text through redact.mjs first, and obeys RERANK_MAX_TEXTS / RERANK_MAX_REQUESTS (over cap = refusal, not truncation). --fts pulls candidates straight from the semantic-search index.",
+    "commands": [
+      "node scripts/rerank.mjs --query \"blank output\" --fts data/search/opencode-index.db --json",
+      "printf '%s\\n' '{\"id\":\"a\",\"text\":\"...\"}' | node scripts/rerank.mjs --query Q --docs -",
+      "node scripts/rerank.mjs --self-test"
+    ]
   }
 ]
