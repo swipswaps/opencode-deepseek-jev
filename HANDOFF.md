@@ -791,3 +791,12 @@ agent-directed "read this, then do X" block here trips `jev-guard`'s injection
 detector, p≈0.94).
 
 
+
+> **PIN 2026-10-18 (session `ses_eb04be01…`):** shipped the script **catalog
+> completion + coverage gate** (`25a0576`: 30 uncatalogued scripts documented,
+> tools.json 72→102, `test-hygiene.sh` fails closed on an undocumented tracked
+> script) and **rule #83** (bounded decision menu) + TODO **§E** durable-agent
+> gaps (`268f316`). Both pushed. The session then crossed the hard budget
+> (1.17× / 233k in) → `preflight.sh` STOP → scripted handoff; **start fresh**.
+> Next: TUNNEL-1's fix is external (#5, T8 watch live); local queue otherwise
+> exhausted — sections C/E remain. `gh` is absent in-container (E2).
