@@ -8,6 +8,15 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **RULES #54: runbook/tool script targets must be git-tracked — 2026-10-18.**
+      `runbooks.json` told you to run `./scripts/archive/one-shot/rotate-api-keys.sh`
+      and `.../verify-password-drift.sh` — **untracked** files (absent on a fresh
+      clone); the canonical scripts live at `./scripts/`. Repointed all three
+      commands. Added a **falsifiable** guard to `test-dashboard.sh`: every
+      `./scripts/...` named in `runbooks.json`/`tools.json` must pass
+      `git ls-files --error-unmatch` (a SKIP, never a PASS, outside a git
+      worktree). Gate: test-dashboard 121/0, lint 264/0.
+
 - [x] **`ensure-env.sh` password-regen review — 2026-10-18.** Re-verified the
       regen invariants (behavior test now 19/19: no-op / warn / rotate /
       preserve). Two gaps fixed: a standalone `--rotate` now prints *"restart the

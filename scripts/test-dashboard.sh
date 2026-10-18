@@ -247,6 +247,54 @@ PY
         bad 'runbooks payload valid'
         cat "$work/rbcheck.txt"
     fi
+
+    # RULES #54: every ./scripts/... a runbook or tool tells you to run must be
+    # git-TRACKED, not merely present — an untracked helper is absent on a fresh
+    # clone, so the command fails where it matters (this is how rotate-password
+    # once pointed at scripts/archive/one-shot/ while the canonical script was
+    # only at scripts/). SKIP (no git) is reported, never silently a pass.
+    if command -v git > /dev/null && git -C "$REPO" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        python3 - "$REPO/scripts/runbooks.json" "$REPO/scripts/tools.json" > "$work/refpaths.txt" <<'PY'
+import json, re, sys
+pat = re.compile(r'\./scripts/[A-Za-z0-9_./-]+')
+seen = {}
+for path in sys.argv[1:]:
+    try:
+        d = json.load(open(path))
+    except Exception:
+        continue
+    items = d if isinstance(d, list) else d.get("runbooks", d.get("tools", []))
+    for it in items:
+        blobs = []
+        for k in ("commands", "command", "cmd"):
+            v = it.get(k)
+            if isinstance(v, str):
+                blobs.append(v)
+            elif isinstance(v, list):
+                blobs += [x for x in v if isinstance(x, str)]
+        for b in blobs:
+            for m in pat.findall(b):
+                seen.setdefault(m, path.split("/")[-1])
+for p in sorted(seen):
+    print(p)
+PY
+        local ref_ok=1 refp=""
+        while IFS= read -r refp; do
+            [ -n "$refp" ] || continue
+            if ! git -C "$REPO" ls-files --error-unmatch "${refp#./}" > /dev/null 2>&1; then
+                printf '  - untracked target: %s\n' "$refp"
+                ref_ok=0
+            fi
+        done < "$work/refpaths.txt"
+        if [ "$ref_ok" -eq 1 ]; then
+            ok 'runbook/tool script targets are git-tracked (RULES #54)'
+        else
+            bad 'runbook/tool script targets are git-tracked (RULES #54)'
+        fi
+    else
+        printf 'ts=%s level=WARN status=SKIP runbook/tool target tracking (no git worktree)\n' "$(date -u +%H:%M:%S)"
+    fi
+
     local rb_exp=""
     if [ -f "$REPO/scripts/runbooks.json" ]; then
         rb_exp=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$REPO/scripts/runbooks.json")

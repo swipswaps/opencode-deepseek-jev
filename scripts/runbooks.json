@@ -21,7 +21,7 @@
     "commands": [
       "./scripts/ensure-env.sh --rotate",
       "./scripts/web.sh",
-      "./scripts/archive/one-shot/verify-password-drift.sh"
+      "./scripts/verify-password-drift.sh"
     ],
     "note": "Scripted: ensure-env.sh --rotate regenerates OPENCODE_SERVER_PASSWORD (atomic write, mode 0600, one backup, prints the new value once with a PASSWORD_ROTATED marker). Then ./scripts/web.sh recreates the stack so the container picks it up -- a running container keeps the OLD password until restarted (the previous password stops working). Verify with verify-password-drift.sh."
   },
@@ -56,8 +56,8 @@
     "where": "host",
     "manual": true,
     "commands": [
-      "./scripts/archive/one-shot/rotate-api-keys.sh",
-      "./scripts/archive/one-shot/verify-password-drift.sh"
+      "./scripts/rotate-api-keys.sh",
+      "./scripts/verify-password-drift.sh"
     ],
     "note": "Manual: completes browser steps at platform.deepseek.com and console.typesafe.ai, then writes .env.local and recreates the container."
   },

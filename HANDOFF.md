@@ -47,8 +47,12 @@
 > a standalone `--rotate` now says to restart the stack (a running container
 > keeps the OLD password until restarted), and runbook `rotate-password` uses
 > the tested scripted path (`--rotate` → `web.sh`) instead of a manual paste.
-> Segment A is now fully done. Nothing else changed: TUNNEL-1's fix stays
-> external (#5), T8 watch live.
+> (4) RULES #54 fix: `runbooks.json` referenced **untracked** copies under
+> `scripts/archive/one-shot/` (absent on a fresh clone) — repointed to the
+> canonical tracked `./scripts/` paths, and `test-dashboard.sh` now asserts
+> every runbook/tool `./scripts/...` target is **git-tracked** (falsifiable;
+> SKIP outside a worktree). Segment A is now fully done. Nothing else changed:
+> TUNNEL-1's fix stays external (#5), T8 watch live.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
