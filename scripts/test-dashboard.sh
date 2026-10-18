@@ -256,7 +256,9 @@ PY
     if command -v git > /dev/null && git -C "$REPO" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         python3 - "$REPO/scripts/runbooks.json" "$REPO/scripts/tools.json" > "$work/refpaths.txt" <<'PY'
 import json, re, sys
-pat = re.compile(r'\./scripts/[A-Za-z0-9_./-]+')
+# Match both './scripts/x.sh' and 'bash scripts/x.sh' forms (the latter was
+# missed by an earlier './'-only pattern).
+pat = re.compile(r'scripts/[A-Za-z0-9_./-]+\.(?:sh|py|mjs)')
 seen = {}
 for path in sys.argv[1:]:
     try:

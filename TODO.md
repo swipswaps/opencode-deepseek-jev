@@ -8,6 +8,15 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Host runbooks verified + RULES #54 gate broadened — 2026-10-18.** Audited
+      every host (`where=host`) runbook (G4 litellm, G5 laya, G6 doctor --full,
+      G7 grafana / adopt-durable-pi / host-*): **all 87** `scripts/*.{sh,py,mjs}`
+      targets they name exist and are **tracked** (0 bad). The RULES #54 gate
+      matched only the `./scripts/` form — broadened it to also catch
+      `bash scripts/…` / `python3 scripts/…` (the old pattern would have missed
+      `bash scripts/snapshot-audit.sh`). The remaining G4–G7 steps stay
+      host-bound (no docker/systemd in-sandbox). Gate: dashboard 121/0.
+
 - [x] **Embeddings rerank over FTS5 (`scripts/rerank.mjs`) — 2026-10-18.** The
       semantic step over lexical search, with the three standing constraints
       baked in: (1) **offline by default** — a deterministic, dependency-free
