@@ -118,7 +118,12 @@ self_test() {
         || { printf 'FAIL red gate end\n'; fail=1; }
     o=$(DURABLE_JOB_DIR="$work" bash "$SELF" --show 2>&1)
     printf '%s' "$o" | grep -q 'last done: second-unit \[red\]' || { printf 'FAIL text show\n'; fail=1; }
-    rm -f "$work/dev-loop.jsonl"
+    # E3: a second LIVE session cannot begin while the lease is held.
+    LOOP_LOCK_ACTOR=live1 DURABLE_JOB_DIR="$work" bash "$SELF" --begin "Locked unit" > /dev/null 2>&1
+    LOOP_LOCK_ACTOR=live2 DURABLE_JOB_DIR="$work" bash "$SELF" --begin "Other session" > /dev/null 2>&1
+    [ "$?" -eq 3 ] || { printf 'FAIL concurrent begin not refused (rc=%s)\n' "$?"; fail=1; }
+    LOOP_LOCK_ACTOR=live1 DURABLE_JOB_DIR="$work" bash "$SELF" --end "Locked unit" > /dev/null 2>&1
+    rm -f "$work/dev-loop.jsonl" "$work/dev-loop.lock" "$work/dev-loop.lock.flock"
     rmdir "$work"
     if [ "$fail" -eq 0 ]; then printf 'loop-state: self-test PASS\n'; else printf 'loop-state: self-test FAIL\n'; fi
     return "$fail"
@@ -154,7 +159,15 @@ main() {
     case "$MODE" in
         begin)
             [ -n "$UNIT" ] || { printf 'need a unit text\n'; return 2; }
-            local rev slugid
+            local rev slugid LOCK acquired
+            LOCK="${LOOP_LOCK_FILE:-$JOB_DIR/dev-loop.lock}"
+            # E3: only one live session may own the dev loop. A busy lease
+            # refuses the begin (never silently clobbers another's segment).
+            if ! acquired=$(LOOP_LOCK_FILE="$LOCK" bash "$REPO/scripts/loop-lock.sh" --acquire --unit "$UNIT" 2>&1); then
+                printf '%s\n' "$acquired"
+                printf 'loop-state: refused — dev loop is locked by another live session\n'
+                return 3
+            fi
             rev=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
             slugid=$(slug "$UNIT")
             DURABLE_JOB_DIR="$JOB_DIR" bash "$DUR" --job dev-loop --step "b:$slugid:$rev" -- true > /dev/null 2>&1 || true
@@ -162,7 +175,9 @@ main() {
             ;;
         end)
             [ -n "$UNIT" ] || { printf 'need a unit text\n'; return 2; }
-            local gate slugid2
+            local gate slugid2 LOCK2
+            LOCK2="${LOOP_LOCK_FILE:-$JOB_DIR/dev-loop.lock}"
+            LOOP_LOCK_FILE="$LOCK2" bash "$REPO/scripts/loop-lock.sh" --release > /dev/null 2>&1 || true
             gate="green"; [ "$RED" -eq 1 ] && gate="red"
             slugid2=$(slug "$UNIT")
             DURABLE_JOB_DIR="$JOB_DIR" bash "$DUR" --job dev-loop --step "e:$slugid2:$gate" -- true > /dev/null 2>&1 || true

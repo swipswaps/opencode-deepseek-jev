@@ -243,8 +243,20 @@ loop-state.sh
     job store (job `dev-loop`): --begin records the unit + rev, --end records
     the gate result (--red for a failed gate), --show prints the in-flight
     segment + last done. A fresh session resumes/skips the segment instead of
-    re-deriving it; next-action.sh surfaces the in-flight unit. --self-test;
-    DURABLE_JOB_DIR seam.
+    re-deriving it; next-action.sh surfaces the in-flight unit. --begin also
+    takes the E3 single-writer lease (loop-lock.sh); --end releases it.
+    --self-test; DURABLE_JOB_DIR seam.
+
+loop-lock.sh
+    E3 single-writer lease for the dev loop: "one process owns storage; clients
+    attach". --acquire [--unit U] [--force] takes a TTL lease (default 1800s),
+    actor-tagged; --refresh bumps it; --release frees it; --status [--json]
+    reports the holder; --check exits 3 when another LIVE holder owns it. A dead
+    holder is reclaimed by TTL, never by replaying history; a takeover is
+    explicit (--force). The critical section is flock-serialised and the file is
+    written atomically, so two sessions can never both acquire. loop-state.sh
+    --begin requires it and refuses a busy loop; next-action.sh surfaces the
+    holder + blocks. --self-test; LOOP_LOCK_FILE/ACTOR/TTL/ NOW seams.
 
 learn-rules.py
     Contrastive corpus learning: builds (state, action, outcome) triples from

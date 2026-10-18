@@ -50,7 +50,7 @@ report() {
     NA_UNTRACKED="$UNTRACKED" NA_COMMITS="$COMMITS" NA_JSON="$JSON" \
     LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" \
     python3 - <<'PY'
-import json, os, sqlite3, datetime, re
+import json, os, sqlite3, datetime, re, time
 
 repo = os.environ["NEXT_ACTION_REPO"]
 head = os.environ.get("NA_HEAD", "?")
@@ -127,6 +127,21 @@ if db and os.path.exists(db):
     except Exception:
         pass
 
+# Dev-loop lease (E3): the single-writer lock loop-state.sh acquires on --begin.
+# A live holder is a hard blocker for beginning a segment (another session owns
+# the loop); a stale lease is no blocker (it is reclaimable).
+lock = None
+try:
+    lk = load(os.path.join(repo, "data/observability/dev-loop.lock"))
+    if lk:
+        ttl = int(os.environ.get("LOOP_LOCK_TTL", "1800") or 1800)
+        age = int(time.time()) - int(lk.get("ts_epoch", 0))
+        lock = {"actor": lk.get("actor"), "host": lk.get("host"),
+                "unit": lk.get("unit"), "age_s": age, "ttl": ttl,
+                "live": age <= ttl}
+except Exception:
+    lock = None
+
 tier1 = docs.get("tier1_tokens")
 budget = docs.get("budget")
 docs_over = bool(tier1 is not None and budget and tier1 > budget)
@@ -146,6 +161,9 @@ try:
         blockers.append("%s uncommitted change(s)" % dirty)
 except Exception:
     pass
+if lock and lock.get("live"):
+    blockers.append("dev loop locked by %s (unit=%s, %ss) — do not begin a segment; loop-lock.sh --force to take over"
+                    % (lock.get("actor"), lock.get("unit") or "-", lock.get("age_s")))
 
 # Loop checkpoint (dev-loop job, written by loop-state.sh): the in-flight
 # segment, if any — so a fresh session resumes it instead of re-deriving it.
@@ -184,6 +202,7 @@ out = {
     "next": {"text": next_text, "source": next_source},
     "loop": loop_cur,
     "external": external,
+    "lock": lock,
     "blockers": blockers,
 }
 
@@ -211,6 +230,10 @@ else:
 if external:
     print("external: %d open issue(s) — %s" % (len(external), ", ".join(
         "%s [%s]" % (e["resource"], e["state"]) for e in external)))
+if lock:
+    print("lock:      %s (%s, unit=%s, %ss, %s)" % (
+        lock.get("actor"), lock.get("host"), lock.get("unit") or "-",
+        lock.get("age_s"), "live" if lock.get("live") else "stale"))
 if blockers:
     print("blockers:")
     for b in blockers:

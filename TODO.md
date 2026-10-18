@@ -8,6 +8,21 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **E3 concurrency lock (`scripts/loop-lock.sh`) — 2026-10-18.** The dev
+      loop has several shared writers (`TODO.md`, `HANDOFF.md`, the `dev-loop`
+      checkpoint, the ledger) and no merge key, so two **live** sessions could
+      both claim a segment and clobber each other. New `loop-lock.sh`: a TTL
+      lease (default 1800s), **actor-tagged**, with explicit stale + `--force`
+      takeover; acquire/refresh/release/status/check. The critical section is
+      `flock`-serialised and the file written atomically, so two sessions can
+      never both acquire; a dead holder is reclaimed by **TTL**, never by
+      replaying history (durable = crash-safe, not exactly-once). Wired:
+      `loop-state.sh --begin` requires the lease and **refuses a busy loop**
+      (rc 3), `--end` releases it; `next-action.sh` surfaces the holder (text
+      `lock:` + JSON `lock`) and blocks. Gated in `test-durable.sh` (+2 → 10/0).
+      New **RULE #85**. Gate: lint 266/0 · hygiene 61/0 · durable 10/0 ·
+      patterns 6/0.
+
 - [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
       `capabilities.json` declared 15 capabilities but **9 of its own
       `registration` markers had drifted** (`name.sh --self-test` vs the file's
@@ -97,80 +112,6 @@ Last updated: 2026-10-18
       (never guesses the side). Works off the existing `GET /session/status`
       adjudication — no new network on the default path. Self-test +3 → PASS.
 
-- [x] **RULES #54: runbook/tool script targets must be git-tracked — 2026-10-18.**
-      `runbooks.json` told you to run `./scripts/archive/one-shot/rotate-api-keys.sh`
-      and `.../verify-password-drift.sh` — **untracked** files (absent on a fresh
-      clone); the canonical scripts live at `./scripts/`. Repointed all three
-      commands. Added a **falsifiable** guard to `test-dashboard.sh`: every
-      `./scripts/...` named in `runbooks.json`/`tools.json` must pass
-      `git ls-files --error-unmatch` (a SKIP, never a PASS, outside a git
-      worktree). Gate: test-dashboard 121/0, lint 264/0.
-
-- [x] **`ensure-env.sh` password-regen review — 2026-10-18.** Re-verified the
-      regen invariants (behavior test now 19/19: no-op / warn / rotate /
-      preserve). Two gaps fixed: a standalone `--rotate` now prints *"restart the
-      stack to apply it"* (a running container keeps the OLD password until
-      restarted), and the `rotate-password` runbook now uses the tested scripted
-      path (`./scripts/ensure-env.sh --rotate` → `./scripts/web.sh`) instead of a
-      manual paste. Gate: lint 264/0, test-hygiene 58/0, test-dashboard 120/0.
-
-- [x] **`quirks` precision: word-boundary the loose regexes — 2026-10-18.** The
-      `matchIssues()` regexes for `#50434` (`import`), `#37339` (`black`) and
-      `#51614` (`loaded`) matched **substrings** (`import` ⊂ "important" — the
-      single held-out false positive; `black` ⊂ "blacklist"; `loaded` ⊂
-      "downloaded"). Anchored them (`\bimport\b`, `\bblack\b`, `\bloaded\b`) with
-      no keyword loss. Eval (frozen key `quirks-eval.json`): held-out **FPR
-      20% → 0%**, constructive recall **100%**, decoy FPR **0**, real FPR **0**.
-      Gate: lint 264/0, test-hygiene 58/0.
-
-- [x] **Tier-1 doc trim (doc-budget headroom) — 2026-10-18.** The read-first
-      corpus was at **34,849 / 35,000** (151-tok headroom) — the next
-      HANDOFF/TODO edit would trip the WARN. Per RULES #77's method, moved the
-      older `TODO.md` Done entries ("Kill the gate double-run" through "Estimate
-      Gantt + OCR crop", ~19.5 KB) into `docs/todo-archive-2026.md`
-      (newest-first); the recent Done + the queue stay. Tier-1 `doc-budget.sh`:
-      **34,849 → 29,926 tokens** (headroom **151 → 5,074**). Gate: lint 264/0,
-      test-tooling 17/0, doc-budget/next-action/progress-review self-tests PASS.
-
-- [x] **Three triage follow-ups (2026-10-17 live triage).** (1) The [HIGH]
-      `stall` flags were all the interactive **`question`** tool (age ~2h)
-      awaiting the OPERATOR — `session-health.mjs` now excludes
-      `INTERACTIVE_TOOLS` from S0 + the S1 tool-set (live running_tools 2→0;
-      self-test: a running `question` is not flagged). (2) The dominant
-      `slow_fetch /provider` (97 grouped rows) is now edge-cached 120s in
-      `docker/Caddyfile` (`path /provider*`, query-keyed; runbook third drain).
-      (3) TUNNEL-1 hand-off is scripted: `nebula-systemd-override.sh --handoff`
-      emits a paste-ready peer-repo issue from the `--diagnose` evidence.
-      Gate: lint 264/0, hygiene 58/0.
-
-- [x] **triage de-dup by condition, not text (130-alert cry-wolf).** The live
-      T8 run showed **130 distinct from 200 rows**, nearly all `slow_fetch` to
-      `GET /provider` differing only in `slowest`. `summarize()` now keys
-      `slow_fetch` **by URI** (max slowest) and `tunnel_flap` by resource:
-      **130 → 35 distinct**; self-test asserts it (`test-durable`).
-
-- [x] **Sentinel T8 — peer-tunnel flap detector (NEBULA-1 follow-up).** **T8**
-      counts teardown/re-handshake/`state:dead` events for the nebula unit since
-      the cursor (`>= SENTINEL_TUNNEL_MIN`, default 4; `journalctl --since` +
-      `SENTINEL_TUNNEL_LOG` seam, cursor-bounded like T4) → stable-key ADVISORY
-      → the existing notify sink + `triage-alerts.py` `tunnel_flap` kind +
-      runbook `tunnel-flap`. Reuses the sentinel timer — no new daemon.
-      Gate: lint 264/0, hygiene 58/0, tooling 17/0.
-
-- [x] **NEBULA-1 diagnostic + fix, both scripted (premise falsified).**
-      `nebula-restart-trace.py` reads `/proc/<pid>/stat` + the parent's
-      comm/cmdline for every nebula process; a non-PID-1 parent is the restarter.
-      `--watch SECS`; `--json`; `--proc-root` seam; offline `--self-test`. Live
-      result: **systemd (PID 1) is the parent** — but `nebula-systemd-override.sh
-      --show` then showed **NRestarts=0 + one stable PID**, so the "3 PIDs/10 min
-      crash-loop" premise is NOT reproduced; the recurring event is a **tunnel
-      flap** to lighthouse-01. `nebula-systemd-override.sh` writes an idempotent
-      defensive drop-in (StartLimit*/Burst in `[Unit]`, CPU/IO/Memory/LogRateLimit
-      in `[Service]`) and `--diagnose` **classifies restart-churn vs tunnel-flap**.
-      Wired: test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 →
-      17/0), tools.json + scripts/README. Drop-in applied then **reverted on the
-      host (2026-10-17)**; real issue carried forward as TUNNEL-1 (external).
-
 ## Outstanding issues (audited — resolve or explicitly accept)
 
 - [x] **Script catalog was incomplete (resolved 2026-10-18, see Done).** The
@@ -257,12 +198,15 @@ Last updated: 2026-10-18
   `gh` is absent in-container, so an issue hand-off was a manual body-file relay
   with no read-back. **DONE 2026-10-18** (`scripts/issue-bridge.py`:
   link/poll/status → ledger; the hand-off now prints the read-back step;
-  next-action surfaces open external issues). **E3 concurrency lock/merge
-  key:** history is linear with no lock/CRDT — `beads` (Dolt cell-level merge,
-  hash IDs) or `backlog` (SQLite, actor-signed writes) supply zero-conflict
-  merge. **E4 owned task identity:** DB `todo` is session-local (94 done / 10
-  in_progress / 14 pending, all ended) with no ID linking it to `TODO.md` —
-  `beads`/`backlog` give a durable, addressed unit that survives every session.
+  next-action surfaces open external issues). **E3 concurrency lock/merge key:
+  DONE 2026-10-18** (RULE #85): `loop-lock.sh` — a TTL, actor-tagged
+  single-writer lease (`flock`-serialised, atomic write) that `loop-state.sh
+  --begin` requires and `next-action.sh` surfaces; a dead holder is reclaimed by
+  TTL. (Dolt/`backlog` zero-conflict *merge* stays a D-decision — only needed if
+  we want parallel writers, not one owner.) **E4 owned task identity:** DB
+  `todo` is session-local (94 done / 10 in_progress / 14 pending, all ended)
+  with no ID linking it to `TODO.md` — `beads`/`backlog` give a durable,
+  addressed unit that survives every session.
 
 ## Queue (ranked, top first)
 

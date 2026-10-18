@@ -779,12 +779,25 @@
     "id": "loop-state",
     "title": "Durable dev-loop segment checkpoint",
     "where": "container",
-    "purpose": "Checkpoint the in-flight loop segment on durable-run.sh's job store (job dev-loop): --begin records the unit + rev, --end records the gate result; --show reports the in-flight segment and the last done unit. A fresh session resumes/skips the segment instead of re-deriving it.",
+    "purpose": "Checkpoint the in-flight loop segment on durable-run.sh's job store (job dev-loop): --begin records the unit + rev, --end records the gate result; --show reports the in-flight segment and the last done unit. A fresh session resumes/skips the segment instead of re-deriving it. --begin also takes the E3 single-writer lease (loop-lock.sh); --end releases it.",
     "commands": [
       "./scripts/loop-state.sh --begin \"unit text\"",
       "./scripts/loop-state.sh --end \"unit text\" [--red]",
       "./scripts/loop-state.sh --show --json",
       "./scripts/loop-state.sh --self-test"
+    ]
+  },
+  {
+    "id": "loop-lock",
+    "title": "Single-writer lease for the dev loop (E3)",
+    "where": "container",
+    "purpose": "E3 concurrency lock: the dev loop has several shared writers and no merge key, so two live sessions can clobber each other. A TTL lease (default 1800s), actor-tagged, with explicit stale + forced takeover. --acquire [--unit U] [--force], --refresh, --release [--force], --status [--json], --check (exit 3 when another LIVE holder owns it). A dead holder is reclaimed by TTL, never by replaying history. flock-serialised, atomic write. Used by loop-state.sh --begin; surfaced by next-action.sh.",
+    "commands": [
+      "./scripts/loop-lock.sh --acquire --unit \"unit text\"",
+      "./scripts/loop-lock.sh --status --json",
+      "./scripts/loop-lock.sh --check",
+      "./scripts/loop-lock.sh --release",
+      "./scripts/loop-lock.sh --self-test"
     ]
   },
   {

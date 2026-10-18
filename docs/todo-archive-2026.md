@@ -1,10 +1,84 @@
 # TODO archive — 2026 (older Done entries)
 
-Moved out of `TODO.md`'s Done log on 2026-10-17, and a second batch on
+Moved out of `TODO.md`'s Done log on 2026-10-17, a second and third batch on
 2026-10-18, to hold the read-first doc budget (the corpus is read at every
 session start, so its size is context cost — see `./scripts/doc-budget.sh`).
 Newest-first. `TODO.md` keeps the queue plus recent Done; durable state lives
 in `HANDOFF.md`. Git history is unchanged.
+
+- [x] **RULES #54: runbook/tool script targets must be git-tracked — 2026-10-18.**
+      `runbooks.json` told you to run `./scripts/archive/one-shot/rotate-api-keys.sh`
+      and `.../verify-password-drift.sh` — **untracked** files (absent on a fresh
+      clone); the canonical scripts live at `./scripts/`. Repointed all three
+      commands. Added a **falsifiable** guard to `test-dashboard.sh`: every
+      `./scripts/...` named in `runbooks.json`/`tools.json` must pass
+      `git ls-files --error-unmatch` (a SKIP, never a PASS, outside a git
+      worktree). Gate: test-dashboard 121/0, lint 264/0.
+
+- [x] **`ensure-env.sh` password-regen review — 2026-10-18.** Re-verified the
+      regen invariants (behavior test now 19/19: no-op / warn / rotate /
+      preserve). Two gaps fixed: a standalone `--rotate` now prints *"restart the
+      stack to apply it"* (a running container keeps the OLD password until
+      restarted), and the `rotate-password` runbook now uses the tested scripted
+      path (`./scripts/ensure-env.sh --rotate` → `./scripts/web.sh`) instead of a
+      manual paste. Gate: lint 264/0, test-hygiene 58/0, test-dashboard 120/0.
+
+- [x] **`quirks` precision: word-boundary the loose regexes — 2026-10-18.** The
+      `matchIssues()` regexes for `#50434` (`import`), `#37339` (`black`) and
+      `#51614` (`loaded`) matched **substrings** (`import` ⊂ "important" — the
+      single held-out false positive; `black` ⊂ "blacklist"; `loaded` ⊂
+      "downloaded"). Anchored them (`\bimport\b`, `\bblack\b`, `\bloaded\b`) with
+      no keyword loss. Eval (frozen key `quirks-eval.json`): held-out **FPR
+      20% → 0%**, constructive recall **100%**, decoy FPR **0**, real FPR **0**.
+      Gate: lint 264/0, test-hygiene 58/0.
+
+- [x] **Tier-1 doc trim (doc-budget headroom) — 2026-10-18.** The read-first
+      corpus was at **34,849 / 35,000** (151-tok headroom) — the next
+      HANDOFF/TODO edit would trip the WARN. Per RULES #77's method, moved the
+      older `TODO.md` Done entries ("Kill the gate double-run" through "Estimate
+      Gantt + OCR crop", ~19.5 KB) into `docs/todo-archive-2026.md`
+      (newest-first); the recent Done + the queue stay. Tier-1 `doc-budget.sh`:
+      **34,849 → 29,926 tokens** (headroom **151 → 5,074**). Gate: lint 264/0,
+      test-tooling 17/0, doc-budget/next-action/progress-review self-tests PASS.
+
+- [x] **Three triage follow-ups (2026-10-17 live triage).** (1) The [HIGH]
+      `stall` flags were all the interactive **`question`** tool (age ~2h)
+      awaiting the OPERATOR — `session-health.mjs` now excludes
+      `INTERACTIVE_TOOLS` from S0 + the S1 tool-set (live running_tools 2→0;
+      self-test: a running `question` is not flagged). (2) The dominant
+      `slow_fetch /provider` (97 grouped rows) is now edge-cached 120s in
+      `docker/Caddyfile` (`path /provider*`, query-keyed; runbook third drain).
+      (3) TUNNEL-1 hand-off is scripted: `nebula-systemd-override.sh --handoff`
+      emits a paste-ready peer-repo issue from the `--diagnose` evidence.
+      Gate: lint 264/0, hygiene 58/0.
+
+- [x] **triage de-dup by condition, not text (130-alert cry-wolf).** The live
+      T8 run showed **130 distinct from 200 rows**, nearly all `slow_fetch` to
+      `GET /provider` differing only in `slowest`. `summarize()` now keys
+      `slow_fetch` **by URI** (max slowest) and `tunnel_flap` by resource:
+      **130 → 35 distinct**; self-test asserts it (`test-durable`).
+
+- [x] **Sentinel T8 — peer-tunnel flap detector (NEBULA-1 follow-up).** **T8**
+      counts teardown/re-handshake/`state:dead` events for the nebula unit since
+      the cursor (`>= SENTINEL_TUNNEL_MIN`, default 4; `journalctl --since` +
+      `SENTINEL_TUNNEL_LOG` seam, cursor-bounded like T4) → stable-key ADVISORY
+      → the existing notify sink + `triage-alerts.py` `tunnel_flap` kind +
+      runbook `tunnel-flap`. Reuses the sentinel timer — no new daemon.
+      Gate: lint 264/0, hygiene 58/0, tooling 17/0.
+
+- [x] **NEBULA-1 diagnostic + fix, both scripted (premise falsified).**
+      `nebula-restart-trace.py` reads `/proc/<pid>/stat` + the parent's
+      comm/cmdline for every nebula process; a non-PID-1 parent is the restarter.
+      `--watch SECS`; `--json`; `--proc-root` seam; offline `--self-test`. Live
+      result: **systemd (PID 1) is the parent** — but `nebula-systemd-override.sh
+      --show` then showed **NRestarts=0 + one stable PID**, so the "3 PIDs/10 min
+      crash-loop" premise is NOT reproduced; the recurring event is a **tunnel
+      flap** to lighthouse-01. `nebula-systemd-override.sh` writes an idempotent
+      defensive drop-in (StartLimit*/Burst in `[Unit]`, CPU/IO/Memory/LogRateLimit
+      in `[Service]`) and `--diagnose` **classifies restart-churn vs tunnel-flap**.
+      Wired: test-hygiene self-tests (+2 → 58/0), test-tooling `--json` (+1 →
+      17/0), tools.json + scripts/README. Drop-in applied then **reverted on the
+      host (2026-10-17)**; real issue carried forward as TUNNEL-1 (external).
 
 - [x] **Kill the gate double-run + fixture the semantic leg.** `harness.sh` runs
       lint + test-hygiene, and `test-dashboard.sh` re-ran BOTH inside itself —

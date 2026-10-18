@@ -832,3 +832,15 @@ detector, p≈0.94).
 > #84** — same class as the 30-script catalog: promote each claim to a gate,
 > not a sentence. Next: **E3** (lock/merge key), **E4** (owned task identity);
 > TUNNEL-1's fix stays external (#5, T8 live).
+
+> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E3):** closed **E3
+> concurrency lock**. The loop's shared writers have no merge key, so two live
+> sessions could both own a segment. New **`scripts/loop-lock.sh`**: a TTL lease
+> (1800s, actor-tagged), `flock`-serialised, atomic write; acquire/refresh/
+> release/status/check; stale (TTL) + `--force` takeover, never silent.
+> `loop-state.sh --begin` requires it (**refuses a busy loop**, rc 3), `--end`
+> releases; `next-action.sh` prints `lock:` + a blocker when another live holder
+> owns it. Gated: `test-durable.sh` +2 (loop-lock + loop-state) → **10/0**; new
+> **RULE #85**. Moved the older `TODO.md` Done half to `docs/todo-archive-2026.md`
+> to hold the tier-1 budget (RULE #77).
+> Next: **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).

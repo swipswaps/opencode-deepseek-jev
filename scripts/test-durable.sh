@@ -30,6 +30,10 @@ chk "triage-alerts self-test (durable ledger reader)" python3 "$REPO/scripts/tri
 chk "issue-bridge self-test (external issue state -> ledger)" python3 "$REPO/scripts/issue-bridge.py" --self-test
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
+# #80: the in-flight loop segment is checkpointed.
+chk "loop-state self-test (segment checkpoint + lease)" bash "$REPO/scripts/loop-state.sh" --self-test
+# E3: a single-writer lease stops two live sessions owning the same loop.
+chk "loop-lock self-test (TTL lease, stale/forced takeover)" bash "$REPO/scripts/loop-lock.sh" --self-test
 chk "caddy-reload self-test (checkpointed adopter)" bash "$REPO/scripts/caddy-reload.sh" --self-test
 # storage is the source of truth: derived state rebuilds from it.
 chk "rebuild-derived self-test (rebuild from storage)" bash "$REPO/scripts/rebuild-derived.sh" --self-test
