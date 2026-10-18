@@ -343,7 +343,14 @@ captured to answer "what did the agent do, in what order, for how much".
 | `session` | one row per session | `id`, `parent_id`, `title`, `directory`, `cost`, `tokens_input/output/reasoning/cache_read/write`, `model`, `agent`, `time_created/updated`, `time_compacting/archived` |
 | `message` | one row per turn | `id`, `session_id`, `data.role` |
 | `part` | one row per message part — the granular event log | `message_id`, `session_id`, `time_created`, `data` |
-| `todo` | the live plan | `session_id`, `content`, `status`, `priority`, `position` |
+| `todo` | the live plan **per session** (`todowrite` mirrors here) | `session_id`, `content`, `status`, `priority`, `position` |
+
+> **DB `todo` rows are session-local, not a backlog.** A 2026-10-18 audit found
+> **24 non-completed** rows, all from long-ended sessions (dated 09-23…10-14) —
+> mostly already-done or abandoned plans (e.g. *"Implement re-extract-session.sh"*
+> shipped; *"Set default model to Muse Spark Free"* rejected by #82). Treat the
+> DB `todo` table as **read-only session state**; the live queue is **`TODO.md`**.
+> Don't reconcile the two by hand each session — that is `next-action.sh`'s job.
 
 **Tool calls are `part` rows.** A tool part's `data` JSON looks like:
 

@@ -8,6 +8,21 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Chat-DB audit (PhD pass) — 2026-10-18.** Read-only audit of
+      `data/opencode/opencode.db` (99 sessions · 14,750 msgs · 56,499 parts ·
+      114 todos; $10.68 lifetime; 97.1% cache hit) + `observability.db` (798
+      ledger rows). **Outstanding (pending):** the CURRENT session is **2.5× over
+      budget** → `preflight.sh` **STOP** (RULES #76); the one hard action is a
+      handoff (`session-guard.sh --handoff`). **Outstanding (stands out):**
+      (1) `edit` oldString mismatch **70×** — the #1 recurring failure →
+      **RULE #81**; (2) the "free" `muse-spark-*` model accrued **real cost**
+      ($1.74 / 26 sessions, one $1.51) → **RULE #82** (gateway-metered, not
+      free); (3) 632 ADVISORY/FAIL ledger rows, sentinel-dominated and
+      stable-keyed; (4) 24 stale session-local DB todos (not a backlog).
+      Addressed: persisted the learning outputs (`issue-solutions.py --write` →
+      `/api/solutions`, `learn-rules.py --write`), promoted #81/#82, documented
+      the DB-todo caveat in HANDOFF.
+
 - [x] **Host runbooks verified + RULES #54 gate broadened — 2026-10-18.** Audited
       every host (`where=host`) runbook (G4 litellm, G5 laya, G6 doctor --full,
       G7 grafana / adopt-durable-pi / host-*): **all 87** `scripts/*.{sh,py,mjs}`
