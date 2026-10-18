@@ -104,8 +104,9 @@ nebula-systemd-override.sh
     =300/StartLimitBurst=5 + CPUWeight/IOWeight=50 + MemoryMax=512M +
     LogRateLimit* as a defensive ceiling, and CLASSIFIES restart-churn vs
     tunnel-flap. Dry-run by default; --show/--diagnose/--apply/--revert;
-    --restart opt-in; --file/--systemctl-file/--journal-file seams; offline
-    --self-test. Sudo only on write.
+    --handoff emits a ready-to-paste issue for the peer repo (the fix is
+    external); --restart opt-in; --file/--systemctl-file/--journal-file seams;
+    offline --self-test. Sudo only on write.
 
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
@@ -362,10 +363,13 @@ session-health.mjs
     Read-only, browser-independent detection of stalled/blank turns from the
     opencode db (no model call): a tool part still "running" past the
     deadline, and a recent session whose last part is a tool with no text
-    after it. The naive "long gap" signal is deliberately NOT a finding
-    (~100% user-idle false positives). Exports healthReport() (/api/health,
-    /explore ▸ signals) and handoffAdvice() (latest input vs CONTEXT_BUDGET:
-    ok/warn/over + an action). --json, --live, --self-test.
+    after it. Interactive tools (a pending `question`, which blocks on the
+    OPERATOR by design) are excluded from both — the 2026-10-17 [HIGH] stall
+    flags were all `question`, a false positive. The naive "long gap" signal is
+    deliberately NOT a finding (~100% user-idle false positives). Exports
+    healthReport() (/api/health, /explore ▸ signals) and handoffAdvice()
+    (latest input vs CONTEXT_BUDGET: ok/warn/over + an action). --json, --live,
+    --self-test.
 
 quirks.mjs
     Correlates a symptom with a vendored map of known upstream issues

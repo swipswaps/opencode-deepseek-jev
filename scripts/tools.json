@@ -177,6 +177,7 @@
       "bash scripts/nebula-systemd-override.sh",
       "bash scripts/nebula-systemd-override.sh --show",
       "bash scripts/nebula-systemd-override.sh --diagnose",
+      "bash scripts/nebula-systemd-override.sh --handoff",
       "sudo bash scripts/nebula-systemd-override.sh --apply",
       "sudo bash scripts/nebula-systemd-override.sh --revert",
       "bash scripts/nebula-systemd-override.sh --self-test"
@@ -390,7 +391,7 @@
     "id": "session-health",
     "title": "Session health (stalls / blank turns)",
     "where": "container",
-    "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Surfaces at /explore \u25b8 signals and /api/health; --live also reads /session/status.",
+    "purpose": "Read-only, browser-independent detection of stalled (running tool) and blank (no text after the last tool) turns straight from opencode.db. Interactive tools (a pending `question`, which blocks on the OPERATOR) are excluded. Surfaces at /explore \u25b8 signals and /api/health; --live also reads /session/status.",
     "commands": [
       "node --experimental-sqlite scripts/session-health.mjs",
       "node --experimental-sqlite scripts/session-health.mjs --json",

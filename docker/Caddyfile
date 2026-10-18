@@ -29,6 +29,13 @@
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
 	@icons path /favicon* /apple-touch-icon* /assets/Inter.ttf /assets/sprite-*.svg
 	header @icons Cache-Control "public, max-age=86400"
+	# /provider was the single dominant slow-fetch (x188 in the access log): the
+	# SPA fetches it on every page load, but the model/provider list is stable
+	# until the config changes. A short edge TTL collapses the per-load storm
+	# without meaningful staleness (query strings are part of the cache key, so
+	# /provider?directory=… caches separately). See runbook `slow-fetch`.
+	@provider path /provider*
+	header @provider Cache-Control "public, max-age=120"
 	reverse_proxy opencode-web:4096
 }
 

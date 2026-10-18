@@ -19,7 +19,10 @@
 // TWO LOW-FALSE-POSITIVE SIGNALS (a third was FALSIFIED)
 // ------------------------------------------------------
 //  S0 running_tool : a tool part still `state.status="running"` long after it
-//                    started — the sharpest agent-stall fingerprint.
+//                    started — the sharpest agent-stall fingerprint. Excludes
+//                    interactive tools (a pending `question` blocks on the
+//                    OPERATOR by design: the 2026-10-17 stall flags were all
+//                    `question`, age ~2h — a false positive).
 //  S1 blank_tail   : a recent session whose LAST part is a tool and no `text`
 //                    part followed within the deadline — the "no answer printed"
 //                    fingerprint. Sessions already flagged by S0 are excluded.
@@ -133,6 +136,11 @@ export const DEFAULTS = {
   recentSessions: 40, // only the most recent N sessions are online-interesting
 };
 
+// Tools that legitimately stay `state.status="running"` while awaiting OPERATOR
+// input: a pending prompt is not a stalled agent. The 2026-10-17 [HIGH] stall
+// flags were all `question` tools (age ~2h) — a false positive. Excluded from S0.
+export const INTERACTIVE_TOOLS = ["question"];
+
 // The session row stores `model` as a JSON string; it may be an object
 // ({"id":"deepseek-flash",...}) or a bare JSON string ("deepseek-flash").
 function modelId(m) {
@@ -154,6 +162,9 @@ export function healthReport(dbPath, opts = {}) {
   const db = new DatabaseSync(dbPath, { readOnly: true });
 
   // S0 — tools stuck in `running` (join session for per-model attribution).
+  // Interactive tools (a pending `question`) are excluded: they block on the
+  // OPERATOR, not on the server, so they are not a stall.
+  const excl = INTERACTIVE_TOOLS.map((t) => `'${t}'`).join(",");
   const running = db
     .prepare(
       `SELECT p.session_id                           AS session_id,
@@ -164,6 +175,7 @@ export function healthReport(dbPath, opts = {}) {
          FROM part p LEFT JOIN session s ON s.id = p.session_id
         WHERE json_extract(p.data,'$.type') = 'tool'
           AND json_extract(p.data,'$.state.status') = 'running'
+          AND json_extract(p.data,'$.tool') NOT IN (${excl})
           AND p.time_created < ?
           AND p.session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)
         ORDER BY p.time_created DESC
@@ -187,6 +199,7 @@ export function healthReport(dbPath, opts = {}) {
               MAX(CASE WHEN json_extract(p.data,'$.type') = 'text'
                        THEN p.time_created END) AS last_text,
               MAX(CASE WHEN json_extract(p.data,'$.type') = 'tool'
+                        AND json_extract(p.data,'$.tool') NOT IN (${excl})
                        THEN p.time_created END) AS last_tool
          FROM session s LEFT JOIN part p ON p.session_id = s.id
         WHERE s.id IN (SELECT id FROM session
@@ -383,6 +396,12 @@ async function selfTest() {
   insS.run("s_idle", "idle", '{"id":"deepseek-flash"}', NOW - 9_000_000);
   insP.run("p6", "m", "s_idle", NOW - 7_200_000, NOW - 7_200_000, text("bye"));
   insP.run("p7", "m", "s_idle", NOW - 3_600_000, NOW - 3_600_000, text("back"));
+
+  // A pending interactive `question` also sits in `running` for hours, but it
+  // blocks on the OPERATOR, not the server — it must NOT be a stall (S0).
+  insS.run("s_q", "asking", '{"id":"deepseek-flash"}', NOW - 9_000_000);
+  insP.run("p8", "m", "s_q", NOW - 7_200_000, NOW - 7_200_000,
+    JSON.stringify({ type: "tool", tool: "question", state: { status: "running", input: {} } }));
   db.close();
 
   const r = healthReport(dbFile, { now: NOW });
@@ -394,6 +413,7 @@ async function selfTest() {
     ["kinds are blank_tail + running_tool", kinds === "blank_tail,running_tool"],
     ["idle session is NOT flagged", !r.findings.some((f) => f.session === "s_idle")],
     ["healthy session is NOT flagged", !r.findings.some((f) => f.session === "s_ok")],
+    ["pending question is NOT a stall", !r.findings.some((f) => f.session === "s_q")],
     ["long gap is not a finding by default", !("gaps" in r)],
   ];
   rmSync(dir, { recursive: true, force: true });

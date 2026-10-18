@@ -147,6 +147,42 @@ show_state() {
     diagnose "$sys" "$jrn"
 }
 
+# handoff -- emit a ready-to-paste issue for the PEER repo (the fix is external:
+# proxmox-dual-plane-mesh). Plain selectable text (RULES #70); built from the
+# same evidence --diagnose uses, so the issue cannot drift from the data.
+handoff() {
+    local sys jrn peer ip n restarts
+    sys=$(read_sysctl)
+    jrn=$(read_journal)
+    n=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
+    peer=$(printf '%s\n' "$jrn" | grep -oE 'certName=[A-Za-z0-9._-]+' | head -1 | cut -d= -f2)
+    ip=$(printf '%s\n' "$jrn" | grep -oE 'vpnIp=[0-9.]+' | head -1 | cut -d= -f2)
+    restarts=$(printf '%s\n' "$sys" | awk -F= '/^NRestarts=/{print $2; exit}')
+    [ -n "$restarts" ] || restarts="0"
+    printf '%s\n' \
+        "TITLE: nebula tunnel to ${peer:-peer} (vpnIp ${ip:-?}) flaps — repeated teardown/re-handshake" \
+        "" \
+        "Repo: proxmox-dual-plane-mesh (opencode-deepseek-jev only watches and hands off)" \
+        "" \
+        "## Symptom" \
+        "The nebula PROCESS is healthy — systemd NRestarts=${restarts}, one stable PID, no exit" \
+        "lines — so the recurring event is a peer tunnel flap, not a service restart." \
+        "" \
+        "## Evidence" \
+        "  flap events in 'journalctl -u nebula': ${n}" \
+        "  peer certName: ${peer:-?}   vpnIp: ${ip:-?}" \
+        "  signature: 'Close tunnel received, tearing down.' / 'Taking new handshake' / tunnelCheck state:dead" \
+        "" \
+        "## Repro (read-only)" \
+        "  bash scripts/nebula-systemd-override.sh --diagnose   # classifies restart-churn vs tunnel-flap" \
+        "  python3 scripts/nebula-restart-trace.py --watch 60   # proves the process is not restarting" \
+        "  journalctl -u nebula | grep -E 'Close tunnel|Taking new handshake|state:dead'" \
+        "" \
+        "## Suspects" \
+        "UDP reachability to the lighthouse (firewall/NAT/MTU) and the peer/lighthouse reload cadence." \
+        "A systemd rate-limit does NOT fix this (it only bounds restarts that are not happening)."
+}
+
 self_test() {
     local w dest fail=0 out n
     w=$(mktemp -d) || { printf 'FAIL: mktemp\n'; return 1; }
@@ -180,12 +216,18 @@ self_test() {
     out=$(bash "${BASH_SOURCE[0]}" --diagnose --systemctl-file "$w/sys2" --journal-file "$w/jrn2" 2>&1)
     case "$out" in *RESTART*) : ;; *) printf 'FAIL: classifier missed restart churn (%s)\n' "$out"; fail=1 ;; esac
 
+    # handoff emits a ready-to-paste issue with the peer/ip evidence.
+    out=$(bash "${BASH_SOURCE[0]}" --handoff --systemctl-file "$w/sys1" --journal-file "$w/jrn1" 2>&1)
+    printf '%s' "$out" | grep -q 'TITLE: nebula tunnel' || { printf 'FAIL: handoff has no title\n'; fail=1; }
+    printf '%s' "$out" | grep -q 'vpnIp 10.100.0.1' || { printf 'FAIL: handoff missing peer ip\n'; fail=1; }
+    printf '%s' "$out" | grep -q 'flap events in' || { printf 'FAIL: handoff missing evidence count\n'; fail=1; }
+
     printf 'nebula-systemd-override: self-test %s\n' "$([ "$fail" -eq 0 ] && printf PASS || printf FAIL)"
     return "$fail"
 }
 
 main() {
-    local DROPIN="$DEF_DROPIN" APPLY=0 REVERT=0 SHOW=0 DIAGNOSE=0 RESTART=0 NO_RELOAD=0
+    local DROPIN="$DEF_DROPIN" APPLY=0 REVERT=0 SHOW=0 DIAGNOSE=0 HANDOFF=0 RESTART=0 NO_RELOAD=0
     local SYSTEMCTL_FILE="" JOURNAL_FILE=""
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -194,13 +236,14 @@ main() {
             --revert) REVERT=1; shift ;;
             --show) SHOW=1; shift ;;
             --diagnose) DIAGNOSE=1; shift ;;
+            --handoff) HANDOFF=1; shift ;;
             --systemctl-file) SYSTEMCTL_FILE="${2:-}"; shift 2 ;;
             --journal-file) JOURNAL_FILE="${2:-}"; shift 2 ;;
             --restart) RESTART=1; shift ;;
             --no-reload) NO_RELOAD=1; shift ;;
             --self-test) self_test; return "$?" ;;
             -h | --help)
-                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show|--diagnose] [--systemctl-file F] [--journal-file F] [--restart] [--no-reload] [--self-test]\n' "$0"
+                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show|--diagnose|--handoff] [--systemctl-file F] [--journal-file F] [--restart] [--no-reload] [--self-test]\n' "$0"
                 return 0
                 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
@@ -213,6 +256,8 @@ main() {
         diagnose "$(read_sysctl)" "$(read_journal)"
         return $?
     fi
+
+    if [ "$HANDOFF" -eq 1 ]; then handoff; return $?; fi
 
     if [ "$REVERT" -eq 1 ]; then
         remove_file "$DROPIN" || return 1
