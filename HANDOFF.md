@@ -35,6 +35,13 @@
 > **Filed:** TUNNEL-1 → `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
 > watch side stays live (T8).
 
+> **PIN 2026-10-18 (doc-budget headroom):** the tier-1 (session-start) corpus
+> sat at **34,849 / 35,000** (151 tok) — one HANDOFF/TODO edit from the WARN.
+> Per RULES #77, moved the older `TODO.md` Done entries → `docs/todo-archive-2026.md`
+> (newest-first); recent Done + the queue stay. Tier-1 **→ 29,926 tok**
+> (headroom **5,074**). Nothing else changed: TUNNEL-1's fix stays external
+> (#5), T8 watch live.
+
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
 > **local-time + light theme** (#66), **clickable Gantt + span drill + Flags panel
