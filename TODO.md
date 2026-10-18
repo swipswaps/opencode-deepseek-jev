@@ -8,6 +8,16 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Script catalog completed + gated — 2026-10-18.** The README's "one
+      entry per script" claim was false: 30 tracked top-level `scripts/*.{sh,py,mjs}`
+      were in neither `scripts/README.txt` nor `scripts/tools.json`. Added a
+      "Host checks, repo gates and local helpers" section (all 30) + 30 `/manage`
+      entries (`tools.json` 72 → 102). `test-hygiene.sh` now asserts every tracked
+      top-level script is documented (SKIP off-git) — falsified live: an
+      uncatalogued script fails it, 0 missing passes. Corrected the audit's
+      dead-ref premise: `chatlog.sh`/`ask.sh` DO exist and are executable; only
+      `test-tools.sh` is wired into no gate. Gate: hygiene 60/0.
+
 - [x] **Chat-DB audit (PhD pass) — 2026-10-18.** Read-only audit of
       `data/opencode/opencode.db` (99 sessions · 14,750 msgs · 56,499 parts ·
       114 todos; $10.68 lifetime; 97.1% cache hit) + `observability.db` (798
@@ -137,19 +147,11 @@ Last updated: 2026-10-18
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
-- [ ] **Script catalog is incomplete vs the README's "one entry per script"
-      claim (found 2026-10-18 by a dead-ref sweep).** 23 **tracked** scripts are
-      in neither `tools.json` nor `scripts/README.txt` (`apply-fstab-nofail.sh`,
-      `certs-verify.sh`, `dns-audit.sh`, `dns-guard.sh`, `enable-lan-cert.sh`,
-      `gate-all.sh`, `hotspot-test.sh`, `png-shrink.mjs`, `ports-forward-audit.sh`,
-      `probe-diagnose.sh`, `recall-sessions.py`, `repo-mcp.mjs`, `review-diff.sh`,
-      `run-with-telemetry.sh`, `test-tools.sh`, `tool-census.sh`, `ux-findings.sh`,
-      `ux.sh`, `verify-caddy-audit.sh`, `verify-fstab-nofail.sh`, `verify-loads.sh`,
-      `verify-password-drift.sh`, `watch-test-tools.sh`). Also
-      `test-tools.sh`/`watch-test-tools.sh` reference tools that no longer exist
-      (`chatlog.sh`, `ask.sh`) and are wired into no gate. **Triage (own
-      segment):** catalog the operator-facing ones, archive the obsolete; then
-      the README claim is true again. Low urgency — no gate depends on it.
+- [x] **Script catalog was incomplete (resolved 2026-10-18, see Done).** The
+      dead-ref sweep found 30 tracked scripts uncataloged (the audit's 23 was a
+      stricter match; its "chatlog.sh/ask.sh no longer exist" premise was false).
+      All 30 cataloged + a `test-hygiene.sh` coverage gate — the README claim is
+      true again and now enforced.
 
 - [x] **Telemetry-console upgrade** (deduced from the DB's own frequency:
       `ux 66 / telemetry 60 / dashboard 54 / cost 27 / drill 15 / slow 15 /

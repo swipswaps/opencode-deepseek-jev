@@ -711,6 +711,150 @@ test-repo.sh
     directives; G5 repo root only expected entries; G6 operating scripts
     present; G7 one-shots archived; G8 doctor.sh passes end-to-end.
 
+Host checks, repo gates and local helpers
+-----------------------------------------
+
+audit-config.sh
+    Compare the actual deployment settings against an "expected" spec and
+    surface every drift with a remediation hint. Read-only; a human table by
+    default, or --json (for the :5099 dashboard).
+
+gate-all.sh
+    Every assert in one command (implements the agents contract): lint, hygiene,
+    patterns, self-tests, yaml contract, backup freshness, cert coverage, secret
+    scan, opencode.json, review-diff, recall smoke, pages export. Host-only
+    asserts print SKIP with the exact host command instead of failing (RULES #37).
+    Exit 0 no FAIL, 2 otherwise.
+
+review-diff.sh
+    Pre-push semantic review gate over the working-tree diff (deterministic file
+    selection plus an LLM pass). Degrades to SKIP when the reviewer is not
+    installed — never FAIL, because a missing optional tool must not block a
+    push (RULES #37). Exit 0 clean or SKIP, 2 findings.
+
+verify-password-drift.sh
+    4-gate verification that OPENCODE_SERVER_PASSWORD handling is consistent
+    across web.sh, .env.local and the running container.
+
+apply-fstab-nofail.sh / verify-fstab-nofail.sh
+    Add (apply) / report-and-apply (verify) the nofail and
+    x-systemd.device-timeout options to the /mnt/nvme fstab entry, then confirm
+    the generated systemd mount unit reflects the change.
+
+test-tools.sh / watch-test-tools.sh / run-with-telemetry.sh
+    Exercise every script in scripts/ and report pass/fail (test-tools.sh; --full
+    adds the model round-trips and the grounded chatlog summarize); watch-test-tools.sh
+    tails its status file and per-test logs; run-with-telemetry.sh runs
+    test-tools.sh with the watcher active so the transition timeline is preserved.
+
+tool-census.sh
+    Print one line per agentic tool/model on this host (present + version, or
+    MISSING) so a tool evaluation starts from fact, not memory. Offline,
+    read-only, no egress, no installs.
+
+test-jev-laya-ab.sh
+    A/B the same typed-decision payload through TypeSafe Jev and a self-hosted
+    Laya server (Jev-API-compatible, POST /v1/systemone); diff the answers and
+    report latency. Skips the diff with the exact start commands if Laya is not
+    reachable.
+
+code-index.py
+    Assemble, index and flag the repo's own code into data/observability/code.db
+    (per-file metadata, top-level symbols, blacklist patterns, TODO/FIXME) so
+    the code sits beside the chat DB. Free, local, read-only over the repo.
+    --flags · --list · --grep REGEX · --json · --self-test.
+
+recall-sessions.py
+    Hermes-style keyword recall over opencode sessions (read-only, sqlite
+    mode=ro): searches session titles first, then message bodies, printing
+    id + directory + title + updated time as provenance.
+    python3 scripts/recall-sessions.py <keyword> [--limit N]
+
+repo-mcp.mjs
+    Minimal MCP (stdio) wrapper over the repo's read-only tools
+    (probe_status, recall_sessions, findings, cost) so any agent calls them as
+    tools instead of pasted shell. No dependencies (Node 22). Add to
+    opencode.json mcp.servers.  node scripts/repo-mcp.mjs
+
+ocr-tesseractjs.mjs
+    Local OCR via tesseract.js (WASM) — no apt/pip/API; the same engine as
+    receipts-ocr's browser side. Downscales oversized images before OCR so very
+    tall screenshots don't stall the detector.
+    node scripts/ocr-tesseractjs.mjs <image> [lang] · --self-test
+
+png-shrink.mjs
+    Downscale a PNG to a byte budget (box filter, opaque RGB) using the
+    repo-pinned pngjs (no apt/pip). Overwrites the input file.
+    node scripts/png-shrink.mjs <file.png> [scale=0.75] [budget=153600]
+
+ux.sh
+    One router for the web-probe workflow (a single verb table shared by
+    interactive and unattended runs; mirrors agents/probe.yaml in order).
+    Run on the host.  bash scripts/ux.sh help · bash scripts/ux.sh status
+
+ux-findings.sh
+    Guided :5099 findings control (no dashboard spelunking): fetches /api/health
+    and translates each finding into plain language — what it means, whether you
+    should care, and the scripted action. Reports the standout positives
+    (cost, balance, rev currency, counts) too.
+
+probe-diagnose.sh
+    Scripted probe telemetry, no manual typing: sources .env.local (never prints
+    it), runs the probe, then reports verdict/counts/reasons + screenshot sizes
+    + live DOM markers, and prints the deterministic next action. Host; exit 0
+    PASS, 2 FAIL.
+
+hotspot-test.sh
+    Roaming test from a hotspot-tethered client: proves the overlay URLs survive
+    a LAN switch that kills LAN-bound URLs. Run on the roaming box; read-only
+    except a fresh /tmp Chrome CDP profile. Exit 0 all-green, 2 otherwise.
+
+host-path-probe.sh
+    Break down the :5099/:4096 hop (dns -> connect -> tls -> ttfb -> total)
+    against the host URL and the loopback, repeatedly, and name the dominant
+    phase. Run on the host.
+    ./scripts/host-path-probe.sh [--url URL] [--n N]
+
+ports-forward-audit.sh
+    Deduce the best steps to expose :4096/:5099 off-LAN (read-only; prints a
+    verdict + next commands). Firewall changes live in the eero phone app.
+    Run on the host.
+
+verify-caddy-audit.sh
+    Scripted Caddy access-plane verification: container Running (not merely
+    Created), published bindings on 4096/5099, access-log lines for the session
+    referer + /global/event SSE outcomes, and absence of 401/403 denials.
+    Host; exit 0 all-green, 2 otherwise.
+
+enable-lan-cert.sh
+    LAN path for TLS: IP SAN + caddy reload + trust + verify. Idempotent; no
+    port forwarding needed (eero/phone-app untouched). Run on the host.
+
+certs-verify.sh
+    The TLS verification battery as code (everything once typed by hand during
+    the BAD_CERT_DOMAIN incident, now one command) — served fingerprint == file
+    fingerprint, chain/SAN/expiry, etc. --playwright adds the browser check.
+    Exit 0 only if all pass.
+
+verify-loads.sh
+    Confirm post-recreate loads on the .24 host: litellm config accepted
+    (fallbacks live, no config error), opencode-web picked up the repo MCP server
+    + wizard skill, and the models endpoint answers. Read-only. Host.
+
+dns-audit.sh
+    Read-only DNS-forensics collector (sections A-C). Run on the FAILING box,
+    paste all output back. Changes nothing: no restarts, no writes outside
+    /tmp/opencode-dns.txt.
+
+dns-guard.sh
+    Automated DNS-recovery-loop telemetry (detection always, remediation only
+    with --fix), using the ledger DB as the durable record so the next occurrence
+    is a lookup, not a fresh investigation.
+
+web-logs.sh / web-stop.sh
+    Show the opencode-web container logs (-f follows) / stop the OpenCode web UI
+    container. cd into docker/ first so `docker compose` finds its config.
+
 Archive
 -------
 

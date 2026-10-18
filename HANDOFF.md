@@ -54,6 +54,15 @@
 > SKIP outside a worktree). Segment A is now fully done. Nothing else changed:
 > TUNNEL-1's fix stays external (#5), T8 watch live.
 
+> **PIN 2026-10-18 (script catalog):** the README's "one entry per script" was
+> false — 30 tracked top-level `scripts/*.{sh,py,mjs}` were in neither
+> `scripts/README.txt` nor `scripts/tools.json`. Added a "Host checks, repo gates
+> and local helpers" section (all 30) + 30 `/manage` entries (`tools.json`
+> 72 → 102). `test-hygiene.sh` now asserts every tracked top-level script is
+> documented (SKIP off-git; falsified live: an uncatalogued script fails it,
+> 0 missing passes). Corrected the audit's premise — `chatlog.sh`/`ask.sh` DO
+> exist and are executable. Hygiene 60/0.
+
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
 > **local-time + light theme** (#66), **clickable Gantt + span drill + Flags panel

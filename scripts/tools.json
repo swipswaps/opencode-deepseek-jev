@@ -784,5 +784,286 @@
       "printf '%s\\n' '{\"id\":\"a\",\"text\":\"...\"}' | node scripts/rerank.mjs --query Q --docs -",
       "node scripts/rerank.mjs --self-test"
     ]
+  },
+  {
+    "id": "audit-config",
+    "title": "Audit deployment config vs the expected spec",
+    "where": "container",
+    "purpose": "Compare the actual deployment settings against an expected spec and surface every drift with a remediation hint. Read-only; a human table by default, or --json for the :5099 dashboard.",
+    "commands": [
+      "./scripts/audit-config.sh",
+      "./scripts/audit-config.sh --json"
+    ]
+  },
+  {
+    "id": "gate-all",
+    "title": "Every assert, one command (agents contract)",
+    "where": "container",
+    "purpose": "Run all sandbox-runnable gates (lint, hygiene, patterns, self-tests, yaml contract, backup freshness, cert coverage, secret scan, opencode.json, review-diff, recall smoke, pages export). Host-only asserts print SKIP with the exact host command instead of failing (RULES #37). Exit 0 no FAIL, 2 otherwise.",
+    "commands": [
+      "./scripts/gate-all.sh"
+    ]
+  },
+  {
+    "id": "review-diff",
+    "title": "Pre-push semantic review gate",
+    "where": "container",
+    "purpose": "Review the working-tree diff (deterministic file selection plus an LLM pass). Degrades to SKIP when the reviewer is not installed, never FAIL, because a missing optional tool must not block a push (RULES #37). Exit 0 clean or SKIP, 2 findings.",
+    "commands": [
+      "bash scripts/review-diff.sh"
+    ]
+  },
+  {
+    "id": "verify-password-drift",
+    "title": "Verify OPENCODE_SERVER_PASSWORD handling has no drift",
+    "where": "host",
+    "purpose": "4-gate verification that password handling is consistent across web.sh, .env.local and the running container (warn-on-mismatch, no-warn-when-absent, doctor Tier 2, container agreement).",
+    "commands": [
+      "bash scripts/verify-password-drift.sh"
+    ]
+  },
+  {
+    "id": "apply-fstab-nofail",
+    "title": "Add nofail to the /mnt/nvme fstab entry",
+    "where": "host",
+    "purpose": "Add nofail and x-systemd.device-timeout to the /mnt/nvme entry in /etc/fstab, then verify the generated systemd mount unit reflects the change.",
+    "commands": [
+      "bash scripts/apply-fstab-nofail.sh"
+    ]
+  },
+  {
+    "id": "verify-fstab-nofail",
+    "title": "Report and, on request, apply fstab nofail",
+    "where": "host",
+    "purpose": "Report and, on request, apply the nofail and x-systemd.device-timeout options to the /mnt/nvme fstab entry (the verify-side twin of apply-fstab-nofail.sh).",
+    "commands": [
+      "bash scripts/verify-fstab-nofail.sh"
+    ]
+  },
+  {
+    "id": "test-tools",
+    "title": "Exercise every tool in scripts/ and report pass/fail",
+    "where": "container",
+    "purpose": "Invoke each script in scripts/ once, with the smallest input that exercises it, and report pass/fail. --full adds the model round-trips and the grounded chatlog summarize. Wired into no gate; run on demand while a watcher is active.",
+    "commands": [
+      "bash scripts/test-tools.sh",
+      "bash scripts/test-tools.sh --full"
+    ]
+  },
+  {
+    "id": "watch-test-tools",
+    "title": "Tail the test-tools status file and per-test logs",
+    "where": "container",
+    "purpose": "Follow scripts/archive/logs/test-tools.status (created by test-tools.sh) and, optionally, one test log, so a long test-tools run is visible in real time.",
+    "commands": [
+      "./scripts/watch-test-tools.sh",
+      "./scripts/watch-test-tools.sh T8-ask"
+    ]
+  },
+  {
+    "id": "run-with-telemetry",
+    "title": "Run test-tools.sh with the watcher active",
+    "where": "container",
+    "purpose": "Run test-tools.sh while the watcher is active, so the transition timeline is visible in real time and preserved as a log file.",
+    "commands": [
+      "./scripts/run-with-telemetry.sh"
+    ]
+  },
+  {
+    "id": "tool-census",
+    "title": "Report which agentic tools/models exist on this host",
+    "where": "container",
+    "purpose": "Print one line per agentic tool/model (present + version, or MISSING) so a tool evaluation starts from fact, not memory (evaluations rot). Offline, read-only, no egress, no installs.",
+    "commands": [
+      "./scripts/tool-census.sh"
+    ]
+  },
+  {
+    "id": "test-jev-laya-ab",
+    "title": "A/B the same payload through Jev vs self-hosted Laya",
+    "where": "host",
+    "purpose": "Send the same typed-decision payload through TypeSafe Jev and a self-hosted Laya server (Jev-API-compatible, POST /v1/systemone), then diff the answers and report latency. Persists each run to observability.db (served at /api/ab).",
+    "commands": [
+      "bash scripts/test-jev-laya-ab.sh"
+    ]
+  },
+  {
+    "id": "code-index",
+    "title": "Index and flag the repo's own code",
+    "where": "container",
+    "purpose": "Assemble, index and flag the repo code into data/observability/code.db (per-file metadata, top-level symbols, blacklist patterns, TODO/FIXME) so code sits beside the chat DB. Free, local, read-only over the repo.",
+    "commands": [
+      "./scripts/code-index.py",
+      "./scripts/code-index.py --flags",
+      "./scripts/code-index.py --self-test"
+    ]
+  },
+  {
+    "id": "recall-sessions",
+    "title": "Keyword recall over opencode sessions",
+    "where": "container",
+    "purpose": "Hermes-style keyword recall (read-only, sqlite mode=ro): search session titles first, then message bodies, printing id + directory + title + updated time as provenance.",
+    "commands": [
+      "python3 scripts/recall-sessions.py duckdns --limit 10"
+    ]
+  },
+  {
+    "id": "repo-mcp",
+    "title": "Minimal MCP server over the repo's read-only tools",
+    "where": "container",
+    "purpose": "One MCP (stdio) server exposing probe_status, recall_sessions, findings and cost as tools so any agent calls them instead of pasted shell. No dependencies (Node 22); add to opencode.json mcp.servers.",
+    "commands": [
+      "node scripts/repo-mcp.mjs"
+    ]
+  },
+  {
+    "id": "ocr-tesseractjs",
+    "title": "Local OCR via tesseract.js (WASM)",
+    "where": "container",
+    "purpose": "Local OCR with tesseract.js — no apt/pip/API; the same engine as receipts-ocr's browser side. Downscales oversized images before OCR so very tall screenshots do not stall the detector.",
+    "commands": [
+      "node scripts/ocr-tesseractjs.mjs shot.png",
+      "node scripts/ocr-tesseractjs.mjs --self-test"
+    ]
+  },
+  {
+    "id": "png-shrink",
+    "title": "Downscale a PNG to a byte budget",
+    "where": "container",
+    "purpose": "Downscale a PNG to fit a byte budget (box filter, opaque RGB) using the repo-pinned pngjs (no apt/pip). Overwrites the input file.",
+    "commands": [
+      "node scripts/png-shrink.mjs shot.png 0.75 153600"
+    ]
+  },
+  {
+    "id": "ux",
+    "title": "One router for the web-probe workflow",
+    "where": "host",
+    "purpose": "A single verb table shared by interactive and unattended runs, mirroring agents/probe.yaml in order. Run on the host from the repo root.",
+    "commands": [
+      "bash scripts/ux.sh help",
+      "bash scripts/ux.sh status"
+    ]
+  },
+  {
+    "id": "ux-findings",
+    "title": "Guided :5099 findings control",
+    "where": "container",
+    "purpose": "Fetch /api/health and translate each finding into plain language (what it means, whether to care, the scripted action). Reports outstanding findings AND the standout positives (cost, balance, rev currency, counts).",
+    "commands": [
+      "bash scripts/ux-findings.sh"
+    ]
+  },
+  {
+    "id": "probe-diagnose",
+    "title": "Scripted probe telemetry with a deterministic next action",
+    "where": "host",
+    "purpose": "Source .env.local (never printed), run the probe, then report verdict/counts/reasons + screenshot sizes + live DOM markers and print the deterministic next action. Exit 0 PASS, 2 FAIL.",
+    "commands": [
+      "bash scripts/probe-diagnose.sh"
+    ]
+  },
+  {
+    "id": "hotspot-test",
+    "title": "Roaming test from a hotspot-tethered client",
+    "where": "host",
+    "purpose": "Prove the overlay URLs survive a LAN switch that kills LAN-bound URLs. Run on the roaming box; read-only except a fresh /tmp Chrome CDP profile. Exit 0 all-green, 2 otherwise.",
+    "commands": [
+      "bash scripts/hotspot-test.sh"
+    ]
+  },
+  {
+    "id": "host-path-probe",
+    "title": "Localize long delays on the :5099/:4096 hop",
+    "where": "host",
+    "purpose": "Measure the phases a request pays (dns -> connect -> tls -> ttfb -> total) against the host URL and the loopback, repeatedly, and name the dominant phase. Run on the host.",
+    "commands": [
+      "./scripts/host-path-probe.sh",
+      "./scripts/host-path-probe.sh --url http://host:5099 --n 10"
+    ]
+  },
+  {
+    "id": "ports-forward-audit",
+    "title": "Deduce steps to expose :4096/:5099 off-LAN",
+    "where": "host",
+    "purpose": "Read-only: print a verdict + next commands for exposing the ports off-LAN. Firewall changes live in the eero phone app. Run on the host.",
+    "commands": [
+      "bash scripts/ports-forward-audit.sh"
+    ]
+  },
+  {
+    "id": "verify-caddy-audit",
+    "title": "Scripted Caddy access-plane verification",
+    "where": "host",
+    "purpose": "Check container Running (not merely Created), published bindings on 4096/5099, access-log lines for the session referer + /global/event SSE outcomes, and absence of 401/403 denials. Exit 0 all-green, 2 otherwise.",
+    "commands": [
+      "bash scripts/verify-caddy-audit.sh"
+    ]
+  },
+  {
+    "id": "enable-lan-cert",
+    "title": "LAN TLS: IP SAN + caddy reload + trust + verify",
+    "where": "host",
+    "purpose": "Idempotent LAN certificate path (IP SAN, caddy reload, trust, verify); no port forwarding needed (eero/phone-app untouched). Run on the host from the repo root.",
+    "commands": [
+      "bash scripts/enable-lan-cert.sh"
+    ]
+  },
+  {
+    "id": "certs-verify",
+    "title": "TLS verification battery as code",
+    "where": "host",
+    "purpose": "Everything once typed by hand during the BAD_CERT_DOMAIN incident, now one command: served fingerprint == file fingerprint, chain/SAN/expiry, etc. --playwright adds the browser check. Exit 0 only if all pass.",
+    "commands": [
+      "./scripts/certs-verify.sh",
+      "./scripts/certs-verify.sh --playwright"
+    ]
+  },
+  {
+    "id": "verify-loads",
+    "title": "Confirm post-recreate loads on the .24 host",
+    "where": "host",
+    "purpose": "Check litellm config accepted (fallbacks live, no config error), opencode-web picked up the repo MCP server + wizard skill, and the models endpoint answers. Read-only. Exit 0 all-green.",
+    "commands": [
+      "bash scripts/verify-loads.sh"
+    ]
+  },
+  {
+    "id": "dns-audit",
+    "title": "Read-only DNS-forensics collector",
+    "where": "host",
+    "purpose": "Collect DNS forensics (sections A-C) on a FAILING box and paste all output back. Changes nothing: no restarts, no writes outside /tmp/opencode-dns.txt.",
+    "commands": [
+      "bash scripts/dns-audit.sh"
+    ]
+  },
+  {
+    "id": "dns-guard",
+    "title": "DNS recovery-loop telemetry",
+    "where": "host",
+    "purpose": "Detection always runs, remediation only with --fix, using the ledger DB as the durable record so the next occurrence is a lookup, not a fresh investigation.",
+    "commands": [
+      "bash scripts/dns-guard.sh",
+      "bash scripts/dns-guard.sh --fix"
+    ]
+  },
+  {
+    "id": "web-logs",
+    "title": "Show the opencode-web container logs",
+    "where": "host",
+    "purpose": "cd into docker/ first so docker compose finds its config. Last 80 lines by default; -f follows.",
+    "commands": [
+      "./scripts/web-logs.sh",
+      "./scripts/web-logs.sh -f"
+    ]
+  },
+  {
+    "id": "web-stop",
+    "title": "Stop the OpenCode web UI container",
+    "where": "host",
+    "purpose": "Stop the opencode-web container. This takes the :5099 dashboard down until the entrypoint reruns (it comes back in a few seconds).",
+    "commands": [
+      "./scripts/web-stop.sh"
+    ]
   }
 ]

@@ -684,6 +684,42 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-trace.py present'
     fi
 
+    # Script catalog completeness — scripts/README.txt claims "one entry per
+    # script" and tools.json is the /manage catalog. Every tracked top-level
+    # scripts/*.{sh,py,mjs} must appear in at least one, or the catalog silently
+    # drifts from the tree (the 2026-10-18 audit found 30 missing). SKIP (no git)
+    # is reported, never a silent pass.
+    if command -v git > /dev/null && git -C "$REPO" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        git -C "$REPO" ls-files scripts > "$work/tracked.txt"
+        python3 - "$REPO" "$work/tracked.txt" > "$work/catalog.txt" <<'PY'
+import os, re, sys
+repo, tracked = sys.argv[1], sys.argv[2]
+names = []
+for line in open(tracked, encoding="utf-8"):
+    p = line.strip()
+    rest = p[len("scripts/"):] if p.startswith("scripts/") else ""
+    if rest and "/" not in rest and re.search(r"\.(sh|py|mjs)$", rest):
+        names.append(rest)
+readme = open(os.path.join(repo, "scripts/README.txt"), encoding="utf-8", errors="replace").read()
+tools_path = os.path.join(repo, "scripts/tools.json")
+tools = open(tools_path, encoding="utf-8", errors="replace").read() if os.path.exists(tools_path) else ""
+missing = [n for n in names if n not in readme and n not in tools]
+print("count=%d missing=%d" % (len(names), len(missing)))
+for n in missing:
+    print("  - " + n)
+sys.exit(1 if missing else 0)
+PY
+        local cat_rc=$?
+        if [ "$cat_rc" -eq 0 ]; then
+            ok "script catalog complete ($(awk -F' ' '/^count=/{print $1}' "$work/catalog.txt"))"
+        else
+            bad 'script catalog complete (every tracked script documented)'
+            cat "$work/catalog.txt"
+        fi
+    else
+        printf 'ts=%s level=WARN status=SKIP script catalog (no git worktree)\n' "$(date -u +%H:%M:%S)"
+    fi
+
     rm -f "$work"/*.txt "$work"/*.json "$work/live.db"
     rmdir "$work"
 
