@@ -65,6 +65,7 @@ rebuilt.*
 | checkpointed tasks; resume after a crash | **partial** | sentinel cursors (`sentinel-*.cursor`) resume; long shell jobs (`rotate-api-keys`, `recover-4096`) are not checkpointed yet |
 | exactly-once submission (`requestId`) | **have (analog)** | stable per-incident ledger keys (`UNIQUE(source,key)`) — a re-sweep is a no-op |
 | external effect observed, not assumed | **have (E2)** | `issue-bridge.py` polls a filed issue's state (host `gh` or a host-written JSON) → the same ledger; the hand-off prints the read-back step; `next-action` surfaces open external issues |
+| a declared capability is **enforced, not asserted** | **have (E1)** | `capabilities.mjs` runs the **live** registry as a gate — any DEGRADED/MISSING not named in `accepted_degraded` (id → reason) fails `test-hygiene.sh`, so a claim that silently goes false breaks the build (RULES #84) |
 | `reset(note)` + `search_history` | **have** | `handoff-brief.sh` (curate + note) + `search-history.sh` |
 | background **compaction** | **partial** | `session-digest.sh` curates a ~1.5 KB digest at trip time; not a model summarizer |
 | app state in **durable documents** | **gap (accepted)** | the ledger is a *derived* sidecar, not an atomic commit with the opencode transcript — that store is read-only, so we cannot join the commit. We chose *derived + de-duped* instead of faking atomicity. |

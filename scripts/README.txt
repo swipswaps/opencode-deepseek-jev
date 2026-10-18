@@ -462,7 +462,10 @@ capabilities.mjs
     REGISTRATION (wired in), TEST, EVIDENCE (observed-execution marker).
     GREEN needs impl+registration+test; DEGRADED = impl present but
     wiring/tests missing; MISSING = no impl. Evidence levels per RULES.md.
-    --json, --self-test. Gated in test-hygiene.sh.
+    --json, --self-test. E1: run with no flags to evaluate the LIVE repo; it
+    exits nonzero on any DEGRADED/MISSING not named in capabilities.json
+    accepted_degraded (id -> reason), so a silently-false claim fails the gate.
+    Gated in test-hygiene.sh (both the self-test and the live check).
 
 web.sh
     Start the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD; refuses

@@ -819,3 +819,16 @@ detector, p≈0.94).
 > once `issue-bridge.py` was git-**tracked**).
 > Next: **E1** (claims → enforced gates), **E3** (concurrency lock/merge key),
 > **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).
+
+> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E1):** closed **E1**.
+> `scripts/capabilities.json` declared 15 capabilities but **9 of its own
+> `registration` markers had drifted** (`name.sh --self-test` vs the file's
+> `"$REPO/scripts/name.sh" --self-test`), so they read **DEGRADED** and no gate
+> said so — only the fixture `--self-test` ran, proving the *checker*, not the
+> *claims*. Fixed the markers (live registry **15/15 GREEN**) and made the
+> **live** registry **fail closed** on any DEGRADED/MISSING not listed in
+> `accepted_degraded` (id → reason; `UNACCEPTED:` + nonzero exit);
+> `test-hygiene.sh` runs it (+1 → **61/0**); 2 new self-test cases. New **RULE
+> #84** — same class as the 30-script catalog: promote each claim to a gate,
+> not a sentence. Next: **E3** (lock/merge key), **E4** (owned task identity);
+> TUNNEL-1's fix stays external (#5, T8 live).

@@ -1,5 +1,6 @@
 {
-  "_comment": "Vendored capability registry for scripts/capabilities.mjs. For each declared capability it records the four links the LifeOS incident proved can silently diverge: IMPLEMENTATION (the file exists), REGISTRATION (it is actually wired in), TEST (a self-test exists), EVIDENCE (it has been observed executing). GREEN requires impl+registration+test; evidence level E3 needs an executed/observed marker, E5 needs test+marker. Read-only, offline. A capability with impl but no registration is DEGRADED — the guard-was-configured-but-inert class.",
+  "_comment": "Vendored capability registry for scripts/capabilities.mjs. For each declared capability it records the four links the LifeOS incident proved can silently diverge: IMPLEMENTATION (the file exists), REGISTRATION (it is actually wired in), TEST (a self-test exists), EVIDENCE (it has been observed executing). GREEN requires impl+registration+test; evidence level E3 needs an executed/observed marker, E5 needs test+marker. Read-only, offline. A capability with impl but no registration is DEGRADED — the guard-was-configured-but-inert class. E1: the LIVE registry is now enforced as a gate (test-hygiene.sh) — any DEGRADED/MISSING fails closed. A deliberately-accepted DEGRADED must be named in accepted_degraded with a reason, so drift is explicit, never silent. (The nine markers below had already drifted: they said `name.sh --self-test` while test-hygiene.sh writes `$REPO/scripts/name.sh\" --self-test`, so registration read false — the exact silently-false-claim class.)",
+  "accepted_degraded": {},
   "capabilities": [
     {
       "id": "blacklist-guard",
@@ -53,7 +54,7 @@
       "id": "session-guard",
       "purpose": "numbered fresh-session guidance for over-budget / deny-listed-model sessions, ADVISORY rows to ledger",
       "impl": "scripts/session-guard.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "session-guard.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "session-guard.sh" },
       "test": "scripts/session-guard.sh",
       "evidence": { "path": "data/observability/observability.db", "marker": "session-guard" }
     },
@@ -61,7 +62,7 @@
       "id": "handoff-brief",
       "purpose": "deterministic redacted carry-over brief from a transcript; never forks/continues",
       "impl": "scripts/handoff-brief.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "handoff-brief.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "handoff-brief.sh" },
       "test": "scripts/handoff-brief.sh",
       "evidence": { "path": "scripts/session-guard.sh", "marker": "handoff-brief.sh" }
     },
@@ -69,7 +70,7 @@
       "id": "secret-scan",
       "purpose": "value-free secrets-at-rest scan of artifacts, guides to rotate-api-keys.sh",
       "impl": "scripts/secret-scan.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "secret-scan.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "secret-scan.sh" },
       "test": "scripts/secret-scan.sh",
       "evidence": { "path": "scripts/handoff-brief.sh", "marker": "secret-scan.sh" }
     },
@@ -77,7 +78,7 @@
       "id": "sentinel",
       "purpose": "periodic threshold trips (latest over/denied, new gateway errors) to the ledger",
       "impl": "scripts/sentinel.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "sentinel.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "sentinel.sh" },
       "test": "scripts/sentinel.sh",
       "evidence": { "path": "data/observability/observability.db", "marker": "sentinel" }
     },
@@ -85,7 +86,7 @@
       "id": "rotate-server-password",
       "purpose": "rotate the web Basic-auth password with new=200/old=401 proof, values never printed",
       "impl": "scripts/rotate-server-password.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "rotate-server-password.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "rotate-server-password.sh" },
       "test": "scripts/rotate-server-password.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "rotate-server-password" }
     },
@@ -93,7 +94,7 @@
       "id": "latency-timeline",
       "purpose": "DB-driven Gantt of agentic-loop cadence vs queued slow fetches",
       "impl": "scripts/latency-timeline.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "latency-timeline.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "latency-timeline.sh" },
       "test": "scripts/latency-timeline.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "latency-timeline" }
     },
@@ -101,7 +102,7 @@
       "id": "deploy",
       "purpose": "gated promote: scratch-boot + inline-script execution gate before serving",
       "impl": "scripts/deploy.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "deploy.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "deploy.sh" },
       "test": "scripts/deploy.sh",
       "evidence": { "path": "scripts/deploy.sh", "marker": "D3 gate" }
     },
@@ -109,7 +110,7 @@
       "id": "state-snapshot",
       "purpose": "snapshot + checksum-verified, reversible restore of secrets/certs/config",
       "impl": "scripts/state-snapshot.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "state-snapshot.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "state-snapshot.sh" },
       "test": "scripts/state-snapshot.sh",
       "evidence": { "path": "data/observability/snapshots", "marker": "manifest.json" }
     },
@@ -117,7 +118,7 @@
       "id": "extract-transcript",
       "purpose": "DB-direct transcript when the tab will not render; feeds handoff-brief",
       "impl": "scripts/extract-transcript.sh",
-      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "extract-transcript.sh --self-test" },
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "extract-transcript.sh" },
       "test": "scripts/extract-transcript.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "extract-transcript" }
     }

@@ -12,6 +12,12 @@
 // Evidence levels follow RULES.md "Evidence levels" (E0..E5); nothing is
 // "confirmed" below E3. Offline, no network, no model call.
 //
+// E1: a fixture self-test proves the CHECKER works, not that the CLAIMS hold.
+// Running with no flags now evaluates the LIVE repo and EXITS NONZERO on any
+// DEGRADED/MISSING capability that is not named in `accepted_degraded` (id ->
+// reason) — so a registry entry that silently goes false fails the gate instead
+// of reading as a harmless status line. test-hygiene.sh runs this live check.
+//
 // Usage: node scripts/capabilities.mjs [--json] [--self-test]
 
 import { readFileSync, existsSync, realpathSync } from "node:fs";
@@ -56,11 +62,23 @@ function checkCapability(root, cap) {
 }
 
 export function evaluate(root = REPO, capsPath = CAPS) {
-  const caps = JSON.parse(readFileSync(capsPath, "utf8")).capabilities || [];
-  const capabilities = caps.map((c) => checkCapability(root, c));
+  const reg = JSON.parse(readFileSync(capsPath, "utf8"));
+  const caps = reg.capabilities || [];
+  const accepted = reg.accepted_degraded || {};
+  const capabilities = caps.map((c) => {
+    const r = checkCapability(root, c);
+    r.accepted = c.status !== "GREEN" && Object.prototype.hasOwnProperty.call(accepted, c.id);
+    r.accept_reason = r.accepted ? String(accepted[c.id] || "") : "";
+    return r;
+  });
   const counts = { GREEN: 0, DEGRADED: 0, MISSING: 0 };
   for (const c of capabilities) counts[c.status]++;
-  return { ts: new Date().toISOString(), repo: root, counts, capabilities };
+  const unaccepted = capabilities.filter((c) => c.status !== "GREEN" && !c.accepted);
+  return {
+    ts: new Date().toISOString(), repo: root, counts,
+    unaccepted: unaccepted.map((c) => c.id),
+    capabilities,
+  };
 }
 
 async function selfTest() {
@@ -87,12 +105,17 @@ async function selfTest() {
   writeFileSync(capsPath, JSON.stringify(caps));
   const r = evaluate(root, capsPath);
   const by = Object.fromEntries(r.capabilities.map((c) => [c.id, c]));
+  const accepted = { capabilities: caps.capabilities, accepted_degraded: { "b-degraded": "intentional: fixture" } };
+  writeFileSync(capsPath, JSON.stringify(accepted));
+  const r2 = evaluate(root, capsPath);
   const checks = [
     ["impl+registration+test+evidence -> GREEN / E5", by["a-green"].status === "GREEN" && by["a-green"].evidence_level === "E5"],
     ["impl without registration -> DEGRADED", by["b-degraded"].status === "DEGRADED"],
     ["missing impl -> MISSING / E0", by["c-missing"].status === "MISSING" && by["c-missing"].evidence_level === "E0"],
     ["registration by symlink resolves -> GREEN", by["d-symlink-green"].status === "GREEN"],
     ["counts add up", r.counts.GREEN === 2 && r.counts.DEGRADED === 1 && r.counts.MISSING === 1],
+    ["unaccepted DEGRADED/MISSING listed", r.unaccepted.slice().sort().join(",") === "b-degraded,c-missing"],
+    ["accepted_degraded waives a DEGRADED", r2.unaccepted.slice().sort().join(",") === "c-missing"],
   ];
   rmSync(root, { recursive: true, force: true });
   let fail = 0;
@@ -109,10 +132,14 @@ async function main() {
   if (argv.includes("--json")) console.log(JSON.stringify(r, null, 2));
   else {
     console.log("=== capabilities ===");
-    for (const c of r.capabilities) console.log("  " + c.status.padEnd(8) + " " + c.evidence_level + "  " + c.id);
+    for (const c of r.capabilities) {
+      const tag = c.accepted ? " (accepted: " + c.accept_reason + ")" : "";
+      console.log("  " + c.status.padEnd(8) + " " + c.evidence_level + "  " + c.id + tag);
+    }
     console.log("  " + JSON.stringify(r.counts));
+    if (r.unaccepted.length) console.log("UNACCEPTED: " + r.unaccepted.join(", "));
   }
-  return r.counts.MISSING ? 1 : 0;
+  return r.unaccepted.length ? 1 : 0;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

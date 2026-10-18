@@ -8,6 +8,16 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
+      `capabilities.json` declared 15 capabilities but **9 of its own
+      `registration` markers had drifted** (`name.sh --self-test` vs the file's
+      `"$REPO/scripts/name.sh" --self-test`), so they read DEGRADED unseen — only
+      the fixture `--self-test` was gated, proving the checker, not the claims.
+      Fixed the markers (15/15 GREEN) and made the **live** registry fail closed
+      on any DEGRADED/MISSING not named in `accepted_degraded` (id → reason);
+      `test-hygiene.sh` runs it (+1). New **RULE #84**. Gate: lint 266/0 ·
+      hygiene 61/0 · patterns 6/0.
+
 - [x] **E2 external-state bridge (`scripts/issue-bridge.py`) — 2026-10-18.** `gh`
       is absent in-container, so an issue hand-off (`nebula-systemd-override.sh
       --handoff`) was a manual body-file relay with **no read-back** — the filed
@@ -239,9 +249,11 @@ Last updated: 2026-10-18
   routing, finos/perspective, Laya, Blockly/n8n.
 - **E — durable-agent gaps (deduced 2026-10-18; own session each).** Four
   structural gaps the loop still has, each with the GitHub tool that closes it.
-  **E1 claims → enforced gates:** a written claim silently goes false (the
-  30-script catalog was one) — promote it to a falsifiable gate; eval-as-
-  regression tooling: `promptfoo`, `inspect_ai`. **E2 external-state bridge:**
+  **E1 claims → enforced gates: DONE 2026-10-18** (RULE #84): the live
+  capability registry now fails closed on unaccepted DEGRADED/MISSING
+  (`accepted_degraded` = explicit waivers), gated by `test-hygiene.sh`.
+  (Regression-eval tooling `promptfoo`/`inspect_ai` stays a D-decision.)
+  **E2 external-state bridge:**
   `gh` is absent in-container, so an issue hand-off was a manual body-file relay
   with no read-back. **DONE 2026-10-18** (`scripts/issue-bridge.py`:
   link/poll/status → ledger; the hand-off now prints the read-back step;

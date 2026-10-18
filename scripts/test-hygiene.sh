@@ -268,6 +268,16 @@ main() {
             bad 'capabilities: self-test (GREEN/DEGRADED/MISSING)'
             cat "$work/cap_st.txt"
         fi
+        # E1: the self-test proves the checker, not the claims. Run the LIVE
+        # registry -- any DEGRADED/MISSING not named in accepted_degraded fails
+        # closed, so a registry entry that silently goes false (drifted marker,
+        # deleted wiring) breaks the gate instead of reading as a status line.
+        if node "$REPO/scripts/capabilities.mjs" > "$work/cap_live.txt" 2>&1; then
+            ok "capabilities: live gate ($(awk '/^  \{/{gsub(/ /,"");print}' "$work/cap_live.txt"))"
+        else
+            bad 'capabilities: live gate (no unaccepted DEGRADED/MISSING)'
+            cat "$work/cap_live.txt"
+        fi
     else
         bad 'capabilities.mjs present + node'
     fi
