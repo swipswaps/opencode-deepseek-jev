@@ -121,6 +121,16 @@ nebula-systemd-override.sh
     --file/--systemctl-file/--journal-file seams; offline --self-test. Sudo
     only on write.
 
+issue-bridge.py
+    E2 external-state bridge: gh is absent in-container, so an issue hand-off
+    (nebula-systemd-override.sh --handoff) had no read-back. "link" records a
+    filed issue (repo#number) as an open external unit; "poll" reads its state
+    — `gh issue view` on the host (--gh), or a host-written JSON file (--in,
+    default data/observability/issue-state.json) — into the same ledger that
+    triage/next-action read (idempotent by source_key); "status" prints the
+    latest state per issue. next-action.sh surfaces open external issues.
+    Offline --self-test.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the

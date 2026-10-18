@@ -177,7 +177,8 @@ handoff_body() {
 }
 
 handoff() {
-    local sys jrn peer ip n restarts title
+    local sys jrn peer ip n restarts title repo
+    repo="${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh}"
     sys=$(read_sysctl)
     jrn=$(read_journal)
     n=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
@@ -193,11 +194,17 @@ handoff() {
         handoff_body "$peer" "$ip" "$n" "$restarts" > "$HANDOFF_OUT"
         printf 'body written: %s\n' "$HANDOFF_OUT"
         printf 'open the issue (host, gh authed):\n  gh issue create --repo %s --title "%s" --body-file %s\n' \
-            "${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh}" "$title" "$HANDOFF_OUT"
+            "$repo" "$title" "$HANDOFF_OUT"
     else
         printf 'open the issue (host, gh authed):\n  gh issue create --repo %s --title "%s" --body-file <body above>\n' \
-            "${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh}" "$title"
+            "$repo" "$title"
     fi
+    # E2: the hand-off had no read-back. Once the issue number exists, record it
+    # and poll its state into the ledger (the same one triage/next-action read).
+    printf 'close the loop (record + read the filed state back into the ledger):\n'
+    printf '  python3 scripts/issue-bridge.py link --repo %s --number N\n' "$repo"
+    printf '  python3 scripts/issue-bridge.py poll --gh --repo %s --number N   # host, gh authed\n' "$repo"
+    printf '  # no gh in-container: write the host JSON, then poll --in data/observability/issue-state.json\n'
 }
 
 self_test() {
@@ -241,6 +248,10 @@ self_test() {
     out=$(bash "${BASH_SOURCE[0]}" --handoff --systemctl-file "$w/sys1" --journal-file "$w/jrn1" --out "$w/issue.md" 2>&1)
     printf '%s' "$out" | grep -q 'gh issue create --repo swipswaps/proxmox-dual-plane-mesh' \
         || { printf 'FAIL: handoff gh command\n'; fail=1; }
+    printf '%s' "$out" | grep -q 'issue-bridge.py link --repo swipswaps/proxmox-dual-plane-mesh' \
+        || { printf 'FAIL: handoff read-back link step\n'; fail=1; }
+    printf '%s' "$out" | grep -q 'issue-bridge.py poll --gh' \
+        || { printf 'FAIL: handoff read-back poll step\n'; fail=1; }
     [ -f "$w/issue.md" ] || { printf 'FAIL: handoff --out not written\n'; fail=1; }
     grep -q 'flap events in' "$w/issue.md" || { printf 'FAIL: issue body missing evidence\n'; fail=1; }
 

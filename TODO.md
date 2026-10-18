@@ -8,6 +8,22 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **E2 external-state bridge (`scripts/issue-bridge.py`) — 2026-10-18.** `gh`
+      is absent in-container, so an issue hand-off (`nebula-systemd-override.sh
+      --handoff`) was a manual body-file relay with **no read-back** — the filed
+      issue's state never returned to the store, so an external unit
+      (TUNNEL-1 → `swipswaps/proxmox-dual-plane-mesh#5`) could not close. New
+      `issue-bridge.py`: `link` records a filed issue (repo#number) as an OPEN
+      external unit; `poll` reads its state — `gh issue view --json` on the host
+      (`--gh`) or a host-written JSON via `--in` (the host bridge when gh is
+      absent) — into the **same ledger** triage/next-action read, de-duped by
+      `(source,source_key)` (a re-poll is a no-op); `status [--json]` prints the
+      latest state. Wired: `--handoff` now prints the link+poll read-back step;
+      `next-action.sh` surfaces open external issues (text `external:` + JSON
+      `external`); self-test added to `test-durable.sh`. Live: linked `#5` →
+      next-action shows `external: 1 open issue(s)`. Gate: lint 266/0 · hygiene
+      60/0 · durable 8/0 · patterns 6/0.
+
 - [x] **Script catalog completed + gated — 2026-10-18.** The README's "one
       entry per script" claim was false: 30 tracked top-level `scripts/*.{sh,py,mjs}`
       were in neither `scripts/README.txt` nor `scripts/tools.json`. Added a
@@ -226,9 +242,10 @@ Last updated: 2026-10-18
   **E1 claims → enforced gates:** a written claim silently goes false (the
   30-script catalog was one) — promote it to a falsifiable gate; eval-as-
   regression tooling: `promptfoo`, `inspect_ai`. **E2 external-state bridge:**
-  `gh` is absent in-container, so an issue hand-off is a manual body-file relay
-  with no read-back (`nebula-systemd-override.sh --handoff`); needs a round-trip
-  (poll issue state → ledger) or a host-side bridge. **E3 concurrency lock/merge
+  `gh` is absent in-container, so an issue hand-off was a manual body-file relay
+  with no read-back. **DONE 2026-10-18** (`scripts/issue-bridge.py`:
+  link/poll/status → ledger; the hand-off now prints the read-back step;
+  next-action surfaces open external issues). **E3 concurrency lock/merge
   key:** history is linear with no lock/CRDT — `beads` (Dolt cell-level merge,
   hash IDs) or `backlog` (SQLite, actor-signed writes) supply zero-conflict
   merge. **E4 owned task identity:** DB `todo` is session-local (94 done / 10

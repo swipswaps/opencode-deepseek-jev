@@ -108,6 +108,25 @@ if db and os.path.exists(db):
     except Exception:
         pass
 
+# External issues (E2): the latest ISSUE_STATE per resource, read back by
+# issue-bridge.py. A non-CLOSED issue is a live external unit — surfaced here so
+# a resuming session sees the hand-off's fate without re-deriving it.
+external = []
+if db and os.path.exists(db):
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+        latest = {}
+        for resource, verdict, ts in con.execute(
+                "SELECT resource,verdict,ts FROM ledger WHERE type='ISSUE' ORDER BY id"):
+            latest[resource] = (verdict, ts)
+        for resource, verdict, ts in con.execute(
+                "SELECT resource,verdict,ts FROM ledger WHERE type='ISSUE_STATE' ORDER BY id"):
+            latest[resource] = (verdict, ts)
+        external = [{"resource": r, "state": v[0], "ts": v[1]}
+                    for r, v in latest.items() if (v[0] or "").upper() != "CLOSED"]
+    except Exception:
+        pass
+
 tier1 = docs.get("tier1_tokens")
 budget = docs.get("budget")
 docs_over = bool(tier1 is not None and budget and tier1 > budget)
@@ -164,6 +183,7 @@ out = {
     "since_gate": {"rev": gate_rev, "commits": commits, "n_commits": len(commits), "events": events_since},
     "next": {"text": next_text, "source": next_source},
     "loop": loop_cur,
+    "external": external,
     "blockers": blockers,
 }
 
@@ -188,6 +208,9 @@ if next_text:
     print("  source:   %s" % next_source)
 else:
     print("next unit: (none queued — see TODO.md)")
+if external:
+    print("external: %d open issue(s) — %s" % (len(external), ", ".join(
+        "%s [%s]" % (e["resource"], e["state"]) for e in external)))
 if blockers:
     print("blockers:")
     for b in blockers:

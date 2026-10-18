@@ -800,3 +800,22 @@ detector, p≈0.94).
 > (1.17× / 233k in) → `preflight.sh` STOP → scripted handoff; **start fresh**.
 > Next: TUNNEL-1's fix is external (#5, T8 watch live); local queue otherwise
 > exhausted — sections C/E remain. `gh` is absent in-container (E2).
+
+> **PIN 2026-10-18 (session `ses_eb04bf350f…` → fresh, E2):** closed the E2
+> **external-state bridge** — the hand-off loop had no read-back (an issue was a
+> manual body-file relay, so an external unit could not close). New
+> **`scripts/issue-bridge.py`**: `link` records a filed issue (repo#number) as
+> an OPEN external unit; `poll` reads its state — `gh issue view --json` on the
+> host (`--gh`) or a host-written JSON via `--in` (the host bridge when `gh` is
+> absent) — into the **same ledger** triage/`next-action` read, de-duped by
+> `(source,source_key)` so a re-poll is a no-op; `status [--json]` prints the
+> latest state. Wired: `nebula-systemd-override.sh --handoff` now prints the
+> link+poll read-back step; `next-action.sh` surfaces open external issues (text
+> `external:` + JSON `external`); `issue-bridge` self-test in `test-durable.sh`
+> (+1 → 8/0); catalogued in `tools.json` + `scripts/README.txt`. **Live:**
+> linked `swipswaps/proxmox-dual-plane-mesh#5` → `next-action` prints
+> `external: 1 open issue(s) — … #5 [OPEN]`. Gate: lint 266/0 · hygiene 60/0 ·
+> patterns 6/0 · durable 8/0 · dashboard 121/0 — all green (RULES #54 resolved
+> once `issue-bridge.py` was git-**tracked**).
+> Next: **E1** (claims → enforced gates), **E3** (concurrency lock/merge key),
+> **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).
