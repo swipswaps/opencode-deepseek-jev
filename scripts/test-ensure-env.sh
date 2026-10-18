@@ -99,6 +99,7 @@ open(p, "w").write("\n".join(l for l in lines if not l.startswith("OPENCODE_SERV
 PY
     bash "$sh" --repo "$d" > "$d/out3.txt" 2>&1
     has 'PASSWORD_ROTATED' "$d/out3.txt" && ok 'missing password rotates (announced)' || bad 'missing password rotates (announced)'
+    has 'Restart the stack to apply it' "$d/out3.txt" && ok 'rotation tells the operator to restart (running container keeps the old value)' || bad 'rotation restart note missing'
     has 'CUSTOM_KEY=keep-me' "$d/.env.local" && ok 'unknown key survives a rotation' || bad 'unknown key survives a rotation'
     local plen; plen=$(pwlen "$d/.env.local")
     [ "${plen:-0}" -ge 12 ] && ok "generated password length ${plen} >= 12" || bad "generated password length (${plen}) >= 12"

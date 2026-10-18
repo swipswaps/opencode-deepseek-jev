@@ -16,6 +16,8 @@
 #     is missing;
 #   * a generation is announced (PASSWORD_ROTATED marker) so the caller
 #     (web.sh) can tell the operator to re-login; values never otherwise print.
+#     The announcement also says to (re)start the stack: the running container
+#     read the old password at boot and keeps it until recreated/restarted.
 #
 # Usage: ensure-env.sh [--rotate] [--repo <dir>]   (--repo is the test seam)
 #
@@ -181,6 +183,7 @@ if generated:
     print(merged["OPENCODE_SERVER_PASSWORD"])
     print("GENERATED_PASSWORD_END")
     print("SAVE this password in a password manager; it is shown only once.")
+    print("Restart the stack to apply it (./scripts/web.sh); a running container keeps the old password until then.")
 PY_EOF
     local rc=$?
     if [ "$rc" -ne 0 ]; then

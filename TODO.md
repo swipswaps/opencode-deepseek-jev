@@ -8,6 +8,14 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **`ensure-env.sh` password-regen review — 2026-10-18.** Re-verified the
+      regen invariants (behavior test now 19/19: no-op / warn / rotate /
+      preserve). Two gaps fixed: a standalone `--rotate` now prints *"restart the
+      stack to apply it"* (a running container keeps the OLD password until
+      restarted), and the `rotate-password` runbook now uses the tested scripted
+      path (`./scripts/ensure-env.sh --rotate` → `./scripts/web.sh`) instead of a
+      manual paste. Gate: lint 264/0, test-hygiene 58/0, test-dashboard 120/0.
+
 - [x] **`quirks` precision: word-boundary the loose regexes — 2026-10-18.** The
       `matchIssues()` regexes for `#50434` (`import`), `#37339` (`black`) and
       `#51614` (`loaded`) matched **substrings** (`import` ⊂ "important" — the
@@ -122,10 +130,11 @@ Last updated: 2026-10-18
 
 ## Segmented plan (do not balloon — one segment per session)
 
-- **A — local, doable now:** ~~tier-1 doc trim~~ **done 2026-10-18** (TODO Done
-  → archive; RULES #77; `scripts/README.txt` is tier-2, not budgeted);
-  ~~`quirks` fuzzy precision~~ **done** (word-boundary regexes, held-out FPR 0).
-  Remaining: `ensure-env.sh` password-regen review.
+- **A — local, doable now:** **ALL DONE 2026-10-18** — ~~tier-1 doc trim~~ (TODO
+  Done → archive; RULES #77; `scripts/README.txt` is tier-2, not budgeted),
+  ~~`quirks` fuzzy precision~~ (word-boundary regexes, held-out FPR 0),
+  ~~`ensure-env.sh` password-regen review~~ (restart note + scripted runbook).
+  Next local work moves to the C groups (own session).
 - **B — needs a host/test this container cannot run:** `doctor.sh --full` Tier 10,
   `ux-audit.py`/`ux-test.py`, `test-sidebar-streaming.sh`, `rotate-api-keys.sh`
   end-to-end.

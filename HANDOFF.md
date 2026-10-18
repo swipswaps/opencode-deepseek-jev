@@ -43,8 +43,12 @@
 > loose single-word match regexes were substring bugs (`import` matched
 > **"important"** — the one held-out FP; also `black`→"blacklist",
 > `loaded`→"downloaded"); word-bounded them. Held-out **FPR 20% → 0%**,
-> constructive recall stays 100%, decoy FPR 0. Nothing else changed: TUNNEL-1's
-> fix stays external (#5), T8 watch live.
+> constructive recall stays 100%, decoy FPR 0. (3) `ensure-env.sh` regen review:
+> a standalone `--rotate` now says to restart the stack (a running container
+> keeps the OLD password until restarted), and runbook `rotate-password` uses
+> the tested scripted path (`--rotate` → `web.sh`) instead of a manual paste.
+> Segment A is now fully done. Nothing else changed: TUNNEL-1's fix stays
+> external (#5), T8 watch live.
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard

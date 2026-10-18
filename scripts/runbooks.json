@@ -15,15 +15,15 @@
   {
     "id": "rotate-password",
     "title": "Rotate server password",
-    "purpose": "Replace OPENCODE_SERVER_PASSWORD (its live value was echoed by docker compose config).",
+    "purpose": "Replace OPENCODE_SERVER_PASSWORD via the tested scripted path (its live value was once echoed by docker compose config).",
     "where": "host",
-    "manual": true,
+    "manual": false,
     "commands": [
-      "python3 -c 'import secrets; print(\"OPENCODE_SERVER_PASSWORD=\" + secrets.token_hex(24))'",
+      "./scripts/ensure-env.sh --rotate",
       "./scripts/web.sh",
       "./scripts/archive/one-shot/verify-password-drift.sh"
     ],
-    "note": "Manual: paste the generated line over the OPENCODE_SERVER_PASSWORD line in .env.local (mode 0600), then reload and verify."
+    "note": "Scripted: ensure-env.sh --rotate regenerates OPENCODE_SERVER_PASSWORD (atomic write, mode 0600, one backup, prints the new value once with a PASSWORD_ROTATED marker). Then ./scripts/web.sh recreates the stack so the container picks it up -- a running container keeps the OLD password until restarted (the previous password stops working). Verify with verify-password-drift.sh."
   },
   {
     "id": "litellm",
