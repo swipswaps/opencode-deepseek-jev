@@ -379,7 +379,10 @@ quirks.mjs
     and docs. matchIssues() is fuzzy + typo-tolerant ("blnak" -> "blank");
     annotateReport() is the cheap form used on every /api/health load;
     modelLedger() joins each model to its tool-error rate and blacklist-
-    construct usage; corpusHits() (DB LIKE + doc/code scan) is CLI-only.
+    construct usage; adaptModel() turns that ledger into a thresholded
+    verdict (ok/watch/adapt) + a recommendation (the evidence->action step,
+    RULES #69) attached to each ledger row and shown per model in /api/health;
+    corpusHits() (DB LIKE + doc/code scan) is CLI-only.
     --self-test, --query TEXT, --report, --check-issues, --eval (scores
     matchIssues against the frozen key scripts/quirks-eval.json; prints
     precision/recall/FPR + a sweep). Default threshold 0.5. Offline.

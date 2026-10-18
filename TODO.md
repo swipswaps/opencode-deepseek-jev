@@ -8,6 +8,13 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Per-model adaptation (not just the ledger) — 2026-10-18.** `quirks.mjs`
+      gains `adaptModel(ledgerRow)`: the measured per-model ledger (tool-error
+      rate, blacklist-construct usage) becomes a thresholded verdict
+      (`ok`/`watch`/`adapt`) + a concrete recommendation — evidence → action,
+      RULES #69 (never a prompt). Attached to every `modelLedger()` row and
+      rendered per model in the `/api/health` panel. Self-test +4 → PASS.
+
 - [x] **client-vs-agent stall locus (`session-health.mjs`) — 2026-10-18.** Every
       finding now names the **side** when live data is present: `locus: agent`
       (server reports the session busy → the agent side is active) vs

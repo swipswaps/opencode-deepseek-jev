@@ -232,10 +232,30 @@ export function annotateReport(report, issues = loadIssues()) {
   return { correlated, known_issues, by_model };
 }
 
+// PER-MODEL ADAPTATION (not just the ledger): turn the MEASURED per-model
+// ledger into a deterministic verdict + recommendation. The corpus supplies
+// evidence, the harness (guard substitutions) enforces, the person decides
+// (RULES #69) — so this never issues a prompt, only a thresholded, reproducible
+// signal: a high tool-error rate says "check the gateway / prefer another
+// model"; a rising blacklist-construct count says the guard's substitute is not
+// being adopted. Pure on a ledger row, so it rides every page load for free.
+export function adaptModel(row) {
+  if (!row || !row.tool_parts) return { verdict: "no-data", recs: ["insufficient tool data"] };
+  const er = row.error_rate || 0;
+  const q = row.quirk_hits || 0;
+  const recs = [];
+  if (er >= 0.15) recs.push("high tool-error rate (" + (Math.round(er * 1000) / 10) + "%): check the gateway (free-tier 'backend temporarily unavailable') or prefer another model");
+  if (q >= 3) recs.push("blacklist constructs x" + q + " (sed / 2>/dev/null / subprocess.run): the guard substitutes these — a rising count means the substitute is not being adopted");
+  if (!recs.length) recs.push("within normal range");
+  return { verdict: er >= 0.15 ? "adapt" : q >= 3 ? "watch" : "ok", recs };
+}
+
 // PER-MODEL QUIRK LEDGER (P4): join each model to its tool-error rate and its
 // blacklist-construct usage, so "which model keeps emitting sed/2>/dev/null or
 // fails most" is a measured property, not a hunch. Bounded to the most recent
-// sessions so it stays cheap enough for a page load. Read-only.
+// sessions so it stays cheap enough for a page load. Read-only. Each row also
+// carries `adaptation` (adaptModel): the ledger is the evidence, the adaptation
+// is the action.
 export function modelLedger(dbPath, opts = {}) {
   const recent = opts.recentSessions ?? 40;
   const db = new DatabaseSync(dbPath, { readOnly: true });
@@ -264,6 +284,7 @@ export function modelLedger(dbPath, opts = {}) {
   for (const r of rows) {
     r.error_rate = r.tool_parts ? Number((r.errors / r.tool_parts).toFixed(3)) : 0;
     r.quirk_hits = (r.used_sed || 0) + (r.used_devnull || 0) + (r.used_subprocess || 0);
+    r.adaptation = adaptModel(r);
   }
   return rows;
 }
@@ -367,6 +388,23 @@ async function selfTest() {
     ["modelLedger: free-model has 0 errors + 0 quirk hits", (() => {
       const f = modelLedger(mdb).find((x) => x.model === "free-model");
       return !!f && f.errors === 0 && f.quirk_hits === 0;
+    })()],
+    ["adaptModel: high error rate -> adapt + names the gateway", (() => {
+      const a = adaptModel({ model: "m", tool_parts: 4, error_rate: 0.5, quirk_hits: 0 });
+      return a.verdict === "adapt" && a.recs.some((r) => r.includes("gateway"));
+    })()],
+    ["adaptModel: 3+ blacklist constructs -> watch", (() => {
+      const a = adaptModel({ model: "m", tool_parts: 10, error_rate: 0.05, quirk_hits: 3 });
+      return a.verdict === "watch" && a.recs.some((r) => r.includes("substitute"));
+    })()],
+    ["adaptModel: clean -> ok; no tool data -> no-data", (() => {
+      return adaptModel({ model: "m", tool_parts: 5, error_rate: 0, quirk_hits: 0 }).verdict === "ok" &&
+             adaptModel({ model: "m", tool_parts: 0, error_rate: 0, quirk_hits: 0 }).verdict === "no-data" &&
+             adaptModel(null).verdict === "no-data";
+    })()],
+    ["modelLedger rows carry adaptation (evidence -> action)", (() => {
+      const d = modelLedger(mdb).find((x) => x.model === "deepseek-flash");
+      return !!d && !!d.adaptation && d.adaptation.verdict === "adapt";
     })()],
     ["checkIssues passes on the vendored map", checkIssues().errors.length === 0],
     ["checkIssues flags a broken regex", (() => {

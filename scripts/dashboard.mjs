@@ -1842,7 +1842,9 @@ async function renderHealth(){
   if(d.per_model&&d.per_model.length){
     h+='<div class="muted" style="font-size:12px;margin-top:8px">per-model quirks — tool errors + blacklist constructs (recent sessions)</div>';
     for(var q=0;q<d.per_model.length;q++){var pm=d.per_model[q];
-      h+='<div class="item"><span class="tag'+(pm.quirk_hits>0?' ERR':'')+'">model</span>'+esc(pm.model)+' — '+esc(String(pm.tool_parts))+' tools, errors '+esc(String(pm.errors))+' ('+esc(String(Math.round((pm.error_rate||0)*1000)/10))+'%) · sed '+esc(String(pm.used_sed||0))+' · 2>/dev/null '+esc(String(pm.used_devnull||0))+'</div>';}}
+      h+='<div class="item"><span class="tag'+(pm.quirk_hits>0?' ERR':'')+'">model</span>'+esc(pm.model)+' — '+esc(String(pm.tool_parts))+' tools, errors '+esc(String(pm.errors))+' ('+esc(String(Math.round((pm.error_rate||0)*1000)/10))+'%) · sed '+esc(String(pm.used_sed||0))+' · 2>/dev/null '+esc(String(pm.used_devnull||0))+'</div>';
+      var ad=pm.adaptation;
+      if(ad&&ad.verdict&&ad.verdict!=='ok'){h+='<div class="item muted" style="font-size:12px"><span class="tag'+(ad.verdict==='adapt'?' ERR':'')+'">'+esc(ad.verdict)+'</span>'+esc(ad.recs&&ad.recs[0]||'')+'</div>';}}}
   el.html(h);
   setBadge('signals',d.findings.length);
   HEALTH_SUMMARY=c.running_tools+' running · '+c.blank_tails+' blank'+(c.dead_tools?' · '+c.dead_tools+' dead':'');
