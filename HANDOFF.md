@@ -657,8 +657,10 @@ Current state: **all six served pages 0 errors / 0 warnings / 0 notes**
 
 The live queue (with dispositions and segment letters A–D) is **`TODO.md`** —
 read it there, do not duplicate it here. Standing groups: **G1** observability
-UX (nav/tabs/`/docs`/`ux-trace` built; remaining: runbook tag filter, keyboard
-shortcuts, landing grid), **G2** learning loop (solutions + recurring-error gate
+UX (nav/tabs/`/docs`/`ux-trace` built; the erstwhile "remaining" list is stale
+— runbook tag filter, search/tab keyboard shortcuts (`⌘K`, `/`, APG arrow keys)
+and the landing strip are all present in `dashboard.mjs`; optional residual:
+richer page-nav shortcuts), **G2** learning loop (solutions + recurring-error gate
 built), **G3** visualization (patterns done, Plot pivot done, perspective
 deferred), **G4** cost control (pin model; wire LiteLLM `max_budget`), **G5**
 security/ops (Laya, embeddings rerank), **G6** test/quality.
