@@ -514,6 +514,23 @@ async function selfTest() {
   checks.push(["dead: no live data -> blank stays (fail-safe)",
     bOff.findings[0].kind === "blank_tail" && bOff.counts.blank_tails === 1]);
 
+  // LOCUS (client-vs-agent): a RECENT running tool (below DEAD_AFTER_S) with an
+  // idle server is still a live stall, but now names the side — the agent side
+  // is not progressing ("idle"); a busy server says the agent side is active.
+  // Offline assigns no locus (never guess the side).
+  const recentReport = () => ({
+    counts: { running_tools: 1 },
+    findings: [{ kind: "running_tool", session: "s_new", tool: "bash", age_s: 300, command: "npm i" }],
+  });
+  const rIdle = applyLiveAdjudication(recentReport(), { available: true, statuses: { s_new: { type: "idle" } } });
+  checks.push(["locus: recent idle running tool stays stall + locus idle",
+    rIdle.findings[0].kind === "running_tool" && rIdle.findings[0].locus === "idle"]);
+  const rBusy = applyLiveAdjudication(recentReport(), { available: true, statuses: { s_new: { type: "busy" } } });
+  checks.push(["locus: busy server marks the finding locus agent",
+    rBusy.findings[0].kind === "running_tool" && rBusy.findings[0].locus === "agent"]);
+  checks.push(["locus: offline assigns no locus (never guess the side)",
+    typeof applyLiveAdjudication(recentReport(), { available: false }).findings[0].locus === "undefined"]);
+
   let fail = 0;
   console.log("=== session-health.mjs --self-test ===");
   for (const [name, ok] of checks) {
@@ -524,6 +541,17 @@ async function selfTest() {
   return fail ? 1 : 0;
 }
 
+// CLIENT-VS-AGENT LOCUS — the store proves the AGENT side; /session/status says
+// whether the session is actively BUSY. Each finding gets a `locus`:
+//   "agent" — the server reports the session busy: the agent side is working
+//             (a long tool run may be legitimate, not a wedge);
+//   "idle"  — the server reports idle/absent while the store claims a tool is
+//             still running or a turn went blank: the agent side is NOT
+//             progressing. A client-side freeze is invisible from the store
+//             (which is exactly why this tool reads the store, not the view),
+//             so "idle" is the honest, offline-safe locus. Without live data
+//             no locus is assigned (fail-safe: never guess the side).
+//
 // DEAD-TOOL ADJUDICATION — reclassify `running_tool` findings the server has
 // demonstrably outlived: older than DEAD_AFTER_S *and* the session idle/absent
 // in live /session/status. Without live data the verdict stays `stall`
@@ -534,10 +562,11 @@ export function applyLiveAdjudication(report, live, opts = {}) {
   const deadAfterS = opts.deadAfterS ?? DEAD_AFTER_S;
   if (!live || live.available !== true || !live.statuses) return report;
   for (const f of report.findings || []) {
-    if (!(f.age_s > deadAfterS)) continue;
     const st = live.statuses[f.session];
-    const idle = !st || st.type !== "busy";
-    if (!idle) continue;
+    const busy = !!(st && st.type === "busy");
+    f.locus = busy ? "agent" : "idle";
+    if (!(f.age_s > deadAfterS)) continue;
+    if (busy) continue;
     // A tool still `running` long past its stride, server idle/absent -> dead.
     if (f.kind === "running_tool") {
       f.kind = "dead_tool";
@@ -598,13 +627,14 @@ async function main() {
       );
     }
     for (const f of report.findings) {
+      const locus = f.locus ? ` locus=${f.locus}` : "";
       if (f.kind === "running_tool")
-        console.log(`  [stall] ${f.session} ${f.tool} running ${f.age_s}s :: ${f.command}`);
+        console.log(`  [stall] ${f.session} ${f.tool} running ${f.age_s}s${locus} :: ${f.command}`);
       else if (f.kind === "dead_tool")
         console.log(`  [dead] ${f.session} ${f.tool} ran ${f.age_s}s, server idle/absent :: archival, not a live stall`);
       else if (f.kind === "dead_blank")
         console.log(`  [dead] ${f.session} ${f.model} blank ${f.age_s}s, server idle/absent :: archival, not a live no-answer`);
-      else console.log(`  [blank] ${f.session} ${f.model} no text ${f.age_s}s after tool`);
+      else console.log(`  [blank] ${f.session} ${f.model} no text ${f.age_s}s after tool${locus}`);
     }
   }
   return 0;

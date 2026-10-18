@@ -8,6 +8,15 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **client-vs-agent stall locus (`session-health.mjs`) — 2026-10-18.** Every
+      finding now names the **side** when live data is present: `locus: agent`
+      (server reports the session busy → the agent side is active) vs
+      `locus: idle` (server idle/absent → the agent side is not progressing; a
+      client-side freeze is *invisible* from the store, which is exactly why
+      this tool reads the store, not the view). Offline assigns **no** locus
+      (never guesses the side). Works off the existing `GET /session/status`
+      adjudication — no new network on the default path. Self-test +3 → PASS.
+
 - [x] **RULES #54: runbook/tool script targets must be git-tracked — 2026-10-18.**
       `runbooks.json` told you to run `./scripts/archive/one-shot/rotate-api-keys.sh`
       and `.../verify-password-drift.sh` — **untracked** files (absent on a fresh
