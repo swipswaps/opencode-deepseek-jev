@@ -150,19 +150,12 @@ show_state() {
 # handoff -- emit a ready-to-paste issue for the PEER repo (the fix is external:
 # proxmox-dual-plane-mesh). Plain selectable text (RULES #70); built from the
 # same evidence --diagnose uses, so the issue cannot drift from the data.
-handoff() {
-    local sys jrn peer ip n restarts
-    sys=$(read_sysctl)
-    jrn=$(read_journal)
-    n=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
-    peer=$(printf '%s\n' "$jrn" | grep -oE 'certName=[A-Za-z0-9._-]+' | head -1 | cut -d= -f2)
-    ip=$(printf '%s\n' "$jrn" | grep -oE 'vpnIp=[0-9.]+' | head -1 | cut -d= -f2)
-    restarts=$(printf '%s\n' "$sys" | awk -F= '/^NRestarts=/{print $2; exit}')
-    [ -n "$restarts" ] || restarts="0"
+# --out writes the body for `gh issue create --body-file`; the exact gh command
+# is printed so the hand-off closes without hand-assembly.
+handoff_body() {
+    local peer="$1" ip="$2" n="$3" restarts="$4"
     printf '%s\n' \
-        "TITLE: nebula tunnel to ${peer:-peer} (vpnIp ${ip:-?}) flaps — repeated teardown/re-handshake" \
-        "" \
-        "Repo: proxmox-dual-plane-mesh (opencode-deepseek-jev only watches and hands off)" \
+        "Repo: ${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh} (opencode-deepseek-jev only watches and hands off)" \
         "" \
         "## Symptom" \
         "The nebula PROCESS is healthy — systemd NRestarts=${restarts}, one stable PID, no exit" \
@@ -181,6 +174,30 @@ handoff() {
         "## Suspects" \
         "UDP reachability to the lighthouse (firewall/NAT/MTU) and the peer/lighthouse reload cadence." \
         "A systemd rate-limit does NOT fix this (it only bounds restarts that are not happening)."
+}
+
+handoff() {
+    local sys jrn peer ip n restarts title
+    sys=$(read_sysctl)
+    jrn=$(read_journal)
+    n=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
+    peer=$(printf '%s\n' "$jrn" | grep -oE 'certName=[A-Za-z0-9._-]+' | head -1 | cut -d= -f2)
+    ip=$(printf '%s\n' "$jrn" | grep -oE 'vpnIp=[0-9.]+' | head -1 | cut -d= -f2)
+    restarts=$(printf '%s\n' "$sys" | awk -F= '/^NRestarts=/{print $2; exit}')
+    [ -n "$restarts" ] || restarts="0"
+    title="nebula tunnel to ${peer:-peer} (vpnIp ${ip:-?}) flaps — repeated teardown/re-handshake"
+    printf 'TITLE: %s\n\n' "$title"
+    handoff_body "$peer" "$ip" "$n" "$restarts"
+    printf '\n---\n'
+    if [ -n "$HANDOFF_OUT" ]; then
+        handoff_body "$peer" "$ip" "$n" "$restarts" > "$HANDOFF_OUT"
+        printf 'body written: %s\n' "$HANDOFF_OUT"
+        printf 'open the issue (host, gh authed):\n  gh issue create --repo %s --title "%s" --body-file %s\n' \
+            "${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh}" "$title" "$HANDOFF_OUT"
+    else
+        printf 'open the issue (host, gh authed):\n  gh issue create --repo %s --title "%s" --body-file <body above>\n' \
+            "${HANDOFF_REPO:-swipswaps/proxmox-dual-plane-mesh}" "$title"
+    fi
 }
 
 self_test() {
@@ -221,6 +238,11 @@ self_test() {
     printf '%s' "$out" | grep -q 'TITLE: nebula tunnel' || { printf 'FAIL: handoff has no title\n'; fail=1; }
     printf '%s' "$out" | grep -q 'vpnIp 10.100.0.1' || { printf 'FAIL: handoff missing peer ip\n'; fail=1; }
     printf '%s' "$out" | grep -q 'flap events in' || { printf 'FAIL: handoff missing evidence count\n'; fail=1; }
+    out=$(bash "${BASH_SOURCE[0]}" --handoff --systemctl-file "$w/sys1" --journal-file "$w/jrn1" --out "$w/issue.md" 2>&1)
+    printf '%s' "$out" | grep -q 'gh issue create --repo swipswaps/proxmox-dual-plane-mesh' \
+        || { printf 'FAIL: handoff gh command\n'; fail=1; }
+    [ -f "$w/issue.md" ] || { printf 'FAIL: handoff --out not written\n'; fail=1; }
+    grep -q 'flap events in' "$w/issue.md" || { printf 'FAIL: issue body missing evidence\n'; fail=1; }
 
     printf 'nebula-systemd-override: self-test %s\n' "$([ "$fail" -eq 0 ] && printf PASS || printf FAIL)"
     return "$fail"
@@ -229,6 +251,7 @@ self_test() {
 main() {
     local DROPIN="$DEF_DROPIN" APPLY=0 REVERT=0 SHOW=0 DIAGNOSE=0 HANDOFF=0 RESTART=0 NO_RELOAD=0
     local SYSTEMCTL_FILE="" JOURNAL_FILE=""
+    local HANDOFF_OUT="${HANDOFF_OUT:-}" HANDOFF_REPO="${HANDOFF_REPO:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
             --file) DROPIN="${2:-}"; shift 2 ;;
@@ -237,13 +260,15 @@ main() {
             --show) SHOW=1; shift ;;
             --diagnose) DIAGNOSE=1; shift ;;
             --handoff) HANDOFF=1; shift ;;
+            --out) HANDOFF_OUT="${2:-}"; shift 2 ;;
+            --repo) HANDOFF_REPO="${2:-}"; shift 2 ;;
             --systemctl-file) SYSTEMCTL_FILE="${2:-}"; shift 2 ;;
             --journal-file) JOURNAL_FILE="${2:-}"; shift 2 ;;
             --restart) RESTART=1; shift ;;
             --no-reload) NO_RELOAD=1; shift ;;
             --self-test) self_test; return "$?" ;;
             -h | --help)
-                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show|--diagnose|--handoff] [--systemctl-file F] [--journal-file F] [--restart] [--no-reload] [--self-test]\n' "$0"
+                printf 'usage: %s [--file DROPIN] [--apply|--revert|--show|--diagnose|--handoff] [--out F] [--repo OWNER/NAME] [--systemctl-file F] [--journal-file F] [--restart] [--no-reload] [--self-test]\n' "$0"
                 return 0
                 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;

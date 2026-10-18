@@ -178,6 +178,7 @@
       "bash scripts/nebula-systemd-override.sh --show",
       "bash scripts/nebula-systemd-override.sh --diagnose",
       "bash scripts/nebula-systemd-override.sh --handoff",
+      "bash scripts/nebula-systemd-override.sh --handoff --out /tmp/tunnel-1-issue.md",
       "sudo bash scripts/nebula-systemd-override.sh --apply",
       "sudo bash scripts/nebula-systemd-override.sh --revert",
       "bash scripts/nebula-systemd-override.sh --self-test"

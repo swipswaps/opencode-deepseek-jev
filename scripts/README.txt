@@ -105,8 +105,10 @@ nebula-systemd-override.sh
     LogRateLimit* as a defensive ceiling, and CLASSIFIES restart-churn vs
     tunnel-flap. Dry-run by default; --show/--diagnose/--apply/--revert;
     --handoff emits a ready-to-paste issue for the peer repo (the fix is
-    external); --restart opt-in; --file/--systemctl-file/--journal-file seams;
-    offline --self-test. Sudo only on write.
+    external); --out F writes the body and prints the exact `gh issue create
+    --repo OWNER/NAME --title … --body-file F` command; --restart opt-in;
+    --file/--systemctl-file/--journal-file seams; offline --self-test. Sudo
+    only on write.
 
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
