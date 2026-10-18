@@ -8,6 +8,16 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **E4 owned task identity (`scripts/task-id.py`) — 2026-10-18.** A unit had
+      no stable ID and the DB `todo` is session-local, so begin/close/hand-off
+      could not name the same unit across sessions. New `task-id.py` records
+      `TASK`/`TASK_STATE` rows on the same ledger: `new` mints (or returns, by
+      title) a stable id (`T-<6hex>`, or explicit `--id` like `TUNNEL-1`) +
+      owner; `close --id|--title`; `show`/`list [--all]`; idempotent by
+      `source_key`. Wired: `loop-state.sh --begin` registers the unit, `--end`
+      closes it; `next-action.sh` surfaces open tasks (text `tasks:` + JSON
+      `tasks`). New **RULE #86**; `test-durable.sh` +1 → 11/0.
+
 - [x] **E3 concurrency lock (`scripts/loop-lock.sh`) — 2026-10-18.** The dev
       loop has several shared writers (`TODO.md`, `HANDOFF.md`, the `dev-loop`
       checkpoint, the ledger) and no merge key, so two **live** sessions could
@@ -203,10 +213,11 @@ Last updated: 2026-10-18
   single-writer lease (`flock`-serialised, atomic write) that `loop-state.sh
   --begin` requires and `next-action.sh` surfaces; a dead holder is reclaimed by
   TTL. (Dolt/`backlog` zero-conflict *merge* stays a D-decision — only needed if
-  we want parallel writers, not one owner.) **E4 owned task identity:** DB
-  `todo` is session-local (94 done / 10 in_progress / 14 pending, all ended)
-  with no ID linking it to `TODO.md` — `beads`/`backlog` give a durable,
-  addressed unit that survives every session.
+  we want parallel writers, not one owner.) **E4 owned task identity: DONE
+  2026-10-18** (RULE #86): `task-id.py` — a durable, addressed id (id → title +
+  owner) on the ledger; `loop-state.sh` registers/closes it and `next-action.sh`
+  surfaces open tasks. (`beads`/`backlog` add zero-conflict *merge* if parallel
+  writers are ever wanted.)
 
 ## Queue (ranked, top first)
 

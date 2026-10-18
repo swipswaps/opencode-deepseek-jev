@@ -131,6 +131,16 @@ issue-bridge.py
     latest state per issue. next-action.sh surfaces open external issues.
     Offline --self-test.
 
+task-id.py
+    E4 durable, addressed task identity: a unit has no stable ID and the DB
+    `todo` is session-local, so begin/close/hand-off cannot name the same unit.
+    "new" mints (or returns, by title) a stable id (T-<6hex>, or an explicit
+    --id like TUNNEL-1) and records title + owner; "close --id|--title" ends it;
+    "show"/"list [--all]" read the latest state — all on the same ledger
+    (TASK/TASK_STATE rows), idempotent by source_key. loop-state.sh --begin
+    registers the unit and --end closes it; next-action.sh surfaces open tasks.
+    Offline --self-test.
+
 query-lib.mjs
     Pure read-only aggregations (signals/patterns/words query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the

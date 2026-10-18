@@ -28,6 +28,8 @@ printf '=== test-durable ===\n'
 chk "triage-alerts self-test (durable ledger reader)" python3 "$REPO/scripts/triage-alerts.py" --self-test
 # E2: an external issue hand-off round-trips into the durable ledger.
 chk "issue-bridge self-test (external issue state -> ledger)" python3 "$REPO/scripts/issue-bridge.py" --self-test
+# E4: a unit gets a durable, addressed id (id -> title + owner).
+chk "task-id self-test (addressed task identity -> ledger)" python3 "$REPO/scripts/task-id.py" --self-test
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.

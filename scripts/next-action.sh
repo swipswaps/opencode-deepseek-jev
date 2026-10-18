@@ -127,6 +127,26 @@ if db and os.path.exists(db):
     except Exception:
         pass
 
+# Task registry (E4): the latest TASK/TASK_STATE per id, written by task-id.py.
+# An OPEN task is a durable, ADDRESSED unit (id -> title + owner) that survives
+# every session, so begin/close/hand-off name the same thing.
+tasks = []
+if db and os.path.exists(db):
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+        tstate = {}
+        for res, verdict, detail in con.execute(
+                "SELECT resource,verdict,detail FROM ledger WHERE type='TASK' ORDER BY id"):
+            tstate[res] = (verdict, detail)
+        for res, verdict, detail in con.execute(
+                "SELECT resource,verdict,detail FROM ledger WHERE type='TASK_STATE' ORDER BY id"):
+            tstate[res] = (verdict, detail)
+        tasks = sorted([{"id": r, "state": v[0], "title": v[1]}
+                        for r, v in tstate.items()
+                        if (v[0] or "").upper() != "CLOSED"], key=lambda t: t["id"])
+    except Exception:
+        pass
+
 # Dev-loop lease (E3): the single-writer lock loop-state.sh acquires on --begin.
 # A live holder is a hard blocker for beginning a segment (another session owns
 # the loop); a stale lease is no blocker (it is reclaimable).
@@ -202,6 +222,7 @@ out = {
     "next": {"text": next_text, "source": next_source},
     "loop": loop_cur,
     "external": external,
+    "tasks": tasks,
     "lock": lock,
     "blockers": blockers,
 }
@@ -230,6 +251,9 @@ else:
 if external:
     print("external: %d open issue(s) — %s" % (len(external), ", ".join(
         "%s [%s]" % (e["resource"], e["state"]) for e in external)))
+if tasks:
+    print("tasks:     %d open — %s" % (len(tasks), ", ".join(
+        "%s (%s)" % (t["id"], (t["title"] or "")[:40]) for t in tasks)))
 if lock:
     print("lock:      %s (%s, unit=%s, %ss, %s)" % (
         lock.get("actor"), lock.get("host"), lock.get("unit") or "-",

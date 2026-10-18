@@ -102,6 +102,8 @@ self_test() {
     work=$(mktemp -d)
     local SELF
     SELF="${BASH_SOURCE[0]}"
+    # hermetic: the E4 task registry writes to the ledger — keep it in the tmp dir.
+    export LEDGER_DB="$work/obs.db"
     local o=""
     DURABLE_JOB_DIR="$work" bash "$SELF" --begin "Fix the widget" > /dev/null 2>&1
     o=$(DURABLE_JOB_DIR="$work" bash "$SELF" --show --json 2>&1)
@@ -123,7 +125,9 @@ self_test() {
     LOOP_LOCK_ACTOR=live2 DURABLE_JOB_DIR="$work" bash "$SELF" --begin "Other session" > /dev/null 2>&1
     [ "$?" -eq 3 ] || { printf 'FAIL concurrent begin not refused (rc=%s)\n' "$?"; fail=1; }
     LOOP_LOCK_ACTOR=live1 DURABLE_JOB_DIR="$work" bash "$SELF" --end "Locked unit" > /dev/null 2>&1
-    rm -f "$work/dev-loop.jsonl" "$work/dev-loop.lock" "$work/dev-loop.lock.flock"
+    rm -f "$work/dev-loop.jsonl" "$work/dev-loop.lock" "$work/dev-loop.lock.flock" \
+        "$work/obs.db" "$work/obs.db-journal"
+    unset LEDGER_DB
     rmdir "$work"
     if [ "$fail" -eq 0 ]; then printf 'loop-state: self-test PASS\n'; else printf 'loop-state: self-test FAIL\n'; fi
     return "$fail"
@@ -171,7 +175,13 @@ main() {
             rev=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
             slugid=$(slug "$UNIT")
             DURABLE_JOB_DIR="$JOB_DIR" bash "$DUR" --job dev-loop --step "b:$slugid:$rev" -- true > /dev/null 2>&1 || true
-            printf 'loop-state: in-flight %s (at %s)\n' "$slugid" "$rev"
+            # E4: give the unit a durable, addressed id (id -> title + owner),
+            # so begin/close/hand-off name the same unit across sessions.
+            local tid=""
+            if have python3 && [ -f "$REPO/scripts/task-id.py" ]; then
+                tid=$(python3 "$REPO/scripts/task-id.py" new --title "$UNIT" 2>&1 | tail -1)
+            fi
+            printf 'loop-state: in-flight %s (at %s) task=%s\n' "$slugid" "$rev" "${tid:-(none)}"
             ;;
         end)
             [ -n "$UNIT" ] || { printf 'need a unit text\n'; return 2; }
@@ -181,6 +191,10 @@ main() {
             gate="green"; [ "$RED" -eq 1 ] && gate="red"
             slugid2=$(slug "$UNIT")
             DURABLE_JOB_DIR="$JOB_DIR" bash "$DUR" --job dev-loop --step "e:$slugid2:$gate" -- true > /dev/null 2>&1 || true
+            # E4: close the addressed unit on the segment's end.
+            if have python3 && [ -f "$REPO/scripts/task-id.py" ]; then
+                python3 "$REPO/scripts/task-id.py" close --title "$UNIT" > /dev/null 2>&1 || true
+            fi
             printf 'loop-state: ended %s [%s]\n' "$slugid2" "$gate"
             ;;
         show)

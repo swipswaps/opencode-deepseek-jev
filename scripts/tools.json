@@ -198,6 +198,18 @@
     ]
   },
   {
+    "id": "task-id",
+    "title": "Durable, addressed task identity (E4)",
+    "where": "container",
+    "purpose": "E4: a TODO unit has no stable ID and the DB `todo` is session-local, so a unit cannot be addressed across sessions. Records TASK/TASK_STATE rows on the same ledger triage/next-action read: `new --title T [--id ID] [--owner A]` mints (or returns, by title) a stable id (T-<6hex>, or an explicit --id like TUNNEL-1) and records title + owner; `close --id|--title` ends it; `show`/`list [--all]` read the latest state. Idempotent by source_key. loop-state.sh --begin registers the unit, --end closes it; next-action.sh surfaces open tasks.",
+    "commands": [
+      "python3 scripts/task-id.py new --title \"unit text\"",
+      "python3 scripts/task-id.py close --id T-xxxx",
+      "python3 scripts/task-id.py list --json",
+      "python3 scripts/task-id.py --self-test"
+    ]
+  },
+  {
     "id": "fix-docker-network",
     "title": "Recover host->docker port path (sudo)",
     "where": "host",

@@ -844,3 +844,15 @@ detector, p≈0.94).
 > **RULE #85**. Moved the older `TODO.md` Done half to `docs/todo-archive-2026.md`
 > to hold the tier-1 budget (RULE #77).
 > Next: **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).
+
+> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E4 — E-gaps complete):**
+> closed **E4 owned task identity**. A unit had no stable ID and the DB `todo`
+> is session-local, so begin/close/hand-off could not name the same unit across
+> sessions. New **`scripts/task-id.py`**: `TASK`/`TASK_STATE` rows on the same
+> ledger — `new` mints (or returns, by title) a stable id (`T-<6hex>`, or an
+> explicit `--id` like `TUNNEL-1`) + owner; `close --id|--title`; `show`/`list
+> [--all]`; idempotent by `source_key`. Wired: `loop-state.sh --begin` registers
+> the unit, `--end` closes it; `next-action.sh` prints `tasks:` + JSON `tasks`.
+> Gated: `test-durable.sh` +1 → **11/0**; new **RULE #86**. **All four E-gaps
+> (E1–E4) closed.** Local queue is thin (E1 regression-eval deps stay
+> D-decisions); TUNNEL-1 external (#5, T8 live).
