@@ -56,6 +56,7 @@ number and a constraint overlap, both are listed.
 | #80 | **The in-flight loop segment is checkpointed, not re-derived.** `loop-state.sh --begin UNIT` records the segment (unit + rev) on `durable-run.sh`'s job store (`dev-loop`); `--end UNIT` records the gate result. A fresh session — or `next-action.sh`, which surfaces the in-flight unit — **resumes or skips** the segment from storage instead of reconstructing "where was I" from a diary. Same law as #74 (checkpointed long jobs), applied to the dev loop itself. | `loop-state.sh`; `durable-run.sh`; `next-action.sh` |
 | #81 | **Before `edit`, re-read the exact region — `oldString` must match the file's CURRENT bytes.** A chat-DB audit (2026-10-18) found this the **#1 recurring failure**: `Could not find oldString …` **70×** (and `Found multiple matches` 12×), always because the region had shifted since it was last read (or the fixture lived in a different file than remembered). Read the region immediately before editing; make `oldString` unique with surrounding context. The guard records an `advisory` to `guard.log` when an edit pre-check fails, so the pattern is visible via `logs.sh --source guard`. | `issue-solutions.py` (`--write`); jev-harness skill §2 |
 | #82 | **`opencode/*-free` is gateway-METERED, not free — it is deny-listed for cause.** The chat DB shows the "free" contributor model accrued **real cost** before denial: `muse-spark-1.3-contributor-free` → **$1.74 over 26 sessions** (one session **$1.51**); with its non-free sibling, **$2.06**. It also mostly returned `AI_APICallError backend temporarily unavailable` (`modelDenied`). Never re-enable it "because it is free": the price is paid in the gateway, and a huge session re-prices the whole context every turn. Keep the flash default (`deepseek-flash` / `opencode-go/deepseek-v4.1-flash`). | `models.policy.json` (`deny`); `session-health.modelDenied`; `cost-bottlenecks.sh` |
+| #83 | **An ambiguous next step is decided by a bounded menu, not prose.** When the branch is open (an external blocker, several valid units, a cost/scope trade-off), call the `question` tool with **3–5 mutually-exclusive, single-select options, exactly one labelled `(Recommended)` and listed first**, each a concrete **falsifiable** deliverable, and **every option MUST carry a `description`** (a missing one is a schema error). A short header names the *axis* of choice (`Next action` / `Next unit` / `Hand off`). Evidence: the chat DB holds **74** `question` parts — the dominant, working shape is a 3–5 option `Next action|Next unit` menu led by a first `(Recommended)` pick; the only **2** recorded failures were a **dismissed** prompt and a **schema error** (an option missing `description`). A menu turns an open decision into one pick, so the loop advances instead of the operator re-deriving it. | chat DB `part` `tool='question'` (74; 69 completed); `issue-solutions.py` |
 
 ## Substitutions for the blacklist
 
@@ -243,6 +244,10 @@ here because review enforces them the same way. Grounded in the corpus: over
 - The audit → deduce → write → audit → upgrade → implement → explain loop
   (the `phd-pipeline` skill) is the standing shape of a PhD-terms request; the
   upgrade step is not skipped even when the first prompt looks clean.
+- When the next unit is *genuinely* ambiguous, ask with the bounded decision
+  menu (rule #83): 3–5 mutually-exclusive, single-select, falsifiable options,
+  one `(Recommended)` first, each with a `description`. Prose option-lists make
+  the operator re-derive what one pick settles.
 
 ## Not rules
 

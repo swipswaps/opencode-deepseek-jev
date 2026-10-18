@@ -221,6 +221,19 @@ Last updated: 2026-10-18
   residuals, embeddings rerank.
 - **D — external / new deps (never batch):** upstream SPA, LiteLLM `max_budget`
   routing, finos/perspective, Laya, Blockly/n8n.
+- **E — durable-agent gaps (deduced 2026-10-18; own session each).** Four
+  structural gaps the loop still has, each with the GitHub tool that closes it.
+  **E1 claims → enforced gates:** a written claim silently goes false (the
+  30-script catalog was one) — promote it to a falsifiable gate; eval-as-
+  regression tooling: `promptfoo`, `inspect_ai`. **E2 external-state bridge:**
+  `gh` is absent in-container, so an issue hand-off is a manual body-file relay
+  with no read-back (`nebula-systemd-override.sh --handoff`); needs a round-trip
+  (poll issue state → ledger) or a host-side bridge. **E3 concurrency lock/merge
+  key:** history is linear with no lock/CRDT — `beads` (Dolt cell-level merge,
+  hash IDs) or `backlog` (SQLite, actor-signed writes) supply zero-conflict
+  merge. **E4 owned task identity:** DB `todo` is session-local (94 done / 10
+  in_progress / 14 pending, all ended) with no ID linking it to `TODO.md` —
+  `beads`/`backlog` give a durable, addressed unit that survives every session.
 
 ## Queue (ranked, top first)
 
