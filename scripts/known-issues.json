@@ -40,7 +40,7 @@
       "title": "Desktop: screen goes black during processing; zombie session responds in new tabs",
       "url": "https://github.com/anomalyco/opencode/issues/37339",
       "severity": "medium",
-      "match": ["black", "zombie", "during processing"],
+      "match": ["\\bblack\\b", "zombie", "during processing"],
       "keywords": ["black", "zombie", "processing"]
     },
     {
@@ -48,7 +48,7 @@
       "title": "Plugin host behaviour that provider plugins rely on has no runtime tests",
       "url": "https://github.com/anomalyco/opencode/issues/51614",
       "severity": "medium",
-      "match": ["hook.*not.*(run|fire|wire)", "tool\\.execute", "loaded"],
+      "match": ["hook.*not.*(run|fire|wire)", "tool\\.execute", "\\bloaded\\b"],
       "keywords": ["plugin", "tool.execute.before", "hook", "loaded"]
     },
     {
@@ -56,7 +56,7 @@
       "title": "plugins: local plugins cannot resolve @opencode/plugin import",
       "url": "https://github.com/anomalyco/opencode/issues/50434",
       "severity": "medium",
-      "match": ["cannot resolve", "@opencode/plugin", "import"],
+      "match": ["cannot resolve", "@opencode/plugin", "\\bimport\\b"],
       "keywords": ["plugin", "resolve", "@opencode/plugin", "import"]
     },
     {

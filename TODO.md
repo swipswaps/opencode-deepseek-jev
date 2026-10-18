@@ -8,6 +8,15 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **`quirks` precision: word-boundary the loose regexes — 2026-10-18.** The
+      `matchIssues()` regexes for `#50434` (`import`), `#37339` (`black`) and
+      `#51614` (`loaded`) matched **substrings** (`import` ⊂ "important" — the
+      single held-out false positive; `black` ⊂ "blacklist"; `loaded` ⊂
+      "downloaded"). Anchored them (`\bimport\b`, `\bblack\b`, `\bloaded\b`) with
+      no keyword loss. Eval (frozen key `quirks-eval.json`): held-out **FPR
+      20% → 0%**, constructive recall **100%**, decoy FPR **0**, real FPR **0**.
+      Gate: lint 264/0, test-hygiene 58/0.
+
 - [x] **Tier-1 doc trim (doc-budget headroom) — 2026-10-18.** The read-first
       corpus was at **34,849 / 35,000** (151-tok headroom) — the next
       HANDOFF/TODO edit would trip the WARN. Per RULES #77's method, moved the
@@ -113,9 +122,10 @@ Last updated: 2026-10-18
 
 ## Segmented plan (do not balloon — one segment per session)
 
-- **A — local, doable now:** tier-1 doc trim (`TODO.md` Done → archive is the
-  budgeted lever, RULES #77; `scripts/README.txt` is tier-2, not budgeted),
-  `quirks` fuzzy precision on real data, `ensure-env.sh` password-regen review.
+- **A — local, doable now:** ~~tier-1 doc trim~~ **done 2026-10-18** (TODO Done
+  → archive; RULES #77; `scripts/README.txt` is tier-2, not budgeted);
+  ~~`quirks` fuzzy precision~~ **done** (word-boundary regexes, held-out FPR 0).
+  Remaining: `ensure-env.sh` password-regen review.
 - **B — needs a host/test this container cannot run:** `doctor.sh --full` Tier 10,
   `ux-audit.py`/`ux-test.py`, `test-sidebar-streaming.sh`, `rotate-api-keys.sh`
   end-to-end.
