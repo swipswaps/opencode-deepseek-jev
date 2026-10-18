@@ -84,6 +84,20 @@ Last updated: 2026-10-18
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
+- [ ] **Script catalog is incomplete vs the README's "one entry per script"
+      claim (found 2026-10-18 by a dead-ref sweep).** 23 **tracked** scripts are
+      in neither `tools.json` nor `scripts/README.txt` (`apply-fstab-nofail.sh`,
+      `certs-verify.sh`, `dns-audit.sh`, `dns-guard.sh`, `enable-lan-cert.sh`,
+      `gate-all.sh`, `hotspot-test.sh`, `png-shrink.mjs`, `ports-forward-audit.sh`,
+      `probe-diagnose.sh`, `recall-sessions.py`, `repo-mcp.mjs`, `review-diff.sh`,
+      `run-with-telemetry.sh`, `test-tools.sh`, `tool-census.sh`, `ux-findings.sh`,
+      `ux.sh`, `verify-caddy-audit.sh`, `verify-fstab-nofail.sh`, `verify-loads.sh`,
+      `verify-password-drift.sh`, `watch-test-tools.sh`). Also
+      `test-tools.sh`/`watch-test-tools.sh` reference tools that no longer exist
+      (`chatlog.sh`, `ask.sh`) and are wired into no gate. **Triage (own
+      segment):** catalog the operator-facing ones, archive the obsolete; then
+      the README claim is true again. Low urgency — no gate depends on it.
+
 - [x] **Telemetry-console upgrade** (deduced from the DB's own frequency:
       `ux 66 / telemetry 60 / dashboard 54 / cost 27 / drill 15 / slow 15 /
       flag 14`). Doctrine codified as **RULE #67** +
