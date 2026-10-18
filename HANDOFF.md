@@ -32,7 +32,8 @@
 > **by URI** (130 → 35 distinct), and `session-health.mjs` drops interactive
 > **`question`** from S0/S1 (the [HIGH] stall flags were pending prompts). The
 > dominant `slow_fetch /provider` is edge-cached 120s in `docker/Caddyfile`.
-> Residual is external (`proxmox-dual-plane-mesh`) — see TODO `TUNNEL-1`.
+> **Filed:** TUNNEL-1 → `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
+> watch side stays live (T8).
 
 > **PIN 2026-10-16 (web session `ses_ec5519e33f…`):** shipped — sentinel **T1–T7**
 > + deduped ledger; `cdp-tab`/`browser-bench` failover (#62/#64); dashboard
