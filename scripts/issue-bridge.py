@@ -225,6 +225,21 @@ def cmd_poll(args: argparse.Namespace) -> int:
     return 0
 
 
+def humanize_detail(res: str, detail: str) -> str:
+    """Show the clickable github.com URL, not the REST API URL, for a person."""
+    repo, _, num = res.partition("#")
+    if not num:
+        return detail
+    want = "https://github.com/%s/issues/%s" % (repo, num)
+    out = []
+    for tok in detail.split():
+        if tok.startswith("https://api.github.com/repos/") and "/issues/" in tok:
+            out.append(want)
+        else:
+            out.append(tok)
+    return " ".join(out)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     con = ledger.connect(ledger.db_path())
     latest: dict[str, tuple] = {}
@@ -252,7 +267,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         state, detail, ts = latest[res]
         line = "%-48s %-8s %s" % (res, state or "?", ts or "")
         if detail:
-            line += " — " + detail[:80]
+            line += " — " + humanize_detail(res, detail)[:120]
         print(line)
     return 0
 
@@ -377,6 +392,13 @@ def self_test() -> int:
             text = "\n".join(cap.buf)
             check("swipswaps/proxmox-dual-plane-mesh#5" in text, "status names the issue")
             check("CLOSED" in text, "status shows the latest state")
+            human = humanize_detail(
+                "swipswaps/proxmox-dual-plane-mesh#5",
+                "2026-10-18T11:47:59Z https://api.github.com/repos/"
+                "swipswaps/proxmox-dual-plane-mesh/issues/5")
+            check(human.endswith("https://github.com/swipswaps/"
+                                 "proxmox-dual-plane-mesh/issues/5"),
+                  "status maps the api URL to the html URL")
         finally:
             del os.environ["LEDGER_DB"]
     print("self-test: %s (%d failures)" % ("PASS" if fails == 0 else "FAIL", fails))
