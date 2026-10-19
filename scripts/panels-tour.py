@@ -11,8 +11,11 @@ system libs). Needs `playwright install chromium` once.
 
 Panels (hash routing activates the tab server-side, no clicks needed):
     home      /                    Flags card + sessions + stats
+    overview  /explore#overview    search + compact session table
     board     /explore#board       Kanban + Gantt + projected-schedule estimate
     trends    /explore#charts      cost/sessions per day
+    signals   /explore#signals     session health + guard
+    patterns  /explore#patterns    recurring tool n-grams + known fixes
 
 Light theme is forced (?theme=light) so the shots read.
 Every shot is shrunk with png-shrink.mjs (node) to stay under the 150 KiB
@@ -29,8 +32,11 @@ import time
 
 PANELS = [
     ("home", "/?theme=light"),
+    ("overview", "/explore?theme=light#overview"),
     ("board", "/explore?theme=light#board"),
     ("trends", "/explore?theme=light#charts"),
+    ("signals", "/explore?theme=light#signals"),
+    ("patterns", "/explore?theme=light#patterns"),
 ]
 
 
@@ -46,9 +52,22 @@ def shrink(path: str, repo: pathlib.Path) -> None:
 
 
 def self_test() -> int:
-    ok = any(k == "board" for k, _ in PANELS) and any(k == "trends" for k, _ in PANELS)
+    need = {"home", "overview", "board", "trends", "signals", "patterns"}
+    have = {k for k, _ in PANELS}
+    ok = need <= have
     print("panels-tour: self-test PASS" if ok else "panels-tour: self-test FAIL")
     return 0 if ok else 1
+
+
+def check(out: pathlib.Path) -> int:
+    """Report which expected shots are missing; never fail the build on a host gap."""
+    expected = ["status-%s.png" % name for name, _ in PANELS]
+    missing = [e for e in expected if not (out / e).exists()]
+    print("panels-tour: %d/%d expected shots present in %s" % (len(expected) - len(missing), len(expected), out))
+    if missing:
+        print("missing: " + ", ".join(missing))
+    print("capture on the host (needs chromium): python3 scripts/panels-tour.py")
+    return 0 if not missing else 1
 
 
 def main() -> int:
@@ -56,10 +75,13 @@ def main() -> int:
     ap.add_argument("--base", default="https://127.0.0.1:5099")   # host :5099 is HTTPS (caddy)
     ap.add_argument("--out", default="docs/ux")
     ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--check", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
+    if a.check:
+        return check(pathlib.Path(a.out))
 
     from playwright.sync_api import sync_playwright
 

@@ -65,7 +65,7 @@ const CMDK_CSS =
   "#cmdk-box{width:min(560px,92vw);background:#0d1117;border:1px solid #30363d;" +
   "border-radius:10px;overflow:hidden}" +
   "#cmdk-input{width:100%;box-sizing:border-box;background:#0d1117;color:#e6edf3;" +
-  "border:0;border-bottom:1px solid #30363d;padding:12px 14px;font-size:14px;outline:none}" +
+  "border:0;border-bottom:1px solid #30363d;padding:12px 14px;font-size:14px}" +
   "#cmdk-list{max-height:300px;overflow:auto;padding:6px}" +
   ".cmdk-group{font-size:11px;color:#8b949e;padding:8px 10px 2px}" +
   ".cmdk-item{padding:8px 10px;border-radius:6px;font-size:13px;color:#e6edf3;cursor:pointer}" +
@@ -103,7 +103,7 @@ const THEME_CSS =
   ".skip-link:focus{left:8px}";
 
 function nav(active) {
-  let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><a class=\"skip-link\" href=\"#main\">Skip to main content</a><nav class=\"nav\"><span class=\"brand\">opencode observability</span>";
+  let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><a class=\"skip-link\" href=\"#main\">Skip to main content</a><nav class=\"nav\" aria-label=\"Primary\"><span class=\"brand\">opencode observability</span>";
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\" aria-current=\"page\"" : "") + ">" + it[1] + "</a>";
   }
@@ -1120,7 +1120,7 @@ const html = `<!doctype html>
 </style></head>
 <body>
 ${nav("dashboard")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode observability</h1>
 <div id="session" class="muted" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
 <div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
@@ -1477,7 +1477,7 @@ const exploreHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("explore")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode explore</h1>
 <div class="muted" id="filter">filter: all time</div> <button id="brush-reset">reset filter</button>
 <div class="tabs" id="tabs" role="tablist" aria-label="Explore views">
@@ -2468,7 +2468,7 @@ function renderBoardEstimate(d){
   });
   host.appendChild(chart);
   var rects=chart.querySelectorAll('rect');
-  for(var bi=0;bi<rects.length&&bi<rows.length;bi++){(function(el,r){if(r.session){el.style.cursor='pointer';el.setAttribute('tabindex','0');el.setAttribute('role','link');el.addEventListener('click',function(){detail(r.session);});}})(rects[bi],rows[bi]);}
+  for(var bi=0;bi<rects.length&&bi<rows.length;bi++){(function(el,r){if(r.session){el.style.cursor='pointer';el.setAttribute('tabindex','0');el.setAttribute('role','link');el.setAttribute('aria-label','drill into '+(r.title||r.session));el.addEventListener('click',function(){detail(r.session);});el.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();detail(r.session);}});}})(rects[bi],rows[bi]);}
 }
 function renderBoardTables(d){
   var bt=document.getElementById('board-tables');if(!bt)return;
@@ -2513,7 +2513,7 @@ const runbooksHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("runbooks")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode runbooks</h1>
 <div class="muted" style="font-size:12px">Operational scripts surfaced read-only. host = run on the machine with docker; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div class="bar"><label class="muted" for="f">filter</label><select id="f" aria-label="Filter runbooks by tag"><option value="all">all</option><option value="host">host only</option><option value="container">container only</option><option value="manual">manual only</option></select></div>
@@ -2595,7 +2595,7 @@ const managedHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("manage")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode manage</h1>
 <div class="muted" style="font-size:12px">The repo's tools, surfaced read-only. host = run where docker/browser live; container = safe inside the agent container. Copy, then paste into a terminal.</div>
 <div id="providers"></div>
@@ -2663,7 +2663,7 @@ const docsHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("docs")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode docs</h1>
 <div class="muted" style="margin-bottom:8px">The repo's own rules, handoff and docs, rendered in-UI. Read-only; whitelisted files only.</div>
 <select id="docsel" aria-label="Select a document to view"></select>
@@ -2699,7 +2699,7 @@ const modelsHtml = `<!doctype html>
 </style></head>
 <body>
 ${nav("models")}
-<main id="main">
+<main id="main" tabindex="-1">
 <h1>opencode models</h1>
 <div id="banner" class="banner"><span class="muted" data-loading>loading...</span></div>
 <div class="muted" id="policy"></div>

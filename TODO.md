@@ -8,6 +8,17 @@ Last updated: 2026-10-19
 
 ## Done (most recent first)
 
+- [x] **UX accessibility gate + durable-agent arming — 2026-10-19.** New
+      `a11y-audit.mjs` gates WCAG basics (landmarks, heading order, control
+      names, focus-visible, reduced motion, contrast) in `test-dashboard.sh`;
+      dashboard fixes: `main tabindex="-1"`, named nav, no `outline:none`,
+      Gantt drill rectangles keyboard-activatable + named. New
+      `durable-agents.sh` arms/verifies sentinel + notify-sink + progress-review
+      in one idempotent command (host enablement pending). Media: `panels-tour`
+      now covers overview/signals/patterns; `--check` reports 3 missing shots
+      (host browser required). Plans/PR bodies + chat-DB tool audit in
+      `docs/plans/`. Gate: lint 274 · hygiene 62 · patterns 6 · dashboard 123.
+
 - [x] **G1 UX drill-down — every session-bearing datum drills (telemetry (3)) —
       2026-10-19.** Closed the named residual. The **health** panel (stall/blank
       findings + budget/deny risks) now opens the session detail (`data-go` +

@@ -249,6 +249,14 @@ progress-review-install.sh
     Installs the user-level progress-review timer (bakes the repo path, enables
     via systemctl --user). Idempotent; --write-only, --uninstall, --self-test.
 
+durable-agents.sh
+    One command to arm/verify the three durable background agents instead of
+    half-arming them one installer at a time: sentinel (5 min), notify-sink
+    (service), progress-review (15 min). --install runs the tested installers in
+    order; --status prints unit present + enabled + active, and prints SKIP (not
+    pass) when systemctl is absent; --dry-run lists the commands; --self-test
+    checks the five unit templates and the three installers offline.
+
 loop-state.sh
     Durable checkpoint of the in-flight DEV LOOP segment, on durable-run.sh's
     job store (job `dev-loop`): --begin records the unit + rev, --end records
@@ -320,6 +328,17 @@ ux-test.py
     toggles its pane and the overview stays compact. Exit non-zero on failure;
     SKIP (no playwright) is not a pass. --check reports readiness + install
     commands. Screenshots to logs/ux/. Runbook "ux-test".
+
+a11y-audit.mjs
+    Offline accessibility/usability audit for served HTML (no browser, no
+    network). Checks <html lang>, title, viewport, exactly one h1 with no
+    skipped levels, a skip-link whose target has tabindex="-1", a named nav
+    landmark, image alt text, accessible names for buttons/inputs/role
+    controls, a visible :focus-visible outline (and no stray outline:none),
+    prefers-reduced-motion when motion CSS exists, and WCAG contrast for the
+    dark/light theme tokens. Input is files or --url; --json for machines;
+    --self-test proves the checker on a good + bad fixture. Wired into
+    test-dashboard.sh against the scratch build (a regression is a red gate).
 
 ux-trace.py
     Host-side Playwright UX trace that proves the journey: injects a recorder

@@ -1116,5 +1116,28 @@
     "commands": [
       "./scripts/web-stop.sh"
     ]
+  },
+  {
+    "id": "durable-agents",
+    "title": "Arm/verify the durable background agents in one command",
+    "where": "host",
+    "purpose": "The loop has three always-on agents (sentinel 5m, notify-sink service, progress-review 15m), each with its own installer, so arming them one by one is easy to half-do. --install runs the tested installers in order; --status prints unit present + enabled + active and SKIP (not pass) when systemctl is absent; --dry-run lists the commands; --self-test checks the five unit templates and the three installers offline.",
+    "commands": [
+      "./scripts/durable-agents.sh --status",
+      "./scripts/durable-agents.sh --install",
+      "./scripts/durable-agents.sh --dry-run",
+      "./scripts/durable-agents.sh --self-test"
+    ]
+  },
+  {
+    "id": "a11y-audit",
+    "title": "Offline accessibility/usability audit for served HTML",
+    "where": "container",
+    "purpose": "WCAG-basics gate with no browser or network: lang/title/viewport, one h1 with no skipped levels, skip-link target with tabindex=-1, named nav landmark, image alt, accessible names for buttons/inputs/role controls, :focus-visible (no stray outline:none), prefers-reduced-motion when motion CSS exists, and contrast for the dark/light theme tokens. Accepts files or --url, --json, --self-test; wired into test-dashboard.sh against the scratch build.",
+    "commands": [
+      "node scripts/a11y-audit.mjs home.html explore.html",
+      "node scripts/a11y-audit.mjs --url http://127.0.0.1:5099/ --json",
+      "node scripts/a11y-audit.mjs --self-test"
+    ]
   }
 ]

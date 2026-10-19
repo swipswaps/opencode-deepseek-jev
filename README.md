@@ -126,8 +126,15 @@ panels ([RULE #67 — Telemetry/visualization doctrine](RULES.md#rule-67));
 Regenerate every panel + a short `.webm` tour with the scripted capture:
 `python3 scripts/panels-tour.py` (needs a launchable chromium —
 `playwright install chromium`; the sandbox lacks the system libs, so run it on
-the host). It writes `docs/ux/status-{home,board,trends}.png` and
+the host). It writes
+`docs/ux/status-{home,overview,board,trends,signals,patterns}.png` and
 `docs/ux/tour.webm`, shrinking each shot under the 150 KiB media budget.
+`python3 scripts/panels-tour.py --check` lists any expected shot that is still
+missing (it reports, it does not fake a pass).
+
+The **signals** (session-health) and **patterns** panels are newer than the
+shots below; run the host capture above to add
+`status-signals.png` / `status-patterns.png`, then embed them here.
 
 Dashboard home — **Flags** (bottlenecks · cost · slowdowns · stalls), sessions
 with tz-labelled times, cost, live activity:
@@ -403,6 +410,13 @@ RULES.md / the guard's fixed blacklist. Learn → review → codify → enforce.
 the queue. Update both at the end of a session.
 
 ## Navigating the observability UI
+
+Accessibility is a gate here, not a style note: `scripts/a11y-audit.mjs` checks
+`lang`, title, viewport, heading order, a named `nav` landmark, the skip-link
+target (`#main` with `tabindex="-1"`), accessible names for controls, a visible
+`:focus-visible` outline, reduced motion, and WCAG contrast for both themes.
+`test-dashboard.sh` runs it against the scratch build on every gate.
+
 Every page (/ dashboard, /explore, /runbooks, /docs) shares one sticky nav:
 `dashboard · explore · models · runbooks · manage · docs · csv`. The /explore tabs
 (overview · charts · signals · ocr) are linkable and restore from the Uniform

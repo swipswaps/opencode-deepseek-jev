@@ -177,6 +177,12 @@ UX_EOF
     local ux_rc=$?
     if [ "$ux_rc" -eq 0 ]; then ok 'UX: overview compact (<=3 sections) + data tab holds internals'; else bad 'UX: overview compact + data tab'; cat "$work/uxcheck.txt"; fi
     has 'class="nav"' "$work/explore.html" && ok 'shared nav present' || bad 'shared nav present'
+    if node "$REPO/scripts/a11y-audit.mjs" "$work/home.html" "$work/explore.html" > "$work/a11y.txt" 2>&1; then
+        ok 'a11y: WCAG basics (names, headings, focus, contrast)'
+    else
+        bad 'a11y: WCAG basics'
+        cat "$work/a11y.txt"
+    fi
     curl -s "http://$HOST:$PORT/docs" > "$work/docs.html"
     has '<title>opencode docs</title>' "$work/docs.html" && ok 'docs title' || bad 'docs title'
     has 'id="docsel"' "$work/docs.html" && ok 'docs selector' || bad 'docs selector'

@@ -88,6 +88,25 @@ main() {
         tail -6 "$work/mb.txt"
     fi
 
+    # A README image that no longer exists is a silent docs regression.
+    if python3 - "$REPO" <<'PY'
+import os, re, sys
+repo = sys.argv[1]
+text = open(os.path.join(repo, "README.md"), encoding="utf-8").read()
+refs = re.findall(r"!\[[^\]]*\]\(([^)\s]+)", text)
+local = [r for r in refs if not r.startswith(("http://", "https://", "#"))]
+missing = [r for r in local if not os.path.exists(os.path.join(repo, r))]
+print("README images: %d local, %d missing" % (len(local), len(missing)))
+for r in missing:
+    print("missing:", r)
+sys.exit(0 if not missing else 1)
+PY
+    then
+        ok 'README media references exist'
+    else
+        bad 'README media references exist'
+    fi
+
     local fixdb=""
     if [ -x "$REPO/scripts/test-fixture-db.sh" ]; then
         fixdb="$work/live.db"
