@@ -128,18 +128,19 @@ Regenerate every panel + a short `.webm` tour with the scripted capture:
 `playwright install chromium`; the sandbox lacks the system libs, so run it on
 the host). It writes
 `docs/ux/status-{home,overview,board,trends,signals,patterns}.png` and
-`docs/ux/tour.webm`, shrinking each shot under the 150 KiB media budget.
-`python3 scripts/panels-tour.py --check` lists any expected shot that is still
-missing (it reports, it does not fake a pass).
-
-The **signals** (session-health) and **patterns** panels are newer than the
-shots below; run the host capture above to add
-`status-signals.png` / `status-patterns.png`, then embed them here.
+`docs/ux/tour.webm`, shrinking each shot under the 150 KiB image budget (from
+the original, so it never double-shrinks) and recording a separate 960x540 tour
+under the 2 MiB video budget. `python3 scripts/panels-tour.py --check` lists any
+expected shot that is still missing (it reports, it does not fake a pass).
 
 Dashboard home — **Flags** (bottlenecks · cost · slowdowns · stalls), sessions
-with tz-labelled times, cost, live activity:
+with time-zone-labelled times, cost, live activity:
 
 ![Dashboard home](docs/ux/status-home.png)
+
+`/explore ▸ overview` — search everything + the compact sessions table:
+
+![Explore overview](docs/ux/status-overview.png)
 
 `/explore ▸ board · gantt` — Kanban (pending / in-progress / completed) + the
 **clickable Gantt** + the **projected-schedule estimate**:
@@ -150,7 +151,18 @@ with tz-labelled times, cost, live activity:
 
 ![Trends](docs/ux/status-trends.png)
 
-A short click-through tour (screen recording): [`docs/ux/tour.webm`](docs/ux/tour.webm).
+`/explore ▸ signals` — **session health** (stalled / blank turns) + the guard
+panel; a health finding drills into the session detail:
+
+![Explore signals](docs/ux/status-signals.png)
+
+`/explore ▸ patterns` — recurring tool-sequence n-grams + known fixes; each
+bigram drills into an example session:
+
+![Explore patterns](docs/ux/status-patterns.png)
+
+A short click-through tour (960x540, six panels):
+[`docs/ux/tour.webm`](docs/ux/tour.webm).
 
 Clicking a Gantt bar drills into that session's **timeline in-page** (`detail()`):
 
