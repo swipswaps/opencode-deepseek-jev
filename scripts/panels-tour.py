@@ -18,8 +18,10 @@ Panels (hash routing activates the tab server-side, no clicks needed):
     patterns  /explore#patterns    recurring tool n-grams + known fixes
 
 Light theme is forced (?theme=light) so the shots read.
-Every shot is shrunk with png-shrink.mjs (node) to stay under the 150 KiB
-media budget.
+Every shot is shrunk with png-shrink.mjs from the ORIGINAL bytes, trying the
+largest scale that fits the 150 KiB image budget. The tour is a separate
+960x540 pass with a short dwell, so the .webm stays under the 2 MiB video
+budget (a 1280x860/6s recording measured 7.7 MiB).
 """
 
 from __future__ import annotations
@@ -41,14 +43,29 @@ PANELS = [
 
 
 def shrink(path: str, repo: pathlib.Path) -> None:
+    """Downscale to the 150 KiB budget from the ORIGINAL each attempt.
+
+    png-shrink overwrites its input, so trying 0.6 then 0.55 on the same file
+    would double-shrink it (384x258, unreadable). Keep the original bytes and
+    try the largest scale that fits.
+    """
     script = repo / "scripts" / "png-shrink.mjs"
     if not script.exists():
         return
+    src = pathlib.Path(path)
     try:
-        p = subprocess.Popen(["node", str(script), path, "0.6", "153600"], cwd=str(repo))
-        p.communicate(timeout=60)
-    except Exception:
-        pass
+        original = src.read_bytes()
+    except OSError:
+        return
+    for scale in ("0.6", "0.55", "0.5", "0.45", "0.4", "0.35"):
+        try:
+            src.write_bytes(original)
+            p = subprocess.Popen(["node", str(script), str(src), scale, "153600"], cwd=str(repo))
+            p.communicate(timeout=60)
+            if p.returncode == 0:
+                return
+        except Exception:
+            return
 
 
 def self_test() -> int:
@@ -97,10 +114,9 @@ def main() -> int:
         except Exception as e:
             print("FAIL: cannot launch chromium (%s). Run: playwright install chromium" % str(e)[:80])
             return 2
+        # 1) Screenshots: full viewport, no video, enough time for SSE + charts.
         ctx = b.new_context(viewport={"width": 1280, "height": 860},
-                            ignore_https_errors=True,   # self-signed caddy cert
-                            record_video_dir=None if a.no_video else str(tmp_vid),
-                            record_video_size={"width": 1280, "height": 860} if not a.no_video else None)
+                            ignore_https_errors=True)   # self-signed caddy cert
         pg = ctx.new_page()
         for name, path in PANELS:
             try:
@@ -112,7 +128,23 @@ def main() -> int:
                 print("shot", shot)
             except Exception as e:
                 print("WARN %s: %s" % (name, str(e)[:80]))
-        ctx.close()  # finalizes the video
+        ctx.close()
+
+        # 2) Tour video: its own short, low-res context so the .webm stays under
+        # the 2 MiB video budget (the 1280x860/6s version was 7.7 MiB).
+        if not a.no_video:
+            vctx = b.new_context(viewport={"width": 960, "height": 540},
+                                 ignore_https_errors=True,
+                                 record_video_dir=str(tmp_vid),
+                                 record_video_size={"width": 960, "height": 540})
+            vpg = vctx.new_page()
+            for name, path in PANELS:
+                try:
+                    vpg.goto(a.base + path, wait_until="domcontentloaded", timeout=30000)
+                    vpg.wait_for_timeout(1400)
+                except Exception as e:
+                    print("WARN video %s: %s" % (name, str(e)[:80]))
+            vctx.close()  # finalizes the video
         b.close()
 
     if not a.no_video:
@@ -123,7 +155,10 @@ def main() -> int:
                 import shutil
                 shutil.copy2(str(vids[0]), str(dst))   # cross-device safe (no rename)
                 vids[0].unlink()
-                print("video", dst, dst.stat().st_size // 1024, "KiB")
+                size = dst.stat().st_size
+                print("video", dst, size // 1024, "KiB")
+                if size > 2097152:
+                    print("WARN video over the 2 MiB media budget; trim panels or use --no-video")
             except OSError as e:
                 print("WARN video copy:", str(e)[:80])
     return 0

@@ -1,6 +1,6 @@
 # PR: refresh README screenshots and the .webm tour for the newest panels
 
-Status: **capture script extended; pixels require a host browser.**
+Status: **capture script extended + hardened; one host re-run needed.**
 
 ## Why
 
@@ -16,11 +16,23 @@ Playwright is not installed, and no CDP endpoint answers on `:9222`
 (`cdp-tab.mjs tabs` -> SKIP). `panels-tour.py` launches its own chromium, so it
 must run on the host.
 
+## Measured on the first host run
+
+All six panels captured, but two budgets were exceeded: `status-home.png`
+160 KiB and `status-signals.png` 187 KiB (image budget 150 KiB), and the
+1280x860 / 6 s tour was **7.7 MiB** (video budget 2 MiB). A naive second
+`png-shrink` pass double-shrank the file to 384x258 (unreadable), so the
+capture script was hardened rather than the artifacts committed.
+
 ## Changes
 
 - `scripts/panels-tour.py`: capture six panels (`home`, `overview`, `board`,
   `trends`, `signals`, `patterns`); `--check` reports which expected
   `status-<panel>.png` are missing; `--self-test` asserts the panel set.
+- Adaptive image shrink: keep the original bytes and try the largest scale
+  (0.6, 0.55, ...) that fits, so a shot is never double-shrunk.
+- Separate short **960x540** video context (1.4 s dwell) so the `.webm` fits
+  the 2 MiB budget; print a WARN if it is still over.
 - `README.md`: list the six expected shots, document `--check`, and state that
   signals/patterns shots need the host capture before they are embedded.
 - (Proposed, not done) `test-hygiene.sh`: assert every README `![](...)` media
