@@ -183,6 +183,24 @@ UX_EOF
         bad 'a11y: WCAG basics'
         cat "$work/a11y.txt"
     fi
+    # /api/trends is off the event loop: the worker imports this same body.
+    if DB_PATH="$db" LIB_URL="file://$REPO/scripts/query-lib.mjs" node --input-type=module -e '
+const { apiTrendsFresh } = await import(process.env.LIB_URL);
+const r = apiTrendsFresh(process.env.DB_PATH);
+if (!Array.isArray(r)) process.exit(1);
+if (r.length && !("day" in r[0] && "n" in r[0] && "c" in r[0] && "i" in r[0])) process.exit(1);
+' > "$work/trends-unit.txt" 2>&1; then
+        ok 'trends: query-lib body (day/n/c/i) runs off the loop'
+    else
+        bad 'trends: query-lib body (day/n/c/i)'
+        cat "$work/trends-unit.txt"
+    fi
+    curl -s "http://$HOST:$PORT/api/trends" > "$work/trends.json"
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and (not d or set(("day","n","c","i")) <= set(d[0])) else 1)' "$work/trends.json"; then
+        ok 'api/trends shape (array of day/n/c/i)'
+    else
+        bad 'api/trends shape'
+    fi
     curl -s "http://$HOST:$PORT/docs" > "$work/docs.html"
     has '<title>opencode docs</title>' "$work/docs.html" && ok 'docs title' || bad 'docs title'
     has 'id="docsel"' "$work/docs.html" && ok 'docs selector' || bad 'docs selector'

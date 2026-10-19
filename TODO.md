@@ -8,6 +8,12 @@ Last updated: 2026-10-19
 
 ## Done (most recent first)
 
+- [x] **/api/trends off the event loop (sentinel T4 slow-fetch) — 2026-10-19.**
+      A host capture burst produced a 10.7 s `GET /api/trends`; the route was a
+      sync cold compute. Body moved to `query-lib.apiTrendsFresh` + the query
+      worker (`asyncCached`), inline fallback kept; `test-dashboard.sh` asserts
+      the body + array shape (#72: duration is time-in-system).
+
 - [x] **UX accessibility gate + durable-agent arming — 2026-10-19.** New
       `a11y-audit.mjs` gates WCAG basics (landmarks, heading order, control
       names, focus-visible, reduced motion, contrast) in `test-dashboard.sh`;

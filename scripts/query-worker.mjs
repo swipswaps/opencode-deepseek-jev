@@ -17,7 +17,7 @@
 import { parentPort } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh, apiBoardFresh } from "./query-lib.mjs";
+import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh, apiTrendsFresh, apiBoardFresh } from "./query-lib.mjs";
 
 const FNS = {
   // Mirrors refreshHealthCache's sync prefix (minus live adjudication,
@@ -40,6 +40,10 @@ const FNS = {
   },
   signals(dbPath) {
     return apiSignalsFresh(dbPath);
+  },
+  // /api/trends: small query, but a cold cache miss must not run on the loop.
+  trends(dbPath) {
+    return apiTrendsFresh(dbPath);
   },
   patterns(dbPath, limit) {
     return apiPatternsFresh(dbPath, limit);

@@ -143,7 +143,7 @@ task-id.py
     Offline --self-test.
 
 query-lib.mjs
-    Pure read-only aggregations (signals/patterns/words query bodies) shared
+    Pure read-only aggregations (signals/patterns/words/trends/board query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the
     worker cannot drift. Every function is (dbPath, ...) -> plain JSON with
     its own read-only handle.

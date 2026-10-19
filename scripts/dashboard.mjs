@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh } from "./query-lib.mjs";
+import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh, apiTrendsFresh } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
 
 const dbPath = process.argv[2];
@@ -271,12 +271,13 @@ function query(sql, ...args) {
 // part-table sort) recompute on every tick and saturate the
 // single-threaded loop. 10 s staleness is invisible on glanceable panels.
 const POLL_TTL_MS = Number(process.env.POLL_TTL_MS || 10000);
-function apiTrends() {
+async function apiTrends() {
   // Time-series the dashboard lacked (cost/sessions per day) from the session
-  // table — the biggest remaining gap vs the LLM-observability tools.
-  return ttlCached("trends", CACHE_TTL_MS, () => query(
-    "SELECT date(time_created/1000,'unixepoch') day, COUNT(*) n, COALESCE(SUM(cost),0) c, " +
-    "COALESCE(SUM(tokens_input),0) i FROM session GROUP BY day ORDER BY day"));
+  // table. Off the event loop: a cold miss runs in query-worker via the shared
+  // query-lib body (apiTrendsFresh); the inline fallback keeps the same shape.
+  // The sentinel flagged a 10.7 s GET /api/trends under a capture burst — a
+  // sync cold compute queued behind other work, so this is the #72 fix.
+  return asyncCached("trends", CACHE_TTL_MS, "trends", [], () => apiTrendsFresh(dbPath));
 }
 function apiCost() {
   return ttlCached("cost", POLL_TTL_MS, apiCostFresh);
@@ -2842,7 +2843,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/patterns") {
     send(res, 200, JSON.stringify(await apiPatterns(Number(params.limit) || 30)), "application/json");
   } else if (url === "/api/trends") {
-    send(res, 200, JSON.stringify(apiTrends()), "application/json");
+    send(res, 200, JSON.stringify(await apiTrends()), "application/json");
   } else if (url === "/api/cost") {
     send(res, 200, JSON.stringify(apiCost()), "application/json");
   } else if (url === "/api/balance") {

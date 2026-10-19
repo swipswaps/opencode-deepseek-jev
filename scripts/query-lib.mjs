@@ -19,6 +19,17 @@ export function queryDb(dbPath, sql, ...args) {
   }
 }
 
+// /api/trends payload (sessions + cost per day). Moved here so the worker can
+// run it off the dashboard event loop; the dashboard keeps this exact body as
+// the inline fallback (same shape the page already renders).
+export function apiTrendsFresh(dbPath) {
+  return queryDb(
+    dbPath,
+    "SELECT date(time_created/1000,'unixepoch') day, COUNT(*) n, COALESCE(SUM(cost),0) c, " +
+      "COALESCE(SUM(tokens_input),0) i FROM session GROUP BY day ORDER BY day"
+  );
+}
+
 // Board payload (Kanban + Gantt + milestones) for /api/board. Lives here so the
 // ~19s cold compute runs in query-worker (off the dashboard event loop); the
 // dashboard keeps an inline fallback with identical output (healthSync pattern).
