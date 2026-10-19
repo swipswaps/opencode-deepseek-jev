@@ -2,20 +2,75 @@
 
 Docker-based setup. All project code stays inside this repository.
 
+## Glossary — acronyms and rule citations
+
+**Rule citations.** A rule is cited by **name, number, and link** — for example
+[RULE #67 — Telemetry/visualization doctrine](RULES.md#rule-67) — never by a
+bare number. [`RULES.md`](RULES.md) is the source of truth; each anchor lands on
+the rule's row and carries its enforcement text plus evidence of use.
+
+**Acronyms** used in this document, with their expansions (each is also spelled
+out at its first prose use where the abbreviation could be ambiguous):
+
+| Acronym | Expansion |
+|---|---|
+| API | Application Programming Interface |
+| ARIA | Accessible Rich Internet Applications (W3C specification) |
+| ASK | Ask-tier: a model policy verdict that requires human approval |
+| BM25 | Best Matching 25 (a ranking function for full-text search) |
+| CA | Certificate Authority |
+| CDP | Chrome DevTools Protocol |
+| CLI | Command-Line Interface |
+| CSV | Comma-Separated Values |
+| DB | Database |
+| DNS | Domain Name System |
+| DOM | Document Object Model |
+| ECC | The external ECC skills catalog (`github.com/affaan-m/ECC`) |
+| FTS5 | Full-Text Search version 5 (SQLite extension) |
+| HTTP / HTTPS | Hypertext Transfer Protocol / HTTP Secure |
+| JS | JavaScript |
+| JSON | JavaScript Object Notation |
+| LAN | Local Area Network |
+| MCP | Model Context Protocol |
+| NSS | Network Security Services (Mozilla certificate store) |
+| OCR | Optical Character Recognition |
+| REST | Representational State Transfer |
+| RFC | Request for Comments (IETF standards document) |
+| SAN | Subject Alternative Name (TLS certificate field) |
+| SQL | Structured Query Language |
+| SSE | Server-Sent Events |
+| TLS | Transport Layer Security |
+| TTL | Time To Live |
+| TUI | Terminal User Interface |
+| UI / UX | User Interface / User Experience |
+| UID | User Identifier |
+| URL | Uniform Resource Locator |
+| WAI | Web Accessibility Initiative (W3C) |
+| WAL | Write-Ahead Logging (SQLite journal mode) |
+| WCAG | Web Content Accessibility Guidelines (W3C) |
+
 ## Status — where we are, how we got here, next steps (2026-10-16)
 
 ### How we got here
 A dockerized OpenCode + DeepSeek + Jev stack with a read-only `:5099` dashboard,
 grown a fail-closed monitoring family (**sentinel T1–T7**, cursor-bounded,
-de-cry-wolfed via stable per-incident ledger keys), a zero-dep CDP browser path
-(**`cdp-tab.mjs`**, RULES #62/#64), a UX gate (**`ux-smoke.py`**, DOM +
-local-OCR `--vision`) with a **light theme** so tesseract can read (RULES
-#65/#66), and the telemetry doctrine (**RULE #67** +
-`.opencode/skills/telemetry-dashboard`: declarative, DB-driven,
-drill-down-native; Grafana/Vega-Lite/TanStack; not Flutter). Fixed the
-served-page defects the operator hit (tz labels, poll-loop freeze, STALE-rev
-banner, empty Session-detail, inline-expand collapse, buried Gantt). Full causal
-chain in `HANDOFF.md`.
+de-cry-wolfed via stable per-incident ledger keys), a zero-dependency
+**Chrome DevTools Protocol (CDP)** browser path
+([**`cdp-tab.mjs`**](scripts/cdp-tab.mjs); see
+[RULE #62 — Drive a live browser over CDP, never X11 automation](RULES.md#rule-62)
+and [RULE #64 — Benchmark-informed browser-driver choice with failover](RULES.md#rule-64)),
+a user-experience (**UX**) gate ([**`ux-smoke.py`**](scripts/ux-smoke.py),
+**Document Object Model (DOM)** + local **Optical Character Recognition (OCR)**
+`--vision`) with a **light theme** so tesseract can read
+([RULE #65 — Prefer local OCR over a paid cloud vision-language model](RULES.md#rule-65)
+and [RULE #66 — Light theme so local OCR can read the screen](RULES.md#rule-66)),
+and the telemetry doctrine
+([RULE #67 — Telemetry/visualization doctrine: declarative, database-driven,
+drill-down-native](RULES.md#rule-67) +
+`.opencode/skills/telemetry-dashboard`: Grafana/Vega-Lite/TanStack; not Flutter).
+Fixed the served-page defects the operator hit (time-zone labels, poll-loop
+freeze, STALE-revision banner, empty Session-detail, inline-expand collapse,
+buried Gantt). Full causal chain in `HANDOFF.md`.
 
 ### Where we are
 - Sentinel **T1–T7**; ledger deduped; DB-only **digests** auto-written on a trip;
@@ -24,13 +79,25 @@ chain in `HANDOFF.md`.
 - Dashboard: **clickable Gantt** (bar → in-page span timeline with per-part ms),
   a **Flags** panel (bottlenecks · cost · slowdowns · stalls, clickable), a
   **projected-schedule estimate Gantt**, **trends** (cost/sessions per day), a
-  **light theme**, and **snapshot→deltas SSE** (`/api/stream`) instead of
-  polling. `/api/board` is **offloaded** to `query-worker.mjs`.
+  **light theme**, and **snapshot→deltas Server-Sent Events (SSE)**
+  (`/api/stream`) instead of polling. `/api/board` is **offloaded** to
+  `query-worker.mjs`.
 - Browser: `cdp-tab.mjs` (Node) + `browser_bench.py` failover; a **semantic
   beforeTool guard** (`guard-classify.py`) layered into `blacklist-guard.js`.
 - Ops: `web-restart.sh` kills all dashboard pids before relaunch (no more `:5099`
-  down-race); `host-path-probe.sh` breaks the hop into dns/tls/ttfb; `tui-audit.py`
-  audits a TUI session causally; RULES #62–#69 + the `telemetry-dashboard` skill.
+  down-race); `host-path-probe.sh` breaks the hop into Domain Name System
+  (DNS) / Transport Layer Security (TLS) / time-to-first-byte (TTFB);
+  `tui-audit.py` audits a **terminal user interface (TUI)** session causally;
+  and the browser/telemetry rules
+  [#62 — drive a live browser over CDP](RULES.md#rule-62) ·
+  [#63 — UI-only consent steps](RULES.md#rule-63) ·
+  [#64 — benchmark-informed browser drivers](RULES.md#rule-64) ·
+  [#65 — local OCR over cloud vision](RULES.md#rule-65) ·
+  [#66 — light theme for OCR](RULES.md#rule-66) ·
+  [#67 — telemetry/visualization doctrine](RULES.md#rule-67) ·
+  [#68 — Claude is ASK-tier](RULES.md#rule-68) ·
+  [#69 — durable-harness doctrine](RULES.md#rule-69)
+  plus the `telemetry-dashboard` skill.
 - **Host-only, pending:** the CDP-bound screenshot/video capture (needs Chrome on
   `:9222` or `playwright install chromium`), the host browser-venv wiring, and
   standing up Grafana.
@@ -41,7 +108,8 @@ chain in `HANDOFF.md`.
 2. **Host browser stack** — point `ux-smoke.py` / `browser_bench.py` at the host
    venv (`/home/owner/.venvs/browser`) so the vision/failover legs have a home.
 3. **Host path** — the probe shows the hop is **TLS-dominated**; cut the caddy
-   handshake cost (HTTP/2 keep-alive / CPU contention) or bypass it.
+   handshake cost (Hypertext Transfer Protocol version 2, HTTP/2, keep-alive /
+   CPU contention) or bypass it.
 4. **Grafana + SQLite** (below) as the non-bespoke ops view.
 
 ### Optional: a hosted-grade ops view (Grafana + SQLite)
@@ -50,8 +118,8 @@ stores mounted read-only and a provisioned `frser-sqlite-datasource`. On the
 host: `docker compose -f docker/docker-compose.observability.yml up -d` → open
 `http://127.0.0.1:3000` (anonymous viewer on localhost). Use it for metrics,
 **alerting**, **annotations**, and **saved views** instead of hand-rolling
-panels (RULE #67); `:5099` stays the in-app view. Verify the plugin id/schema on
-first run.
+panels ([RULE #67 — Telemetry/visualization doctrine](RULES.md#rule-67));
+`:5099` stays the in-app view. Verify the plugin id/schema on first run.
 
 ### Screenshots (light theme)
 
@@ -81,13 +149,15 @@ Clicking a Gantt bar drills into that session's **timeline in-page** (`detail()`
 
 ![Gantt bar drilled into a session](docs/ux/status-gantt-drill.png)
 
-See `RULES.md` #62–#67, `.opencode/skills/telemetry-dashboard`, `HANDOFF.md`,
-and `TODO.md` for the full queue.
+See [RULE #62 — drive a live browser over CDP](RULES.md#rule-62) through
+[RULE #67 — telemetry/visualization doctrine](RULES.md#rule-67),
+`.opencode/skills/telemetry-dashboard`, `HANDOFF.md`, and `TODO.md` for the
+full queue.
 
 ## Prerequisites
 - Docker Engine (daemon reachable by current user)
-- gh (GitHub CLI), authenticated
-- DeepSeek API key (prefix sk-)
+- GitHub Command-Line Interface (`gh`), authenticated
+- DeepSeek Application Programming Interface (API) key (prefix sk-)
   https://platform.deepseek.com/api_keys
 - Jev API key (prefix apikey_)
   https://console.typesafe.ai/keys
@@ -108,11 +178,12 @@ provider entry without that declaration is treated as text-only.)
 
 If a model rejects an image anyway, read it locally instead:
 
-    ./scripts/ocr-image.sh <image.png>      # tesseract CLI, tesseract.js, or PaddleOCR
+    ./scripts/ocr-image.sh <image.png>      # tesseract Command-Line Interface (CLI), tesseract.js, or PaddleOCR
     ./scripts/ocr-image.sh --check          # report which engine is available
 
 Each run is persisted to data/observability/ocr_run and surfaced in the
-dashboard: /api/ocr lists runs, /api/export/ocr downloads CSV, and the OCR
+dashboard: /api/ocr lists runs, /api/export/ocr downloads Comma-Separated
+Values (CSV), and the OCR
 text is folded into /api/semantic so the search box finds screenshots too.
 
 The engines match github.com/swipswaps/receipts-ocr: tesseract.js (browser)
@@ -127,7 +198,7 @@ is also baked into the image. PaddleOCR is available with
     ./scripts/lint.sh
 
 Static gate over the repo: `bash -n` on every script, `shellcheck` (baked
-into the image), `node --check` on the JS (including
+into the image), `node --check` on the JavaScript (JS) (including
 `.opencode/plugins/*.js`), `py_compile` on the Python, a `subprocess.run`
 check, a `scan-constraints.py` pass (code vs string/comment) over
 `scripts/*.sh`, and a RULES grep (no `sed`, no `2>/dev/null`).
@@ -197,12 +268,13 @@ as it arrives. The safety timeout (120s) fires only if the process
 genuinely makes no progress.
 
 ## Smoke test methodology
-opencode 1.18.31 exits non-zero after a successful non-TTY response.
+opencode 1.18.31 exits non-zero after a successful non-TTY (teletypewriter /
+terminal) response.
 The staging script asserts on response text ("OK") instead of exit
 code. Elapsed time and exit code are reported for diagnostic purposes
 but do not determine pass/fail.
 
-## UID handling
+## UID (User Identifier) handling
 Container runs with --user $(id -u):$(id -g). /home/node is chmod 777
 at build time.
 
@@ -210,10 +282,11 @@ at build time.
 - Keys never appear on docker CLI argv (bare -e VAR).
 - curl Authorization headers written to mode-0600 temp files.
 - .env.local is gitignored and mode 0600.
-- The web UI (port 4096) requires OPENCODE_SERVER_PASSWORD; web.sh
+- The web user interface (UI, port 4096) requires OPENCODE_SERVER_PASSWORD; web.sh
   refuses to start without it (pass --insecure to override).
 - Port 4096 is bound to 127.0.0.1 only (loopback). The password is the single
-  gate, so it must not be the only thing between the service and a LAN.
+  gate, so it must not be the only thing between the service and a Local Area
+  Network (LAN).
   Widening it is a three-part change — rotate first, widen only the publish
   line, then firewall the CIDR; see HANDOFF "Exposing 4096 to the LAN". Never
   widen the port alone.
@@ -229,8 +302,8 @@ at build time.
 Full staging output captured to ../staging.log.
 
 ## Verification (V1 command surface)
-opencode V1 has no "mcp list" subcommand. MCP servers are read from
-opencode.json. The staging script verifies:
+opencode V1 has no "mcp list" subcommand. **Model Context Protocol (MCP)**
+servers are read from opencode.json. The staging script verifies:
 - opencode --help loads the binary
 - opencode.json parses and lists mcp.servers keys via python3
 - the image builds
@@ -272,7 +345,8 @@ The dashboard drills down. Click a session row to see its detail panel
 parts. Each detail panel offers a per-session chat-history download as
 txt, md, or json (/api/export/session). The search box runs ranked
 full-text search across every session — text, reasoning, and tool
-commands — via an in-memory SQLite FTS5/bm25 index (/api/semantic).
+commands — via an in-memory SQLite **Full-Text Search version 5 (FTS5)** /
+**Best Matching 25 (BM25)** index (/api/semantic).
 http://127.0.0.1:5099/runbooks lists the operational runbooks (host vs
 container) with copy buttons; ./scripts/runbook.sh runs them as a menu.
 scripts/runbooks.json is the single source for both — add entries there, not
@@ -331,8 +405,9 @@ the queue. Update both at the end of a session.
 ## Navigating the observability UI
 Every page (/ dashboard, /explore, /runbooks, /docs) shares one sticky nav:
 `dashboard · explore · models · runbooks · manage · docs · csv`. The /explore tabs
-(overview · charts · signals · ocr) are linkable and restore from the URL
-hash, so `http://127.0.0.1:5099/explore#charts` opens the charts tab and the
+(overview · charts · signals · ocr) are linkable and restore from the Uniform
+Resource Locator (URL) hash, so `http://127.0.0.1:5099/explore#charts` opens the
+charts tab and the
 browser back/forward buttons work. /docs renders this repo's own HANDOFF.md,
 RULES.md, README.md, scripts/README.txt and HANDOFF-PROMPT.txt in-UI
 (read-only, whitelisted names via /api/doc), so the rules are reachable
@@ -370,7 +445,7 @@ evidence, and names its limitations — findings always carry all three.
 | Tool | Behavior → evidence |
 |---|---|
 | `ux.sh status` | Chrome + probe end-to-end → `probe: PASS` + `logs/cdp/probe-latest.json` |
-| `probe-diagnose.sh` / `cdp-tab.mjs` | HTTPS + auth + render evidence over CDP (zero-dep, no Playwright install) |
+| `probe-diagnose.sh` / `cdp-tab.mjs` | Hypertext Transfer Protocol Secure (HTTPS) + authentication + render evidence over CDP (zero-dependency, no Playwright install) |
 | `ux-findings.sh` | `:5099` findings in plain language (means / care / action) |
 | `recall-sessions.py` | Keyword recall over sessions with provenance |
 | `cost.sh` | Spend headline: sessions, tokens, balance, estimates |
@@ -379,7 +454,7 @@ evidence, and names its limitations — findings always carry all three.
 | `gate-all.sh` | 15 asserts (lint/hygiene/patterns/self-tests/contract/freshness/certs/secrets/recall/pages) → PASS/FAIL/SKIP |
 | `review-diff.sh` | Pre-push semantic review; SKIP (never FAIL) when uninstalled |
 | `repo-mcp.mjs` | The four read-only tools as an MCP server (`repo-tools` in `opencode.json`) |
-| `enable-lan-cert.sh` / `certs-init.sh` / `certs-trust.sh` | LAN SAN rotation + CA trust (system/Firefox/Chromium NSS) |
+| `enable-lan-cert.sh` / `certs-init.sh` / `certs-trust.sh` | Local Area Network (LAN) Subject Alternative Name (SAN) rotation + Certificate Authority (CA) trust (system/Firefox/Chromium Network Security Services, NSS) |
 | Skills | `jev-harness` (workflow), `repo-wizard` (human-only steps + grill), `typed-must-be-scripted`, `ux-verify` |
 | Dashboard `:5099` | Panes: dashboard, explore, models, runbooks, manage, docs + cmdk palette |
 
@@ -422,7 +497,8 @@ node scripts/cdp-tab.mjs openauth http://127.0.0.1:4096/session  # answer the lo
 node scripts/cdp-tab.mjs probe                                    # PASS + logs/cdp/probe-latest.json
 ```
 
-Why `openauth` exists: `:4096` is JSON-API-only and answers browsers
+Why `openauth` exists: `:4096` is JavaScript Object Notation (JSON)-API-only
+and answers browsers
 with `401 + Basic realm` and an empty body, so an opened tab parks on
 the login dialog with nothing to display. Answering the challenge
 renders the session JSON in the tab (43 sessions); the human-readable
@@ -546,7 +622,8 @@ skills) is itself context cost:
     ./scripts/doc-budget.sh          # ~tokens + content hash; unchanged = cached
 
 It records a hash in data/observability/docs.json, so an unchanged corpus means
-nothing new to re-learn (the ECC context-budget / content-hash-cache pattern).
+nothing new to re-learn (the ECC external-skills-catalog context-budget /
+content-hash-cache pattern).
 
 Before spending on a session, run the fail-closed spend gate:
 
@@ -584,7 +661,7 @@ Same `docs/ux` shots below (refreshed 09:20 run).
 ```bash
 # PASS check (the whole state, one command)
 bash scripts/ux.sh status
-# Backup (atomic, WAL-safe) + verify
+# Backup (atomic, Write-Ahead Logging (WAL)-safe) + verify
 python3 -c "import sqlite3; s=sqlite3.connect('file:data/opencode/opencode.db?mode=ro',uri=True); print(s.execute('SELECT COUNT(*) FROM session').fetchone())"
 # Cert rotate + trust (LAN SAN, then relaunch Chrome)
 CERT_EXTRA_SANS="IP:192.168.4.24" ./docker/certs-init.sh && ./docker/certs-trust.sh
@@ -836,8 +913,10 @@ Silent stall during smoke test: process substitution ensures live
 
 ## References (links verified 200 on 2026-09-30)
 
-Specs/standards: W3C ARIA APG tabs
-https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ · WCAG 2.1
+Specs/standards: W3C Accessible Rich Internet Applications (ARIA) Authoring
+Practices Guide (APG) tabs
+https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ · Web Content Accessibility
+Guidelines (WCAG) 2.1
 https://www.w3.org/TR/WCAG21/ · RFC 5861 stale-while-revalidate
 https://httpwg.org/specs/rfc5861.html · Go singleflight
 https://pkg.go.dev/golang.org/x/sync/singleflight · CSP3 script-src
@@ -855,7 +934,8 @@ https://api-docs.deepseek.com/guides/json_mode · Meta structured output
 https://ai.developer.meta.com/docs/features/structured-output · Playwright
 evaluating https://playwright.dev/docs/evaluating · opencode CLI
 https://dev.opencode.ai/docs/cli · opencode MCP
-https://opencode.ai/docs/mcp-servers · GitHub REST pagination
+https://opencode.ai/docs/mcp-servers · GitHub Representational State Transfer
+(REST) pagination
 https://docs.github.com/en/rest/using-the-rest-api · Stripe pagination
 https://stripe.com/docs/api/pagination
 

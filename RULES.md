@@ -18,6 +18,9 @@ number and a constraint overlap, both are listed.
 
 ## Numbered rules
 
+<!-- Stable anchors so docs can cite a rule by name + link, not a bare number. -->
+<a id="rule-62"></a><a id="rule-63"></a><a id="rule-64"></a><a id="rule-65"></a><a id="rule-66"></a><a id="rule-67"></a><a id="rule-68"></a><a id="rule-69"></a>
+
 | Rule | Meaning | Evidence of use |
 | ---- | ------- | --------------- |
 | #7  | No `sed` — in scripts *and* in the agent's own "Thinking" commands. Reach for `python3`, then `awk`, then `grep`/`find`; use `cat`/`curl` to read. Only if none apply may a guarded `sed` be used and called out. | `push_notes_v18.sh` header |
