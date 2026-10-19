@@ -26,8 +26,10 @@ Last updated: 2026-10-19
       and prints the paste path — **idempotent** (an existing brief is reused;
       `--force` regenerates), no model call, never `--fork/--continue`.
       `preflight.sh` calls it on the budget STOP (`JEV_AUTO_HANDOFF=0`
-      disables). Gated: `test-durable.sh` (+1 → 12/0). New **RULE #87**. Live:
-      this session crossed budget and the auto-handoff produced its own brief.
+      disables). Gated: `test-durable.sh` (+1 → 12/0), and the **wiring** itself
+      is now locked (preflight must call it, and the switch must gate it) → 13/0.
+      New **RULE #87**. Live: this session crossed budget and the auto-handoff
+      produced its own brief.
 
 - [x] **E4 owned task identity (`scripts/task-id.py`) — 2026-10-18.** A unit had
       no stable ID and the DB `todo` is session-local, so begin/close/hand-off

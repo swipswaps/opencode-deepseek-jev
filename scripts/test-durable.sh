@@ -32,6 +32,16 @@ chk "issue-bridge self-test (external issue state -> ledger)" python3 "$REPO/scr
 chk "task-id self-test (addressed task identity -> ledger)" python3 "$REPO/scripts/task-id.py" --self-test
 # #76 acted on: an over-budget session yields a brief automatically (idempotent).
 chk "auto-handoff self-test (budget STOP -> brief)" bash "$REPO/scripts/auto-handoff.sh" --self-test
+# #87 wiring: the helper is proven above, but the loop is only closed if the
+# budget STOP actually CALLS it (not just advises) and the action is switch-
+# gated. This locks the wiring so "preflight quietly stops acting" is a red
+# gate, not a silent regression.
+if grep -qF 'auto-handoff.sh' "$REPO/scripts/preflight.sh" \
+    && grep -qF 'JEV_AUTO_HANDOFF' "$REPO/scripts/preflight.sh"; then
+    ok "preflight wiring (budget STOP -> auto-handoff call + JEV_AUTO_HANDOFF switch)"
+else
+    no "preflight wiring (budget STOP -> auto-handoff call + JEV_AUTO_HANDOFF switch)"
+fi
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.
