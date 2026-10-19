@@ -144,7 +144,7 @@ export function apiPatternsFresh(dbPath, limit) {
   const recent = 40;
   const win = "session_id IN (SELECT id FROM session ORDER BY time_created DESC LIMIT ?)";
   const ngrams = queryDb(dbPath,
-    "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n FROM (" +
+    "SELECT tool || '->' || next_tool AS gram, tool AS \"from\", next_tool AS \"to\", COUNT(*) n, MAX(session_id) example_sid FROM (" +
     "SELECT session_id, json_extract(data,'$.tool') tool, time_created, " +
     "lead(json_extract(data,'$.tool')) OVER (PARTITION BY session_id ORDER BY time_created) next_tool " +
     "FROM part WHERE json_extract(data,'$.type')='tool' AND " + win + ") " +

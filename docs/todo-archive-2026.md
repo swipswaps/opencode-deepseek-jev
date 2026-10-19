@@ -1,10 +1,36 @@
 # TODO archive — 2026 (older Done entries)
 
 Moved out of `TODO.md`'s Done log on 2026-10-17, a second and third batch on
-2026-10-18, to hold the read-first doc budget (the corpus is read at every
-session start, so its size is context cost — see `./scripts/doc-budget.sh`).
-Newest-first. `TODO.md` keeps the queue plus recent Done; durable state lives
-in `HANDOFF.md`. Git history is unchanged.
+2026-10-18, and a fourth on 2026-10-19, to hold the read-first doc budget (the
+corpus is read at every session start, so its size is context cost — see
+`./scripts/doc-budget.sh`). Newest-first. `TODO.md` keeps the queue plus recent
+Done; durable state lives in `HANDOFF.md`. Git history is unchanged.
+
+- [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
+      `capabilities.json` declared 15 capabilities but **9 of its own
+      `registration` markers had drifted** (`name.sh --self-test` vs the file's
+      `"$REPO/scripts/name.sh" --self-test`), so they read DEGRADED unseen — only
+      the fixture `--self-test` was gated, proving the checker, not the claims.
+      Fixed the markers (15/15 GREEN) and made the **live** registry fail closed
+      on any DEGRADED/MISSING not named in `accepted_degraded` (id → reason);
+      `test-hygiene.sh` runs it (+1). New **RULE #84**. Gate: lint 266/0 ·
+      hygiene 61/0 · patterns 6/0.
+
+- [x] **E2 external-state bridge (`scripts/issue-bridge.py`) — 2026-10-18.** `gh`
+      is absent in-container, so an issue hand-off (`nebula-systemd-override.sh
+      --handoff`) was a manual body-file relay with **no read-back** — the filed
+      issue's state never returned to the store, so an external unit
+      (TUNNEL-1 → `swipswaps/proxmox-dual-plane-mesh#5`) could not close. New
+      `issue-bridge.py`: `link` records a filed issue (repo#number) as an OPEN
+      external unit; `poll` reads its state — `gh issue view --json` on the host
+      (`--gh`) or a host-written JSON via `--in` (the host bridge when gh is
+      absent) — into the **same ledger** triage/next-action read, de-duped by
+      `(source,source_key)` (a re-poll is a no-op); `status [--json]` prints the
+      latest state. Wired: `--handoff` now prints the link+poll read-back step;
+      `next-action.sh` surfaces open external issues (text `external:` + JSON
+      `external`); self-test added to `test-durable.sh`. Live: linked `#5` →
+      next-action shows `external: 1 open issue(s)`. Gate: lint 266/0 · hygiene
+      60/0 · durable 8/0 · patterns 6/0.
 
 - [x] **Script catalog completed + gated — 2026-10-18.** The README's "one
       entry per script" claim was false: 30 tracked top-level `scripts/*.{sh,py,mjs}`

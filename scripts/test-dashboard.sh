@@ -144,6 +144,17 @@ main() {
     has 'data-tab="patterns"' "$work/explore.html" && ok 'explore patterns tab' || bad 'explore patterns tab'
     has 'id="patterns"' "$work/explore.html" && ok 'explore patterns section' || bad 'explore patterns section'
     has 'id="pivot"' "$work/explore.html" && ok 'explore pivot section' || bad 'explore pivot section'
+    python3 - "$work/explore.html" <<'DRILL_EOF'
+import sys
+h = open(sys.argv[1]).read()
+need = [
+    "getElementById('health').addEventListener('click'",
+    "getElementById('cloud').addEventListener('click'",
+    "getElementById('pivot').addEventListener('click'",
+]
+sys.exit(0 if all(n in h for n in need) else 1)
+DRILL_EOF
+    if [ $? -eq 0 ]; then ok 'explore: remaining panels drill down (health, cloud, pivot)'; else bad 'explore: remaining panels drill down'; fi
     has '/vendor/plot.umd.min.js' "$work/explore.html" && ok 'explore loads vendored Plot' || bad 'explore loads vendored Plot'
     has 'max-height:58vh' "$work/explore.html" && ok 'explore sessions table scrolls internally (fits viewport)' || bad 'explore sessions table scrolls internally (fits viewport)'
     has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'
@@ -374,7 +385,7 @@ PY
         curl -s "http://$HOST:$PORT/api/health" > "$work/health2.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/health2.json" && ok 'api/health served from cache (does not block the event loop)' || bad 'api/health served from cache (does not block the event loop)'
         curl -s "http://$HOST:$PORT/api/patterns" > "$work/pat.json"
-        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); g=d.get("ngrams") or []; sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d and (not g or ("from" in g[0] and "to" in g[0])) else 1)' "$work/pat.json" && ok 'api/patterns' || bad 'api/patterns'
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); g=d.get("ngrams") or []; sys.exit(0 if isinstance(d.get("ngrams"),list) and "distinct" in d and (not g or ("from" in g[0] and "to" in g[0] and "example_sid" in g[0])) else 1)' "$work/pat.json" && ok 'api/patterns (drillable example_sid)' || bad 'api/patterns (drillable example_sid)'
         curl -s "http://$HOST:$PORT/api/solutions" > "$work/sol.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("issues"),list) or d.get("available") is False else 1)' "$work/sol.json" && ok 'api/solutions' || bad 'api/solutions'
         curl -s "http://$HOST:$PORT/api/code" > "$work/code.json"

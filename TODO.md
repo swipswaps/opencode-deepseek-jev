@@ -4,9 +4,20 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 ## Done (most recent first)
+
+- [x] **G1 UX drill-down — every session-bearing datum drills (telemetry (3)) —
+      2026-10-19.** Closed the named residual. The **health** panel (stall/blank
+      findings + budget/deny risks) now opens the session detail (`data-go` +
+      delegated listener); **patterns** bigram bars gained `example_sid`
+      (`MAX(session_id)` in `apiPatternsFresh`) and drill the same way; the
+      **pivot** cells carry a Plot `href` to an example session, intercepted for
+      in-page detail; and **word-cloud** terms drill into ranked session search
+      (set `#q2` → overview). `test-dashboard.sh` asserts the `example_sid`
+      contract + the three delegated listeners (falsifiable). Gate: lint 271/0 ·
+      patterns 6/0 · dashboard 123/0.
 
 - [x] **Auto-handoff action (#76, RULES #87) — 2026-10-18.** The budget STOP was
       advice the agent had to remember to act on. New `auto-handoff.sh`: at the
@@ -43,32 +54,6 @@ Last updated: 2026-10-18
       New **RULE #85**. Gate: lint 266/0 · hygiene 61/0 · durable 10/0 ·
       patterns 6/0.
 
-- [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
-      `capabilities.json` declared 15 capabilities but **9 of its own
-      `registration` markers had drifted** (`name.sh --self-test` vs the file's
-      `"$REPO/scripts/name.sh" --self-test`), so they read DEGRADED unseen — only
-      the fixture `--self-test` was gated, proving the checker, not the claims.
-      Fixed the markers (15/15 GREEN) and made the **live** registry fail closed
-      on any DEGRADED/MISSING not named in `accepted_degraded` (id → reason);
-      `test-hygiene.sh` runs it (+1). New **RULE #84**. Gate: lint 266/0 ·
-      hygiene 61/0 · patterns 6/0.
-
-- [x] **E2 external-state bridge (`scripts/issue-bridge.py`) — 2026-10-18.** `gh`
-      is absent in-container, so an issue hand-off (`nebula-systemd-override.sh
-      --handoff`) was a manual body-file relay with **no read-back** — the filed
-      issue's state never returned to the store, so an external unit
-      (TUNNEL-1 → `swipswaps/proxmox-dual-plane-mesh#5`) could not close. New
-      `issue-bridge.py`: `link` records a filed issue (repo#number) as an OPEN
-      external unit; `poll` reads its state — `gh issue view --json` on the host
-      (`--gh`) or a host-written JSON via `--in` (the host bridge when gh is
-      absent) — into the **same ledger** triage/next-action read, de-duped by
-      `(source,source_key)` (a re-poll is a no-op); `status [--json]` prints the
-      latest state. Wired: `--handoff` now prints the link+poll read-back step;
-      `next-action.sh` surfaces open external issues (text `external:` + JSON
-      `external`); self-test added to `test-durable.sh`. Live: linked `#5` →
-      next-action shows `external: 1 open issue(s)`. Gate: lint 266/0 · hygiene
-      60/0 · durable 8/0 · patterns 6/0.
-
 ## Outstanding issues (audited — resolve or explicitly accept)
 
 - [x] **Script catalog was incomplete (resolved 2026-10-18, see Done).** The
@@ -93,8 +78,10 @@ Last updated: 2026-10-18
       board compute; api/board shape PASS. **Shipped (2026-10-17 audit):**
       clickable **Gantt** → session timeline (`GANTT_WIRED` + the `drill()`
       listener) and the **Flags panel** (`#flags-card` — bottlenecks · cost ·
-      slowdowns · stalls, each example click-to-drill via `data-go`). Residual:
-      (3) drill-down on the remaining sections, (4) Grafana+SQLite offer (host).
+      slowdowns · stalls, each example click-to-drill via `data-go`).
+      **(3) drill-down on the remaining session-bearing sections: DONE
+      2026-10-19** (health · patterns · pivot · word cloud; see Done). Residual:
+      (4) Grafana+SQLite offer (host).
 
 - **Guard runtime was silently inert (root-caused + fixed).** Web sessions boot
   at `$HOME/.opencode`, so the project-scoped `{plugin,plugins}/*.{ts,js}` glob
@@ -142,7 +129,8 @@ Last updated: 2026-10-18
   end-to-end.
 - **C — larger code (own session):** per-model adaptation, client-vs-agent
   stall, Plot migration, embeddings rerank, and auto-handoff **action** — all
-  **DONE 2026-10-18** (RULES #87). Residual: G1 UX drill-down (telemetry (3)).
+  **DONE 2026-10-18** (RULES #87). ~~Residual: G1 UX drill-down~~ **DONE
+  2026-10-19** (telemetry (3): health · patterns · pivot · cloud).
 - **D — external / new deps (never batch):** upstream SPA, LiteLLM `max_budget`
   routing, finos/perspective, Laya, Blockly/n8n.
 - **E — durable-agent gaps (deduced 2026-10-18; own session each).** Four

@@ -1765,7 +1765,7 @@ async function renderPatterns(){
   var h='<div class="muted" style="font-size:12px">'+d.distinct+' distinct tools · top tool-sequence bigrams</div>';
   for(var i=0;i<d.ngrams.length;i++){var g=d.ngrams[i];
     var w=Math.max(2,Math.round(100*g.n/max));
-    h+='<div style="display:flex;align-items:center;gap:8px;margin:3px 0"><span style="width:220px;font-size:12px">'+esc(g.gram)+'</span><span style="display:inline-block;height:10px;width:'+w+'%;max-width:420px;background:#2ea043;border-radius:4px"></span><span class="muted">'+g.n+'</span></div>';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin:3px 0'+(g.example_sid?';cursor:pointer':'')+'"'+(g.example_sid?' data-go="'+esc(g.example_sid)+'" title="drill into an example session"':'')+'><span style="width:220px;font-size:12px">'+esc(g.gram)+'</span><span style="display:inline-block;height:10px;width:'+w+'%;max-width:420px;background:#2ea043;border-radius:4px"></span><span class="muted">'+g.n+'</span></div>';
   }
   if(d.errorTools&&d.errorTools.length){
     h+='<div class="muted" style="font-size:12px;margin-top:10px">error tool calls</div>';
@@ -1791,7 +1791,7 @@ async function renderPivot(){
   for(i=0;i<d.ngrams.length;i++){var g=d.ngrams[i];
     if(!seenF[g.from]){seenF[g.from]=1;froms.push(g.from);}
     if(!seenT[g.to]){seenT[g.to]=1;tos.push(g.to);}}
-  var rows=[];for(i=0;i<d.ngrams.length;i++){rows.push({from:d.ngrams[i].from,to:d.ngrams[i].to,n:Number(d.ngrams[i].n)||0});}
+  var rows=[];for(i=0;i<d.ngrams.length;i++){rows.push({from:d.ngrams[i].from,to:d.ngrams[i].to,n:Number(d.ngrams[i].n)||0,example_sid:d.ngrams[i].example_sid||null});}
   var span=Math.max(froms.length,tos.length);
   host.innerHTML='';
   host.appendChild(Plot.plot({
@@ -1802,11 +1802,12 @@ async function renderPivot(){
     x:{label:'to tool',domain:tos,tickRotate:-35},
     y:{label:'from tool',domain:froms},
     marks:[
-      Plot.cell(rows,{x:'to',y:'from',fill:'n'}),
+      Plot.cell(rows,{x:'to',y:'from',fill:'n',href:function(r){return r.example_sid?('/?session='+encodeURIComponent(r.example_sid)):null;},title:function(r){return r.from+' → '+r.to+': '+r.n+(r.example_sid?' (click to drill)':'');}}),
       Plot.text(rows,{x:'to',y:'from',text:function(r){return r.n;},fill:'#0d1117',fontSize:10,fontWeight:600})
     ]
   }));
 }
+document.getElementById('pivot').addEventListener('click',function(ev){var a=ev.target&&ev.target.closest?ev.target.closest('a[href*="session="]'):null;if(!a)return;var m=/[?&]session=([^&]+)/.exec(a.getAttribute('href')||a.getAttribute('xlink:href')||'');if(m){ev.preventDefault();detail(decodeURIComponent(m[1]));}});
 async function renderCode(){
   var el=d3.select('#code');el.selectAll('*').remove();
   var d=await j('/api/code?limit=400');
@@ -1825,13 +1826,14 @@ async function renderHealth(){
   var c=d.counts||{};
   var h='<div class="muted" style="font-size:12px">'+esc(String(c.sessions_scanned||0))+' sessions scanned · running '+esc(String(c.running_tools||0))+' · blank '+esc(String(c.blank_tails||0))+(c.dead_tools?' · dead '+esc(String(c.dead_tools)):'')+(c.dead_blanks?' · dead-blank '+esc(String(c.dead_blanks)):'')+'</div>';
   if(d.handoff&&d.handoff.available){h+='<div class="item"><span class="tag'+(d.handoff.level==='ok'?'':' ERR')+'">handoff '+esc(d.handoff.level||'?')+'</span>'+esc(String(d.handoff.in_tok))+'/'+esc(String(d.handoff.budget))+' in ('+esc(String(Math.round((d.handoff.ratio||0)*100)))+'%) — '+esc(d.handoff.action||'')+'</div>';}
-  if(d.risks&&d.risks.available){var rk=(d.risks.over||[]).concat(d.risks.denied||[]);for(var ri=0;ri<rk.length&&ri<6;ri++){var rs=rk[ri];h+='<div class="item"><span class="tag ERR">risk</span>'+esc(rs.session)+' '+esc(String(rs.in_tok))+' in ('+esc(String(Math.round((rs.ratio||0)*100)))+'%)'+(rs.model_denied?' · model '+esc(rs.model)+' deny-listed':'')+' — '+esc(String(rs.guidance||'').slice(0,140))+'</div>';}}
+  if(d.risks&&d.risks.available){var rk=(d.risks.over||[]).concat(d.risks.denied||[]);for(var ri=0;ri<rk.length&&ri<6;ri++){var rs=rk[ri];h+='<div class="item"'+(rs.session?' data-go="'+esc(rs.session)+'" style="cursor:pointer" title="drill into '+esc(rs.session)+'"':'')+'><span class="tag ERR">risk</span>'+esc(rs.session)+' '+esc(String(rs.in_tok))+' in ('+esc(String(Math.round((rs.ratio||0)*100)))+'%)'+(rs.model_denied?' · model '+esc(rs.model)+' deny-listed':'')+' — '+esc(String(rs.guidance||'').slice(0,140))+'</div>';}}
   if(!d.findings.length){h+='<div class="item">no stalls or blank turns — the web view lagging is a client issue, not an agent stall</div>';}
   for(var i=0;i<d.findings.length;i++){var f=d.findings[i];
-    if(f.kind==='running_tool'){h+='<div class="item"><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}
-    else if(f.kind==='dead_tool'){h+='<div class="item"><span class="tag">dead</span>'+esc(f.session)+' '+esc(f.tool)+' <span class="muted">dead tool — server idle/absent, running '+esc(String(f.age_s))+'s is archival, not a live stall</span></div>';}
-    else if(f.kind==='dead_blank'){h+='<div class="item"><span class="tag">dead</span>'+esc(f.session)+' '+esc(f.model)+' <span class="muted">dead blank — server idle/absent, no text '+esc(String(f.age_s))+'s is archival, not a live no-answer</span></div>';}
-    else {h+='<div class="item"><span class="tag">blank</span>'+esc(f.session)+' '+esc(f.model)+' — no text '+esc(String(f.age_s))+'s after last tool</div>';}
+    var go=f.session?' data-go="'+esc(f.session)+'" style="cursor:pointer" title="drill into '+esc(f.session)+'"':'';
+    if(f.kind==='running_tool'){h+='<div class="item"'+go+'><span class="tag ERR">stall</span>'+esc(f.session)+' '+esc(f.tool)+' [running '+esc(String(f.age_s))+'s] <span class="muted">'+esc(String(f.command||'').slice(0,80))+'</span></div>';}
+    else if(f.kind==='dead_tool'){h+='<div class="item"'+go+'><span class="tag">dead</span>'+esc(f.session)+' '+esc(f.tool)+' <span class="muted">dead tool — server idle/absent, running '+esc(String(f.age_s))+'s is archival, not a live stall</span></div>';}
+    else if(f.kind==='dead_blank'){h+='<div class="item"'+go+'><span class="tag">dead</span>'+esc(f.session)+' '+esc(f.model)+' <span class="muted">dead blank — server idle/absent, no text '+esc(String(f.age_s))+'s is archival, not a live no-answer</span></div>';}
+    else {h+='<div class="item"'+go+'><span class="tag">blank</span>'+esc(f.session)+' '+esc(f.model)+' — no text '+esc(String(f.age_s))+'s after last tool</div>';}
   }
   if(d.by_model){var bm=[];for(var mk in d.by_model){bm.push(esc(mk)+'='+esc(String(d.by_model[mk])));}
     if(bm.length){h+='<div class="muted" style="font-size:11px;margin-top:6px">findings by model: '+bm.join(', ')+'</div>';}}
@@ -1872,6 +1874,7 @@ document.addEventListener('keydown',function(ev){
 document.getElementById('detail-close').addEventListener('click',function(){document.getElementById('detail').innerHTML='';document.querySelectorAll('#stable tr.selected').forEach(function(r){r.classList.remove('selected');});document.getElementById('detail-card').hidden=true;});
 document.getElementById('detail-head').addEventListener('click',function(ev){if(ev.target&&ev.target.id==='detail-close')return;document.getElementById('detail-card').classList.toggle('collapsed');});
 document.getElementById('signals').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
+document.getElementById('health').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
 async function renderOcr(){
   var el=d3.select('#ocr');el.selectAll('*').remove();
   var d=await j('/api/ocr?limit=20');
@@ -2358,10 +2361,13 @@ async function renderCloud(){
     .selectAll('text').data(placed).enter().append('text')
     .style('font-size',function(d){return d.size+'px';})
     .style('fill',function(d){return d3.interpolateViridis(d.size/64);})
+    .style('cursor','pointer')
+    .attr('data-word',function(d){return d.text;})
     .attr('text-anchor','middle')
     .attr('transform',function(d){return 'translate('+d.x+','+d.y+')';})
     .text(function(d){return d.text;});
 }
+document.getElementById('cloud').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-word]'):null;if(!t)return;var w=t.getAttribute('data-word');var q=document.getElementById('q2');if(q)q.value=w;activateTab('overview',true);doSearch2();});
 
 document.getElementById('tl-reset').addEventListener('click',function(){renderTimeline(null,null);});
 document.addEventListener('keydown',function(ev){if(ev.key==='/'&&ev.target&&ev.target.tagName!=='INPUT'){var q=document.getElementById('q2');if(q){ev.preventDefault();q.focus();}}});

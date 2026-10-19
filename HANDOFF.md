@@ -866,3 +866,15 @@ detector, p≈0.94).
 > action produced its own brief: `logs/brief-ses_eaf110b93ffeOLMmxLklc5zx7P.md`
 > — start a FRESH session and paste it; do NOT `--fork/--continue`. Remaining
 > local residual: G1 UX drill-down (telemetry (3)); TUNNEL-1 external (#5, T8).
+
+> **PIN 2026-10-19 (G1 drill-down, fresh session):** closed the last local
+> telemetry-console residual (3). **Health** findings + budget/deny risks drill
+> to session detail (`data-go`); **patterns** bigram bars now carry
+> `example_sid` from `apiPatternsFresh` (`MAX(session_id)`) and drill; **pivot**
+> cells get a Plot `href` to an example session and the click is intercepted for
+> in-page detail; **word-cloud** terms drill into ranked session search. Proven
+> structural + contract checks in `test-dashboard.sh` (api `/api/patterns` must
+> expose `example_sid`; the three delegated listeners must exist). Gate: lint
+> **271/0** · patterns **6/0** · dashboard **123/0**. **The ranked queue is now
+> external/host-only** (TUNNEL-1 #5 + T8 watch; G4 needs the proxy; G6/G7 need a
+> host) — the next local unit must come from a new audited gap, not this queue.
