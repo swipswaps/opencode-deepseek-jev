@@ -53,6 +53,18 @@
     ]
   },
   {
+    "id": "auto-handoff",
+    "title": "Act on the budget STOP: produce the brief automatically (#76)",
+    "where": "container",
+    "purpose": "RULES #76 makes an over-budget session a hard STOP whose prescription is a handoff; this is the ACTION (detect and act were separate). Targets the LATEST over-budget session (the row preflight.sh gates on), runs the brief chain, and prints the paste path — no model call, never --fork/--continue. Idempotent: a brief already on disk is reused (--force regenerates), so a per-turn preflight is cheap after the first. preflight.sh invokes it on the budget STOP; JEV_AUTO_HANDOFF=0 disables.",
+    "commands": [
+      "./scripts/auto-handoff.sh",
+      "./scripts/auto-handoff.sh --session ses_<id> --out FILE",
+      "./scripts/auto-handoff.sh --json",
+      "./scripts/auto-handoff.sh --self-test"
+    ]
+  },
+  {
     "id": "handoff-brief",
     "title": "Deterministic carry-over brief from a transcript",
     "where": "host",

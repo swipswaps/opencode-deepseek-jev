@@ -30,6 +30,8 @@ chk "triage-alerts self-test (durable ledger reader)" python3 "$REPO/scripts/tri
 chk "issue-bridge self-test (external issue state -> ledger)" python3 "$REPO/scripts/issue-bridge.py" --self-test
 # E4: a unit gets a durable, addressed id (id -> title + owner).
 chk "task-id self-test (addressed task identity -> ledger)" python3 "$REPO/scripts/task-id.py" --self-test
+# #76 acted on: an over-budget session yields a brief automatically (idempotent).
+chk "auto-handoff self-test (budget STOP -> brief)" bash "$REPO/scripts/auto-handoff.sh" --self-test
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.

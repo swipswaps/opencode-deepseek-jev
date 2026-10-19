@@ -207,6 +207,13 @@ except Exception:
                 if [ "$lasttok" -ge "$budget" ]; then
                     over=$(python3 -c 'import sys;print("%.1f"%(float(sys.argv[1])/float(sys.argv[2])))' "$lasttok" "$budget" 2>&1)
                     crit "latest session ${over}x over budget ($lasttok/$budget in) — STOP: hand off NOW (./scripts/session-guard.sh --handoff), then a fresh session"
+                    # ACT, don't advise: produce the fresh-session brief at the
+                    # trip point (idempotent). JEV_AUTO_HANDOFF=0 disables.
+                    if [ "$JSON" -eq 0 ] && [ "${JEV_AUTO_HANDOFF:-1}" = "1" ] && [ -x "$REPO/scripts/auto-handoff.sh" ]; then
+                        local ah=""
+                        ah=$(bash "$REPO/scripts/auto-handoff.sh" --db "$db" 2>&1 || true)
+                        [ -n "$ah" ] && printf '  [auto] %s\n' "$ah"
+                    fi
                 else
                     good "latest session within budget ($lasttok/$budget in)"
                 fi

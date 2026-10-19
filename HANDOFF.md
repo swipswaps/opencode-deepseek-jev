@@ -856,3 +856,13 @@ detector, p≈0.94).
 > Gated: `test-durable.sh` +1 → **11/0**; new **RULE #86**. **All four E-gaps
 > (E1–E4) closed.** Local queue is thin (E1 regression-eval deps stay
 > D-decisions); TUNNEL-1 external (#5, T8 live).
+
+> **PIN 2026-10-18 (session `ses_eb04be01…` → OVER BUDGET, hand off):** closed
+> the **auto-handoff action** (RULES #87): the #76 budget STOP no longer just
+> advises — `auto-handoff.sh` targets the latest over-budget session, runs the
+> brief chain, and prints the paste path, idempotently; `preflight.sh` invokes
+> it on the STOP (`JEV_AUTO_HANDOFF=0` disables). `test-durable.sh` +1 → **12/0**.
+> **This session then crossed the hard budget (STOP, 3.1× over)** and the new
+> action produced its own brief: `logs/brief-ses_eaf110b93ffeOLMmxLklc5zx7P.md`
+> — start a FRESH session and paste it; do NOT `--fork/--continue`. Remaining
+> local residual: G1 UX drill-down (telemetry (3)); TUNNEL-1 external (#5, T8).

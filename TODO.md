@@ -8,6 +8,16 @@ Last updated: 2026-10-18
 
 ## Done (most recent first)
 
+- [x] **Auto-handoff action (#76, RULES #87) — 2026-10-18.** The budget STOP was
+      advice the agent had to remember to act on. New `auto-handoff.sh`: at the
+      trip point it targets the **latest** over-budget session (the row
+      `preflight.sh` gates on), runs the brief chain (redacted, leak-checked),
+      and prints the paste path — **idempotent** (an existing brief is reused;
+      `--force` regenerates), no model call, never `--fork/--continue`.
+      `preflight.sh` calls it on the budget STOP (`JEV_AUTO_HANDOFF=0`
+      disables). Gated: `test-durable.sh` (+1 → 12/0). New **RULE #87**. Live:
+      this session crossed budget and the auto-handoff produced its own brief.
+
 - [x] **E4 owned task identity (`scripts/task-id.py`) — 2026-10-18.** A unit had
       no stable ID and the DB `todo` is session-local, so begin/close/hand-off
       could not name the same unit across sessions. New `task-id.py` records
@@ -58,69 +68,6 @@ Last updated: 2026-10-18
       `external`); self-test added to `test-durable.sh`. Live: linked `#5` →
       next-action shows `external: 1 open issue(s)`. Gate: lint 266/0 · hygiene
       60/0 · durable 8/0 · patterns 6/0.
-
-- [x] **Script catalog completed + gated — 2026-10-18.** The README's "one
-      entry per script" claim was false: 30 tracked top-level `scripts/*.{sh,py,mjs}`
-      were in neither `scripts/README.txt` nor `scripts/tools.json`. Added a
-      "Host checks, repo gates and local helpers" section (all 30) + 30 `/manage`
-      entries (`tools.json` 72 → 102). `test-hygiene.sh` now asserts every tracked
-      top-level script is documented (SKIP off-git) — falsified live: an
-      uncatalogued script fails it, 0 missing passes. Corrected the audit's
-      dead-ref premise: `chatlog.sh`/`ask.sh` DO exist and are executable; only
-      `test-tools.sh` is wired into no gate. Gate: hygiene 60/0.
-
-- [x] **Chat-DB audit (PhD pass) — 2026-10-18.** Read-only audit of
-      `data/opencode/opencode.db` (99 sessions · 14,750 msgs · 56,499 parts ·
-      114 todos; $10.68 lifetime; 97.1% cache hit) + `observability.db` (798
-      ledger rows). **Outstanding (pending):** the CURRENT session is **2.5× over
-      budget** → `preflight.sh` **STOP** (RULES #76); the one hard action is a
-      handoff (`session-guard.sh --handoff`). **Outstanding (stands out):**
-      (1) `edit` oldString mismatch **70×** — the #1 recurring failure →
-      **RULE #81**; (2) the "free" `muse-spark-*` model accrued **real cost**
-      ($1.74 / 26 sessions, one $1.51) → **RULE #82** (gateway-metered, not
-      free); (3) 632 ADVISORY/FAIL ledger rows, sentinel-dominated and
-      stable-keyed; (4) 24 stale session-local DB todos (not a backlog).
-      Addressed: persisted the learning outputs (`issue-solutions.py --write` →
-      `/api/solutions`, `learn-rules.py --write`), promoted #81/#82, documented
-      the DB-todo caveat in HANDOFF.
-
-- [x] **Host runbooks verified + RULES #54 gate broadened — 2026-10-18.** Audited
-      every host (`where=host`) runbook (G4 litellm, G5 laya, G6 doctor --full,
-      G7 grafana / adopt-durable-pi / host-*): **all 87** `scripts/*.{sh,py,mjs}`
-      targets they name exist and are **tracked** (0 bad). The RULES #54 gate
-      matched only the `./scripts/` form — broadened it to also catch
-      `bash scripts/…` / `python3 scripts/…` (the old pattern would have missed
-      `bash scripts/snapshot-audit.sh`). The remaining G4–G7 steps stay
-      host-bound (no docker/systemd in-sandbox). Gate: dashboard 121/0.
-
-- [x] **Embeddings rerank over FTS5 (`scripts/rerank.mjs`) — 2026-10-18.** The
-      semantic step over lexical search, with the three standing constraints
-      baked in: (1) **offline by default** — a deterministic, dependency-free
-      hashing embedder (word unigrams+bigrams, L2-normalised), no model/key;
-      (2) **redaction is mandatory** on the external path (every text through
-      `redact.mjs` *before* egress — proven: a live-looking `sk-…` becomes
-      `[REDACTED]` in the request body); (3) a **hard cap** (`RERANK_MAX_TEXTS`
-      per call, `RERANK_MAX_REQUESTS` per process — over cap is a **refusal**,
-      not a truncation) *and* an explicit `RERANK_ALLOW=1` gate (an agent never
-      auto-spends). `--fts data/search/opencode-index.db` pulls bm25 candidates
-      straight from the FTS5 index and reranks; `--docs FILE|-` takes JSONL.
-      Wired into test-hygiene. Self-test 14/0.
-
-- [x] **Per-model adaptation (not just the ledger) — 2026-10-18.** `quirks.mjs`
-      gains `adaptModel(ledgerRow)`: the measured per-model ledger (tool-error
-      rate, blacklist-construct usage) becomes a thresholded verdict
-      (`ok`/`watch`/`adapt`) + a concrete recommendation — evidence → action,
-      RULES #69 (never a prompt). Attached to every `modelLedger()` row and
-      rendered per model in the `/api/health` panel. Self-test +4 → PASS.
-
-- [x] **client-vs-agent stall locus (`session-health.mjs`) — 2026-10-18.** Every
-      finding now names the **side** when live data is present: `locus: agent`
-      (server reports the session busy → the agent side is active) vs
-      `locus: idle` (server idle/absent → the agent side is not progressing; a
-      client-side freeze is *invisible* from the store, which is exactly why
-      this tool reads the store, not the view). Offline assigns **no** locus
-      (never guesses the side). Works off the existing `GET /session/status`
-      adjudication — no new network on the default path. Self-test +3 → PASS.
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -193,9 +140,9 @@ Last updated: 2026-10-18
 - **B — needs a host/test this container cannot run:** `doctor.sh --full` Tier 10,
   `ux-audit.py`/`ux-test.py`, `test-sidebar-streaming.sh`, `rotate-api-keys.sh`
   end-to-end.
-- **C — larger code (own session):** per-model adaptation (not just the ledger),
-  auto-handoff **action**, client-vs-agent stall, Plot migration, G1 UX
-  residuals, embeddings rerank.
+- **C — larger code (own session):** per-model adaptation, client-vs-agent
+  stall, Plot migration, embeddings rerank, and auto-handoff **action** — all
+  **DONE 2026-10-18** (RULES #87). Residual: G1 UX drill-down (telemetry (3)).
 - **D — external / new deps (never batch):** upstream SPA, LiteLLM `max_budget`
   routing, finos/perspective, Laya, Blockly/n8n.
 - **E — durable-agent gaps (deduced 2026-10-18; own session each).** Four

@@ -523,6 +523,15 @@ session-guard.sh
     (brief + leak check + ledger). --json, --session, --no-log, --db/--rev,
     --self-test.
 
+auto-handoff.sh
+    #76 ACTED, not advised: at the budget STOP it targets the LATEST
+    over-budget session (the row preflight.sh gates on), produces the redacted
+    brief, and prints the paste path — no model call, no --fork/--continue.
+    Idempotent (a brief already on disk is reused; --force regenerates), so a
+    per-turn preflight costs nothing after the first. preflight.sh calls it on
+    the budget STOP (JEV_AUTO_HANDOFF=0 disables). --session/--db/--out/
+    --transcript/--json/--self-test.
+
 handoff-brief.sh
     Deterministic carry-over brief from logs/transcript-<id>.md (goal,
     findings, recent asks, tools, open question); every field passes through
