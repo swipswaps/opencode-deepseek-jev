@@ -1,6 +1,6 @@
 # PR: refresh README screenshots and the .webm tour for the newest panels
 
-Status: **capture script extended + hardened; one host re-run needed.**
+Status: **implemented — six panels captured on the host and embedded.**
 
 ## Why
 
@@ -24,6 +24,9 @@ All six panels captured, but two budgets were exceeded: `status-home.png`
 `png-shrink` pass double-shrank the file to 384x258 (unreadable), so the
 capture script was hardened rather than the artifacts committed.
 
+Final host run after the fix: **6/6** shots (52-139 KiB each) and a
+**717 KiB** `tour.webm`; `media-budget.sh` is green.
+
 ## Changes
 
 - `scripts/panels-tour.py`: capture six panels (`home`, `overview`, `board`,
@@ -35,8 +38,8 @@ capture script was hardened rather than the artifacts committed.
   the 2 MiB budget; print a WARN if it is still over.
 - `README.md`: list the six expected shots, document `--check`, and state that
   signals/patterns shots need the host capture before they are embedded.
-- (Proposed, not done) `test-hygiene.sh`: assert every README `![](...)` media
-  path exists, so a missing/renamed shot fails the gate.
+- `test-hygiene.sh`: assert every README `![](...)` media path exists, so a
+  missing/renamed shot fails the gate.
 
 ## Host run (one command)
 

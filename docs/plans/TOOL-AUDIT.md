@@ -71,7 +71,8 @@ served container. `nimble` is commercial and not wanted for localhost work.
 
 ## Recommended order
 
-1. Run `panels-tour.py` on the host and commit the media (PR-02).
+1. ~~Run `panels-tour.py` on the host and commit the media (PR-02).~~ Done
+   2026-10-19: six panels + a 717 KiB tour.
 2. Arm the durable agents on the host (`durable-agents.sh --install`, PR-03).
 3. Wire README media-existence into `test-hygiene.sh` (cheap, prevents rot).
 4. Decide whether to add per-mark keyboard activation for treemap/sankey

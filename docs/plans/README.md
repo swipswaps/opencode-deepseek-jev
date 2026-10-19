@@ -14,7 +14,7 @@ pull request from a branch:
 | PR | Status | Scope |
 |---|---|---|
 | `PR-01-a11y-hardening.md` | **implemented** in this tree | offline WCAG-basics audit + dashboard fixes |
-| `PR-02-media-refresh.md` | script ready; capture is host-only | README screenshots/`.webm` for the newest panels |
+| `PR-02-media-refresh.md` | **implemented + captured on host** | README screenshots/`.webm` for the newest panels |
 | `PR-03-pi-durable-automation.md` | **implemented** (host arming pending) | one command to arm the three durable agents |
 
 Evidence for the tool/UX audit that motivated these is in `TOOL-AUDIT.md`.
