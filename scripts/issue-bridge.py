@@ -13,23 +13,29 @@ WHAT: a round-trip over the same append-only ledger triage/next-action read:
     poll    read the issue's current state and record it (idempotent)
     status  print the latest known state per issue (read-only)
 
-The state comes from `gh issue view --json ...` on the host (`--gh`), or from a
-host-written JSON file (`--in`, default data/observability/issue-state.json) —
-the host-side bridge when gh is not in the container. Rows are de-duped by
-(source,source_key), so a re-poll is a no-op.
+The state comes from `gh issue view --json ...` on the host (`--gh`), from a
+host-written JSON file (`--in`, default data/observability/issue-state.json),
+or straight from GitHub's REST API for a PUBLIC repo (`--api`, stdlib only, no
+gh and no token required). Rows are de-duped by (source,source_key), so a
+re-poll is a no-op.
 
 Usage:
     python3 scripts/issue-bridge.py link --repo OWNER/NAME --number N [--url U]
     python3 scripts/issue-bridge.py poll --in issue-state.json
     python3 scripts/issue-bridge.py poll --gh --repo OWNER/NAME --number N
+    python3 scripts/issue-bridge.py poll --api --repo OWNER/NAME --number N
     python3 scripts/issue-bridge.py status [--json]
     python3 scripts/issue-bridge.py --self-test
 
 Host bridge (no gh in-container): run `gh issue list --json ...` (or one
 `gh issue view`) on the host, write the JSON to data/observability/, then in the
-container run `poll --in` — the ledger now carries the external state.
+container run `poll --in` — the ledger now carries the external state. For a
+public repo `poll --api` does the same read from the container; set
+GITHUB_TOKEN to avoid the anonymous rate limit (never printed).
 
-Env: LEDGER_DB (test seam; same as ledger.py). Stdlib only.
+Env: LEDGER_DB (test seam; same as ledger.py), GITHUB_API_BASE (test seam),
+GITHUB_TOKEN/GH_TOKEN (optional rate-limit credential; never printed). Stdlib
+only.
 """
 
 from __future__ import annotations
@@ -40,6 +46,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ledger  # noqa: E402 — shared schema/insert, one ledger
@@ -59,7 +67,7 @@ def normalize(obj) -> dict | None:
     if repo is None or number is None or state is None:
         return None
     updated = obj.get("updatedAt") or obj.get("updated_at") or obj.get("updated") or ""
-    url = obj.get("url") or obj.get("html_url") or ""
+    url = obj.get("html_url") or obj.get("url") or ""
     return {"repo": str(repo), "number": str(number).lstrip("#"),
             "state": str(state).upper(), "updated": str(updated).strip(),
             "url": str(url).strip()}
@@ -112,12 +120,48 @@ def gh_state(repo: str, number: str) -> dict | None:
     return normalize(data)
 
 
+def api_base() -> str:
+    return os.environ.get("GITHUB_API_BASE", "https://api.github.com").rstrip("/")
+
+
+def api_state(repo: str, number: str) -> dict | None:
+    """Read a PUBLIC issue from the GitHub REST API (no gh, no token needed).
+
+    GITHUB_API_BASE is a test seam (a local fixture server). GITHUB_TOKEN, when
+    present, is sent as a bearer credential for the rate limit only; it is never
+    printed. Never log the request headers.
+    """
+    url = "%s/repos/%s/issues/%s" % (api_base(), repo, str(number).lstrip("#"))
+    headers = {"User-Agent": "opencode-issue-bridge",
+               "Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError,
+            json.JSONDecodeError) as e:
+        print("issue-bridge: API read failed for %s#%s (%s)"
+              % (repo, str(number).lstrip("#"), e), file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
+        print("issue-bridge: API returned a non-object", file=sys.stderr)
+        return None
+    data.setdefault("repo", repo)
+    data.setdefault("number", number)
+    return normalize(data)
+
+
 def record(con, item: dict, source: str) -> bool:
     res = "%s#%s" % (item["repo"], item["number"])
     key = "state:%s@%s:%s" % (res, item["updated"] or "-", item["state"])
     detail = (item["updated"] + " " + item["url"]).strip()
+    tool = ("gh" if source == "issue-bridge.gh"
+            else "api" if source == "issue-bridge.api" else "bridge")
     new = ledger.insert(con, {"type": "ISSUE_STATE", "actor": "issue-bridge",
-                              "tool": "gh" if source == "issue-bridge.gh" else "bridge",
+                              "tool": tool,
                               "resource": res, "verdict": item["state"],
                               "detail": detail, "source": source,
                               "source_key": key})
@@ -143,12 +187,16 @@ def cmd_link(args: argparse.Namespace) -> int:
 
 def cmd_poll(args: argparse.Namespace) -> int:
     items: list[dict] = []
-    if args.gh:
+    if args.gh or args.api:
         if not args.repo or not args.number:
-            print("issue-bridge poll --gh: --repo and --number are required",
-                  file=sys.stderr)
+            flag = "--gh" if args.gh else "--api"
+            print("issue-bridge poll %s: --repo and --number are required"
+                  % (flag,), file=sys.stderr)
             return 2
-        one = gh_state(args.repo, str(args.number).lstrip("#"))
+        if args.gh:
+            one = gh_state(args.repo, str(args.number).lstrip("#"))
+        else:
+            one = api_state(args.repo, str(args.number).lstrip("#"))
         if one is None:
             return 1
         items = [one]
@@ -168,7 +216,9 @@ def cmd_poll(args: argparse.Namespace) -> int:
         print("issue-bridge: no usable issue rows")
         return 1
     con = ledger.connect(ledger.db_path())
-    source = "issue-bridge.gh" if args.gh else "issue-bridge.poll"
+    source = ("issue-bridge.gh" if args.gh
+              else "issue-bridge.api" if args.api
+              else "issue-bridge.poll")
     added = sum(1 for item in items if record(con, item, source))
     con.close()
     print("issue-bridge: poll +%d row(s)" % (added,))
@@ -228,7 +278,8 @@ def self_test() -> int:
                     "updated_at": "2026-10-18T00:00:00Z",
                     "url": "https://example.invalid/5"}]}, fh)
 
-            ns = argparse.Namespace(gh=False, infile=fixture, repo="", number="")
+            ns = argparse.Namespace(gh=False, api=False, infile=fixture,
+                                    repo="", number="")
             check(cmd_poll(ns) == 0, "poll ingests a host JSON file")
             con = ledger.connect(ledger.db_path())
             n1 = con.execute("SELECT COUNT(*) FROM ledger WHERE type='ISSUE_STATE'").fetchone()[0]
@@ -260,6 +311,53 @@ def self_test() -> int:
             nl = con.execute("SELECT COUNT(*) FROM ledger WHERE type='ISSUE'").fetchone()[0]
             con.close()
             check(nl == 1, "one ISSUE row")
+
+            # --api: read a PUBLIC issue with no gh and no token, against a local
+            # fixture server (offline; GITHUB_API_BASE is the test seam).
+            import http.server
+            import threading
+
+            main_db = os.environ["LEDGER_DB"]
+            os.environ["LEDGER_DB"] = os.path.join(tmp, "api.db")
+            body = json.dumps({"number": 5, "state": "open",
+                               "updated_at": "2026-10-18T11:47:59Z",
+                               "html_url": "https://example.invalid/5"}).encode()
+
+            class Handler(http.server.BaseHTTPRequestHandler):
+                def do_GET(self):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+
+                def log_message(self, *args):
+                    pass
+
+            srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            os.environ["GITHUB_API_BASE"] = (
+                "http://127.0.0.1:%d" % (srv.server_address[1],))
+            try:
+                api_ns = argparse.Namespace(
+                    gh=False, api=True, infile="",
+                    repo="swipswaps/proxmox-dual-plane-mesh", number="5")
+                check(cmd_poll(api_ns) == 0, "poll --api reads a public issue")
+                con = ledger.connect(ledger.db_path())
+                na = con.execute("SELECT COUNT(*) FROM ledger WHERE type='ISSUE_STATE' "
+                                 "AND tool='api'").fetchone()[0]
+                con.close()
+                check(na == 1, "api read recorded (tool=api)")
+                check(cmd_poll(api_ns) == 0, "api re-poll exits 0")
+                con = ledger.connect(ledger.db_path())
+                na2 = con.execute("SELECT COUNT(*) FROM ledger WHERE type='ISSUE_STATE'").fetchone()[0]
+                con.close()
+                check(na2 == 1, "api re-poll inserts 0 (idempotent)")
+            finally:
+                srv.shutdown()
+                srv.server_close()
+                del os.environ["GITHUB_API_BASE"]
+                os.environ["LEDGER_DB"] = main_db
 
             class Capture:
                 def __init__(self) -> None:
@@ -294,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     lk.add_argument("--url", default="")
     pl = sub.add_parser("poll")
     pl.add_argument("--gh", action="store_true")
+    pl.add_argument("--api", action="store_true")
     pl.add_argument("--repo", default="")
     pl.add_argument("--number", default="")
     pl.add_argument("--in", dest="infile", default="")

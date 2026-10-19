@@ -145,7 +145,10 @@ Last updated: 2026-10-19
   `gh` is absent in-container, so an issue hand-off was a manual body-file relay
   with no read-back. **DONE 2026-10-18** (`scripts/issue-bridge.py`:
   link/poll/status → ledger; the hand-off now prints the read-back step;
-  next-action surfaces open external issues). **E3 concurrency lock/merge key:
+  next-action surfaces open external issues). **`poll --api` (2026-10-19)**
+  closes the read-back from the container for public repos (stdlib, no gh/token;
+  `GITHUB_TOKEN` optional); TUNNEL-1 `#5` re-read **OPEN** (updated 10-18).
+  **E3 concurrency lock/merge key:
   DONE 2026-10-18** (RULE #85): `loop-lock.sh` — a TTL, actor-tagged
   single-writer lease (`flock`-serialised, atomic write) that `loop-state.sh
   --begin` requires and `next-action.sh` surfaces; a dead holder is reclaimed by

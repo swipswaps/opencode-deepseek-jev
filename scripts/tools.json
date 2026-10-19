@@ -200,11 +200,12 @@
     "id": "issue-bridge",
     "title": "External-state bridge for issue hand-offs",
     "where": "host",
-    "purpose": "E2: gh is absent in-container, so an issue hand-off (nebula-systemd-override.sh --handoff) had no read-back. `link` records a filed issue (repo#number) as an open external unit; `poll` reads its state — gh on the host (--gh) or a host-written JSON file (--in, default data/observability/issue-state.json) — into the same ledger triage/next-action read, idempotently; `status` prints the latest state. next-action.sh surfaces open external issues.",
+    "purpose": "E2: gh is absent in-container, so an issue hand-off (nebula-systemd-override.sh --handoff) had no read-back. `link` records a filed issue (repo#number) as an open external unit; `poll` reads its state — gh on the host (--gh), a host-written JSON file (--in, default data/observability/issue-state.json), or the public GitHub REST API from the container (--api, stdlib, no gh/token) — into the same ledger triage/next-action read, idempotently; `status` prints the latest state. next-action.sh surfaces open external issues.",
     "commands": [
       "python3 scripts/issue-bridge.py link --repo OWNER/NAME --number N",
       "python3 scripts/issue-bridge.py poll --in data/observability/issue-state.json",
       "python3 scripts/issue-bridge.py poll --gh --repo OWNER/NAME --number N",
+      "python3 scripts/issue-bridge.py poll --api --repo OWNER/NAME --number N",
       "python3 scripts/issue-bridge.py status",
       "python3 scripts/issue-bridge.py --self-test"
     ]
