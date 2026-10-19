@@ -8,6 +8,13 @@ Last updated: 2026-10-19
 
 ## Done (most recent first)
 
+- [x] **Remaining sync /api routes audited — 2026-10-19.** Live cold times:
+      search 6.8s, integrations 8.6s, config 5.2s, cost 1.9s, activity 0.3s;
+      sessions/overview cheap (<0.5s). search/integrations/cost/activity now
+      share query-lib bodies and run in query-worker (cached); config spawns
+      the audit with `execFile` + single-flight, so no 45s sync block.
+      test-dashboard asserts the bodies + served shapes (130/0).
+
 - [x] **/api/trends off the event loop (sentinel T4 slow-fetch) — 2026-10-19.**
       A host capture burst produced a 10.7 s `GET /api/trends`; the route was a
       sync cold compute. Body moved to `query-lib.apiTrendsFresh` + the query

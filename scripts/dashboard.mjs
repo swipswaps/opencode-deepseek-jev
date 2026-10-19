@@ -17,14 +17,18 @@
 
 import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh, apiTrendsFresh } from "./query-lib.mjs";
+import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh, apiTrendsFresh,
+         apiSearchFresh as searchFresh, apiIntegrationsFresh as integrationsFresh, apiCostFresh as costFresh, apiActivityFresh as activityFresh } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
+
+const execFileP = promisify(execFile);
 
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
@@ -279,23 +283,10 @@ async function apiTrends() {
   // sync cold compute queued behind other work, so this is the #72 fix.
   return asyncCached("trends", CACHE_TTL_MS, "trends", [], () => apiTrendsFresh(dbPath));
 }
-function apiCost() {
-  return ttlCached("cost", POLL_TTL_MS, apiCostFresh);
-}
-function apiCostFresh() {
-  const totals = query(
-    "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
-  )[0];
-  const sessions = query(
-    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, s.time_created, s.time_updated, " +
-    "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
-    "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
-    "FROM session s ORDER BY s.time_created DESC LIMIT 12"
-  );
-  const latest = query("SELECT title FROM session ORDER BY time_created DESC LIMIT 1")[0];
-  const lastPart = query("SELECT MAX(time_created) m FROM part")[0];
-  const active = !!(lastPart && lastPart.m && Date.now() - Number(lastPart.m) < 30000);
-  return { totals, sessions, latest: latest ? latest.title : null, active };
+async function apiCost() {
+  // Polling endpoint (home every 2 s): compute in the worker so a TTL expiry
+  // cannot block the loop. Same payload, same 10 s TTL.
+  return asyncCached("cost", POLL_TTL_MS, "cost", [], () => costFresh(dbPath));
 }
 
 let budgetCache = { at: 0, usd: null };
@@ -342,12 +333,10 @@ function apiSchemaFresh() {
   return { tables, edges };
 }
 
-function apiIntegrations() {
-  const tools = query(
-    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='tool' GROUP BY tool ORDER BY n DESC"
-  );
-  const sum = (re) => tools.filter((t) => re.test(t.tool || '')).reduce((a, t) => a + t.n, 0);
-  return { jev: sum(/jev/i), laya: sum(/laya/i), tools };
+async function apiIntegrations() {
+  // Measured 8.6 s on the live store (json_extract over every part). Static
+  // enough for 60 s; run it in the worker so the loop never pays for it.
+  return asyncCached("integrations", 60000, "integrations", [], () => integrationsFresh(dbPath));
 }
 
 function apiAb(limit) {
@@ -742,33 +731,10 @@ async function refreshHealthCache() {
   }
 }
 
-function apiActivity() {
-  return ttlCached("activity", POLL_TTL_MS, apiActivityFresh);
-}
-function apiActivityFresh() {
-  // Bounded to the 12 most recently UPDATED sessions via part_session_idx:
-  // the unscoped ORDER BY over the whole part table measured 3.1s uncontended
-  // (full SCAN + temp B-tree; 90s+ under contention) vs 0.3s scoped here.
-  // time_updated (not created) so an old session with fresh parts still counts.
-  const rows = query("SELECT time_created, data FROM part WHERE session_id IN (SELECT id FROM session ORDER BY time_updated DESC LIMIT 12) ORDER BY time_created DESC LIMIT 80");
-  const items = [];
-  for (const row of rows) {
-    let d;
-    try { d = JSON.parse(row.data); } catch { continue; }
-    const it = { ts: row.time_created, type: d.type };
-    if (d.type === "tool") {
-      it.tool = d.tool;
-      it.status = (d.state && d.state.status) || "?";
-      const inp = d.state && d.state.input;
-      it.cmd = (inp && (inp.command || inp.description)) || "";
-    } else if (d.type === "reasoning" || d.type === "text") {
-      it.text = d.text || "";
-    } else if (d.type === "patch") {
-      it.files = (d.files || []).join(",");
-    }
-    items.push(it);
-  }
-  return items;
+async function apiActivity() {
+  // Polling endpoint (home every 2 s). Off-loop + 10 s TTL; the scoped body
+  // (12 newest sessions) lives in query-lib with the same shape.
+  return asyncCached("activity", POLL_TTL_MS, "activity", [], () => activityFresh(dbPath));
 }
 
 function apiTodos() {
@@ -898,24 +864,13 @@ function apiExportSession(id, format) {
   return redact(head + body.replace(/^### /gm, "").replace(/^_\(reasoning\)_\n/gm, "[reasoning] ").replace(/^_\[/gm, "["));
 }
 
-function apiSearch(q, limit) {
+async function apiSearch(q, limit) {
+  // Legacy substring search (measured 6.8 s). Cache by query and run in the
+  // worker; /api/semantic is the fast FTS5 path for interactive search.
   const needle = String(q || "").replace(/[%_\\]/g, "");
-  const like = "%" + needle + "%";
-  if (!needle) return { q, sessions: [], hits: [] };
-  const sessions = query(
-    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
-    like, limit
-  );
-  const rows = query(
-    "SELECT p.session_id sid, s.title title, p.time_created ts, json_extract(p.data,'$.type') type, " +
-    "COALESCE(json_extract(p.data,'$.text'), json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.tool'), '') snippet " +
-    "FROM part p JOIN session s ON s.id = p.session_id " +
-    "WHERE json_extract(p.data,'$.text') LIKE ? OR json_extract(p.data,'$.state.input.command') LIKE ? " +
-    "ORDER BY p.time_created DESC LIMIT ?",
-    like, like, limit
-  );
-  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, snippet: String(h.snippet || "").slice(0, 200) }));
-  return { q: needle, sessions, hits };
+  const lim = Number(limit) || 20;
+  return asyncCached("search:" + needle + ":" + lim, CACHE_TTL_MS, "search",
+    [needle, lim], () => searchFresh(dbPath, needle, lim));
 }
 
 // The FTS index build runs in query-worker.mjs (apiSemanticFresh in
@@ -1050,18 +1005,23 @@ function apiExport() {
 let balanceCache = { at: 0, data: { available: false } };
 let configCache = { at: 0, data: null };
 
-function apiConfig() {
+let configInflight = null;
+async function apiConfig() {
   const script = process.argv[5];
   if (!script) return { findings: [], summary: { ok: 0, warn: 0, error: 0, fatal: 0, skip: 0 } };
   if (configCache.data && Date.now() - configCache.at < 60000) return configCache.data;
-  try {
-    const out = execFileSync("bash", [script, "--json"], { timeout: 45000, encoding: "utf8" });
-    const j = JSON.parse(out.trim());
-    configCache = { at: Date.now(), data: j };
-    return j;
-  } catch {
-    return { error: "config audit failed to run" };
-  }
+  // The audit is an external bash process (up to 45 s): run it non-blocking
+  // with single-flight, so a cold request cannot freeze the served pages.
+  if (configInflight) return configInflight;
+  configInflight = execFileP("bash", [script, "--json"], { timeout: 45000, encoding: "utf8" })
+    .then((r) => {
+      const j = JSON.parse(String(r.stdout).trim());
+      configCache = { at: Date.now(), data: j };
+      return j;
+    })
+    .catch(() => ({ error: "config audit failed to run" }))
+    .finally(() => { configInflight = null; });
+  return configInflight;
 }
 async function apiBalance() {
   const key = process.env.DEEPSEEK_API_KEY;
@@ -2811,7 +2771,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/schema") {
     send(res, 200, JSON.stringify(apiSchema()), "application/json");
   } else if (url === "/api/integrations") {
-    send(res, 200, JSON.stringify(apiIntegrations()), "application/json");
+    send(res, 200, JSON.stringify(await apiIntegrations()), "application/json");
   } else if (url === "/api/ab") {
     send(res, 200, JSON.stringify(apiAb(Number(params.limit) || 200)), "application/json");
   } else if (url === "/api/ocr") {
@@ -2845,13 +2805,13 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/trends") {
     send(res, 200, JSON.stringify(await apiTrends()), "application/json");
   } else if (url === "/api/cost") {
-    send(res, 200, JSON.stringify(apiCost()), "application/json");
+    send(res, 200, JSON.stringify(await apiCost()), "application/json");
   } else if (url === "/api/balance") {
     send(res, 200, JSON.stringify(await apiBalance()), "application/json");
   } else if (url === "/api/config") {
-    send(res, 200, JSON.stringify(apiConfig()), "application/json");
+    send(res, 200, JSON.stringify(await apiConfig()), "application/json");
   } else if (url === "/api/activity") {
-    send(res, 200, JSON.stringify(apiActivity()), "application/json");
+    send(res, 200, JSON.stringify(await apiActivity()), "application/json");
   } else if (url === "/api/todos") {
     send(res, 200, JSON.stringify(apiTodos()), "application/json");
   } else if (url === "/api/sessions") {
@@ -2861,7 +2821,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/session") {
     send(res, 200, JSON.stringify(apiSessionDetail(params.id, Number(params.limit) || 400)), "application/json");
   } else if (url === "/api/search") {
-    send(res, 200, JSON.stringify(apiSearch(params.q, Number(params.limit) || 20)), "application/json");
+    send(res, 200, JSON.stringify(await apiSearch(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/semantic") {
     send(res, 200, JSON.stringify(await apiSemantic(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/export/session") {

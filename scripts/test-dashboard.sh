@@ -195,6 +195,23 @@ if (r.length && !("day" in r[0] && "n" in r[0] && "c" in r[0] && "i" in r[0])) p
         bad 'trends: query-lib body (day/n/c/i)'
         cat "$work/trends-unit.txt"
     fi
+    # The other sync outliers now share query-lib bodies with the worker.
+    if DB_PATH="$db" LIB_URL="file://$REPO/scripts/query-lib.mjs" node --input-type=module -e '
+const L = await import(process.env.LIB_URL); const db = process.env.DB_PATH;
+const s = L.apiSearchFresh(db, "the", 3);
+if (!s || !Array.isArray(s.sessions) || !Array.isArray(s.hits)) process.exit(1);
+const i = L.apiIntegrationsFresh(db);
+if (!("jev" in i) || !Array.isArray(i.tools)) process.exit(1);
+const c = L.apiCostFresh(db);
+if (!c.totals || !Array.isArray(c.sessions)) process.exit(1);
+const a = L.apiActivityFresh(db);
+if (!Array.isArray(a)) process.exit(1);
+' > "$work/offloop-bodies.txt" 2>&1; then
+        ok 'off-loop bodies: search/integrations/cost/activity'
+    else
+        bad 'off-loop bodies: search/integrations/cost/activity'
+        cat "$work/offloop-bodies.txt"
+    fi
     curl -s "http://$HOST:$PORT/api/trends" > "$work/trends.json"
     if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and (not d or set(("day","n","c","i")) <= set(d[0])) else 1)' "$work/trends.json"; then
         ok 'api/trends shape (array of day/n/c/i)'
@@ -376,6 +393,14 @@ PY
         fi
         curl -s "http://$HOST:$PORT/api/search?q=the&limit=3" > "$work/search.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
+        curl -s "http://$HOST:$PORT/api/cost" > "$work/cost.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("totals"),dict) and isinstance(d.get("sessions"),list) and "active" in d else 1)' "$work/cost.json" && ok 'api/cost' || bad 'api/cost'
+        curl -s "http://$HOST:$PORT/api/cost" > "$work/cost2.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/cost2.json" && ok 'api/cost served from cache' || bad 'api/cost served from cache'
+        curl -s "http://$HOST:$PORT/api/activity" > "$work/act.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/act.json" && ok 'api/activity' || bad 'api/activity'
+        curl -s "http://$HOST:$PORT/api/config" > "$work/conf.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("findings"),list) or "error" in d else 1)' "$work/conf.json" && ok 'api/config' || bad 'api/config'
         curl -s "http://$HOST:$PORT/api/semantic?q=the&limit=3" > "$work/sem.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("mode")=="fts" and isinstance(d.get("results"),list) else 1)' "$work/sem.json" && ok 'api/semantic (fts)' || bad 'api/semantic (fts)'
         curl -s "http://$HOST:$PORT/api/overview?limit=5" > "$work/ov.json"

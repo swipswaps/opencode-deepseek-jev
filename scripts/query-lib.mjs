@@ -30,6 +30,90 @@ export function apiTrendsFresh(dbPath) {
   );
 }
 
+// /api/search legacy substring search. The LIKE + json_extract scan measured
+// 6.8 s on the live 59k-part store, so it runs in the worker (off-loop) and is
+// cached by query; /api/semantic remains the fast FTS5 path.
+export function apiSearchFresh(dbPath, q, limit) {
+  const needle = String(q || "").replace(/[%_\\]/g, "");
+  const like = "%" + needle + "%";
+  if (!needle) return { q, sessions: [], hits: [] };
+  const sessions = queryDb(
+    dbPath,
+    "SELECT id, title, cost, tokens_input, time_created FROM session WHERE title LIKE ? ORDER BY time_created DESC LIMIT ?",
+    like, limit
+  );
+  const rows = queryDb(
+    dbPath,
+    "SELECT p.session_id sid, s.title title, p.time_created ts, json_extract(p.data,'$.type') type, " +
+      "COALESCE(json_extract(p.data,'$.text'), json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.tool'), '') snippet " +
+      "FROM part p JOIN session s ON s.id = p.session_id " +
+      "WHERE json_extract(p.data,'$.text') LIKE ? OR json_extract(p.data,'$.state.input.command') LIKE ? " +
+      "ORDER BY p.time_created DESC LIMIT ?",
+    like, like, limit
+  );
+  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, snippet: String(h.snippet || "").slice(0, 200) }));
+  return { q: needle, sessions, hits };
+}
+
+// /api/integrations: json_extract GROUP BY over every part (8.6 s measured).
+// Static enough for a 60 s cache; runs in the worker.
+export function apiIntegrationsFresh(dbPath) {
+  const tools = queryDb(
+    dbPath,
+    "SELECT json_extract(data,'$.tool') tool, COUNT(*) n FROM part WHERE json_extract(data,'$.type')='tool' GROUP BY tool ORDER BY n DESC"
+  );
+  const sum = (re) => tools.filter((t) => re.test(t.tool || "")).reduce((a, t) => a + t.n, 0);
+  return { jev: sum(/jev/i), laya: sum(/laya/i), tools };
+}
+
+// /api/cost: polling endpoint (home every 2 s). Cold compute includes 12
+// correlated part lookups; run it in the worker so a TTL expiry cannot block
+// the loop. Same payload the home page already renders.
+export function apiCostFresh(dbPath) {
+  const totals = queryDb(
+    dbPath,
+    "SELECT COUNT(*) n, COALESCE(SUM(cost),0) c, COALESCE(SUM(tokens_input),0) i, COALESCE(SUM(tokens_output),0) o, COALESCE(SUM(tokens_reasoning),0) r, COALESCE(SUM(tokens_cache_read),0) cr FROM session"
+  )[0];
+  const sessions = queryDb(
+    dbPath,
+    "SELECT s.id, s.title, s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning, s.tokens_cache_read, s.model, s.agent, s.directory, s.time_created, s.time_updated, " +
+      "(SELECT MIN(p.time_created) FROM part p WHERE p.session_id=s.id) p_start, " +
+      "(SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id) p_end " +
+      "FROM session s ORDER BY s.time_created DESC LIMIT 12"
+  );
+  const latest = queryDb(dbPath, "SELECT title FROM session ORDER BY time_created DESC LIMIT 1")[0];
+  const lastPart = queryDb(dbPath, "SELECT MAX(time_created) m FROM part")[0];
+  const active = !!(lastPart && lastPart.m && Date.now() - Number(lastPart.m) < 30000);
+  return { totals, sessions, latest: latest ? latest.title : null, active };
+}
+
+// /api/activity: bounded to the 12 most recently updated sessions (the scoped
+// query measured ~0.3 s; the unscoped sort was 3.1 s+). Still off-loop.
+export function apiActivityFresh(dbPath) {
+  const rows = queryDb(
+    dbPath,
+    "SELECT time_created, data FROM part WHERE session_id IN (SELECT id FROM session ORDER BY time_updated DESC LIMIT 12) ORDER BY time_created DESC LIMIT 80"
+  );
+  const items = [];
+  for (const row of rows) {
+    let d;
+    try { d = JSON.parse(row.data); } catch { continue; }
+    const it = { ts: row.time_created, type: d.type };
+    if (d.type === "tool") {
+      it.tool = d.tool;
+      it.status = (d.state && d.state.status) || "?";
+      const inp = d.state && d.state.input;
+      it.cmd = (inp && (inp.command || inp.description)) || "";
+    } else if (d.type === "reasoning" || d.type === "text") {
+      it.text = d.text || "";
+    } else if (d.type === "patch") {
+      it.files = (d.files || []).join(",");
+    }
+    items.push(it);
+  }
+  return items;
+}
+
 // Board payload (Kanban + Gantt + milestones) for /api/board. Lives here so the
 // ~19s cold compute runs in query-worker (off the dashboard event loop); the
 // dashboard keeps an inline fallback with identical output (healthSync pattern).

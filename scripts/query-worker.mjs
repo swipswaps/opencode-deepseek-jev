@@ -17,7 +17,8 @@
 import { parentPort } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
-import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh, apiTrendsFresh, apiBoardFresh } from "./query-lib.mjs";
+import { apiSignalsFresh, apiPatternsFresh, apiWordsFresh, apiSemanticFresh, apiTrendsFresh,
+         apiSearchFresh, apiIntegrationsFresh, apiCostFresh, apiActivityFresh, apiBoardFresh } from "./query-lib.mjs";
 
 const FNS = {
   // Mirrors refreshHealthCache's sync prefix (minus live adjudication,
@@ -44,6 +45,20 @@ const FNS = {
   // /api/trends: small query, but a cold cache miss must not run on the loop.
   trends(dbPath) {
     return apiTrendsFresh(dbPath);
+  },
+  // Remaining sync outliers measured on the live store (2026-10-19):
+  // search 6.8 s, integrations 8.6 s, cost/activity on the 2 s poll path.
+  search(dbPath, q, limit) {
+    return apiSearchFresh(dbPath, q, limit);
+  },
+  integrations(dbPath) {
+    return apiIntegrationsFresh(dbPath);
+  },
+  cost(dbPath) {
+    return apiCostFresh(dbPath);
+  },
+  activity(dbPath) {
+    return apiActivityFresh(dbPath);
   },
   patterns(dbPath, limit) {
     return apiPatternsFresh(dbPath, limit);
