@@ -8,6 +8,10 @@
 > deltas), isolating the three client renders, and asserting a materialized
 > snapshot (`cost.totals`, `activity` array) in `test-dashboard.sh`. Verify:
 > `curl -N http://127.0.0.1:5099/api/stream | head` then reload `/`.
+> **TUNNEL-1 LINK:** #5 re-read **OPEN** 2026-10-20 ~22:55Z with no new
+> comments/labels; still external. Next evidence is host-only:
+> `nebula-systemd-override.sh --diagnose`, the journal grep, and UDP/MTU probes
+> from the peer to lighthouse-01:4242.
 
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`

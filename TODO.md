@@ -239,10 +239,16 @@ Last updated: 2026-10-20
       cursor → stable-key ADVISORY → `triage-alerts.py` (`tunnel_flap` → runbook
       `tunnel-flap`). Host check: `journalctl -u nebula | grep -E 'Close
       tunnel|state:dead'` + `nebula-systemd-override.sh --diagnose`.
-- [ ] **TUNNEL-1 LINK (external, D):** the peer/lighthouse link in
+- [ ] **[~] TUNNEL-1 LINK (external, D):** the peer/lighthouse link in
       `proxmox-dual-plane-mesh` — UDP reachability (firewall/NAT/MTU) and reload
       cadence. Filed as `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
-      `issue-bridge.py poll --api` re-reads it. Do not batch with local work.
+      re-read **2026-10-20 22:5xZ: OPEN, no new comments/labels** (issue-bridge
+      poll --api; duplicate-skipped). Local repo cannot reach the host journal or
+      the mesh repo, so the next evidence must come from the host:
+      `nebula-systemd-override.sh --diagnose`, `journalctl -u nebula --since
+      '-15min' | grep -E 'Close tunnel|Taking new handshake|state:dead'`, and on
+      the peer `ping -c3 10.100.0.1` + UDP/MTU probes to lighthouse-01:4242.
+      Do not batch with local work; post the cadence/probe result back to #5.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;
