@@ -437,9 +437,11 @@ runbook.sh
 
 test-dashboard.sh
     End-to-end gate for dashboard.mjs: starts it on a scratch port, asserts
-    the served HTML and /api/* payloads, and that the inline browser script on
-    BOTH / and /runbooks parses (node --check); then runs
-    test-dashboard-ui.mjs. Exits non-zero on any failed assert.
+    the served HTML and /api/* payloads (including that the /api/stream
+    snapshot carries MATERIALIZED cost+activity, not stringified promises),
+    and that the inline browser script on BOTH / and /runbooks parses
+    (node --check); then runs test-dashboard-ui.mjs. Exits non-zero on any
+    failed assert.
 
 test-dashboard-ui.mjs
     Headless execution test: fetches the served / page, runs its inline

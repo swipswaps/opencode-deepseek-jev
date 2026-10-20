@@ -1,5 +1,14 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-10-20 (OBS-1):** `:5099` Live activity and Todos stuck at
+> `loading...` was a server bug, not a browser one. `/api/stream` sent
+> `{"cost":{},"activity":{}}` because `ssePayload()` returned the **promises**
+> from `apiCost()`/`apiActivity()`; `renderCost({})` then threw, so the other
+> two panes never rendered. Fixed by awaiting both (snapshot + single-flight
+> deltas), isolating the three client renders, and asserting a materialized
+> snapshot (`cost.totals`, `activity` array) in `test-dashboard.sh`. Verify:
+> `curl -N http://127.0.0.1:5099/api/stream | head` then reload `/`.
+
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`
 > overlapping a long tool part is attributed from the read-only DB

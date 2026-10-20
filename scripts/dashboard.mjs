@@ -1404,7 +1404,12 @@ if(typeof EventSource!=='undefined'){
   // snapshot -> deltas (durable-pi): one server-side loop feeds every client;
   // reconnect gets a fresh snapshot. Falls back to polling if SSE is absent.
   var _es=new EventSource('/api/stream');
-  var _onflow=function(ev){try{var p=JSON.parse(ev.data);}catch(e){return;}renderCost(p.cost);renderActivity(p.activity);renderTodos(p.todos);};
+  var _onflow=function(ev){try{var p=JSON.parse(ev.data);}catch(e){return;}
+    // One stale/malformed pane must not starve the other two into "loading...".
+    try{renderCost(p.cost);}catch(e){}
+    try{renderActivity(p.activity);}catch(e){}
+    try{renderTodos(p.todos);}catch(e){}
+  };
   _es.addEventListener('snapshot',_onflow);
   _es.addEventListener('delta',_onflow);
 }else{
@@ -2756,7 +2761,13 @@ function send(res, code, body, type) {
 }
 
 const SSE_CLIENTS = new Set();
-function ssePayload() { return { cost: apiCost(), activity: apiActivity(), todos: apiTodos() }; }
+// cost/activity are async (worker-backed); awaiting them is what makes the
+// snapshot real. Returning the promises stringified to `{}`, which made the
+// client render nothing and left "Live activity"/"Todos" at "loading...".
+async function ssePayload() {
+  const [cost, activity] = await Promise.all([apiCost(), apiActivity()]);
+  return { cost, activity, todos: apiTodos() };
+}
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
@@ -2770,7 +2781,11 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
     const client = { write: (ev, data) => { try { res.write("event: " + ev + "\ndata: " + JSON.stringify(data) + "\n\n"); } catch { /* client gone */ } } };
     SSE_CLIENTS.add(client);
-    client.write("snapshot", ssePayload());
+    try {
+      client.write("snapshot", await ssePayload());
+    } catch {
+      client.write("snapshot", { cost: null, activity: null, todos: [] });
+    }
     req.on("close", () => SSE_CLIENTS.delete(client));
   } else if (url === "/") {
     send(res, 200, html, "text/html; charset=utf-8");
@@ -2915,10 +2930,13 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
-setInterval(() => {
-  if (!SSE_CLIENTS.size) return;
+let SSE_REFRESHING = false;
+setInterval(async () => {
+  if (!SSE_CLIENTS.size || SSE_REFRESHING) return;
+  SSE_REFRESHING = true;
   let payload;
-  try { payload = ssePayload(); } catch { return; }
+  try { payload = await ssePayload(); } catch { SSE_REFRESHING = false; return; }
+  SSE_REFRESHING = false;
   for (const c of SSE_CLIENTS) c.write("delta", payload);
 }, 5000);
 server.listen(port, host, () => {

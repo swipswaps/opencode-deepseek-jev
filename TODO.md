@@ -8,6 +8,15 @@ Last updated: 2026-10-20
 
 ## Done (most recent first)
 
+- [x] **OBS-1 — 2026-10-20.** `:5099` no longer leaves **Live activity** and
+      **Todos** at `loading...`: `/api/stream` was stringifying the *promises*
+      from `apiCost()`/`apiActivity()`, so every snapshot/delta carried
+      `{"cost":{},"activity":{}}` and `renderCost({})` threw before the other
+      two panes ran. `ssePayload()` now awaits both (single-flight deltas), the
+      client isolates each pane, and `test-dashboard.sh` asserts the snapshot
+      contains `cost.totals` + an `activity` array. Repro: `curl -N
+      :5099/api/stream` (was 0/`{}`, now materialized).
+
 - [x] **LAT-2 — 2026-10-20.** T4 no longer reports an unexplained slow-fetch
       burst: a fetch interval `[ts-duration, ts]` overlapping a long tool part
       is named from the read-only DB (`— overlaps tool bash 307.9s in ses_…`),

@@ -460,6 +460,29 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/cost2.json" && ok 'api/cost served from cache' || bad 'api/cost served from cache'
         curl -s "http://$HOST:$PORT/api/activity" > "$work/act.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/act.json" && ok 'api/activity' || bad 'api/activity'
+        # SSE snapshot must carry MATERIALIZED cost/activity. Returning the
+        # promises put `{}` on the wire and froze Live activity/Todos at
+        # "loading...". curl ends via --max-time after the snapshot arrives.
+        curl -s --max-time 20 "http://$HOST:$PORT/api/stream" > "$work/sse.txt" || true
+        python3 - "$work/sse.txt" <<'PY'
+import json, sys
+ev = None
+try:
+    fh = open(sys.argv[1], encoding="utf-8", errors="replace")
+except OSError:
+    raise SystemExit(1)
+for line in fh:
+    if line.startswith("event: "):
+        ev = line[7:].strip()
+    elif line.startswith("data: ") and ev == "snapshot":
+        d = json.loads(line[6:])
+        c, a = d.get("cost"), d.get("activity")
+        ok = (isinstance(c, dict) and isinstance(c.get("totals"), dict)
+              and isinstance(a, list) and isinstance(d.get("todos"), list))
+        raise SystemExit(0 if ok else 1)
+raise SystemExit(1)
+PY
+        if [ "$?" -eq 0 ]; then ok 'api/stream snapshot carries cost+activity (SSE)'; else bad 'api/stream snapshot carries cost+activity (SSE)'; fi
         curl -s "http://$HOST:$PORT/api/config" > "$work/conf.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("findings"),list) or "error" in d else 1)' "$work/conf.json" && ok 'api/config' || bad 'api/config'
         curl -s "http://$HOST:$PORT/api/semantic?q=the&limit=3" > "$work/sem.json"
