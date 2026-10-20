@@ -1172,5 +1172,41 @@
       "node scripts/a11y-audit.mjs --url http://127.0.0.1:5099/ --json",
       "node scripts/a11y-audit.mjs --self-test"
     ]
+  },
+  {
+    "id": "audit-trees",
+    "title": "Read-only entanglement audit across local checkouts",
+    "where": "host",
+    "purpose": "Answers with evidence which checkouts exist, what repo/branch/HEAD each tracks, whether worktrees are dirty, whether duplicate files drifted, and which tree the live containers serve. Never commits, pushes, restarts, or removes anything; exit 0 clean, 1 findings, 2 usage/tool error.",
+    "commands": [
+      "./scripts/audit-trees.sh"
+    ]
+  },
+  {
+    "id": "net-capture",
+    "title": "Bounded packet capture for reset forensics",
+    "where": "host",
+    "purpose": "mtr --report baseline then `host REMOTE and tcp port PORT` capture for SECONDS with a 10 MB rotate cap into logs/. Needs CAP_NET_RAW/root (prints SKIP, not PASS, without it); fixed filter template, no user bpf, captures never leave logs/. Analyze with net-rst.sh.",
+    "commands": [
+      "./scripts/net-capture.sh HOST [PORT] [SECONDS]"
+    ]
+  },
+  {
+    "id": "net-rst",
+    "title": "List TCP resets in a capture (read-only)",
+    "where": "host",
+    "purpose": "Prints timestamp, direction, and ports for every RST in a PCAP using tcpdump in read mode (no tshark/GUI). A reset's source address is evidence, not proof: middleboxes can inject packets and captures can miss traffic.",
+    "commands": [
+      "./scripts/net-rst.sh FILE.pcap"
+    ]
+  },
+  {
+    "id": "ssh-audit",
+    "title": "SSH banner/algorithm audit for one host",
+    "where": "host",
+    "purpose": "Tests the negotiation branch of a reset: weak legacy algorithms, client/server mismatch, or an unexpected banner (middlebox). Banner grab + algorithm lists only (no credentials, no auth attempts). Prints SKIP with the exact install line if ssh-audit is absent.",
+    "commands": [
+      "./scripts/ssh-audit.sh HOST [PORT]"
+    ]
   }
 ]

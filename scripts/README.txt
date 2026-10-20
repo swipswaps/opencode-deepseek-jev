@@ -848,6 +848,20 @@ tool-census.sh
     MISSING) so a tool evaluation starts from fact, not memory. Offline,
     read-only, no egress, no installs.
 
+audit-trees.sh
+    Read-only entanglement audit across local checkouts: which trees exist,
+    their repo/branch/HEAD, dirty worktrees, drifted duplicate files, and which
+    tree the live containers serve. Never commits, pushes, restarts or removes.
+    Exit 0 clean, 1 findings, 2 usage/tool error.
+
+net-capture.sh / net-rst.sh / ssh-audit.sh
+    Reset-forensics trio. net-capture.sh takes a bounded tcpdump capture (fixed
+    filter, 10 MB rotate, logs/ only) after an mtr baseline; net-rst.sh lists
+    every RST with timestamp/direction/ports from a PCAP (read-only); ssh-audit.sh
+    reports the target's SSH banner and algorithm lists (no credentials, no auth
+    attempts). All print SKIP with the exact install/run line when the host tool
+    or capability (CAP_NET_RAW) is absent.
+
 test-jev-laya-ab.sh
     A/B the same typed-decision payload through TypeSafe Jev and a self-hosted
     Laya server (Jev-API-compatible, POST /v1/systemone); diff the answers and

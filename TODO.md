@@ -4,9 +4,17 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 ## Done (most recent first)
+
+- [x] **Loop equilibrium + gate debt + doc headroom — 2026-10-20.** `.gitignore`
+      now covers the `data/opencode` symlink and `data/opencode.bak-*` (the
+      backup's `auth.json` was untracked but NOT ignored); audit/reset-forensics
+      scripts cataloged; one-shots archived; older HANDOFF PINs/snapshots →
+      `docs/handoff-archive-2026.md` (tier-1 34,959 → 32,237 tok). Re-ran full
+      `harness.sh` at HEAD (see the gate row for the verdict); T4/T3 triaged
+      (queueing vs provider). Queue re-ranked: LAT-1 local first.
 
 - [x] **Proactive agent — 2026-10-20.** `proactive-agent.sh` (15-min timer)
       turns NEW ADVISORY rows into owned tasks (cursor-bounded, bootstrap
@@ -187,6 +195,16 @@ Last updated: 2026-10-19
 
 ## Queue (ranked, top first)
 
+- [ ] **LAT-1: attribute the live latency before optimizing it.** Host:
+      `./scripts/latency-timeline.sh --session <latest> --window 60` plots the
+      part spans and every slow fetch on one axis; pair cold/warm probes of
+      `/api/semantic?q=session` and `/config?directory=%2Fhome%2Fnode%2F.opencode`.
+      Separate handler time from queue delay (RULE #72: duration is
+      time-in-system; both servers are single-threaded). Acceptance: warm p95
+      < 2 s, **or** a named blocker with evidence (access-log timestamp + part
+      span), and no timeout raised. Replaces the pre-restart T4 burst (x64,
+      slowest 170 s `/config`) as the next local unit.
+
 - [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
       restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
       parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the
@@ -199,21 +217,16 @@ Last updated: 2026-10-19
       drop-in was applied then **reverted on the host** (`--revert` + confirm
       2026-10-17). Evidence: the live `--show` output + logs/pressure-*.log.
       Carry-forward: the tunnel itself is external (below).
-- [~] **TUNNEL-1: detector shipped (sentinel T8); the link fix is external (D).**
-      vpnIp `10.100.0.1` (lighthouse-01) tears down / re-handshakes repeatedly
-      (`state:dead`) while the nebula process is healthy. **Watch:** sentinel
-      gains **T8 tunnel-flap** (>= `SENTINEL_TUNNEL_MIN` default 4
-      teardown/re-handshake events since the cursor for the nebula unit;
-      `journalctl --since` source, `SENTINEL_TUNNEL_LOG` file seam) → a
-      stable-key ADVISORY the existing notify sink + `triage-alerts.py`
-      (`tunnel_flap` kind → runbook `tunnel-flap`) deliver and act on. **Hand
-      off:** `journalctl -u nebula | grep -E 'Close tunnel|state:dead'` +
-      `nebula-systemd-override.sh --diagnose`. **Fix (external):** the
-      peer/lighthouse link in `proxmox-dual-plane-mesh` — UDP reachability
-      (firewall/NAT/MTU) and reload cadence. **Filed:** issue
-      `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18) from
-      `bash scripts/nebula-systemd-override.sh --handoff --out F` +
-      `gh issue create --repo … --body-file F`. Watch side stays live (T8).
+- [x] **TUNNEL-1 WATCH: detector shipped (sentinel T8).** vpnIp `10.100.0.1`
+      (lighthouse-01) tears down / re-handshakes (`state:dead`) while nebula is
+      healthy. T8 trips on >= `SENTINEL_TUNNEL_MIN` (default 4) events since the
+      cursor → stable-key ADVISORY → `triage-alerts.py` (`tunnel_flap` → runbook
+      `tunnel-flap`). Host check: `journalctl -u nebula | grep -E 'Close
+      tunnel|state:dead'` + `nebula-systemd-override.sh --diagnose`.
+- [ ] **TUNNEL-1 LINK (external, D):** the peer/lighthouse link in
+      `proxmox-dual-plane-mesh` — UDP reachability (firewall/NAT/MTU) and reload
+      cadence. Filed as `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
+      `issue-bridge.py poll --api` re-reads it. Do not batch with local work.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;
