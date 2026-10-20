@@ -10,9 +10,15 @@ mergeable without rewriting history. `gh` is absent in the container — run the
 
 | PR | Title | Branch | Compare URL | Status |
 |---|---|---|---|---|
-| 01 | a11y: WCAG basics gate + keyboard-operable chart marks | `pr/01-a11y-hardening` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/01-a11y-hardening?expand=1 | implemented (`e063e79`, `90fb1e1`); PR = status record |
-| 02 | docs/media: refresh README shots for the newest panels | `pr/02-media-refresh` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/02-media-refresh?expand=1 | implemented (`04c49e4`, `9af9f7b`); PR = status record |
-| 03 | durable: arm the background agents in one command | `pr/03-durable-agents` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/03-durable-agents?expand=1 | implemented (`e063e79`, `0d0b8d8`, `4d24e56`); armed on host 2026-10-20 |
+| 01 | a11y: WCAG basics gate + keyboard-operable chart marks | `pr/01-a11y-hardening` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/01-a11y-hardening?expand=1 | implemented (`e063e79`, `90fb1e1`); [#2](https://github.com/swipswaps/opencode-deepseek-jev/pull/2) **OPEN** (status card only) |
+| 02 | docs/media: refresh README shots for the newest panels | `pr/02-media-refresh` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/02-media-refresh?expand=1 | implemented (`04c49e4`, `9af9f7b`); [#3](https://github.com/swipswaps/opencode-deepseek-jev/pull/3) **OPEN** (status card only) |
+| 03 | durable: arm the background agents in one command | `pr/03-durable-agents` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/03-durable-agents?expand=1 | implemented (`e063e79`, `0d0b8d8`, `4d24e56`); armed on host 2026-10-20; [#4](https://github.com/swipswaps/opencode-deepseek-jev/pull/4) **OPEN** (status card only) |
+
+Opened 2026-10-20 and verified via the GitHub API: all three are **OPEN**
+against `main` with `mergeable_state=clean`, one file each
+(`docs/pr/PR-0X-status.md`, +12/+14/+15 lines). Merging folds the status
+records into main; closing them leaves main unchanged (the implementations
+are already there).
 
 ## Open them (host, authenticated)
 
