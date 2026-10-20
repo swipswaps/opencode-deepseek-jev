@@ -49,6 +49,7 @@ chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.
 chk "recover-4096 self-test (checkpointed restart)" bash "$REPO/scripts/recover-4096.sh" --self-test
 chk "rotate-server-password self-test (checkpointed rotate)" bash "$REPO/scripts/rotate-server-password.sh" --self-test
 chk "proactive-agent self-test (new alerts -> tasks + digest)" bash "$REPO/scripts/proactive-agent.sh" --self-test
+chk "progress-review self-test (advance/stall/blocked-external)" bash "$REPO/scripts/progress-review.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.
 chk "loop-state self-test (segment checkpoint + lease)" bash "$REPO/scripts/loop-state.sh" --self-test
 # E3: a single-writer lease stops two live sessions owning the same loop.

@@ -13,6 +13,7 @@ Last updated: 2026-10-19
       creates none; owner `proactive`, idempotent by title) and writes a durable
       `proactive.json` digest; a preflight STOP auto-hands off. Systemd timer +
       installer; `durable-agents.sh` now arms five; self-tests offline.
+      progress-review now records a blocked-external PASS, not a stall FAIL.
 
 - [x] **Checkpointed long jobs — 2026-10-19.** `recover-4096 --recover` records
       the compose restart (`durable-run`, job recover-4096; `--resume` skips a

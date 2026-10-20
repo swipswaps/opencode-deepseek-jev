@@ -56,8 +56,12 @@ log_row() {
 decide() {
     # decide STALL_TICKS REPO TMPFILE — reads next-action + prior state,
     # writes the new state, prints the decision JSON. One python pass.
-    NEXT_ACTION_REPO="${NEXT_ACTION_REPO:-$2}" \
-    bash "$REPO/scripts/next-action.sh" --json > "$3" 2>&1 || true
+    if [ -n "${PROGRESS_NEXT_JSON:-}" ]; then
+        printf '%s' "$PROGRESS_NEXT_JSON" > "$3"
+    else
+        NEXT_ACTION_REPO="${NEXT_ACTION_REPO:-$2}" \
+        bash "$REPO/scripts/next-action.sh" --json > "$3" 2>&1 || true
+    fi
     NA_STATE="$3" PROGRESS_STATE="$STATE" PROGRESS_STALL_TICKS="$1" \
     python3 - <<'PY'
 import json, os, datetime
@@ -75,6 +79,10 @@ gate = (na.get("last_gate") or {})
 gate_ts = str(gate.get("ts", ""))
 next_txt = (na.get("next") or {}).get("text") or ""
 blockers = na.get("blockers") or []
+external = na.get("external") or []
+# A stall whose next unit is itself external is not a stalled loop: it is
+# waiting on someone else (RULE #79's cry-wolf rule). Record a quiet PASS.
+blocked_external = bool(external) and ("external" in next_txt.lower())
 since = na.get("since_gate") or {}
 
 prev = {}
@@ -97,7 +105,7 @@ if first:
 elif advanced:
     decision = "advance"
 elif ticks >= stall_ticks:
-    decision = "stall"
+    decision = "blocked-external" if blocked_external else "stall"
 else:
     decision = "quiet"
 
@@ -105,7 +113,11 @@ ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 os.makedirs(os.path.dirname(state_path), exist_ok=True)
 json.dump({"ts": ts, "rev": rev, "gate_ts": gate_ts, "unchanged_ticks": ticks}, open(state_path, "w"), indent=2)
 
-if decision == "stall":
+if decision == "blocked-external":
+    ext = ", ".join(str(e.get("resource", e)) for e in external)
+    detail = "loop blocked on an external unit (rev %s, %d sweep(s)): %s | external: %s" % (rev, ticks, next_txt or "(none)", ext)
+    verdict, key = "PASS", "progress-blocked-" + rev
+elif decision == "stall":
     detail = "dev loop stalled: no rev/gate advance for %d sweep(s) (rev %s). next: %s" % (ticks, rev, next_txt or "(none)")
     if blockers:
         detail += " | blockers: " + "; ".join(blockers)
@@ -153,7 +165,14 @@ self_test() {
     o=$(NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --json 2>&1)
     printf '%s' "$o" | grep -q '"decision": "advance"' || { printf 'FAIL advance\n'; fail=1; }
     LEDGER_DB="$L" python3 "$REPO/scripts/ledger.py" show --grep progress 2>&1 | grep -q 'ADVISORY' || { printf 'FAIL ledger rows\n'; fail=1; }
-    rm -f "$work/repo/NEW" "$work/repo/TODO.md" "$work/repo/opencode.json" "$work/repo/docker/Dockerfile" "$work/repo/data/observability/last-gate.json" "$work/repo/data/observability/docs.json" "$work/state/p.json" "$work/t3.txt" "$work/obs.db"
+    # blocked-external: an external next unit is a quiet PASS, not a FAIL.
+    local S2="$work/state/blocked.json"
+    local NJ='{"rev":"abc","last_gate":{"ts":"20261020T000000Z"},"next":{"text":"TUNNEL-1: the link fix is external"},"external":[{"resource":"o/r#5"}],"blockers":[],"since_gate":{}}'
+    PROGRESS_NEXT_JSON="$NJ" NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S2" PROGRESS_STALL_TICKS=1 bash "${BASH_SOURCE[0]}" --once --no-log --json > "$work/b1.txt" 2>&1
+    PROGRESS_NEXT_JSON="$NJ" NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S2" PROGRESS_STALL_TICKS=1 bash "${BASH_SOURCE[0]}" --once --no-log --json > "$work/b2.txt" 2>&1
+    [ "$?" -eq 0 ] || { printf 'FAIL blocked-external exit\n'; fail=1; }
+    grep -q '"decision": "blocked-external"' "$work/b2.txt" || { printf 'FAIL blocked-external decision\n'; fail=1; }
+    rm -f "$work/repo/NEW" "$work/repo/TODO.md" "$work/repo/opencode.json" "$work/repo/docker/Dockerfile" "$work/repo/data/observability/last-gate.json" "$work/repo/data/observability/docs.json" "$work/state/p.json" "$S2" "$work/t3.txt" "$work/b1.txt" "$work/b2.txt" "$work/obs.db"
     rm -r "$work/repo/.git"
     rmdir "$work/repo/data/observability" "$work/repo/data" "$work/repo/docker" "$work/repo" "$work/state" "$work"
     if [ "$fail" -eq 0 ]; then printf 'progress-review: self-test PASS\n'; else printf 'progress-review: self-test FAIL\n'; fi
@@ -200,7 +219,7 @@ main() {
     detail=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["detail"])')
     key=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
 
-    if [ "$decision" = "advance" ] || [ "$decision" = "stall" ]; then
+    if [ "$decision" = "advance" ] || [ "$decision" = "stall" ] || [ "$decision" = "blocked-external" ]; then
         log_row "$verdict" "$detail" "$key" "loop/progress-review"
     fi
 
@@ -214,6 +233,7 @@ main() {
                 "$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ticks"])')" \
                 "$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["stall_ticks"])')" ;;
             advance) printf 'ADVANCE: %s\n' "$detail" ;;
+            blocked-external) printf 'BLOCKED: %s\n' "$detail" ;;
             stall) printf 'STALL: %s\n' "$detail"
                 printf 'run ./scripts/next-action.sh for the verdict\n' ;;
         esac

@@ -247,8 +247,10 @@ progress-review.sh
     Sentinel sibling: supervisor of the DEV LOOP's progression. One sweep reads
     next-action and records a durable PASS row on a rev/gate advance, or a FAIL
     row when the loop stalls (no advance for PROGRESS_STALL_TICKS sweeps;
-    stable keys, only news trips). --once, --json, --no-log, --self-test;
-    PROGRESS_STATE / PROGRESS_STALL_TICKS / LEDGER_DB seams.
+    stable keys, only news trips). A stall whose next unit is itself external
+    records a PASS `progress-blocked-<rev>` (not a FAIL), so an external
+    blocker does not cry wolf. --once, --json, --no-log, --self-test;
+    PROGRESS_STATE / PROGRESS_STALL_TICKS / PROGRESS_NEXT_JSON / LEDGER_DB seams.
     progress-review-install.sh installs the user timer (every 15 min; no sudo).
 
 progress-review-install.sh
