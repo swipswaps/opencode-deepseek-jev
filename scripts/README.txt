@@ -545,9 +545,11 @@ recover-4096.sh
     Automated :4096 recovery probe: asserts containers, compose DNS, loopback
     + mesh TLS edge (401 healthy; 000/400/502 classified), dashboard, cert
     battery, authenticated data plane (secret by name only) and the session
-    store (read-only). --recover adds one bounded restart + re-probe; one
-    RECOVERY ledger row per check. --json, --no-log, --db/--session/--rev,
-    --self-test. Gated in test-hygiene.sh.
+    store (read-only). --recover adds one bounded restart + re-probe, and the
+    restart is checkpointed (durable-run, job recover-4096); --resume skips a
+    second restart after a crash. One RECOVERY ledger row per check. --json,
+    --no-log, --db/--session/--rev, --self-test (incl. checkpoint/resume).
+    Gated in test-hygiene.sh.
 
 session-guard.sh
     The over-budget / denied-model guidance as code: reads session-health
@@ -728,7 +730,9 @@ rotate-server-password.sh
     backup, token_urlsafe replacement, atomic single-line rewrite (0600 kept),
     container RECREATE (env_file is read at creation), then proves new=200 and
     old=401. Neither value is ever printed. Interactive "write" gate; prints
-    rollback on mismatch. --env, --self-test.
+    rollback on mismatch. Checkpointed (backup -> rewrite -> recreate ->
+    verify): --fresh (default) resets, --resume skips done steps after a crash.
+    --env, --self-test (incl. checkpoint/resume).
 
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json, key env

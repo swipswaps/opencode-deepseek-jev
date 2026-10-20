@@ -15,8 +15,11 @@
 # construction: loopback + mesh edge probes, served-vs-file cert comparison,
 # edge + authenticated data-plane probes.
 #
-#   ./scripts/recover-4096.sh [--session ID] [--recover]
+#   ./scripts/recover-4096.sh [--session ID] [--recover] [--resume]
 #   ./scripts/recover-4096.sh --json [--no-log]   # machine contract
+#
+# --recover is checkpointed (RULES #74): the compose restart is recorded, so
+# --resume after a crash skips a second restart and re-runs the probes.
 #   ./scripts/recover-4096.sh --self-test         # offline, no docker/net
 #
 # Flags: --db PATH (store to read, opened mode=ro, never written),
@@ -370,9 +373,17 @@ PYEOF
         || { printf 'FAIL ledger record\n'; fail=1; }
     LEDGER_DB="$work/obs.db" python3 "$REPO/scripts/ledger.py" show --grep self-test 2>&1 | grep -q 'RECOVERY' \
         || { printf 'FAIL ledger show\n'; fail=1; }
-    rm -f "$work/fix.db" "$work/obs.db"
-    rmdir "$work"
-    if [ "$fail" -eq 0 ]; then printf 'recover-4096: self-test PASS (9 checks)\n'; else printf 'recover-4096: self-test FAIL\n'; fi
+    # checkpoint/resume (#74): the restart step runs once; a resume skips it.
+    local rec1="" rec2=""
+    rec1=$(RECOVER_DRY=1 DURABLE_JOB_DIR="$work/jobs" bash "${BASH_SOURCE[0]}" --recover --no-net --no-docker --no-log --db "$work/fix.db" --session s1 2>&1)
+    printf '%s' "$rec1" | grep -q 'durable-run: run recover-4096/restart' \
+        || { printf 'FAIL checkpoint first run\n'; fail=1; }
+    rec2=$(RECOVER_DRY=1 DURABLE_JOB_DIR="$work/jobs" bash "${BASH_SOURCE[0]}" --recover --resume --no-net --no-docker --no-log --db "$work/fix.db" --session s1 2>&1)
+    printf '%s' "$rec2" | grep -q 'skip (done): recover-4096/restart' \
+        || { printf 'FAIL checkpoint resume\n'; fail=1; }
+    rm -f "$work/fix.db" "$work/obs.db" "$work/jobs/recover-4096.jsonl"
+    rmdir "$work/jobs" "$work"
+    if [ "$fail" -eq 0 ]; then printf 'recover-4096: self-test PASS (11 checks)\n'; else printf 'recover-4096: self-test FAIL\n'; fi
     return "$fail"
 }
 
@@ -383,7 +394,7 @@ main() {
         printf 'GATE FAIL: cannot resolve repo root\n'
         return 2
     fi
-    JSON=0 SELFTEST=0 DOLOG=1 NODOCKER=0 NONET=0 RECOVER=0
+    JSON=0 SELFTEST=0 DOLOG=1 NODOCKER=0 NONET=0 RECOVER=0 RESUME=0
     SESSION=""
     DB="$REPO/data/opencode/opencode.db"
     REV=""
@@ -395,6 +406,7 @@ main() {
             --no-docker) NODOCKER=1; shift ;;
             --no-net) NONET=1; shift ;;
             --recover) RECOVER=1; shift ;;
+            --resume) RESUME=1; shift ;;
             --session) SESSION="${2:-}"; shift 2 ;;
             --session=*) SESSION="${1#--session=}"; shift ;;
             --db) DB="${2:-}"; shift 2 ;;
@@ -434,6 +446,9 @@ main() {
     if [ "$JSON" -eq 0 ]; then
         printf '=== recover-4096 ===\n'
     fi
+    if [ "$RECOVER" -eq 1 ] && [ "$RESUME" -eq 0 ]; then
+        bash "$REPO/scripts/durable-run.sh" --job recover-4096 --reset > /dev/null 2>&1
+    fi
     run_check containers c_containers
     run_check dns c_dns
     run_check edge c_edge
@@ -442,15 +457,24 @@ main() {
     run_check certs c_certs
     run_check data_auth c_auth
     run_check session c_session
-    if [ "$RECOVER" -eq 1 ] && [ "$NFAIL" -gt 0 ] && [ "$NODOCKER" -eq 0 ] && have docker; then
-        local sig="?"
-        sig=$(docker compose --project-directory "$REPO/docker" logs --tail=50 caddy 2>&1 | grep -c 'reverseproxy.statusError' || true)
-        log_ledger "FAIL" "forensics" "caddy tail-50" "502-signatures=$sig captured before retry"
-        if [ "$JSON" -eq 0 ]; then
-            printf 'forensics: caddy tail-50 502-signatures=%s; single restart attempt\n' "$sig"
+    if [ "$RECOVER" -eq 1 ] && { [ "${RECOVER_DRY:-0}" -eq 1 ] || { [ "$NFAIL" -gt 0 ] && [ "$NODOCKER" -eq 0 ] && have docker; }; }; then
+        local sig="?" job="recover-4096" du="$REPO/scripts/durable-run.sh"
+        if [ "${RECOVER_DRY:-0}" -eq 0 ] && have docker; then
+            sig=$(docker compose --project-directory "$REPO/docker" logs --tail=50 caddy 2>&1 | grep -c 'reverseproxy.statusError' || true)
+            log_ledger "FAIL" "forensics" "caddy tail-50" "502-signatures=$sig captured before retry"
+            if [ "$JSON" -eq 0 ]; then
+                printf 'forensics: caddy tail-50 502-signatures=%s; single restart attempt\n' "$sig"
+            fi
+        else
+            if [ "$JSON" -eq 0 ]; then printf 'forensics: dry (no docker contact)\n'; fi
         fi
-        if docker compose --project-directory "$REPO/docker" up -d opencode-web caddy > /dev/null 2>&1; then
-            sleep 3
+        # The restart is the external effect: checkpoint it so a resume does not
+        # restart twice; the probes below still run on every attempt.
+        if REPO="$REPO" RECOVER_DRY="${RECOVER_DRY:-0}" bash "$du" --job "$job" --step restart -- bash -c '
+            if [ "${RECOVER_DRY:-0}" -eq 1 ]; then printf "dry: would compose up opencode-web caddy\n"; exit 0; fi
+            docker compose --project-directory "$REPO/docker" up -d opencode-web caddy
+        '; then
+            if [ "${RECOVER_DRY:-0}" -eq 0 ]; then sleep 3; fi
             run_check edge_retry c_edge
             run_check dns_retry c_dns
         else

@@ -8,6 +8,14 @@ Last updated: 2026-10-19
 
 ## Done (most recent first)
 
+- [x] **Checkpointed long jobs — 2026-10-19.** `recover-4096 --recover` records
+      the compose restart (`durable-run`, job recover-4096; `--resume` skips a
+      second restart and re-probes); `rotate-server-password` checkpoints
+      backup→rewrite→recreate→verify (`--fresh` resets, `--resume` skips done
+      steps; verify reads new/old from the env/backup, never memory). Both
+      self-test the resume path offline; test-durable 16/0. pi-durable gap row
+      updated (interactive rotate-api-keys stays manual).
+
 - [x] **FTS base refresh timer — 2026-10-19.** `/api/semantic` serves the atomic
       on-disk FTS base + an overlay for new parts, so the base must refresh
       out-of-band: `fts-refresh-install.sh` arms a user timer (15 min,
@@ -66,20 +74,6 @@ Last updated: 2026-10-19
       New **RULE #87**. Live: this session crossed budget and the auto-handoff
       produced its own brief.
 
-- [x] **E3 concurrency lock (`scripts/loop-lock.sh`) — 2026-10-18.** The dev
-      loop has several shared writers (`TODO.md`, `HANDOFF.md`, the `dev-loop`
-      checkpoint, the ledger) and no merge key, so two **live** sessions could
-      both claim a segment and clobber each other. New `loop-lock.sh`: a TTL
-      lease (default 1800s), **actor-tagged**, with explicit stale + `--force`
-      takeover; acquire/refresh/release/status/check. The critical section is
-      `flock`-serialised and the file written atomically, so two sessions can
-      never both acquire; a dead holder is reclaimed by **TTL**, never by
-      replaying history (durable = crash-safe, not exactly-once). Wired:
-      `loop-state.sh --begin` requires the lease and **refuses a busy loop**
-      (rc 3), `--end` releases it; `next-action.sh` surfaces the holder (text
-      `lock:` + JSON `lock`) and blocks. Gated in `test-durable.sh` (+2 → 10/0).
-      New **RULE #85**. Gate: lint 266/0 · hygiene 61/0 · durable 10/0 ·
-      patterns 6/0.
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 

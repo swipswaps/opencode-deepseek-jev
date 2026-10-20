@@ -62,7 +62,7 @@ rebuilt.*
 |---|---|---|
 | one process owns storage; clients attach | **have** | dashboard + `/api/stream` are the client surface |
 | **hello → snapshot → deltas** | **have** | SSE `/api/stream` (snapshot on connect, deltas after) |
-| checkpointed tasks; resume after a crash | **partial** | sentinel cursors (`sentinel-*.cursor`) resume; long shell jobs (`rotate-api-keys`, `recover-4096`) are not checkpointed yet |
+| checkpointed tasks; resume after a crash | **partial** | sentinel cursors (`sentinel-*.cursor`) resume; `recover-4096 --recover` and `rotate-server-password` are now checkpointed (`durable-run`, `--resume`). The interactive `rotate-api-keys` (browser console steps) stays manual |
 | exactly-once submission (`requestId`) | **have (analog)** | stable per-incident ledger keys (`UNIQUE(source,key)`) — a re-sweep is a no-op |
 | external effect observed, not assumed | **have (E2)** | `issue-bridge.py` polls a filed issue's state (host `gh` or a host-written JSON) → the same ledger; the hand-off prints the read-back step; `next-action` surfaces open external issues |
 | a declared capability is **enforced, not asserted** | **have (E1)** | `capabilities.mjs` runs the **live** registry as a gate — any DEGRADED/MISSING not named in `accepted_degraded` (id → reason) fails `test-hygiene.sh`, so a claim that silently goes false breaks the build (RULES #84) |

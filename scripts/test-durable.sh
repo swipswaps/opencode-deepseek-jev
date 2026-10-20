@@ -46,6 +46,8 @@ fi
 chk "durable-agents self-test (4 agents + fts-refresh timer)" bash "$REPO/scripts/durable-agents.sh" --self-test
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
+chk "recover-4096 self-test (checkpointed restart)" bash "$REPO/scripts/recover-4096.sh" --self-test
+chk "rotate-server-password self-test (checkpointed rotate)" bash "$REPO/scripts/rotate-server-password.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.
 chk "loop-state self-test (segment checkpoint + lease)" bash "$REPO/scripts/loop-state.sh" --self-test
 # E3: a single-writer lease stops two live sessions owning the same loop.

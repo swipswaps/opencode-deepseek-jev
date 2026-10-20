@@ -16,6 +16,19 @@ Done; durable state lives in `HANDOFF.md`. Git history is unchanged.
       closes it; `next-action.sh` surfaces open tasks (text `tasks:` + JSON
       `tasks`). New **RULE #86**; `test-durable.sh` +1 → 11/0.
 
+- [x] **E3 concurrency lock (`scripts/loop-lock.sh`) — 2026-10-18.** The dev
+      loop has several shared writers (`TODO.md`, `HANDOFF.md`, the `dev-loop`
+      checkpoint, the ledger) and no merge key, so two **live** sessions could
+      both claim a segment and clobber each other. New `loop-lock.sh`: a TTL
+      lease (default 1800s), **actor-tagged**, with explicit stale + `--force`
+      takeover; acquire/refresh/release/status/check. The critical section is
+      `flock`-serialised and the file written atomically, so two sessions can
+      never both acquire; a dead holder is reclaimed by **TTL**, never by
+      replaying history (durable = crash-safe, not exactly-once). Wired:
+      `loop-state.sh --begin` requires the lease and **refuses a busy loop**
+      (rc 3), `--end` releases it; `next-action.sh` surfaces the holder (text
+      `lock:` + JSON `lock`) and blocks. Gated in `test-durable.sh` (+2 → 10/0).
+
 - [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
       `capabilities.json` declared 15 capabilities but **9 of its own
       `registration` markers had drifted** (`name.sh --self-test` vs the file's
