@@ -243,12 +243,15 @@ Last updated: 2026-10-20
       `proxmox-dual-plane-mesh` — UDP reachability (firewall/NAT/MTU) and reload
       cadence. Filed as `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
       re-read **2026-10-20 22:5xZ: OPEN, no new comments/labels** (issue-bridge
-      poll --api; duplicate-skipped). Local repo cannot reach the host journal or
-      the mesh repo, so the next evidence must come from the host:
-      `nebula-systemd-override.sh --diagnose`, `journalctl -u nebula --since
-      '-15min' | grep -E 'Close tunnel|Taking new handshake|state:dead'`, and on
-      the peer `ping -c3 10.100.0.1` + UDP/MTU probes to lighthouse-01:4242.
-      Do not batch with local work; post the cadence/probe result back to #5.
+      poll --api; duplicate-skipped).       Local repo cannot reach the host journal or
+      the mesh repo. The pasted five-command block looked hung (journal access
+      can block; `--watch 60` runs a full minute), so it is now the scripted
+      `scripts/tunnel-link-probe.sh`: headers print first, every probe has a
+      timeout, and it writes `logs/tunnel-link-<ts>.log` with a verdict
+      (restart-churn / tunnel-flap / overlay-unreachable / no-evidence).
+      Host run: `bash scripts/tunnel-link-probe.sh` (add `--sudo` for
+      non-interactive journal, `--watch 60` for births). Post the verdict +
+      last flap lines back to #5; do not batch with local work.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

@@ -190,6 +190,17 @@ PY
         bad 'session-health.mjs present + node'
     fi
 
+    if [ -f "$REPO/scripts/tunnel-link-probe.sh" ]; then
+        if bash "$REPO/scripts/tunnel-link-probe.sh" --self-test > "$work/tlp_st.txt" 2>&1; then
+            ok 'tunnel-link-probe: self-test (fixtures classify flap/churn/clean)'
+        else
+            bad 'tunnel-link-probe: self-test'
+            cat "$work/tlp_st.txt"
+        fi
+    else
+        bad 'tunnel-link-probe.sh present'
+    fi
+
     if have node && [ -f "$REPO/scripts/quirks.mjs" ]; then
         if node --experimental-sqlite "$REPO/scripts/quirks.mjs" --self-test > "$work/qk_st.txt" 2>&1; then
             ok 'quirks: self-test (fuzzy matcher + corpus counters)'

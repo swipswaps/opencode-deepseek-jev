@@ -124,6 +124,16 @@ nebula-systemd-override.sh
     --file/--systemctl-file/--journal-file seams; offline --self-test. Sudo
     only on write.
 
+tunnel-link-probe.sh
+    Host-side, read-only evidence bundle for TUNNEL-1 LINK (issue #5). Runs the
+    hand-off probes with a header before each and a per-step timeout, so the
+    terminal never looks hung: unit state (NRestarts/MainPID), journal flap
+    count + last teardown/handshake lines, overlay ping loss, DF/MTU probes
+    (1400/1472), local UDP :4242 listeners, and a process snapshot. Classifies
+    restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence and
+    writes logs/tunnel-link-<ts>.log. --no-net/--sudo (non-interactive)/--watch
+    SECS/--json; --systemctl-file/--journal-file seams; offline --self-test.
+
 issue-bridge.py
     E2 external-state bridge: gh is absent in-container, so an issue hand-off
     (nebula-systemd-override.sh --handoff) had no read-back. "link" records a

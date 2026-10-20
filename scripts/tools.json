@@ -56,7 +56,7 @@
     "id": "auto-handoff",
     "title": "Act on the budget STOP: produce the brief automatically (#76)",
     "where": "container",
-    "purpose": "RULES #76 makes an over-budget session a hard STOP whose prescription is a handoff; this is the ACTION (detect and act were separate). Targets the LATEST over-budget session (the row preflight.sh gates on), runs the brief chain, and prints the paste path — no model call, never --fork/--continue. Idempotent: a brief already on disk is reused (--force regenerates), so a per-turn preflight is cheap after the first. preflight.sh invokes it on the budget STOP; JEV_AUTO_HANDOFF=0 disables.",
+    "purpose": "RULES #76 makes an over-budget session a hard STOP whose prescription is a handoff; this is the ACTION (detect and act were separate). Targets the LATEST over-budget session (the row preflight.sh gates on), runs the brief chain, and prints the paste path \u2014 no model call, never --fork/--continue. Idempotent: a brief already on disk is reused (--force regenerates), so a per-turn preflight is cheap after the first. preflight.sh invokes it on the budget STOP; JEV_AUTO_HANDOFF=0 disables.",
     "commands": [
       "./scripts/auto-handoff.sh",
       "./scripts/auto-handoff.sh --session ses_<id> --out FILE",
@@ -200,7 +200,7 @@
     "id": "issue-bridge",
     "title": "External-state bridge for issue hand-offs",
     "where": "host",
-    "purpose": "E2: gh is absent in-container, so an issue hand-off (nebula-systemd-override.sh --handoff) had no read-back. `link` records a filed issue (repo#number) as an open external unit; `poll` reads its state — gh on the host (--gh), a host-written JSON file (--in, default data/observability/issue-state.json), or the public GitHub REST API from the container (--api, stdlib, no gh/token) — into the same ledger triage/next-action read, idempotently; `status` prints the latest state. next-action.sh surfaces open external issues.",
+    "purpose": "E2: gh is absent in-container, so an issue hand-off (nebula-systemd-override.sh --handoff) had no read-back. `link` records a filed issue (repo#number) as an open external unit; `poll` reads its state \u2014 gh on the host (--gh), a host-written JSON file (--in, default data/observability/issue-state.json), or the public GitHub REST API from the container (--api, stdlib, no gh/token) \u2014 into the same ledger triage/next-action read, idempotently; `status` prints the latest state. next-action.sh surfaces open external issues.",
     "commands": [
       "python3 scripts/issue-bridge.py link --repo OWNER/NAME --number N",
       "python3 scripts/issue-bridge.py poll --in data/observability/issue-state.json",
@@ -971,7 +971,7 @@
     "id": "ocr-tesseractjs",
     "title": "Local OCR via tesseract.js (WASM)",
     "where": "container",
-    "purpose": "Local OCR with tesseract.js — no apt/pip/API; the same engine as receipts-ocr's browser side. Downscales oversized images before OCR so very tall screenshots do not stall the detector.",
+    "purpose": "Local OCR with tesseract.js \u2014 no apt/pip/API; the same engine as receipts-ocr's browser side. Downscales oversized images before OCR so very tall screenshots do not stall the detector.",
     "commands": [
       "node scripts/ocr-tesseractjs.mjs shot.png",
       "node scripts/ocr-tesseractjs.mjs --self-test"
@@ -1207,6 +1207,20 @@
     "purpose": "Tests the negotiation branch of a reset: weak legacy algorithms, client/server mismatch, or an unexpected banner (middlebox). Banner grab + algorithm lists only (no credentials, no auth attempts). Prints SKIP with the exact install line if ssh-audit is absent.",
     "commands": [
       "./scripts/ssh-audit.sh HOST [PORT]"
+    ]
+  },
+  {
+    "id": "tunnel-link-probe",
+    "title": "TUNNEL-1 LINK evidence bundle (host, read-only)",
+    "where": "host",
+    "purpose": "One shot for issue #5: unit state, flap count/last lines, overlay ping, DF/MTU 1400/1472, local UDP :4242 listeners, and a process snapshot, each with a timeout so nothing looks hung. Classifies restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence; writes logs/tunnel-link-<ts>.log. Read-only; --no-net for unit/journal only.",
+    "commands": [
+      "bash scripts/tunnel-link-probe.sh",
+      "bash scripts/tunnel-link-probe.sh --no-net",
+      "bash scripts/tunnel-link-probe.sh --sudo",
+      "bash scripts/tunnel-link-probe.sh --watch 60",
+      "bash scripts/tunnel-link-probe.sh --json",
+      "bash scripts/tunnel-link-probe.sh --self-test"
     ]
   }
 ]

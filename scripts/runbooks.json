@@ -319,6 +319,7 @@
     "where": "host",
     "manual": true,
     "commands": [
+      "bash scripts/tunnel-link-probe.sh   # one evidence bundle: unit+journal+ping+MTU (each step timed out)",
       "bash scripts/nebula-systemd-override.sh --diagnose   # classify restart-churn vs tunnel-flap + count it",
       "python3 scripts/nebula-restart-trace.py --watch 60   # confirm it is not the process restarting",
       "python3 scripts/triage-alerts.py   # group the T8 flags + de-dupe the stable key",

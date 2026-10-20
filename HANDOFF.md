@@ -9,9 +9,12 @@
 > snapshot (`cost.totals`, `activity` array) in `test-dashboard.sh`. Verify:
 > `curl -N http://127.0.0.1:5099/api/stream | head` then reload `/`.
 > **TUNNEL-1 LINK:** #5 re-read **OPEN** 2026-10-20 ~22:55Z with no new
-> comments/labels; still external. Next evidence is host-only:
-> `nebula-systemd-override.sh --diagnose`, the journal grep, and UDP/MTU probes
-> from the peer to lighthouse-01:4242.
+> comments/labels; still external. The hand-off paste looked hung because
+> journal access can block and `--watch 60` runs a minute, so it is now
+> `scripts/tunnel-link-probe.sh` (header per step, per-step timeouts, one
+> `logs/tunnel-link-<ts>.log`, verdict): `bash scripts/tunnel-link-probe.sh`
+> on the host, optional `--sudo` / `--watch 60`. Post its verdict + last flap
+> lines to #5.
 
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`
