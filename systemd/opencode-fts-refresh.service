@@ -1,0 +1,17 @@
+[Unit]
+Description=Refresh the opencode FTS index (derived, atomic swap)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/fts-refresh-install.sh (no sudo needed).
+# Reads the opencode store read-only, builds a temp index, then atomically
+# renames it over data/search/opencode-index.db (readers never see a partial
+# index). Low priority + CPU quota so a sweep cannot starve the served pages.
+ExecStart=__REPO__/scripts/semantic-search.sh --rebuild
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+NoNewPrivileges=true

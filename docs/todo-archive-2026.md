@@ -6,6 +6,16 @@ corpus is read at every session start, so its size is context cost — see
 `./scripts/doc-budget.sh`). Newest-first. `TODO.md` keeps the queue plus recent
 Done; durable state lives in `HANDOFF.md`. Git history is unchanged.
 
+- [x] **E4 owned task identity (`scripts/task-id.py`) — 2026-10-18.** A unit had
+      no stable ID and the DB `todo` is session-local, so begin/close/hand-off
+      could not name the same unit across sessions. New `task-id.py` records
+      `TASK`/`TASK_STATE` rows on the same ledger: `new` mints (or returns, by
+      title) a stable id (`T-<6hex>`, or explicit `--id` like `TUNNEL-1`) +
+      owner; `close --id|--title`; `show`/`list [--all]`; idempotent by
+      `source_key`. Wired: `loop-state.sh --begin` registers the unit, `--end`
+      closes it; `next-action.sh` surfaces open tasks (text `tasks:` + JSON
+      `tasks`). New **RULE #86**; `test-durable.sh` +1 → 11/0.
+
 - [x] **E1 claims → enforced gates (capability live gate) — 2026-10-18.**
       `capabilities.json` declared 15 capabilities but **9 of its own
       `registration` markers had drifted** (`name.sh --self-test` vs the file's

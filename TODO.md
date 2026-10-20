@@ -8,6 +8,14 @@ Last updated: 2026-10-19
 
 ## Done (most recent first)
 
+- [x] **FTS base refresh timer — 2026-10-19.** `/api/semantic` serves the atomic
+      on-disk FTS base + an overlay for new parts, so the base must refresh
+      out-of-band: `fts-refresh-install.sh` arms a user timer (15 min,
+      randomized, Nice=19/idle/CPUQuota=50%) running
+      `semantic-search.sh --rebuild` (temp+rename). `durable-agents.sh` now
+      arms four agents; `test-durable.sh` self-tests all seven templates/four
+      installers. Staleness bound: base <=15 min.
+
 - [x] **Remaining sync /api routes audited — 2026-10-19.** Live cold times:
       search 6.8s, integrations 8.6s, config 5.2s, cost 1.9s, activity 0.3s;
       sessions/overview cheap (<0.5s). search/integrations/cost/activity now
@@ -56,16 +64,6 @@ Last updated: 2026-10-19
       is now locked (preflight must call it, and the switch must gate it) → 13/0.
       New **RULE #87**. Live: this session crossed budget and the auto-handoff
       produced its own brief.
-
-- [x] **E4 owned task identity (`scripts/task-id.py`) — 2026-10-18.** A unit had
-      no stable ID and the DB `todo` is session-local, so begin/close/hand-off
-      could not name the same unit across sessions. New `task-id.py` records
-      `TASK`/`TASK_STATE` rows on the same ledger: `new` mints (or returns, by
-      title) a stable id (`T-<6hex>`, or explicit `--id` like `TUNNEL-1`) +
-      owner; `close --id|--title`; `show`/`list [--all]`; idempotent by
-      `source_key`. Wired: `loop-state.sh --begin` registers the unit, `--end`
-      closes it; `next-action.sh` surfaces open tasks (text `tasks:` + JSON
-      `tasks`). New **RULE #86**; `test-durable.sh` +1 → 11/0.
 
 - [x] **E3 concurrency lock (`scripts/loop-lock.sh`) — 2026-10-18.** The dev
       loop has several shared writers (`TODO.md`, `HANDOFF.md`, the `dev-loop`

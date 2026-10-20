@@ -256,12 +256,20 @@ progress-review-install.sh
     via systemctl --user). Idempotent; --write-only, --uninstall, --self-test.
 
 durable-agents.sh
-    One command to arm/verify the three durable background agents instead of
+    One command to arm/verify the four durable background agents instead of
     half-arming them one installer at a time: sentinel (5 min), notify-sink
-    (service), progress-review (15 min). --install runs the tested installers in
-    order; --status prints unit present + enabled + active, and prints SKIP (not
-    pass) when systemctl is absent; --dry-run lists the commands; --self-test
-    checks the five unit templates and the three installers offline.
+    (service), progress-review (15 min), fts-refresh (15 min). --install runs
+    the tested installers in order; --status prints unit present + enabled +
+    active, and prints SKIP (not pass) when systemctl is absent; --dry-run lists
+    the commands; --self-test checks the seven unit templates and the four
+    installers offline.
+
+fts-refresh-install.sh
+    Installs the user-level FTS base refresh timer (no sudo): every 15 min it
+    runs semantic-search.sh --rebuild at Nice=19/idle/CPUQuota=50%. The build is
+    temp+rename, so readers never see a partial index; the dashboard's overlay
+    covers new parts between sweeps (staleness bound <= 15 min). --write-only,
+    --uninstall, --self-test.
 
 loop-state.sh
     Durable checkpoint of the in-flight DEV LOOP segment, on durable-run.sh's

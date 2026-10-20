@@ -42,6 +42,8 @@ if grep -qF 'auto-handoff.sh' "$REPO/scripts/preflight.sh" \
 else
     no "preflight wiring (budget STOP -> auto-handoff call + JEV_AUTO_HANDOFF switch)"
 fi
+# #74: derived state is rebuilt/refreshed from storage (incl. the FTS base).
+chk "durable-agents self-test (4 agents + fts-refresh timer)" bash "$REPO/scripts/durable-agents.sh" --self-test
 # #74: long jobs checkpoint + resume.
 chk "durable-run self-test (checkpoint/resume)" bash "$REPO/scripts/durable-run.sh" --self-test
 # #80: the in-flight loop segment is checkpointed.

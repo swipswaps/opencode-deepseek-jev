@@ -4,7 +4,7 @@ Status: **implemented in this tree; host enablement pending.**
 
 ## Why
 
-The durable loop already has three always-on agents, each with its own tested
+The durable loop already has four always-on agents, each with its own tested
 installer:
 
 | Agent | Cadence | Job |
@@ -12,6 +12,7 @@ installer:
 | `sentinel` | 5 min | trip only on news (budget, deny, gateway failure) |
 | `notify-sink` | service | receive + persist pushed alerts |
 | `progress-review` | 15 min | PASS on advance / FAIL on a stalled loop |
+| `fts-refresh` | 15 min | atomic FTS base refresh (fast semantic search) |
 
 Arming them one at a time is easy to half-do, and a half-armed loop looks
 healthy. The container has no systemd, so the host step is the missing
@@ -19,10 +20,10 @@ automation, not the code.
 
 ## Changes
 
-- `scripts/durable-agents.sh` (new): `--install` runs the three tested
+- `scripts/durable-agents.sh` (new): `--install` runs the four tested
   installers in order; `--status` prints unit-present + enabled + active and
   prints **SKIP** (not pass) when `systemctl` is absent; `--dry-run` lists the
-  commands; `--self-test` checks the five unit templates and the three
+  commands; `--self-test` checks the seven unit templates and the four
   installers offline.
 - `scripts/README.txt` + `scripts/tools.json`: catalog the command.
 - (Proposed) a `dev-loop` service that runs `next-action.sh` + `harness.sh
@@ -40,7 +41,7 @@ automation, not the code.
 ## Acceptance
 
 - `durable-agents.sh --self-test` PASS.
-- On the host: all three units `enabled=yes`, `active=active` (timers: `active
+- On the host: all four units `enabled=yes`, `active=active` (timers: `active
   (waiting)`), and the ledger gains sweep rows.
 - `harness.sh` 4/0.
 
@@ -53,5 +54,6 @@ automation, not the code.
 ## Rollback
 
 `./scripts/sentinel-install.sh --uninstall`,
-`./scripts/progress-review-install.sh --uninstall`, and stop the notify unit;
+`./scripts/progress-review-install.sh --uninstall`,
+`./scripts/fts-refresh-install.sh --uninstall`, and stop the notify unit;
 the ledger and cursors are kept.

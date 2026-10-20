@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh the opencode FTS index every 15 minutes
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=60
+Unit=opencode-fts-refresh.service
+
+[Install]
+WantedBy=timers.target

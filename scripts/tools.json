@@ -1121,12 +1121,23 @@
     "id": "durable-agents",
     "title": "Arm/verify the durable background agents in one command",
     "where": "host",
-    "purpose": "The loop has three always-on agents (sentinel 5m, notify-sink service, progress-review 15m), each with its own installer, so arming them one by one is easy to half-do. --install runs the tested installers in order; --status prints unit present + enabled + active and SKIP (not pass) when systemctl is absent; --dry-run lists the commands; --self-test checks the five unit templates and the three installers offline.",
+    "purpose": "The loop has four always-on agents (sentinel 5m, notify-sink service, progress-review 15m, fts-refresh 15m), each with its own installer, so arming them one by one is easy to half-do. --install runs the tested installers in order; --status prints unit present + enabled + active and SKIP (not pass) when systemctl is absent; --dry-run lists the commands; --self-test checks the seven unit templates and the four installers offline.",
     "commands": [
       "./scripts/durable-agents.sh --status",
       "./scripts/durable-agents.sh --install",
       "./scripts/durable-agents.sh --dry-run",
       "./scripts/durable-agents.sh --self-test"
+    ]
+  },
+  {
+    "id": "fts-refresh-install",
+    "title": "Install the FTS base refresh timer",
+    "where": "host",
+    "purpose": "The dashboard serves /api/semantic from the atomic on-disk FTS base + an in-memory overlay for new parts, so the base must be refreshed out-of-band. Installs a user-level timer (every 15 min, randomized, Nice=19/idle/CPUQuota=50%) that runs semantic-search.sh --rebuild (temp+rename, readers never see a partial index). SKIP/not-pass without systemctl; --write-only, --uninstall, --self-test.",
+    "commands": [
+      "./scripts/fts-refresh-install.sh",
+      "./scripts/fts-refresh-install.sh --uninstall",
+      "./scripts/fts-refresh-install.sh --self-test"
     ]
   },
   {
