@@ -10,6 +10,8 @@
 # Usage:
 #   ./scripts/semantic-search.sh <query...>        # build if needed, then search
 #   ./scripts/semantic-search.sh --rebuild         # rebuild the index only
+#   ./scripts/semantic-search.sh --rebuild --idx FILE  # alternate index (tests)
+#   (builds to FILE.tmp.$$ then atomically renames it over FILE)
 #   ./scripts/semantic-search.sh [--limit N] <q...>
 #   ./scripts/semantic-search.sh --self-test       # offline fixtures, temp DBs
 #
@@ -41,9 +43,10 @@ have() { command -v "$1" >/dev/null 2>&1; }
 use() { printf 'usage: %s [--rebuild] [--fuzzy] [--limit N] <query...>\n' "$0"; }
 
 build() {
+    local tmp="$IDX.tmp.$$"
     printf 'building %s\n' "$IDX"
     sqlite3 "$DB" <<SQL
-ATTACH '$IDX' AS idx;
+ATTACH '$tmp' AS idx;
 PRAGMA synchronous = OFF;
 PRAGMA temp_store = MEMORY;
 .once /dev/null
@@ -57,14 +60,20 @@ INSERT INTO idx.parts_fts(part_id, session_id, type, text)
     WHERE json_extract(data,'\$.text') IS NOT NULL
        OR json_extract(data,'\$.state.input.command') IS NOT NULL;
 DROP TABLE IF EXISTS idx.meta;
-CREATE TABLE idx.meta(n);
-INSERT INTO idx.meta(n) SELECT COUNT(*) FROM idx.parts_fts;
+CREATE TABLE idx.meta(n, m);
+INSERT INTO idx.meta(n, m)
+    SELECT COUNT(*), COALESCE(MAX(p.time_created),0)
+    FROM idx.parts_fts f JOIN main.part p ON p.id = f.part_id;
 SQL
     local rc=$?
     if [ "$rc" -ne 0 ]; then
+        rm -f "$tmp" "$tmp-wal" "$tmp-shm"
         printf 'FAIL: index build returned %d\n' "$rc"
         return 1
     fi
+    # Atomic swap: a concurrent dashboard reader keeps the old inode until it
+    # reopens, and never sees a half-built index.
+    mv -f "$tmp" "$IDX"
     sqlite3 "$IDX" "SELECT printf('indexed %d parts', n) FROM meta;"
 }
 
@@ -104,7 +113,7 @@ main() {
         return 2
     fi
     DB="$REPO/data/opencode/opencode.db"
-    IDX="$REPO/data/search/opencode-index.db"
+    [ -n "$IDX" ] || IDX="$REPO/data/search/opencode-index.db"
     case " $* " in
         *" --self-test "*) selftest; return $? ;;
     esac
@@ -121,6 +130,7 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --db) DB="${2:-}"; shift 2 ;;
+            --idx) IDX="${2:-}"; shift 2 ;;
             --rebuild) REBUILD=1; shift ;;
             --fuzzy) FUZZY=1; shift ;;
             --limit)
@@ -167,12 +177,12 @@ selftest() {
     IDX="$tmp/idx.db"
     LIMIT=15
     sqlite3 "$DB" "CREATE TABLE session(id TEXT PRIMARY KEY, title TEXT);
-        CREATE TABLE part(id TEXT PRIMARY KEY, session_id TEXT, data TEXT);
+        CREATE TABLE part(id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT);
         INSERT INTO session VALUES('ses_aa','alpha tattoo session'),('ses_bb','beta plain session');
         INSERT INTO part VALUES
-          ('p1','ses_aa','{\"type\":\"text\",\"text\":\"quokka billboard zephyr\"}'),
-          ('p2','ses_aa','{\"type\":\"tool\",\"state\":{\"input\":{\"command\":\"echo hello\"}}}'),
-          ('p3','ses_bb','{\"type\":\"text\",\"text\":\"ordinary errands list\"}');" || { printf 'FAIL: fixture\n'; return 1; }
+          ('p1','ses_aa',1,1,'{\"type\":\"text\",\"text\":\"quokka billboard zephyr\"}'),
+          ('p2','ses_aa',2,2,'{\"type\":\"tool\",\"state\":{\"input\":{\"command\":\"echo hello\"}}}'),
+          ('p3','ses_bb',3,3,'{\"type\":\"text\",\"text\":\"ordinary errands list\"}');" || { printf 'FAIL: fixture\n'; return 1; }
     build > /dev/null || { printf 'FAIL: build\n'; return 1; }
     local n
     n=$(sqlite3 "$IDX" "SELECT n FROM meta;")

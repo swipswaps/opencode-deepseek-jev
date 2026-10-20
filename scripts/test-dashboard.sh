@@ -212,6 +212,53 @@ if (!Array.isArray(a)) process.exit(1);
         bad 'off-loop bodies: search/integrations/cost/activity'
         cat "$work/offloop-bodies.txt"
     fi
+    # FTS: new parts are APPENDED to the in-memory index, not rebuilt (the
+    # 28 s full scan was re-paid every 2 min as the live store grew).
+    if DB_PATH="$fixdb" LIB_URL="file://$REPO/scripts/query-lib.mjs" FTS_MIN_REBUILD_MS=0 SEMANTIC_IDX="$work/no-such-index.db" node --input-type=module -e '
+import { DatabaseSync } from "node:sqlite";
+const L = await import(process.env.LIB_URL); const DB = process.env.DB_PATH;
+const r1 = L.apiSemanticFresh(DB, "audit", 5);
+if (r1.index_mode !== "full") process.exit(10);
+const con = new DatabaseSync(DB);
+const m = Number(con.prepare("SELECT MAX(time_created) m FROM part").get().m) + 1000;
+con.prepare("INSERT INTO part(id,message_id,session_id,time_created,time_updated,data) VALUES(?,?,?,?,?,?)")
+  .run("prt_inc","msg_inc","ses_fixture1",m,m,JSON.stringify({type:"text",text:"incremental marker zzuniquezz"}));
+con.close();
+const r2 = L.apiSemanticFresh(DB, "zzuniquezz", 5);
+if (r2.index_mode !== "incremental") process.exit(11);
+if (!r2.results || !r2.results.length) process.exit(12);
+' > "$work/fts-inc.txt" 2>&1; then
+        ok 'semantic: incremental append (no full rebuild)'
+    else
+        bad 'semantic: incremental append'
+        cat "$work/fts-inc.txt"
+    fi
+    # On-disk FTS path: the dashboard body reads the atomic index (fast first
+    # hit) instead of rebuilding in memory.
+    if "$REPO/scripts/semantic-search.sh" --rebuild --db "$fixdb" --idx "$work/disk-idx.db" > "$work/disk-build.txt" 2>&1 \
+       && SEMANTIC_IDX="$work/disk-idx.db" DB_PATH="$fixdb" LIB_URL="file://$REPO/scripts/query-lib.mjs" node --input-type=module -e '
+const L = await import(process.env.LIB_URL);
+const r = L.apiSemanticFresh(process.env.DB_PATH, "audit", 5);
+if (r.index_source !== "disk") process.exit(1);
+if (!r.results || !r.results.length) process.exit(2);
+' > "$work/disk-idx.txt" 2>&1; then
+        ok 'semantic: on-disk index path (fast first hit)'
+    else
+        bad 'semantic: on-disk index path'
+        cat "$work/disk-idx.txt"
+    fi
+    # Durable derived cache: atomic save + load (seeds /api/signals at startup).
+    if CACHE_PATH="$work/cache.json" LIB_URL="file://$REPO/scripts/query-lib.mjs" node --input-type=module -e '
+const L = await import(process.env.LIB_URL); const p = process.env.CACHE_PATH;
+if (!L.saveJsonCache(p, { ok: 1 })) process.exit(1);
+const j = L.loadJsonCache(p);
+if (!j || j.value.ok !== 1 || typeof j.at !== "number") process.exit(2);
+' > "$work/cache-rt.txt" 2>&1; then
+        ok 'durable cache: atomic save + load'
+    else
+        bad 'durable cache: atomic save + load'
+        cat "$work/cache-rt.txt"
+    fi
     curl -s "http://$HOST:$PORT/api/trends" > "$work/trends.json"
     if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and (not d or set(("day","n","c","i")) <= set(d[0])) else 1)' "$work/trends.json"; then
         ok 'api/trends shape (array of day/n/c/i)'
@@ -481,7 +528,7 @@ PY
     fi
 
     if [ -x "$REPO/scripts/semantic-search.sh" ]; then
-        "$REPO/scripts/semantic-search.sh" --rebuild --db "${fixdb:-$db}" > "$work/idx.txt" 2>&1
+        "$REPO/scripts/semantic-search.sh" --rebuild --db "${fixdb:-$db}" --idx "$work/idx.db" > "$work/idx.txt" 2>&1
         local si_rc=$?
         if [ "$si_rc" -eq 0 ] && has 'indexed' "$work/idx.txt"; then ok 'semantic-search.sh builds index'; else bad 'semantic-search.sh builds index'; fi
     else

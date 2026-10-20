@@ -7,7 +7,7 @@
 // read-only handle per call (node:sqlite handles cannot cross threads).
 // Behavior changes here must keep test-dashboard.sh endpoint shapes green.
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export function queryDb(dbPath, sql, ...args) {
@@ -17,6 +17,26 @@ export function queryDb(dbPath, sql, ...args) {
   } finally {
     db.close();
   }
+}
+
+// Durable derived-cache helpers (pi-durable #74): a slow panel's last good
+// value is persisted atomically and re-served at startup as stale, so a cold
+// process never makes the user wait for the rebuild. Values are plain JSON.
+export function loadJsonCache(path) {
+  try {
+    const j = JSON.parse(readFileSync(path, "utf8"));
+    if (j && j.value !== undefined) return j;
+  } catch { /* absent or torn: cold start is the fallback */ }
+  return null;
+}
+
+export function saveJsonCache(path, value) {
+  try {
+    const tmp = path + ".tmp." + process.pid;
+    writeFileSync(tmp, JSON.stringify({ at: Date.now(), value }));
+    renameSync(tmp, path);   // atomic on the same filesystem
+    return true;
+  } catch { return false; }
 }
 
 // /api/trends payload (sessions + cost per day). Moved here so the worker can
@@ -284,18 +304,76 @@ export function apiWordsFresh(dbPath, limit) {
 // short window would rebuild almost continuously under write load and starve
 // the single query worker; 2 min bounds that while keeping search fresh enough.
 export const FTS_MIN_REBUILD_MS = Number(process.env.FTS_MIN_REBUILD_MS || 120000);
-let FTS = { db: null, at: 0, count: -1, sourceMax: -1 };
+let FTS = { db: null, at: 0, count: -1, sourceMax: -1, ocrMax: 0, mode: "" };
+
+// On-disk FTS index (built by semantic-search.sh with an atomic swap) is the
+// BASE. New parts since its watermark live in a small in-memory OVERLAY, so a
+// request queries both (fast) and never pays a full scan or a 24k-row copy.
+// The disk index is refreshed out-of-band (host/timer), never on this path.
+const SEMANTIC_IDX = process.env.SEMANTIC_IDX || fileURLToPath(new URL("../data/search/opencode-index.db", import.meta.url));
+const FTS_OVERLAY_REBUILD_MS = Number(process.env.FTS_OVERLAY_REBUILD_MS || 30000);
+let DISK = { db: null, mtime: 0, sourceMax: 0 };
+let OVL = { db: null, baseMax: -1, max: -1, at: 0 };
+
+function diskBase(dbPath) {
+  try {
+    const st = statSync(SEMANTIC_IDX);
+    if (DISK.db && DISK.mtime === st.mtimeMs) return DISK;
+    if (DISK.db) { try { DISK.db.close(); } catch { /* reopen */ } }
+    const db = new DatabaseSync(SEMANTIC_IDX, { readOnly: true });
+    let m = 0;
+    try { m = Number(db.prepare("SELECT m FROM meta").get().m) || 0; } catch { /* old meta(n) */ }
+    if (!m) m = Number(queryDb(dbPath, "SELECT COALESCE(MAX(time_created),0) m FROM part")[0].m) || 0;
+    DISK = { db, mtime: st.mtimeMs, sourceMax: m };
+    return DISK;
+  } catch {
+    if (DISK.db) { try { DISK.db.close(); } catch { /* ignore */ } }
+    DISK = { db: null, mtime: 0, sourceMax: 0 };
+    return null;
+  }
+}
+
+function overlayFts(dbPath, baseMax) {
+  const pick = (since) => queryDb(dbPath,
+    "SELECT id, session_id, time_created, json_extract(data,'$.type') type, " +
+    "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
+    "FROM part WHERE time_created > ? AND (json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL)",
+    since
+  );
+  if (!OVL.db || OVL.baseMax !== baseMax) {
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
+    const rows = pick(baseMax);
+    const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
+    db.exec("BEGIN");
+    for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+    db.exec("COMMIT");
+    const max = rows.reduce((a, r) => Math.max(a, Number(r.time_created) || 0), baseMax);
+    OVL = { db, baseMax, max, at: Date.now() };
+    return db;
+  }
+  if (Date.now() - OVL.at < FTS_OVERLAY_REBUILD_MS) return OVL.db;
+  const rows = pick(OVL.max);
+  if (rows.length) {
+    const ins = OVL.db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
+    OVL.db.exec("BEGIN");
+    for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+    OVL.db.exec("COMMIT");
+    OVL.max = rows.reduce((a, r) => Math.max(a, Number(r.time_created) || 0), OVL.max);
+  }
+  OVL.at = Date.now();
+  return OVL.db;
+}
 
 function sanitizeFts(q) {
   const words = String(q || "").toLowerCase().match(/[a-z0-9_]+/g) || [];
   return words.map((w) => '"' + w + '"').join(" ");
 }
 
+// Append-only store: count + max(time_created) is a cheap change watermark
+// (no json_extract scan). A changed watermark means new parts, not a rebuild.
 function ftsSource(dbPath) {
-  return queryDb(dbPath,
-    "SELECT COUNT(*) n, COALESCE(MAX(time_created),0) m FROM part " +
-    "WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
-  )[0];
+  return queryDb(dbPath, "SELECT COUNT(*) n, COALESCE(MAX(time_created),0) m FROM part")[0];
 }
 
 function ocrRows(limit) {
@@ -309,24 +387,60 @@ function ocrRows(limit) {
   }
 }
 
+function ocrRowsSince(minId) {
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)), { readOnly: true });
+    const rows = db.prepare("SELECT id, ts, image, engine, lang, text FROM ocr_run WHERE id > ? ORDER BY id").all(Number(minId) || 0);
+    db.close();
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 function ensureFts(dbPath, minRebuildMs) {
   const src = ftsSource(dbPath);
   const n = Number(src.n), m = Number(src.m);
   if (FTS.db && Date.now() - FTS.at < minRebuildMs) return FTS.db;
-  if (FTS.db && FTS.count === n && FTS.sourceMax === m) return FTS.db;
-  const db = new DatabaseSync(":memory:");
-  db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
+  if (FTS.db && FTS.sourceMax === m) { FTS.at = Date.now(); FTS.mode = "hit"; return FTS.db; }
+  if (!FTS.db) {
+    const db = new DatabaseSync(":memory:");
+    db.exec("CREATE VIRTUAL TABLE parts_fts USING fts5(part_id UNINDEXED, session_id UNINDEXED, type UNINDEXED, text)");
+    const rows = queryDb(dbPath,
+      "SELECT id, session_id, json_extract(data,'$.type') type, " +
+      "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
+      "FROM part WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+    );
+    const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
+    db.exec("BEGIN");
+    for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
+    const ocr = ocrRows(2000);
+    for (const o of ocr) ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
+    db.exec("COMMIT");
+    const ocrMax = ocr.reduce((a, o) => Math.max(a, Number(o.id) || 0), 0);
+    FTS = { db, at: Date.now(), count: n, sourceMax: m, ocrMax, mode: "full", source: "memory" };
+    return db;
+  }
+  // New parts only: append by time-created watermark (the store is append-only;
+  // an in-place update of an already-indexed part keeps its old text, which is
+  // bounded staleness, not a full 28 s rebuild every 2 min).
+  const db = FTS.db;
   const rows = queryDb(dbPath,
     "SELECT id, session_id, json_extract(data,'$.type') type, " +
     "COALESCE(json_extract(data,'$.text'), json_extract(data,'$.state.input.command'), '') text " +
-    "FROM part WHERE json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL"
+    "FROM part WHERE time_created > ? AND (json_extract(data,'$.text') IS NOT NULL OR json_extract(data,'$.state.input.command') IS NOT NULL)",
+    FTS.sourceMax
   );
   const ins = db.prepare("INSERT INTO parts_fts(part_id, session_id, type, text) VALUES (?,?,?,?)");
   db.exec("BEGIN");
   for (const r of rows) ins.run(r.id, r.session_id, r.type || "", String(r.text || ""));
-  for (const o of ocrRows(2000)) ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
+  let ocrMax = FTS.ocrMax || 0;
+  for (const o of ocrRowsSince(ocrMax)) {
+    ins.run("ocr" + o.id, "OCR", "ocr", String(o.text || ""));
+    ocrMax = Math.max(ocrMax, Number(o.id) || 0);
+  }
   db.exec("COMMIT");
-  FTS = { db, at: Date.now(), count: n, sourceMax: m };
+  FTS = { db, at: Date.now(), count: n, sourceMax: m, ocrMax, mode: "incremental", source: FTS.source || "memory" };
   return db;
 }
 
@@ -338,18 +452,43 @@ export function apiSemanticFresh(dbPath, q, limit, minRebuildMs = FTS_MIN_REBUIL
     "%" + raw.replace(/[%_\\]/g, "") + "%", limit
   );
   if (!needle) return { q: raw, mode: "fts", indexed: FTS.count, sessions, results: [] };
-  let db;
-  try { db = ensureFts(dbPath, minRebuildMs); } catch (e) {
-    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  const ftsQuery = (handle) => handle.prepare(
+    "SELECT part_id, session_id, type, snippet(parts_fts, 3, '[', ']', '...', 14) snip, bm25(parts_fts) score " +
+    "FROM parts_fts WHERE parts_fts MATCH ? ORDER BY score LIMIT ?"
+  ).all(needle, limit);
+  let base = diskBase(dbPath);
+  let rows = [], source = "memory";
+  if (base) {
+    try {
+      rows = ftsQuery(base.db);
+      rows = rows.concat(ftsQuery(overlayFts(dbPath, base.sourceMax)));
+      rows.sort((a, b) => a.score - b.score);
+      rows = rows.slice(0, limit);
+      source = "disk";
+      // OCR rows are not in the disk index; query the small table directly.
+      const rawLower = raw.toLowerCase();
+      const ocrHits = ocrRows(2000)
+        .filter((o) => String(o.text || "").toLowerCase().includes(rawLower))
+        .slice(0, limit)
+        .map((o) => ({ part_id: "ocr" + o.id, session_id: "OCR", type: "ocr",
+                       snip: String(o.text || "").slice(0, 200), score: 0 }));
+      if (ocrHits.length) rows = rows.concat(ocrHits).sort((a, b) => a.score - b.score).slice(0, limit);
+    } catch {
+      base = null;
+      rows = [];
+    }
   }
-  let rows;
-  try {
-    rows = db.prepare(
-      "SELECT part_id, session_id, type, snippet(parts_fts, 3, '[', ']', '...', 14) snip, bm25(parts_fts) score " +
-      "FROM parts_fts WHERE parts_fts MATCH ? ORDER BY score LIMIT ?"
-    ).all(needle, limit);
-  } catch (e) {
-    return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+  if (!base) {
+    let db;
+    try { db = ensureFts(dbPath, minRebuildMs); } catch (e) {
+      return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+    }
+    try {
+      rows = ftsQuery(db);
+    } catch (e) {
+      return { q: needle, mode: "error", error: String((e && e.message) || e), sessions, results: [] };
+    }
+    source = "memory";
   }
   const ids = [...new Set(rows.map((r) => r.session_id))];
   const titles = {};
@@ -360,7 +499,8 @@ export function apiSemanticFresh(dbPath, q, limit, minRebuildMs = FTS_MIN_REBUIL
   const ocrTitles = {};
   for (const o of ocrRows(2000)) ocrTitles[o.id] = o.image;
   return {
-    q: needle, mode: "fts", indexed: FTS.count, sessions,
+    q: needle, mode: "fts", indexed: base ? null : FTS.count,
+    index_mode: base ? "disk+overlay" : FTS.mode, index_source: source, sessions,
     results: rows.map((r) => {
       const isOcr = r.session_id === "OCR";
       return {

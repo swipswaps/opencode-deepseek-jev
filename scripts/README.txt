@@ -55,7 +55,10 @@ cost-bottlenecks.sh
 semantic-search.sh
     Ranked full-text search (SQLite FTS5/bm25) over text, reasoning, tool
     commands; index at data/search/opencode-index.db (gitignored). --rebuild,
-    --limit N, --fuzzy (delegates to fuzzy-search.py).
+    --limit N, --fuzzy (delegates to fuzzy-search.py), --idx FILE (alternate
+    index, used by tests). Builds to FILE.tmp.$$ then atomically renames it;
+    meta(n,m) stores the row count + max time_created (the dashboard's
+    incremental overlay watermark).
 
 rerank.mjs
     Rerank FTS5/bm25 candidates by embedding cosine -- the missing semantic
@@ -147,7 +150,9 @@ query-lib.mjs
     cost/activity/board query bodies) shared
     by dashboard.mjs and query-worker.mjs: single source of truth so the
     worker cannot drift. Every function is (dbPath, ...) -> plain JSON with
-    its own read-only handle.
+    its own read-only handle. Also: the semantic FTS base (on-disk index) +
+    in-memory overlay for new parts, and loadJsonCache/saveJsonCache (atomic
+    durable snapshots for signals/health).
 
 query-worker.mjs
     node:worker_threads entry running query-lib (plus health/model bundles)

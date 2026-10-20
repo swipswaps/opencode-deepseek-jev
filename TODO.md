@@ -15,11 +15,13 @@ Last updated: 2026-10-19
       the audit with `execFile` + single-flight, so no 45s sync block.
       test-dashboard asserts the bodies + served shapes (130/0).
 
-- [x] **/api/trends off the event loop (sentinel T4 slow-fetch) — 2026-10-19.**
-      A host capture burst produced a 10.7 s `GET /api/trends`; the route was a
-      sync cold compute. Body moved to `query-lib.apiTrendsFresh` + the query
-      worker (`asyncCached`), inline fallback kept; `test-dashboard.sh` asserts
-      the body + array shape (#72: duration is time-in-system).
+- [x] **Cold search/health + trends off the loop — 2026-10-19.** A capture
+      burst produced a 10.7 s `GET /api/trends`; the route was a sync cold
+      compute. trends/cost/search/integrations/activity moved to query-lib +
+      worker pools; `/api/semantic` 22s→1.8s (atomic on-disk FTS base +
+      incremental overlay), `/api/signals` 32s→0.03s and `/api/health`
+      26s→0.02s (persisted snapshots); heavy jobs get their own worker.
+      test-dashboard 133/0 (#72: duration is time-in-system).
 
 - [x] **UX accessibility gate + durable-agent arming — 2026-10-19.** New
       `a11y-audit.mjs` gates WCAG basics (landmarks, heading order, control

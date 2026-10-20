@@ -25,7 +25,8 @@ import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
 import { annotateReport, modelLedger } from "./quirks.mjs";
 import { apiSignalsFresh as signalsFresh, apiPatternsFresh as patternsFresh, apiWordsFresh as wordsFresh, apiSemanticFresh as semanticFresh, apiTrendsFresh,
-         apiSearchFresh as searchFresh, apiIntegrationsFresh as integrationsFresh, apiCostFresh as costFresh, apiActivityFresh as activityFresh } from "./query-lib.mjs";
+         apiSearchFresh as searchFresh, apiIntegrationsFresh as integrationsFresh, apiCostFresh as costFresh, apiActivityFresh as activityFresh,
+         loadJsonCache, saveJsonCache } from "./query-lib.mjs";
 import { redact } from "./redact.mjs";
 
 const execFileP = promisify(execFile);
@@ -497,54 +498,59 @@ function ttlCached(key, ttlMs, fn) {
 // Worker threads reference: https://nodejs.org/api/worker_threads.html
 // (dedicated V8 isolate + event loop; node:sqlite handles cannot cross
 // threads, hence per-call read-only opens inside the worker).
-// Single shared worker (singleflight already serializes refreshes); 60 s
-// timeout; every failure path falls back or keeps stale — a dead worker
-// degrades to the old inline behavior, never to a failed request.
-// Results cross the boundary by structured clone (plain JSON shapes only):
+// Two pools: a FAST worker for interactive queries (semantic/trends/cost/...)
+// and a HEAVY one for health/board (10-30 s builds). A single worker let a
+// health refresh time out a 16 ms trends query; separating them keeps the
+// interactive path responsive. 60 s timeout per call; every failure path falls
+// back or keeps stale — a dead worker degrades to inline, never a failed
+// request. Results cross the boundary by structured clone (plain JSON only):
 // https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
-let QWORKER = null, QSEQ = 0;
 let QWARNED = false;
 function workerWarn(msg) {
   if (!QWARNED) { QWARNED = true; console.log("worker: " + msg); }
 }
-const QPEND = {};
-function workerCall(fn, ...args) {
-  return new Promise((resolve, reject) => {
-    try {
-      if (!QWORKER) {
-        // QUERY_WORKER_PATH overrides the worker entry (operability knob
-        // and fault-injection seam: point it at a missing file to prove
-        // the inline fallback keeps every request at 200).
-        const qurl = process.env.QUERY_WORKER_PATH || "./query-worker.mjs";
-        QWORKER = new Worker(new URL(qurl, import.meta.url),
-          { env: { ...process.env } });
-        QWORKER.on("message", (m) => {
-          const p = QPEND[m.id];
-          if (!p) return;
-          delete QPEND[m.id];
-          if (m.ok) p.res(m.value); else p.rej(new Error(m.error));
-        });
-        const failAll = (e) => {
-          for (const k of Object.keys(QPEND)) {
-            try { QPEND[k].rej(e); } catch { /* settle once */ }
-            delete QPEND[k];
-          }
-          QWORKER = null;
-        };
-        QWORKER.on("error", failAll);
-        QWORKER.on("exit", () => { failAll(new Error("worker exited")); });
-      }
-      const id = ++QSEQ;
-      const to = setTimeout(() => {
-        if (QPEND[id]) { delete QPEND[id]; reject(new Error("worker timeout")); }
-      }, 60000);
-      QPEND[id] = {
-        res: (v) => { clearTimeout(to); resolve(v); },
-        rej: (e) => { clearTimeout(to); reject(e); },
+const HEAVY_FNS = new Set(["healthSync", "board", "signals"]);
+function makePool(name) { return { name, worker: null, seq: 0, pend: {} }; }
+const FAST_POOL = makePool("fast");
+const HEAVY_POOL = makePool("heavy");
+function callPool(pool, fn, args, resolve, reject) {
+  try {
+    if (!pool.worker) {
+      // QUERY_WORKER_PATH overrides the worker entry (operability knob and
+      // fault-injection seam: point it at a missing file to prove the inline
+      // fallback keeps every request at 200).
+      const qurl = process.env.QUERY_WORKER_PATH || "./query-worker.mjs";
+      pool.worker = new Worker(new URL(qurl, import.meta.url), { env: { ...process.env } });
+      pool.worker.on("message", (m) => {
+        const p = pool.pend[m.id];
+        if (!p) return;
+        delete pool.pend[m.id];
+        if (m.ok) p.res(m.value); else p.rej(new Error(m.error));
+      });
+      const failAll = (e) => {
+        for (const k of Object.keys(pool.pend)) {
+          try { pool.pend[k].rej(e); } catch { /* settle once */ }
+          delete pool.pend[k];
+        }
+        pool.worker = null;
       };
-      QWORKER.postMessage({ id, fn, dbPath, args });
-    } catch (e) { reject(e); }
-  });
+      pool.worker.on("error", failAll);
+      pool.worker.on("exit", () => { failAll(new Error(pool.name + " worker exited")); });
+    }
+    const id = ++pool.seq;
+    const to = setTimeout(() => {
+      if (pool.pend[id]) { delete pool.pend[id]; reject(new Error(pool.name + " worker timeout")); }
+    }, 60000);
+    pool.pend[id] = {
+      res: (v) => { clearTimeout(to); resolve(v); },
+      rej: (e) => { clearTimeout(to); reject(e); },
+    };
+    pool.worker.postMessage({ id, fn, dbPath, args });
+  } catch (e) { reject(e); }
+}
+function workerCall(fn, ...args) {
+  return new Promise((resolve, reject) =>
+    callPool(HEAVY_FNS.has(fn) ? HEAVY_POOL : FAST_POOL, fn, args, resolve, reject));
 }
 // Async SWR shell mirroring ttlCached semantics (fresh/cached/stale +
 // singleflight), but compute happens off-thread. Cold path falls back to
@@ -552,7 +558,14 @@ function workerCall(fn, ...args) {
 // thread pays (rare: pre-warmed; observable via missing stale flag).
 const ACACHE = {};
 const AREFRESH = {};
-async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
+// Seed slow panels from their durable snapshot: the first request after a
+// restart serves stale instantly while the worker refreshes (pi-durable #74).
+const SIGNALS_CACHE_PATH = fileURLToPath(new URL("../data/observability/signals-cache.json", import.meta.url));
+try {
+  const seed = loadJsonCache(SIGNALS_CACHE_PATH);
+  if (seed && seed.value) ACACHE["signals"] = { at: Number(seed.at) || Date.now(), value: seed.value };
+} catch { /* no snapshot: normal cold path */ }
+async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn, persist) {
   const now = Date.now();
   const hit = ACACHE[key];
   if (hit && hit.value && now - hit.at < ttlMs) {
@@ -565,6 +578,7 @@ async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
       workerCall(workerFn, ...workerArgs).then((value) => {
         if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
         ACACHE[key] = { at: Date.now(), value };
+        if (persist) persist(value);
         AREFRESH[key] = false;
       }, () => { AREFRESH[key] = false; });
     }
@@ -575,6 +589,7 @@ async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
     const value = await workerCall(workerFn, ...workerArgs);
     if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
     ACACHE[key] = { at: now, value };
+    if (persist) persist(value);
     return value;
   } catch (e) {
     // Inline fallback (same query-lib bodies the worker runs): slower on
@@ -584,13 +599,17 @@ async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn) {
     const value = inlineFn();
     if (!Array.isArray(value)) { value.cached = false; value.age_ms = 0; }
     ACACHE[key] = { at: now, value };
+    if (persist) persist(value);
     return value;
   }
 }
 const SIGNALS_TTL_MS = Number(process.env.SIGNALS_TTL_MS || 30000);
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 15000);
 async function apiSignals() {
-  return asyncCached("signals", SIGNALS_TTL_MS, "signals", [], () => signalsFresh(dbPath));
+  // Persist each successful build; a restart re-serves it as stale (instant)
+  // while the worker recomputes, so the ~32 s first hit disappears.
+  return asyncCached("signals", SIGNALS_TTL_MS, "signals", [], () => signalsFresh(dbPath),
+    (v) => saveJsonCache(SIGNALS_CACHE_PATH, v));
 }
 async function apiPatterns(limit) {
   limit = Number(limit) || 30;
@@ -651,6 +670,14 @@ function apiGuard(limit) {
 let HEALTH_CACHE = { at: 0, value: null };
 const HEALTH_TTL_MS = Number(process.env.HEALTH_TTL_MS || 15000);
 let HEALTH_REFRESHING = false;
+// Seed the health panel from its durable snapshot (same pi-durable #74 pattern
+// as /api/signals): a restart serves the last good report instantly and
+// refreshes in the worker, instead of a cold ~10-30 s aggregation.
+const HEALTH_CACHE_PATH = fileURLToPath(new URL("../data/observability/health-cache.json", import.meta.url));
+try {
+  const seed = loadJsonCache(HEALTH_CACHE_PATH);
+  if (seed && seed.value) HEALTH_CACHE = { at: Number(seed.at) || Date.now(), value: seed.value, ttl: 5000 };
+} catch { /* no snapshot: normal cold path */ }
 async function apiHealth() {
   const now = Date.now();
   const v = HEALTH_CACHE.value;
@@ -725,6 +752,7 @@ async function refreshHealthCache() {
     // already-expired entry (permanent recompute storm saturating the loop).
     const ttl = r.live && r.live.available ? HEALTH_TTL_MS : 5000;
     HEALTH_CACHE = { at: Date.now(), value: r, ttl };
+    saveJsonCache(HEALTH_CACHE_PATH, r);
     return r;
   } catch (e) {
     return { available: false, error: String(e && e.message ? e.message : e), counts: {}, findings: [], known_issues: [], by_model: {}, per_model: [], cached: false };
@@ -2868,24 +2896,9 @@ setInterval(() => {
 }, 5000);
 server.listen(port, host, () => {
   console.log("opencode observability: http://" + host + ":" + port + "  (db: " + dbPath + ")");
-  // Pre-warm the slowest cache off the critical path: a cold /api/health
-  // runs ~10 s of synchronous aggregation that blocks the event loop and
-  // serialises every concurrent fetch (measured ~18 s explore tails).
-  // setImmediate keeps listen prompt; the first visitor gets a warm cache.
-  // /api/activity gets the same treatment: its unscoped cold scan measured
-  // 3.1s uncontended and 90s+ under contention (now session-scoped, but the
-  // first visitor still should not pay cold).
-  setImmediate(() => {
-    console.log("pre-warming /api/health cache...");
-    Promise.resolve(apiHealth()).then(
-      () => console.log("pre-warm /api/health ready"),
-      (e) => console.log("pre-warm /api/health failed: " + (e && e.message ? e.message : e))
-    );
-    try { apiActivity(); console.log("pre-warm /api/activity ready"); }
-    catch (e) { console.log("pre-warm /api/activity failed: " + (e && e.message ? e.message : e)); }
-    Promise.resolve(apiBoard()).then(
-      () => console.log("pre-warm /api/board ready"),
-      (e) => console.log("pre-warm /api/board failed: " + (e && e.message ? e.message : e))
-    );
-  });
+  // No eager pre-warm. The worker is single-threaded: pre-computing
+  // /api/board (~19 s) and /api/health (~10-30 s) at startup starved every
+  // other worker-backed API (semantic, trends, cost) for ~30 s. Instead the
+  // heavy panels are on-demand and /api/health + /api/signals are seeded from
+  // their durable snapshots, so a restart serves them instantly.
 });
