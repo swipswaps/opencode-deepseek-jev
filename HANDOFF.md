@@ -9,9 +9,11 @@
 > `AI_APICallError` x4 at 17:11Z (provider-side, retried). **Debt:** the last
 > green gate was `8914dcb` (two commits back); this session re-runs full
 > `harness.sh` at HEAD. **Docs:** tier-1 was 34,959/35,000 (41 tok) — older PINs
-> moved to `docs/handoff-archive-2026.md` (RULE #77). **Next:** LAT-1 latency
-> attribution (`latency-timeline.sh`) on the host, then TUNNEL-1 LINK
-> (external, #5).
+> moved to `docs/handoff-archive-2026.md` (RULE #77). **LAT-1 done:** the 17:02
+> T4 burst overlaps self-inflicted long tool spans (a 308 s gate run, a 200 s
+> `sleep`) in a single-threaded server; `/api/semantic` and `/config` are
+> queueing, not handler cost. **Next:** LAT-2 (off-loop gates / T4 correlation),
+> then TUNNEL-1 LINK (external, #5).
 
 > **Running todo:** `TODO.md` (queue) — HANDOFF.md is the durable state, TODO.md
 > is what's next. Update both at the end of a session so momentum persists.

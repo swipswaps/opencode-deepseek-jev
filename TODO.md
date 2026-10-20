@@ -12,9 +12,17 @@ Last updated: 2026-10-20
       now covers the `data/opencode` symlink and `data/opencode.bak-*` (the
       backup's `auth.json` was untracked but NOT ignored); audit/reset-forensics
       scripts cataloged; one-shots archived; older HANDOFF PINs/snapshots →
-      `docs/handoff-archive-2026.md` (tier-1 34,959 → 32,237 tok). Re-ran full
-      `harness.sh` at HEAD (see the gate row for the verdict); T4/T3 triaged
-      (queueing vs provider). Queue re-ranked: LAT-1 local first.
+      `docs/handoff-archive-2026.md` (tier-1 34,959 → 32,458 tok). Re-ran full
+      `harness.sh` at HEAD (4/0: lint 278 · hygiene 62 · patterns 6 ·
+      dashboard 135); T4/T3 triaged (queueing vs provider). Queue re-ranked:
+      LAT-1 local first.
+
+- [x] **LAT-1 — 2026-10-20.** `latency-timeline.sh` on `ses_ea5b5ab6…` and the
+      16:30–17:06 slice of `ses_eab7cff1…` shows the 17:02 T4 burst overlapping
+      long tool spans: a 308 s gate run (16:55–17:00) and a 200 s `sleep`
+      (16:43–16:48), while normal steps are seconds. The 8 s `/api/semantic` and
+      170 s `/config` are queueing, not handler cost (single-threaded server).
+      No timeout raised. Follow-up: LAT-2.
 
 - [x] **Proactive agent — 2026-10-20.** `proactive-agent.sh` (15-min timer)
       turns NEW ADVISORY rows into owned tasks (cursor-bounded, bootstrap
@@ -195,15 +203,14 @@ Last updated: 2026-10-20
 
 ## Queue (ranked, top first)
 
-- [ ] **LAT-1: attribute the live latency before optimizing it.** Host:
-      `./scripts/latency-timeline.sh --session <latest> --window 60` plots the
-      part spans and every slow fetch on one axis; pair cold/warm probes of
-      `/api/semantic?q=session` and `/config?directory=%2Fhome%2Fnode%2F.opencode`.
-      Separate handler time from queue delay (RULE #72: duration is
-      time-in-system; both servers are single-threaded). Acceptance: warm p95
-      < 2 s, **or** a named blocker with evidence (access-log timestamp + part
-      span), and no timeout raised. Replaces the pre-restart T4 burst (x64,
-      slowest 170 s `/config`) as the next local unit.
+- [ ] **LAT-2: stop self-inflicted queueing.** `latency-timeline.sh` proved the
+      17:02 T4 burst overlaps long tool spans *inside the serving process* (a
+      308 s gate run at 16:55–17:00 and a 200 s `sleep` at 16:43–16:48), while
+      normal steps are seconds. Choose one: (a) run `harness.sh` detached / in a
+      separate process so the loop is not waiting, or (b) have sentinel T4
+      annotate or suppress a slow-fetch trip when a long tool span overlaps the
+      window. Acceptance: repeat the 16:55–17:02 pattern and get no unexplained
+      T4 (or a named tool span), proven with `latency-timeline.sh`.
 
 - [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
       restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
