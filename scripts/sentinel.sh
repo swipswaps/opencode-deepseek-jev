@@ -23,7 +23,10 @@
 #   T4 >=1 NEW caddy fetch slower than SENTINEL_SLOW_SEC (default 10) since
 #      the access cursor — the "loading takes forever" tripwire. Source is
 #      `docker logs` (or SENTINEL_ACCESSLOG file seam); first run
-#      initialises silently like every cursor here.
+#      initialises silently like every cursor here. LAT-2: when a fetch
+#      interval overlaps a long tool part in the read-only DB, the trip NAMES
+#      that span (`— overlaps tool bash 307.9s in ses_…`) instead of leaving
+#      a self-inflicted burst unexplained.
 #   T5 a NON-latest session runs a deny-listed model and was active since
 #      the last sweep (T2 covers the latest only) — the $2.04 v4-pro history.
 #   T6 a NON-latest session is over budget and was active since the last
@@ -140,6 +143,9 @@ con.execute("INSERT INTO session VALUES('s_old','old','{\"id\":\"deepseek-v4-pro
 con.execute("INSERT INTO session VALUES('s_new','new','{\"id\":\"opencode/x-free\",\"providerID\":\"opencode\"}',100,0,0,0,3,4)")
 con.execute("INSERT INTO session VALUES('s_over','over','{\"id\":\"deepseek-flash\",\"providerID\":\"deepseek\"}',5000,0,0,0,2,2)")
 con.execute("INSERT INTO part VALUES('p1','m','s_old',1,2,'{\"type\":\"text\",\"text\":\"hi\"}')")
+# LAT-2 fixture: a 30s tool span overlapping the 44.2s slow fetch (ts
+# 1791840000, fetch interval [1791839955.8, 1791840000]) must be NAMED.
+con.execute("INSERT INTO part VALUES('p2','m','s_old',1791839970000,1791840000000,'{\"type\":\"tool\",\"tool\":\"bash\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"sleep 30\"}}}')")
 con.commit()
 PYEOF
     printf '%s\n' 'ts=1 level=INFO ok' > "$work/app.log"
@@ -160,6 +166,7 @@ PYEOF
     o=$(SENTINEL_DB="$work/fix.db" SENTINEL_APP="$work/app.log" SENTINEL_STATE="$work/state" SENTINEL_ACCESSLOG="$work/acc.log" bash "${BASH_SOURCE[0]}" --once --no-log 2>&1)
     printf '%s' "$o" | grep -q 'TRIP T4 slow-fetch: 1 fetch' || { printf 'FAIL T4 trips on slow fetch\n'; fail=1; }
     printf '%s' "$o" | grep -q 'slowest 44.2s' || { printf 'FAIL T4 slowest reported\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'overlaps tool bash 30.0s in s_old' || { printf 'FAIL T4 did not attribute the burst to the overlapping tool span (LAT-2)\n'; fail=1; }
     printf '%s' "$o" | grep -q '1422' && { printf 'FAIL T4 counted an SSE stream (cry-wolf)\n'; fail=1; }
     printf '%s' "$o" | grep -q '333' && { printf 'FAIL T4 counted /api/stream (cry-wolf)\n'; fail=1; }
     # T8: a flapping neighbour tunnel (file seam, no journalctl) trips; below
@@ -372,10 +379,12 @@ PYEOF
             : # first live run: initialise below, no trip on history
         else
             local slow_out=""
-            slow_out=$(python3 - "$SLOW_SEC" "$acc_src" << 'PYEOF'
-import json, sys
+            slow_out=$(python3 - "$SLOW_SEC" "$acc_src" "${SENTINEL_DB:-}" << 'PYEOF'
+import json, sqlite3, sys
 thresh = float(sys.argv[1])
-n, mx, uri = 0, 0.0, ""
+dbp = sys.argv[3] if len(sys.argv) > 3 else ""
+n, mx, uri, best = 0, 0.0, "", ""
+spans = []
 try:
     fh = open(sys.argv[2], encoding="utf-8", errors="replace")
 except OSError:
@@ -395,25 +404,62 @@ for line in fh:
     # lifetime, NOT server latency. Counting them cry-wolfs the watchdog
     # (a 1422s /global/event is a healthy open stream, not a stall). The
     # dashboard's /api/stream and the web's /api/event are the same class.
-    uri = str(r.get("uri", ""))
-    if uri.startswith("/global/event") or uri.startswith("/api/stream") or uri.startswith("/api/event"):
+    path = str(r.get("uri", ""))
+    if path.startswith("/global/event") or path.startswith("/api/stream") or path.startswith("/api/event"):
         continue
     dur = float(e.get("duration", 0) or 0)
     if dur >= thresh:
         n += 1
+        ts = float(e.get("ts", 0) or 0)
+        spans.append((ts - dur, ts))
         if dur > mx:
             mx, uri = dur, str(r.get("method", "?")) + " " + str(r.get("uri", "?"))[:70]
-print("%d|%.1f|%s" % (n, mx, uri))
+# LAT-2: attribute the burst to a self-inflicted long tool span instead of
+# reporting it as an unexplained slow fetch. A fetch that was QUEUED behind a
+# long tool span in the single-threaded server overlaps that span
+# ([ts-duration, ts] vs the part's [created, updated]); name the longest one.
+# Read-only, best-effort: no DB (or no overlap) leaves the trip unchanged.
+if n and dbp and spans:
+    lo = min(s for s, _ in spans) * 1000
+    hi = max(t for _, t in spans) * 1000
+    hit = None
+    try:
+        con = sqlite3.connect("file:" + dbp + "?mode=ro", uri=True)
+        for sid, tc, tu, data in con.execute(
+                "SELECT session_id, time_created, time_updated, data FROM part"
+                " WHERE time_created<=? AND time_updated>=?"
+                " AND json_extract(data,'$.type')='tool'", (hi, lo)):
+            t1 = tu or tc
+            ms = t1 - tc
+            if ms < thresh * 1000:
+                continue
+            if not any(tc <= t * 1000 and t1 >= s * 1000 for s, t in spans):
+                continue
+            if hit is None or ms > hit[0]:
+                try:
+                    d = json.loads(data or "{}")
+                except Exception:
+                    d = {}
+                st = d.get("state") or {}
+                hit = (ms, str(st.get("tool") or d.get("tool") or "?"), sid)
+    except Exception:
+        hit = None
+    if hit:
+        best = "%s %.1fs in %s" % (hit[1], hit[0] / 1000.0, hit[2])
+print("%d|%.1f|%s|%s" % (n, mx, uri, best))
 PYEOF
             )
             slow_n=${slow_out%%|*}
             slow_max=$(printf '%s' "$slow_out" | cut -d'|' -f2)
-            slow_uri=$(printf '%s' "$slow_out" | cut -d'|' -f3-)
+            slow_uri=$(printf '%s' "$slow_out" | cut -d'|' -f3)
+            slow_attr=$(printf '%s' "$slow_out" | cut -d'|' -f4-)
             case "$slow_n" in ''|*[!0-9]*) slow_n=0 ;; esac
         fi
         printf '%s' "$(date +%s)" > "$acc_cur"
         if [ "$slow_n" -gt 0 ]; then
-            trip "TRIP T4 slow-fetch: $slow_n fetch(es) >= ${SLOW_SEC}s (slowest ${slow_max}s $slow_uri)" "caddy access log" "slow fetches x$slow_n, slowest ${slow_max}s ($slow_uri)" "sentinel-t4-$slow_uri"
+            local slow_why=""
+            [ -n "$slow_attr" ] && slow_why=" — overlaps tool $slow_attr"
+            trip "TRIP T4 slow-fetch: $slow_n fetch(es) >= ${SLOW_SEC}s (slowest ${slow_max}s $slow_uri)$slow_why" "caddy access log" "slow fetches x$slow_n, slowest ${slow_max}s ($slow_uri)$slow_why" "sentinel-t4-$slow_uri"
         fi
         [ -n "$acc_tmp" ] && rm -f "$acc_tmp"
     fi

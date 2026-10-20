@@ -8,6 +8,15 @@ Last updated: 2026-10-20
 
 ## Done (most recent first)
 
+- [x] **LAT-2 — 2026-10-20.** T4 no longer reports an unexplained slow-fetch
+      burst: a fetch interval `[ts-duration, ts]` overlapping a long tool part
+      is named from the read-only DB (`— overlaps tool bash 307.9s in ses_…`),
+      and `latency-timeline.sh` labels the same fetch (`<- tool:bash 307.9s`;
+      `attributed_to` in `--json`). Proven on the real 16:55–17:02 pattern: the
+      307.9s gate span overlaps the 170s `/config` fetch. Both self-tests
+      assert the attribution. Also fixed the reported "slowest" URI (the loop
+      variable leaked the last URI).
+
 - [x] **Loop equilibrium + gate debt + doc headroom — 2026-10-20.** `.gitignore`
       now covers the `data/opencode` symlink and `data/opencode.bak-*` (the
       backup's `auth.json` was untracked but NOT ignored); audit/reset-forensics
@@ -202,15 +211,6 @@ Last updated: 2026-10-20
   writers are ever wanted.)
 
 ## Queue (ranked, top first)
-
-- [ ] **LAT-2: stop self-inflicted queueing.** `latency-timeline.sh` proved the
-      17:02 T4 burst overlaps long tool spans *inside the serving process* (a
-      308 s gate run at 16:55–17:00 and a 200 s `sleep` at 16:43–16:48), while
-      normal steps are seconds. Choose one: (a) run `harness.sh` detached / in a
-      separate process so the loop is not waiting, or (b) have sentinel T4
-      annotate or suppress a slow-fetch trip when a long tool span overlaps the
-      window. Acceptance: repeat the 16:55–17:02 pattern and get no unexplained
-      T4 (or a named tool span), proven with `latency-timeline.sh`.
 
 - [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
       restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the

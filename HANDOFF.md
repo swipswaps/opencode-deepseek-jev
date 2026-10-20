@@ -1,5 +1,14 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
+> instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`
+> overlapping a long tool part is attributed from the read-only DB
+> (`— overlaps tool bash 307.9s in ses_…`), and `latency-timeline.sh` labels
+> each such fetch (`<- tool:bash 307.9s`; `attributed_to` in `--json`). Real
+> proof: the 307.9 s gate span (16:55:24–17:00:32) overlaps the 170 s
+> `/config` fetch ending 17:02:22. Both self-tests assert the attribution
+> (hygiene gate). **Next:** TUNNEL-1 LINK (external, #5).
+
 > **PIN 2026-10-20 (loop equilibrium + gate debt):** session started at
 > `ab75d1e` (ahead=0). The controller is healthy: `progress-review` now records
 > a **blocked-external PASS** (not a stall) when the top unit is external, and

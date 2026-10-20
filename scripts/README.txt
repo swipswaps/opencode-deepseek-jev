@@ -616,7 +616,8 @@ sentinel.sh
     Periodic threshold monitor (user timer, every 5 min): trips only on
     actionable news — T1 latest over budget, T2 latest on a deny-listed model,
     T3 new gateway-failure lines since cursor, T4 slow caddy fetch (SSE/long-
-    lived streams excluded), T5 non-latest deny-listed, T6 non-latest
+    lived streams excluded; a fetch interval overlapping a long tool span is
+    NAMED as self-inflicted — LAT-2), T5 non-latest deny-listed, T6 non-latest
     over-budget, T7 a tool stuck `running`, T8 a flapping peer tunnel
     (>= SENTINEL_TUNNEL_MIN, default 4, teardown/re-handshake events for the
     nebula unit — the NEBULA-1 finding: the process is healthy, the link is
@@ -722,8 +723,11 @@ ffind.sh
 latency-timeline.sh
     Gantt-style timeline of what made a session slow: part timings (read-only)
     on one axis against slow caddy fetches from the access log — serial-loop
-    starvation made visible, not averaged away. --session (required),
-    --window/--width/--min-fetch, --json, --db/--access-log, --self-test.
+    starvation made visible, not averaged away. Each fetch whose interval
+    overlaps a long (>=1s) tool part is labelled `<- tool:<name> <dur>`
+    (`attributed_to` in --json), so a burst is named, not guessed. --session
+    (required), --window/--width/--min-fetch, --json, --db/--access-log,
+    --self-test.
 
 state-snapshot.sh
     Snapshot + verified restore of the state you cannot regenerate: .env.local,

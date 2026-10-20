@@ -98,6 +98,17 @@ except OSError as ex:
         raise SystemExit
     print("FAIL: access log unreadable: " + str(ex))
     raise SystemExit(1)
+# LAT-2: name the tool span a slow fetch was queued behind. A fetch interval
+# [ts-duration, ts] overlapping a long (>=1s) tool part in the same session is
+# self-inflicted: the single-threaded server was busy running that tool.
+tools = [p for p in parts if p["type"] == "tool" and p["ms"] >= 1000]
+for f in fetches:
+    lo = f["ts"] - f["dur"] * 1000
+    hit = None
+    for p in tools:
+        if p["t0"] <= f["ts"] and p["t1"] >= lo and (hit is None or p["ms"] > hit["ms"]):
+            hit = p
+    f["attributed_to"] = None if hit is None else {"id": hit["id"], "label": hit["label"], "ms": hit["ms"]}
 if as_json:
     print(json.dumps({"session": sid, "window_min": winmin, "parts": parts,
                       "fetches": fetches,
@@ -123,8 +134,12 @@ if fetches:
     print("FETCHES >%.0fs (same axis — who waited while the loop burned)" % minfetch)
     for f in fetches[-10:]:
         a = int(f["ts"] - f["dur"] * 1000)
-        print("%-16s %6.1fs +%5.1fs |%s" % ((f["method"] + " " + f["uri"])[:16],
-                                            f["dur"], (a - t0) / 1000, bar(a, f["ts"])))
+        attr = ""
+        if f.get("attributed_to"):
+            at = f["attributed_to"]
+            attr = " <- %s %.1fs (%s)" % (at["label"], at["ms"] / 1000, at["id"])
+        print("%-16s %6.1fs +%5.1fs |%s%s" % ((f["method"] + " " + f["uri"])[:16],
+                                              f["dur"], (a - t0) / 1000, bar(a, f["ts"]), attr))
 else:
     print("FETCHES: none slower than %.0fs in window" % minfetch)
 mp = max([p["ms"] for p in parts] or [0]) / 1000
@@ -160,8 +175,9 @@ PYEOF
     printf '%s' "$o" | grep -q 'tool:bash' || { printf 'FAIL tool row\n'; fail=1; }
     printf '%s' "$o" | grep -q 'FETCHES' || { printf 'FAIL fetch section\n'; fail=1; }
     printf '%s' "$o" | grep -q 'slowest step 10.0s' || { printf 'FAIL summary\n'; fail=1; }
+    printf '%s' "$o" | grep -q '<- tool:bash 10.0s' || { printf 'FAIL LAT-2 attribution missing\n'; fail=1; }
     o=$(bash "${BASH_SOURCE[0]}" --session s1 --db "$work/fix.db" --access-log "$work/acc.log" --window 10 --json 2>&1)
-    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["session"]=="s1", "sid"; assert len(d["parts"])==3, "parts"; assert len(d["fetches"])==1, "fetch"; assert d["summary"]["max_part_ms"]==10000, "max"' <<< "$o" \
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["session"]=="s1", "sid"; assert len(d["parts"])==3, "parts"; assert len(d["fetches"])==1, "fetch"; assert d["summary"]["max_part_ms"]==10000, "max"; a=d["fetches"][0]["attributed_to"]; assert a and a["label"]=="tool:bash" and a["ms"]==10000, "attribution"' <<< "$o" \
         || { printf 'FAIL json contract\n'; fail=1; }
     rm -f "$work/fix.db" "$work/acc.log"
     rmdir "$work"
