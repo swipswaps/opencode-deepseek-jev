@@ -18,3 +18,5 @@ pull request from a branch:
 | `PR-03-pi-durable-automation.md` | **implemented** (host arming pending) | one command to arm the three durable agents |
 
 Evidence for the tool/UX audit that motivated these is in `TOOL-AUDIT.md`.
+Branch-per-PR artifacts (branches, compare URLs, `gh pr create` commands):
+`PR-INDEX.md`.
