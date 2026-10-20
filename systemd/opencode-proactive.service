@@ -1,0 +1,17 @@
+[Unit]
+Description=Proactive agent: turn NEW alerts into owned tasks + a digest
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/proactive-install.sh (no sudo needed).
+# Read-only against the stores; writes only the ledger, task rows and
+# data/observability/proactive.json. A preflight STOP runs auto-handoff.
+EnvironmentFile=-__REPO__/.env.local
+ExecStart=__REPO__/scripts/proactive-agent.sh --once
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true

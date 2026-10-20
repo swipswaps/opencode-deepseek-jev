@@ -2,14 +2,15 @@
 #
 # durable-agents.sh — arm/verify the durable background agents in one command.
 #
-# The durable loop has four always-on agents, each with its own installer:
+# The durable loop has five always-on agents, each with its own installer:
 #   sentinel         every 5 min   trip on budget/deny/gateway-failure news
 #   notify-sink      service       receive + persist pushed alerts
 #   progress-review  every 15 min  PASS on advance / FAIL on a stalled loop
 #   fts-refresh      every 15 min  atomic FTS base refresh (fast semantic search)
+#   proactive        every 15 min  NEW alerts -> owned tasks + a digest
 #
 # Arming them one by one is easy to half-do (and a half-armed loop looks
-# healthy). This is the one idempotent command: --install runs the four
+# healthy). This is the one idempotent command: --install runs the five
 # tested installers in order, --status shows unit + enabled + active state,
 # and SKIP is printed when systemctl is absent (the container) instead of
 # pretending the agents are running.
@@ -43,6 +44,7 @@ AGENTS=(
     "notify-sink:opencode-notify-sink.service:scripts/notify-selfhost.sh"
     "progress-review:opencode-progress-review.timer:scripts/progress-review-install.sh"
     "fts-refresh:opencode-fts-refresh.timer:scripts/fts-refresh-install.sh"
+    "proactive:opencode-proactive.timer:scripts/proactive-install.sh"
 )
 
 status() {
@@ -77,7 +79,7 @@ dry_run() {
         unit="${spec%%:*}"; installer="${spec#*:}"
         printf '  %-15s bash %s   # -> %s\n' "$agent" "$installer" "$unit"
     done
-    printf 'order: notify sink first, then sentinel + progress-review + fts-refresh timers.\n'
+    printf 'order: notify sink first, then sentinel + progress-review + fts-refresh + proactive timers.\n'
 }
 
 install() {
@@ -102,10 +104,11 @@ self_test() {
         systemd/opencode-sentinel.service systemd/opencode-sentinel.timer \
         systemd/opencode-notify-sink.service \
         systemd/opencode-progress-review.service systemd/opencode-progress-review.timer \
-        systemd/opencode-fts-refresh.service systemd/opencode-fts-refresh.timer; do
+        systemd/opencode-fts-refresh.service systemd/opencode-fts-refresh.timer \
+        systemd/opencode-proactive.service systemd/opencode-proactive.timer; do
         if [ ! -f "$REPO/$f" ]; then printf 'FAIL unit template missing: %s\n' "$f"; fail=1; fi
     done
-    for f in sentinel-install.sh progress-review-install.sh fts-refresh-install.sh; do
+    for f in sentinel-install.sh progress-review-install.sh fts-refresh-install.sh proactive-install.sh; do
         if ! out=$(bash "$REPO/scripts/$f" --self-test 2>&1); then
             printf 'FAIL %s --self-test\n%s\n' "$f" "$out"; fail=1
         fi
@@ -114,7 +117,7 @@ self_test() {
         printf 'FAIL notify-sink self-test\n%s\n' "$out"; fail=1
     fi
     if [ "$fail" -eq 0 ]; then
-        printf 'durable-agents: self-test PASS (7 templates, 4 installers)\n'
+        printf 'durable-agents: self-test PASS (9 templates, 5 installers)\n'
     else
         printf 'durable-agents: self-test FAIL (%d)\n' "$fail"
     fi

@@ -10,15 +10,14 @@ mergeable without rewriting history. `gh` is absent in the container — run the
 
 | PR | Title | Branch | Compare URL | Status |
 |---|---|---|---|---|
-| 01 | a11y: WCAG basics gate + keyboard-operable chart marks | `pr/01-a11y-hardening` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/01-a11y-hardening?expand=1 | implemented (`e063e79`, `90fb1e1`); [#2](https://github.com/swipswaps/opencode-deepseek-jev/pull/2) **OPEN** (status card only) |
-| 02 | docs/media: refresh README shots for the newest panels | `pr/02-media-refresh` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/02-media-refresh?expand=1 | implemented (`04c49e4`, `9af9f7b`); [#3](https://github.com/swipswaps/opencode-deepseek-jev/pull/3) **OPEN** (status card only) |
-| 03 | durable: arm the background agents in one command | `pr/03-durable-agents` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/03-durable-agents?expand=1 | implemented (`e063e79`, `0d0b8d8`, `4d24e56`); armed on host 2026-10-20; [#4](https://github.com/swipswaps/opencode-deepseek-jev/pull/4) **OPEN** (status card only) |
+| 01 | a11y: WCAG basics gate + keyboard-operable chart marks | `pr/01-a11y-hardening` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/01-a11y-hardening?expand=1 | implemented (`e063e79`, `90fb1e1`); [#2](https://github.com/swipswaps/opencode-deepseek-jev/pull/2) **MERGED** (merge `69ef9a1`) |
+| 02 | docs/media: refresh README shots for the newest panels | `pr/02-media-refresh` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/02-media-refresh?expand=1 | implemented (`04c49e4`, `9af9f7b`); [#3](https://github.com/swipswaps/opencode-deepseek-jev/pull/3) **MERGED** (merge `a5fa44a`) |
+| 03 | durable: arm the background agents in one command | `pr/03-durable-agents` | https://github.com/swipswaps/opencode-deepseek-jev/compare/main...pr/03-durable-agents?expand=1 | implemented (`e063e79`, `0d0b8d8`, `4d24e56`); armed on host 2026-10-20; [#4](https://github.com/swipswaps/opencode-deepseek-jev/pull/4) **MERGED** (merge `8914dcb`) |
 
-Opened 2026-10-20 and verified via the GitHub API: all three are **OPEN**
-against `main` with `mergeable_state=clean`, one file each
-(`docs/pr/PR-0X-status.md`, +12/+14/+15 lines). Merging folds the status
-records into main; closing them leaves main unchanged (the implementations
-are already there).
+Opened and **merged 2026-10-20** (verified via the GitHub API): #2 ->
+`69ef9a1`, #3 -> `a5fa44a`, #4 -> `8914dcb`; `main` fast-forwarded. Each PR
+added one status card (`docs/pr/PR-0X-status.md`); the implementations were
+already on main.
 
 ## Open them (host, authenticated)
 

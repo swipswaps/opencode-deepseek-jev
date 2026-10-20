@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the proactive agent every 15 minutes
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=90
+Unit=opencode-proactive.service
+
+[Install]
+WantedBy=timers.target

@@ -506,6 +506,8 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) else 1)' "$work/dupes.json" && ok 'api/duplicates' || bad 'api/duplicates'
         curl -s "http://$HOST:$PORT/api/board" > "$work/board.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("cards"),list) and isinstance(d.get("sessions"),list) and isinstance(d.get("milestones"),list) and isinstance(d.get("estimates"),dict) else 1)' "$work/board.json" && ok 'api/board (kanban+gantt payload)' || bad 'api/board (kanban+gantt payload)'
+        curl -s "http://$HOST:$PORT/api/board" > "$work/board2.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/board2.json" && ok 'api/board served from cache' || bad 'api/board served from cache'
         curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
         has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
         curl -s "http://$HOST:$PORT/api/export/patterns" > "$work/pat.csv"

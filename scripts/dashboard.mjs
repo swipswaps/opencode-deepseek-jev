@@ -561,9 +561,12 @@ const AREFRESH = {};
 // Seed slow panels from their durable snapshot: the first request after a
 // restart serves stale instantly while the worker refreshes (pi-durable #74).
 const SIGNALS_CACHE_PATH = fileURLToPath(new URL("../data/observability/signals-cache.json", import.meta.url));
+const BOARD_CACHE_PATH = fileURLToPath(new URL("../data/observability/board-cache.json", import.meta.url));
 try {
   const seed = loadJsonCache(SIGNALS_CACHE_PATH);
   if (seed && seed.value) ACACHE["signals"] = { at: Number(seed.at) || Date.now(), value: seed.value };
+  const bseed = loadJsonCache(BOARD_CACHE_PATH);
+  if (bseed && bseed.value) ACACHE["board"] = { at: Number(bseed.at) || Date.now(), value: bseed.value };
 } catch { /* no snapshot: normal cold path */ }
 async function asyncCached(key, ttlMs, workerFn, workerArgs, inlineFn, persist) {
   const now = Date.now();
@@ -1005,7 +1008,12 @@ function apiBoardFresh() {
     },
   };
 }
-async function apiBoard() { return asyncCached("board", CACHE_TTL_MS, "board", [TODO_PATH, OBS_DB_PATH], () => apiBoardFresh()); }
+async function apiBoard() {
+  // Persist the last board payload: the first board tab after a restart is
+  // instant while the heavy worker recomputes (same #74 pattern as signals).
+  return asyncCached("board", CACHE_TTL_MS, "board", [TODO_PATH, OBS_DB_PATH], () => apiBoardFresh(),
+    (v) => saveJsonCache(BOARD_CACHE_PATH, v));
+}
 
 
 

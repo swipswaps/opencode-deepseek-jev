@@ -256,13 +256,25 @@ progress-review-install.sh
     via systemctl --user). Idempotent; --write-only, --uninstall, --self-test.
 
 durable-agents.sh
-    One command to arm/verify the four durable background agents instead of
+    One command to arm/verify the five durable background agents instead of
     half-arming them one installer at a time: sentinel (5 min), notify-sink
-    (service), progress-review (15 min), fts-refresh (15 min). --install runs
-    the tested installers in order; --status prints unit present + enabled +
-    active, and prints SKIP (not pass) when systemctl is absent; --dry-run lists
-    the commands; --self-test checks the seven unit templates and the four
-    installers offline.
+    (service), progress-review (15 min), fts-refresh (15 min), proactive
+    (15 min). --install runs the tested installers in order; --status prints
+    unit present + enabled + active, and prints SKIP (not pass) when systemctl
+    is absent; --dry-run lists the commands; --self-test checks the nine unit
+    templates and the five installers offline.
+
+proactive-agent.sh
+    Turns NEW ADVISORY rows into owned tasks + one durable digest. Cursor-
+    bounded (the first run bootstraps and creates no historical tasks); later
+    runs register at most PROACTIVE_MAX_NEW alerts as tasks (owner `proactive`,
+    idempotent by title), write data/observability/proactive.json and record a
+    PROACTIVE ledger row. A preflight STOP runs auto-handoff. --once,
+    --self-test (offline PROACTIVE_ALERTS_JSON/NEXT_JSON seams).
+
+proactive-install.sh
+    Installs the user-level proactive-agent timer (every 15 min, randomized).
+    No sudo; idempotent; --write-only, --uninstall, --self-test.
 
 fts-refresh-install.sh
     Installs the user-level FTS base refresh timer (no sudo): every 15 min it

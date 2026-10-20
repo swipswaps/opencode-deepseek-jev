@@ -1121,12 +1121,34 @@
     "id": "durable-agents",
     "title": "Arm/verify the durable background agents in one command",
     "where": "host",
-    "purpose": "The loop has four always-on agents (sentinel 5m, notify-sink service, progress-review 15m, fts-refresh 15m), each with its own installer, so arming them one by one is easy to half-do. --install runs the tested installers in order; --status prints unit present + enabled + active and SKIP (not pass) when systemctl is absent; --dry-run lists the commands; --self-test checks the seven unit templates and the four installers offline.",
+    "purpose": "The loop has five always-on agents (sentinel 5m, notify-sink service, progress-review 15m, fts-refresh 15m, proactive 15m), each with its own installer, so arming them one by one is easy to half-do. --install runs the tested installers in order; --status prints unit present + enabled + active and SKIP (not pass) when systemctl is absent; --dry-run lists the commands; --self-test checks the nine unit templates and the five installers offline.",
     "commands": [
       "./scripts/durable-agents.sh --status",
       "./scripts/durable-agents.sh --install",
       "./scripts/durable-agents.sh --dry-run",
       "./scripts/durable-agents.sh --self-test"
+    ]
+  },
+  {
+    "id": "proactive-agent",
+    "title": "Turn NEW alerts into owned tasks + a durable digest",
+    "where": "host",
+    "purpose": "The loop detects (sentinel/progress-review) and acts on a budget STOP, but lacked a consumer that turns NEW ADVISORY rows into owned work. Cursor-bounded: the first run bootstraps the cursor and creates no historical tasks; later runs register at most PROACTIVE_MAX_NEW new alerts as tasks (owner `proactive`, idempotent by title) and write data/observability/proactive.json; a preflight STOP runs auto-handoff. --once, --self-test (offline seams). Timer via proactive-install.sh.",
+    "commands": [
+      "./scripts/proactive-agent.sh --once",
+      "./scripts/proactive-agent.sh --self-test",
+      "./scripts/proactive-install.sh"
+    ]
+  },
+  {
+    "id": "proactive-install",
+    "title": "Install the proactive-agent timer",
+    "where": "host",
+    "purpose": "User-level systemd timer (every 15 min, randomized) running proactive-agent.sh --once. No sudo; idempotent; --write-only, --uninstall, --self-test. The first sweep bootstraps the cursor (no historical task flood).",
+    "commands": [
+      "./scripts/proactive-install.sh",
+      "./scripts/proactive-install.sh --uninstall",
+      "./scripts/proactive-install.sh --self-test"
     ]
   },
   {
