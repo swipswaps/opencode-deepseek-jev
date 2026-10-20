@@ -51,7 +51,7 @@ treemap/sankey keyboard inspection".
 | Deterministic WCAG basics (names, landmarks, heading order, focus, contrast) | **done** — `scripts/a11y-audit.mjs`, gated by `test-dashboard.sh` |
 | Gantt drill rectangles: keyboard + accessible name | **done** — Enter/Space + `aria-label` |
 | Reduced motion | **N/A by measurement** — no motion CSS; the audit fails if one is added without a guard |
-| Treemap/sankey keyboard inspection | **open** — charts carry table twins (#70), but per-mark keyboard activation is not asserted |
+| Treemap/sankey keyboard inspection | **done** — marks are focusable with `aria-label`; Enter/Space shows the same tooltip; the table twins stay; `test-dashboard.sh` asserts the contract |
 | Screen-reader certification / axe / Lighthouse | **host-only** — needs a browser; keep as a periodic host audit, do not add to the container |
 
 ## Tools the census says are missing (decision, not a bug)

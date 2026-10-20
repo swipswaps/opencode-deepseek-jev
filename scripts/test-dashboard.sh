@@ -155,6 +155,20 @@ need = [
 sys.exit(0 if all(n in h for n in need) else 1)
 DRILL_EOF
     if [ $? -eq 0 ]; then ok 'explore: remaining panels drill down (health, cloud, pivot)'; else bad 'explore: remaining panels drill down'; fi
+    python3 - "$work/explore.html" <<'MARKS_EOF'
+import sys
+h = open(sys.argv[1]).read()
+need = [
+    "d.data.title+' ($'",                                  # treemap leaf name
+    "role','link'",                                          # treemap leaf role
+    "aria-label',function(d){return d.source.name+' to '",   # sankey link name
+    "aria-label',function(d){return d.name+': '",            # sankey node name
+    "focusTip(ev",                                           # keyboard tooltip
+    "role','img'",                                           # focusable sankey marks
+]
+sys.exit(0 if all(n in h for n in need) else 1)
+MARKS_EOF
+    if [ $? -eq 0 ]; then ok 'chart marks: treemap/sankey keyboard + accessible names'; else bad 'chart marks: treemap/sankey keyboard + accessible names'; fi
     has '/vendor/plot.umd.min.js' "$work/explore.html" && ok 'explore loads vendored Plot' || bad 'explore loads vendored Plot'
     has 'max-height:58vh' "$work/explore.html" && ok 'explore sessions table scrolls internally (fits viewport)' || bad 'explore sessions table scrolls internally (fits viewport)'
     has 'data-tab="data"' "$work/explore.html" && ok 'explore data tab' || bad 'explore data tab'

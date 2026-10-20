@@ -35,7 +35,8 @@ Last updated: 2026-10-19
       `a11y-audit.mjs` gates WCAG basics (landmarks, heading order, control
       names, focus-visible, reduced motion, contrast) in `test-dashboard.sh`;
       dashboard fixes: `main tabindex="-1"`, named nav, no `outline:none`,
-      Gantt drill rectangles keyboard-activatable + named. New
+      Gantt drill rectangles keyboard-activatable + named; **treemap/sankey**
+      marks are focusable with `aria-label` + Enter/Space tooltip (test 134/0). New
       `durable-agents.sh` arms/verifies sentinel + notify-sink + progress-review
       in one idempotent command (host enablement pending). Media: `panels-tour`
       now covers overview/signals/patterns; `--check` reports 3 missing shots
