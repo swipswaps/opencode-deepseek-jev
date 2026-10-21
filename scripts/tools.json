@@ -1213,7 +1213,7 @@
     "id": "tunnel-link-probe",
     "title": "TUNNEL-1 LINK evidence bundle (host, read-only)",
     "where": "host",
-    "purpose": "One shot for issue #5: unit state, flap count/last lines, overlay ping, DF/MTU 1400/1472, local UDP :4242 listeners, and a process snapshot, each with a timeout so nothing looks hung. Classifies restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence; writes logs/tunnel-link-<ts>.log. Read-only; --no-net for unit/journal only.",
+    "purpose": "One shot for issue #5: unit state, flap count/last lines, teardown cadence (median/min/max gap), UDP endpoint distribution, overlay ping, DF/MTU at the route MTU (not 1400 above nebula0's 1300), local UDP :4242 listeners, and a process snapshot, each with a timeout so nothing looks hung. Classifies restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence; writes logs/tunnel-link-<ts>.log. Read-only; --no-net for unit/journal only.",
     "commands": [
       "bash scripts/tunnel-link-probe.sh",
       "bash scripts/tunnel-link-probe.sh --no-net",

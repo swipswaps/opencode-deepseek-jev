@@ -243,15 +243,22 @@ Last updated: 2026-10-20
       `proxmox-dual-plane-mesh` — UDP reachability (firewall/NAT/MTU) and reload
       cadence. Filed as `swipswaps/proxmox-dual-plane-mesh#5` (2026-10-18);
       re-read **2026-10-20 22:5xZ: OPEN, no new comments/labels** (issue-bridge
-      poll --api; duplicate-skipped).       Local repo cannot reach the host journal or
-      the mesh repo. The pasted five-command block looked hung (journal access
-      can block; `--watch 60` runs a full minute), so it is now the scripted
-      `scripts/tunnel-link-probe.sh`: headers print first, every probe has a
-      timeout, and it writes `logs/tunnel-link-<ts>.log` with a verdict
-      (restart-churn / tunnel-flap / overlay-unreachable / no-evidence).
-      Host run: `bash scripts/tunnel-link-probe.sh` (add `--sudo` for
-      non-interactive journal, `--watch 60` for births). Post the verdict +
-      last flap lines back to #5; do not batch with local work.
+      poll --api; duplicate-skipped). Local repo cannot reach the host journal
+      or the mesh repo; the hand-off paste is now the scripted
+      `scripts/tunnel-link-probe.sh` (header per step, per-step timeouts,
+      `logs/tunnel-link-<ts>.log`, flap cadence + UDP endpoint distribution).
+      **Probe 2026-10-20 19:55 EDT:** NRestarts=0, 0 systemd lifecycle lines;
+      `Close tunnel received` is metronomic — median gap **130.0 s**
+      (min 127 / max 132) over 7 teardowns; handshake follows in 1–3 s, then
+      `tunnelCheck state:dead` ~21 s later; `udpAddr` **alternates**
+      `192.168.4.45:4242` / `100.70.43.78:4242` for the same
+      `certName=lighthouse-01`; overlay 3/3, 0% loss, 4–12 ms; `nebula0`
+      route MTU **1300** (so the 1400/1472 DF probes were invalid locally).
+      Next: on lighthouse-01 check reload/restart cadence + endpoint choice
+      (`systemctl show nebula -p NRestarts,ActiveEnterTimestamp`,
+      `systemctl list-timers`, container RestartCount, `host:`/`static_map`,
+      DNS returning both addresses). Post verdict + cadence to #5; do not
+      batch with local work.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

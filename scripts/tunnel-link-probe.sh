@@ -84,9 +84,9 @@ read_journal() {
         cat "$JRN_FILE"
     elif have journalctl; then
         if [ "$SUDO" -eq 1 ]; then
-            limit 15 sudo -n journalctl -u "$UNIT" --since "$SINCE" --no-pager -n 400 2>&1
+            limit 15 sudo -n journalctl -u "$UNIT" --since "$SINCE" --no-pager -n 400 -o short-iso 2>&1
         else
-            limit 15 journalctl -u "$UNIT" --since "$SINCE" --no-pager -n 400 2>&1
+            limit 15 journalctl -u "$UNIT" --since "$SINCE" --no-pager -n 400 -o short-iso 2>&1
         fi
     else
         printf '%s\n' '(journalctl not available here; host only)'
@@ -110,12 +110,19 @@ net_probe() {
     else
         say '  ip: not available here'
     fi
-    say '--- overlay ping %s (3 x 2s) ---' "$PEER"
+    say "--- overlay ping $PEER (3 x 2s) ---"
     pingout=$(limit 12 ping -c 3 -W 2 "$PEER" 2>&1)
     printf '%s\n' "$pingout" | awk '{print "  " $0}'
-    loss=$(printf '%s\n' "$pingout" | awk '/packet loss/{for(i=1;i<=NF;i++) if($i ~ /%/) {print $(i-1); exit}}')
-    say '--- MTU probe (DF, 1400 then 1472; ICMP may be filtered) ---'
-    for s in 1400 1472; do
+    loss=$(printf '%s\n' "$pingout" | awk '/packet loss/{for(i=1;i<=NF;i++) if($i ~ /%/) {gsub(/%/,"",$i); print $i; exit}}')
+    # The overlay interface MTU (nebula default 1300) caps the payload: a 1400
+    # DF probe fails LOCALLY ("Message too long") and proves nothing about the
+    # path. Probe below the route MTU and name that boundary.
+    rmtu=$(printf '%s\n' "$route" | awk '{for(i=1;i<=NF;i++) if($i=="mtu"){print $(i+1); exit}}')
+    say "--- MTU probe (DF; route MTU ${rmtu:-unknown}) ---"
+    p1=1200
+    if [ -n "$rmtu" ] && [ "$rmtu" -gt 1228 ] 2>&1; then p2=$((rmtu - 28)); else p2=1272; fi
+    [ "$p2" = "$p1" ] && p2=$((p1 - 1))
+    for s in "$p1" "$p2"; do
         if limit 10 ping -M do -s "$s" -c 2 -W 2 "$PEER" >/tmp/tunnel-mtu-$s.out 2>&1; then
             ok="$s"; say "  payload $s: PASS"
         else
@@ -124,7 +131,8 @@ net_probe() {
         fi
         rm -f "/tmp/tunnel-mtu-$s.out"
     done
-    say '--- local UDP listeners :%s (peer-side listener is not visible here) ---' "$PORT"
+    say "  note: 1400/1472 > nebula0 MTU ${rmtu:-1300} fail at sendmsg locally; not path evidence."
+    say "--- local UDP listeners :$PORT (peer-side listener is not visible here) ---"
     if have ss; then
         limit 5 ss -lunp 2>&1 | grep ":$PORT" || say "  no local :$PORT listener"
     else
@@ -132,6 +140,48 @@ net_probe() {
     fi
     NP_LOSS="${loss:-?}"
     NP_MTU="${ok:-none}"
+    NP_ROUTE_MTU="${rmtu:-?}"
+}
+
+cadence_summary() {
+    local f="$1"
+    python3 - "$f" <<'PY'
+import datetime, re, sys
+closes = []
+endpoints = {}
+try:
+    lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+except OSError:
+    lines = []
+for ln in lines:
+    if "Close tunnel received" not in ln:
+        continue
+    m = re.search(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", ln)
+    t = None
+    if m:
+        t = datetime.datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")
+    else:
+        m = re.search(r"^([A-Z][a-z]{2}) +(\d+) (\d{2}:\d{2}:\d{2})", ln)
+        if m:
+            t = datetime.datetime.strptime("%s %s %s" % (m.group(1), m.group(2), m.group(3)),
+                                           "%b %d %H:%M:%S").replace(year=datetime.date.today().year)
+    if t:
+        closes.append(t)
+    e = re.search(r'udpAddr="([^"]+)"', ln)
+    if e:
+        endpoints[e.group(1)] = endpoints.get(e.group(1), 0) + 1
+closes.sort()
+gaps = [(b - a).total_seconds() for a, b in zip(closes, closes[1:])]
+if gaps:
+    g = sorted(gaps)
+    n = len(g)
+    med = g[n // 2] if n % 2 else (g[n // 2 - 1] + g[n // 2]) / 2.0
+    gap_s = "%d|%.1f|%.1f|%.1f" % (len(closes), med, g[0], g[-1])
+else:
+    gap_s = "%d|na|na|na" % len(closes)
+eps = ", ".join("%s x%d" % (k, v) for k, v in sorted(endpoints.items())) or "none"
+print("%s|%s" % (gap_s, eps))
+PY
 }
 
 classify() {
@@ -150,7 +200,7 @@ classify() {
 }
 
 probe() {
-    local sys jrn nrest flaps lifecycle last loss mtu verdict ts host
+    local sys jrn nrest flaps lifecycle last loss mtu verdict ts host cad jf closes median
     ts=$(now_utc)
     host=$(hostname 2>&1)
     say "=== tunnel-link-probe @ $ts ==="
@@ -166,6 +216,17 @@ probe() {
     flaps=$(printf '%s\n' "$jrn" | grep -cE 'Close tunnel received|Taking new handshake|state:dead')
     lifecycle=$(printf '%s\n' "$jrn" | grep -cE "systemd\[[0-9]+\]: *${UNIT%%.*}\.service")
     say "  NRestarts=${nrest:-?}  tunnel-events=$flaps  systemd-lifecycle-lines=$lifecycle"
+    jf=$(mktemp) || jf=""
+    cad="0|na|na|na|none"
+    if [ -n "$jf" ]; then
+        printf '%s\n' "$jrn" > "$jf"
+        cad=$(cadence_summary "$jf")
+        rm -f "$jf"
+    fi
+    closes=$(printf '%s' "$cad" | cut -d'|' -f1)
+    median=$(printf '%s' "$cad" | cut -d'|' -f2)
+    say "  teardowns=$closes  median_gap=${median}s  min/max=$(printf '%s' "$cad" | cut -d'|' -f3)-$(printf '%s' "$cad" | cut -d'|' -f4)s"
+    say "  udp endpoints: $(printf '%s' "$cad" | cut -d'|' -f5-)"
     last=$(printf '%s\n' "$jrn" | grep -E 'Close tunnel received|Taking new handshake|state:dead' | tail -5)
     if [ -n "$last" ]; then
         say '  last flap lines:'
@@ -183,8 +244,9 @@ probe() {
     fi
 
     if [ -f "$(dirname "${BASH_SOURCE[0]}")/nebula-restart-trace.py" ]; then
-        say '--- process snapshot (read-only) ---'
+        say '--- process snapshot (read-only; ownership only) ---'
         limit 20 python3 "$(dirname "${BASH_SOURCE[0]}")/nebula-restart-trace.py" 2>&1 | awk '{print "  " $0}'
+        say '  note: NRestarts=0 above wins over any "crash-looping" hint in the trace text.'
     fi
 
     verdict=$(classify "${nrest:-?}" "$flaps" "$lifecycle" "$loss")
@@ -200,15 +262,15 @@ probe() {
         *)
             say '  NO EVIDENCE in this window (no churn, no flap lines, overlay replies). Re-run when T8 trips; keep the window short.' ;;
     esac
-    say "  overlay_loss_pct=${loss}  mtu_ok=${mtu}"
+    say "  overlay_loss_pct=${loss}  mtu_ok=${mtu}  route_mtu=${NP_ROUTE_MTU:-?}"
 
     if [ "$WATCH" -gt 0 ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/nebula-restart-trace.py" ]; then
         say "--- birth watch ${WATCH}s (opt-in; read-only) ---"
         limit "$((WATCH + 10))" python3 "$(dirname "${BASH_SOURCE[0]}")/nebula-restart-trace.py" --watch "$WATCH" 2>&1 | awk '{print "  " $0}'
     fi
 
-    JSON_OUT=$(printf '{"ts":"%s","host":"%s","unit":"%s","peer":"%s","nrestarts":"%s","tunnel_events":%s,"systemd_lifecycle":%s,"overlay_loss_pct":"%s","mtu_ok":"%s","verdict":"%s"}' \
-        "$ts" "$host" "$UNIT" "$PEER" "${nrest:-?}" "$flaps" "$lifecycle" "$loss" "$mtu" "$verdict")
+    JSON_OUT=$(printf '{"ts":"%s","host":"%s","unit":"%s","peer":"%s","nrestarts":"%s","tunnel_events":%s,"teardowns":%s,"median_gap_s":"%s","systemd_lifecycle":%s,"overlay_loss_pct":"%s","mtu_ok":"%s","route_mtu":"%s","verdict":"%s"}' \
+        "$ts" "$host" "$UNIT" "$PEER" "${nrest:-?}" "$flaps" "${closes:-0}" "${median:-na}" "$lifecycle" "$loss" "$mtu" "${NP_ROUTE_MTU:-?}" "$verdict")
     return 0
 }
 
@@ -226,6 +288,8 @@ self_test() {
     out=$(PROBE_SYSTEMCTL_FILE="$w/sys_flap" PROBE_JOURNAL_FILE="$w/jrn_flap" \
         bash "${BASH_SOURCE[0]}" --no-net --json 2>&1)
     printf '%s' "$out" | grep -q '"tunnel_events":5' || { say "FAIL flap count: $out"; rc=1; }
+    printf '%s' "$out" | grep -q '"teardowns":2' || { say "FAIL teardown count: $out"; rc=1; }
+    printf '%s' "$out" | grep -q '"median_gap_s":"300.0"' || { say "FAIL cadence median: $out"; rc=1; }
     printf '%s' "$out" | grep -q '"verdict":"tunnel-flap"' || { say "FAIL flap verdict: $out"; rc=1; }
 
     printf '%s\n' 'NRestarts=3' 'MainPID=222' > "$w/sys_churn"

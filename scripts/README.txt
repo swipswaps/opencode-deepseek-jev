@@ -128,8 +128,10 @@ tunnel-link-probe.sh
     Host-side, read-only evidence bundle for TUNNEL-1 LINK (issue #5). Runs the
     hand-off probes with a header before each and a per-step timeout, so the
     terminal never looks hung: unit state (NRestarts/MainPID), journal flap
-    count + last teardown/handshake lines, overlay ping loss, DF/MTU probes
-    (1400/1472), local UDP :4242 listeners, and a process snapshot. Classifies
+    count + last teardown/handshake lines, teardown cadence (median/min/max
+    gap), udpAddr endpoint distribution, overlay ping loss, DF/MTU probes at
+    the route MTU (below nebula0's 1300; 1400/1472 fail at sendmsg and prove
+    nothing), local UDP :4242 listeners, and a process snapshot. Classifies
     restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence and
     writes logs/tunnel-link-<ts>.log. --no-net/--sudo (non-interactive)/--watch
     SECS/--json; --systemctl-file/--journal-file seams; offline --self-test.

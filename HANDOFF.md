@@ -9,12 +9,15 @@
 > snapshot (`cost.totals`, `activity` array) in `test-dashboard.sh`. Verify:
 > `curl -N http://127.0.0.1:5099/api/stream | head` then reload `/`.
 > **TUNNEL-1 LINK:** #5 re-read **OPEN** 2026-10-20 ~22:55Z with no new
-> comments/labels; still external. The hand-off paste looked hung because
-> journal access can block and `--watch 60` runs a minute, so it is now
+> comments/labels; still external. The hand-off paste is now
 > `scripts/tunnel-link-probe.sh` (header per step, per-step timeouts, one
-> `logs/tunnel-link-<ts>.log`, verdict): `bash scripts/tunnel-link-probe.sh`
-> on the host, optional `--sudo` / `--watch 60`. Post its verdict + last flap
-> lines to #5.
+> `logs/tunnel-link-<ts>.log`, verdict, flap cadence + UDP endpoints).
+> **Probe 19:55 EDT:** NRestarts=0, 0 lifecycle lines; teardowns every
+> **130.0 s** median (127–132) over 7 events; handshake +1–3 s, `state:dead`
+> +21 s; `udpAddr` alternates `192.168.4.45:4242` / `100.70.43.78:4242`;
+> overlay 0% loss 4–12 ms; `nebula0` MTU 1300 (the 1400/1472 DF probes were
+> invalid locally). Next: lighthouse reload/restart cadence + endpoint choice,
+> then post cadence to #5.
 
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`
