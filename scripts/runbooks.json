@@ -315,17 +315,18 @@
   {
     "id": "tunnel-flap",
     "title": "Nebula peer tunnel flapping (NEBULA-1)",
-    "purpose": "Turn sentinel T8 'N tunnel-flap events' into a fix. The NEBULA-1 investigation proved the nebula PROCESS is healthy (systemd NRestarts=0, one stable PID); the recurring event is a peer/lighthouse tunnel teardown + re-handshake (`Close tunnel received, tearing down.` / `Taking new handshake` / `tunnelCheck state:dead`), typically to lighthouse-01 (vpnIp 10.100.0.1). This is a network/link problem, NOT a systemd restart problem -- do not rate-limit systemd.",
+    "purpose": "Turn sentinel T8 'N tunnel-flap events' into a fix. A peer/lighthouse tunnel teardown + re-handshake (`Close tunnel received, tearing down.` / `Taking new handshake` / `tunnelCheck state:dead`) is usually a network/link problem, BUT NRestarts=0 does NOT prove the process was healthy: systemd counts only AUTOMATIC restarts, and an explicit `systemctl restart` resets it to 0. Always compare MainPID / ActiveEnterTimestamp across the run before blaming the link. Proven on ws24: the caller was mesh-recover.sh check2, which restarts nebula when 10.100.0.1 fails ping AND TCP/22 under a 120s rate guard, yielding ~127s restarts (70 in recover.log) while NRestarts stayed 0. Check ~/.local/state/mesh-recover/recover.log for 'restarting nebula' before blaming the link.",
     "where": "host",
     "manual": true,
     "commands": [
+      "bash scripts/tunnel-link-probe.sh --sudo --since -30min   # restart delta + who-restarted + journal",
+      "grep -cE 'restarting nebula' ~/.local/state/mesh-recover/recover.log   # is the healer restarting it?",
       "bash scripts/tunnel-link-probe.sh   # one evidence bundle: unit+journal+ping+MTU (each step timed out)",
       "bash scripts/nebula-systemd-override.sh --diagnose   # classify restart-churn vs tunnel-flap + count it",
       "python3 scripts/nebula-restart-trace.py --watch 60   # confirm it is not the process restarting",
-      "python3 scripts/triage-alerts.py   # group the T8 flags + de-dupe the stable key",
-      "journalctl -u nebula --since '-15min' | grep -E 'Close tunnel|Taking new handshake|state:dead'"
+      "python3 scripts/triage-alerts.py   # group the T8 flags + de-dupe the stable key"
     ],
-    "note": "Root cause lives in the peer/lighthouse repo (proxmox-dual-plane-mesh) -- this repo only watches and hands off. The handshake log shows UDP to 192.168.4.45:4242 and 100.70.43.78:4242 with `tunnelCheck state:dead` on vpnIp 10.100.0.1; check the lighthouse's UDP reachability (firewall/NAT/MTU) and the peer's reload cadence. A systemd drop-in (nebula-systemd-override.sh --apply) does NOT fix this: it only bounds restarts that are not happening. Threshold is SENTINEL_TUNNEL_MIN (default 4 flap events per sweep)."
+    "note": "A MainPID change with NRestarts=0 during the probe is an EXTERNAL restart loop (explicit restart); name the caller from the --sudo who-restarted block (sudo journal, cron, timers, visible loop process) and stop it before touching the mesh. If the PID is stable, root cause lives in the peer/lighthouse repo (proxmox-dual-plane-mesh): check UDP reachability (firewall/NAT/MTU) and endpoint selection."
   },
   {
     "id": "grafana",

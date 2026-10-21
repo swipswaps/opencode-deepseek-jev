@@ -1213,11 +1213,12 @@
     "id": "tunnel-link-probe",
     "title": "TUNNEL-1 LINK evidence bundle (host, read-only)",
     "where": "host",
-    "purpose": "One shot for issue #5: unit state, flap count/last lines, teardown cadence (median/min/max gap), UDP endpoint distribution, overlay ping, DF/MTU at the route MTU (not 1400 above nebula0's 1300), local UDP :4242 listeners, and a process snapshot, each with a timeout so nothing looks hung. Classifies restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence; writes logs/tunnel-link-<ts>.log. Read-only; --no-net for unit/journal only.",
+    "purpose": "One shot for issue #5: unit state, flap count/last lines, teardown cadence (median/min/max), per-teardown udpAddr sequence + alternation and per-endpoint gaps, 3 DNS samples, lighthouse/static_map lines, reload timers, container RestartCount/StartedAt, then a second MainPID/ActiveEnter/NRestarts sample: a PID change with NRestarts=0 is an EXTERNAL restart (explicit restarts reset the counter). --sudo reads the journal/config and names the restarter (sudo-logged command, cron, timers, loop process). Also overlay ping, DF/MTU, local UDP :4242, process snapshot, each timed out. Classifies restart-churn vs external-restart vs dns-flip vs endpoint-rotation vs tunnel-flap vs journal-unreadable vs overlay-unreachable vs no-evidence; writes logs/tunnel-link-<ts>.log. Read-only; --no-net for unit/journal only.",
     "commands": [
       "bash scripts/tunnel-link-probe.sh",
+      "bash scripts/tunnel-link-probe.sh --sudo --since -30min",
       "bash scripts/tunnel-link-probe.sh --no-net",
-      "bash scripts/tunnel-link-probe.sh --sudo",
+      "bash scripts/tunnel-link-probe.sh --lighthouse lighthouse-01 --container nebula",
       "bash scripts/tunnel-link-probe.sh --watch 60",
       "bash scripts/tunnel-link-probe.sh --json",
       "bash scripts/tunnel-link-probe.sh --self-test"

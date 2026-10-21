@@ -12,12 +12,22 @@
 > comments/labels; still external. The hand-off paste is now
 > `scripts/tunnel-link-probe.sh` (header per step, per-step timeouts, one
 > `logs/tunnel-link-<ts>.log`, verdict, flap cadence + UDP endpoints).
-> **Probe 19:55 EDT:** NRestarts=0, 0 lifecycle lines; teardowns every
-> **130.0 s** median (127–132) over 7 events; handshake +1–3 s, `state:dead`
-> +21 s; `udpAddr` alternates `192.168.4.45:4242` / `100.70.43.78:4242`;
-> overlay 0% loss 4–12 ms; `nebula0` MTU 1300 (the 1400/1472 DF probes were
-> invalid locally). Next: lighthouse reload/restart cadence + endpoint choice,
-> then post cadence to #5.
+> **TUNNEL-1 ROOT CAUSE FOUND 2026-10-21 (ws24):** the 130 s teardown cadence
+> is `proxmox-dual-plane-mesh/scripts/mesh-recover.sh` — its check2 sees
+> `peer 10.100.0.1 unreachable` (ping AND TCP/22) and runs
+> `sudo -n systemctl restart nebula`, with a **120 s rate guard** (lines
+> 155–172) so it fires every ~127 s. `recover.log`: **70 restarts 09:57–12:36**
+> (median gap **127 s**, 121–201), every one preceded by `all peers failed`.
+> That is why the tunnel log shows metronomic teardowns and why **NRestarts=0**
+> (explicit restarts reset it). The upstream overlay outage was separate
+> (LAN untested: `peer ... lan=none`); it recovered at 12:37 and the loop
+> stopped. The probe now samples PID/NRestarts at the very end (the first run's
+> restart happened after its mid-run sample). **Patched** mesh-recover.sh
+> (2026-10-21): peer/lighthouse loss is `UPSTREAM-DOWN` and never restarts
+> local nebula; local restarts need 2 consecutive checks over >=120 s plus
+> backoff 120→300→600→1800; `lo` judged by operstate; `--self-test` PASS.
+> Remaining: deploy the patched script on ws24 and post the recover.log
+> evidence + cadence to #5.
 
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`

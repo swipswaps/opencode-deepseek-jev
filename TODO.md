@@ -254,11 +254,24 @@ Last updated: 2026-10-20
       `192.168.4.45:4242` / `100.70.43.78:4242` for the same
       `certName=lighthouse-01`; overlay 3/3, 0% loss, 4–12 ms; `nebula0`
       route MTU **1300** (so the 1400/1472 DF probes were invalid locally).
-      Next: on lighthouse-01 check reload/restart cadence + endpoint choice
-      (`systemctl show nebula -p NRestarts,ActiveEnterTimestamp`,
-      `systemctl list-timers`, container RestartCount, `host:`/`static_map`,
-      DNS returning both addresses). Post verdict + cadence to #5; do not
-      batch with local work.
+      **ROOT CAUSE (ws24, 2026-10-21):** `mesh-recover.sh` check2 restarts
+      nebula whenever `10.100.0.1` fails ping **and** TCP/22, under a **120 s
+      rate guard** → a restart every ~127 s. `recover.log` proves **70
+      restarts 09:57–12:36** (median gap 127 s), each after `all peers failed`;
+      the explicit restart resets `NRestarts` to 0, which is why the old
+      "NRestarts=0 = process healthy" inference was wrong. The upstream overlay
+      outage (LAN plane untested, `lan=none`) recovered at 12:37 and the loop
+      stopped. Probe now takes the PID/NRestarts sample at the **end** (run 1's
+      restart landed after the mid-run sample) and still names the caller with
+      `--sudo`. Next: (a) patch mesh-recover to require consecutive failures,
+      exponential backoff, and a real LAN probe — never restart local nebula
+      for a single unreachable peer; (b) fix `check0a` (`lo` is `state
+      UNKNOWN`, not down); (c) post the recover.log evidence + cadence to #5.
+      **(a)+(b) PATCHED 2026-10-21** in mesh-recover.sh: check2 logs
+      `UPSTREAM-DOWN` and never restarts local nebula; local restarts require
+      2 consecutive checks/>=120 s + backoff 120→300→600→1800; `lo` uses
+      operstate; `--self-test` PASS (exit 0/2). Still to do: deploy on ws24,
+      confirm `recover.log` shows no `restarting nebula`, then post to #5.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

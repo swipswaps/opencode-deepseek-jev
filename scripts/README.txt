@@ -131,10 +131,20 @@ tunnel-link-probe.sh
     count + last teardown/handshake lines, teardown cadence (median/min/max
     gap), udpAddr endpoint distribution, overlay ping loss, DF/MTU probes at
     the route MTU (below nebula0's 1300; 1400/1472 fail at sendmsg and prove
-    nothing), local UDP :4242 listeners, and a process snapshot. Classifies
-    restart-churn vs tunnel-flap vs overlay-unreachable vs no-evidence and
-    writes logs/tunnel-link-<ts>.log. --no-net/--sudo (non-interactive)/--watch
-    SECS/--json; --systemctl-file/--journal-file seams; offline --self-test.
+    nothing), local UDP :4242 listeners, and a process snapshot. Also answers
+    "reload or endpoint flip?": per-teardown udpAddr sequence + alternation %,
+    per-endpoint gaps, 3 DNS samples for the lighthouse name, the
+    lighthouse/static_map config lines, systemd reload timers, and container
+    RestartCount/StartedAt. Re-samples MainPID/ActiveEnterTimestamp/NRestarts at
+    the end: NRestarts counts only AUTOMATIC restarts, so a PID change with
+    NRestarts=0 is an EXTERNAL restart loop. --sudo also reads the journal and
+    config and names the restarter (sudo-logged command, cron, timers, visible
+    loop process). Classifies restart-churn vs external-restart vs dns-flip vs
+    endpoint-rotation vs tunnel-flap vs journal-unreadable vs
+    overlay-unreachable vs no-evidence and writes logs/tunnel-link-<ts>.log.
+    --no-net/--sudo (non-interactive)/--watch SECS/--json/--lighthouse
+    NAME/--config FILE/--container NAME; --systemctl-file/-file2/--journal-file
+    seams; offline --self-test.
 
 issue-bridge.py
     E2 external-state bridge: gh is absent in-container, so an issue hand-off
