@@ -34,6 +34,12 @@ const execFileP = promisify(execFile);
 const dbPath = process.argv[2];
 const port = Number(process.argv[3] || 5099);
 const host = process.argv[4] || "127.0.0.1";
+const SEGMENTS = (process.env.DASH_SEGMENTS || "cost,activity,todos")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const SSE_MS = Math.max(1000, Number(process.env.DASH_SSE_MS) || 5000);
+const AUTO_SHED = process.env.DASH_AUTO_SHED === "1";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 let SERVED_REV = "";
@@ -112,8 +118,10 @@ function nav(active) {
   for (const it of NAV_ITEMS) {
     h += "<a href=\"" + it[0] + "\"" + (it[1] === active ? " class=\"active\" aria-current=\"page\"" : "") + ">" + it[1] + "</a>";
   }
+  h += "<span id=\"res\" class=\"muted\" style=\"font-size:11px;margin-right:8px\" title=\"container resources\"></span>";
   h += "<button id=\"theme\" class=\"tab\" title=\"toggle light/dark\" aria-label=\"toggle light or dark theme\" style=\"margin-left:auto\">&#9680; theme</button><span id=\"rev\" class=\"muted\" style=\"font-size:11px\"></span>";
   h += "</nav><script>fetch('/api/rev').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('rev');if(!e)return;e.textContent=d.stale?('STALE served '+(d.served||'?')+' vs HEAD '+(d.head||'?')):('rev '+(d.served||'?'));if(d.stale)e.style.color='#ff7b72';}).catch(function(){});</script>";
+  h += "<script>setInterval(function(){fetch('/api/resources').then(function(r){return r.json();}).then(function(d){var e=document.getElementById('res');if(!e)return;var c=(d.psi&&d.psi.cpu&&d.psi.cpu.some)?d.psi.cpu.some[0]:0;e.textContent='cpu '+c+'% rss '+d.node_rss_mb+'MB live '+d.sse_clients;}).catch(function(){});},10000);</script>";
   h += "<script>(function(){try{var de=document.documentElement;if(!de||!de.classList)return;var t=null;try{t=localStorage.getItem('theme');}catch(e){}var q=(location.search.match(/[?&]theme=(light|dark)/)||[])[1];if(q)t=q;if(t==='light')de.classList.add('light');var b=document.getElementById('theme');if(b){b.textContent=(de.classList.contains('light')?'\\u25D1 light':'\\u25D0 dark');b.addEventListener('click',function(){var on=de.classList.toggle('light');try{localStorage.setItem('theme',on?'light':'dark');}catch(e){}b.textContent=on?'\\u25D1 light':'\\u25D0 dark';});}}catch(e){}})();</script>";
   h += "<div id=\"cmdk\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Command palette\"><div id=\"cmdk-box\"><input id=\"cmdk-input\" placeholder=\"jump to a page or tab... (Esc closes)\" aria-label=\"Command palette\" autocomplete=\"off\"><div id=\"cmdk-list\" role=\"listbox\"></div></div></div>";
   h += "<script>(function(){if(typeof document==='undefined')return;";
@@ -1332,28 +1340,47 @@ async function drill(id){
   for(var i=0;i<d.parts.length;i++){h+=drillItem(d.parts[i]);}
   el.innerHTML=h;
 }
+// F3: a deadline must be longer than the observed tail, and a timeout must be
+// VISIBLE. j() returns null for both "empty" and "aborted", so a saturated
+// server used to render "no matches" (or silently fall through to a second slow
+// request). jr() keeps the failure kind so the pane can say "degraded".
+var SEARCH_DEADLINE_MS=20000;
+async function jr(u,ms){
+  try{
+    var o=(ms&&typeof AbortSignal!=='undefined')?{signal:AbortSignal.timeout(ms)}:undefined;
+    var r=await fetch(u,o);
+    return r.ok?{ok:true,data:await r.json()}:{ok:false,status:r.status};
+  }catch(e){return {ok:false,err:String((e&&e.name)||'network')};}
+}
 async function doSearch(){
   var q=document.getElementById('q').value.trim();
   var el=document.getElementById('searchres');
   if(!q){el.innerHTML='';return;}
   el.innerHTML='<span class="muted" data-loading>searching…</span>';
-  var h='';
-  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=20',8000);
-  if(r&&r.mode==='fts'){
-    if(r.sessions&&r.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
-      for(var i=0;i<r.sessions.length;i++){var s=r.sessions[i];
+  var h='',why='';
+  var r=await jr('/api/semantic?q='+encodeURIComponent(q)+'&limit=20',SEARCH_DEADLINE_MS);
+  if(r.ok&&r.data&&r.data.mode==='fts'){
+    var d=r.data;
+    if(d.sessions&&d.sessions.length){h+='<div class="muted" style="font-size:11px">sessions</div>';
+      for(var i=0;i<d.sessions.length;i++){var s=d.sessions[i];
         h+='<div class="item" data-go="'+esc(s.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(s.title)+' <span class="muted">$'+(+s.cost).toFixed(4)+'</span></div>';}}
-    if(r.results&&r.results.length){h+='<div class="muted" style="font-size:11px">ranked matches</div>';
-      for(var k=0;k<r.results.length;k++){var x=r.results[k];
+    if(d.results&&d.results.length){h+='<div class="muted" style="font-size:11px">ranked matches</div>';
+      for(var k=0;k<d.results.length;k++){var x=d.results[k];
         h+='<div class="item"'+(x.ocr?'':' data-go="'+esc(x.session)+'" style="cursor:pointer"')+'><span class="tag STEP">'+esc(x.ocr?'screenshot':(x.type||'part'))+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
   } else {
-    var f=await j('/api/search?q='+encodeURIComponent(q)+'&limit=20',8000);
-    if(f&&f.sessions){for(var a=0;a<f.sessions.length;a++){var ss=f.sessions[a];
-      h+='<div class="item" data-go="'+esc(ss.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(ss.title)+'</div>';}}
-    if(f&&f.hits){for(var b=0;b<f.hits.length;b++){var y=f.hits[b];
-      h+='<div class="item" data-go="'+esc(y.session)+'" style="cursor:pointer"><span class="tag STEP">'+esc(y.type)+'</span>'+esc(y.snippet)+'</div>';}}
+    if(!r.ok){why=r.err||('http '+(r.status||'?'));}
+    var f=await jr('/api/search?q='+encodeURIComponent(q)+'&limit=20',SEARCH_DEADLINE_MS);
+    if(f.ok&&f.data){
+      var fd=f.data;
+      if(fd.sessions){for(var a=0;a<fd.sessions.length;a++){var ss=fd.sessions[a];
+        h+='<div class="item" data-go="'+esc(ss.id)+'" style="cursor:pointer"><span class="tag STEP">session</span>'+esc(ss.title)+'</div>';}}
+      if(fd.hits){for(var b=0;b<fd.hits.length;b++){var y=fd.hits[b];
+        h+='<div class="item" data-go="'+esc(y.session)+'" style="cursor:pointer"><span class="tag STEP">'+esc(y.type)+'</span>'+esc(y.snippet)+'</div>';}}
+    } else if(!f.ok){why=why||f.err||('http '+(f.status||'?'));}
   }
-  el.innerHTML=h||'<span class="muted">no matches</span>';
+  if(h){el.innerHTML=h;}
+  else if(why){el.innerHTML='<span class="muted" data-error>search degraded ('+esc(why)+') — server busy, retry in a moment</span>';}
+  else {el.innerHTML='<span class="muted">no matches</span>';}
 }
 document.getElementById('q').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch();}});
 document.getElementById('searchres').addEventListener('click',function(ev){
@@ -1712,11 +1739,13 @@ async function doSearch2(){
   var q=(document.getElementById('q2').value||'').trim();
   var el=document.getElementById('sres');
   if(!q){el.innerHTML='';return;}
-  var r=await j('/api/semantic?q='+encodeURIComponent(q)+'&limit=15');
+  var r=await jr('/api/semantic?q='+encodeURIComponent(q)+'&limit=15',SEARCH_DEADLINE_MS);
   var h='';
-  if(r&&r.results){for(var i=0;i<r.results.length;i++){var x=r.results[i];
+  if(r.ok&&r.data&&r.data.results){for(var i=0;i<r.data.results.length;i++){var x=r.data.results[i];
     h+='<div class="item"'+(x.ocr?'':' data-go="'+esc(x.session)+'"')+'><span class="tag">'+esc(x.ocr?'screenshot':(x.type||'part'))+'</span><span class="muted">'+esc(x.title||x.session)+'</span> — '+esc(x.snippet||'')+'</div>';}}
-  el.innerHTML=h||'<span class="muted">no matches</span>';
+  if(h){el.innerHTML=h;}
+  else if(!r.ok){el.innerHTML='<span class="muted" data-error>search degraded ('+esc(r.err||('http '+(r.status||'?')))+') — server busy, retry in a moment</span>';}
+  else {el.innerHTML='<span class="muted">no matches</span>';}
 }
 document.getElementById('q2').addEventListener('keydown',function(ev){if(ev.key==='Enter'){doSearch2();}});
 document.getElementById('sres').addEventListener('click',function(ev){var t=ev.target&&ev.target.closest?ev.target.closest('[data-go]'):null;if(t){detail(t.getAttribute('data-go'));}});
@@ -2761,12 +2790,70 @@ function send(res, code, body, type) {
 }
 
 const SSE_CLIENTS = new Set();
+
+function readProc(path) {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function psiCpu10() {
+  const match = readProc("/proc/pressure/cpu").match(/some avg10=([\d.]+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function apiResources() {
+  const psi = {};
+  for (const key of ["cpu", "memory", "io"]) {
+    const text = readProc(`/proc/pressure/${key}`);
+    const some = text.match(/some avg10=([\d.]+) avg60=([\d.]+) avg300=([\d.]+)/);
+    const full = text.match(/full avg10=([\d.]+) avg60=([\d.]+) avg300=([\d.]+)/);
+    psi[key] = {
+      some: some ? [Number(some[1]), Number(some[2]), Number(some[3])] : null,
+      full: full ? [Number(full[1]), Number(full[2]), Number(full[3])] : null,
+    };
+  }
+  const load = readProc("/proc/loadavg").split(/\s+/).slice(0, 3).map(Number);
+  const mem = process.memoryUsage();
+  const cpu = process.cpuUsage();
+  return {
+    ts: Date.now(),
+    pid: process.pid,
+    uptime_s: Math.round(process.uptime()),
+    node_rss_mb: Math.round(mem.rss / 1048576),
+    node_cpu_s: Math.round(((cpu.user + cpu.system) / 1e6) * 10) / 10,
+    sse_clients: SSE_CLIENTS.size,
+    segments: SEGMENTS,
+    sse_ms: SSE_MS,
+    auto_shed: AUTO_SHED,
+    cpu_psi_10: psiCpu10(),
+    load,
+    psi,
+    cgroup: {
+      cpu_max: readProc("/sys/fs/cgroup/cpu.max"),
+      cpu_stat: readProc("/sys/fs/cgroup/cpu.stat"),
+      memory_current_mb: Math.round((Number(readProc("/sys/fs/cgroup/memory.current")) || 0) / 1048576),
+      memory_max: readProc("/sys/fs/cgroup/memory.max"),
+    },
+  };
+}
+
 // cost/activity are async (worker-backed); awaiting them is what makes the
 // snapshot real. Returning the promises stringified to `{}`, which made the
 // client render nothing and left "Live activity"/"Todos" at "loading...".
-async function ssePayload() {
-  const [cost, activity] = await Promise.all([apiCost(), apiActivity()]);
-  return { cost, activity, todos: apiTodos() };
+async function ssePayload(segments = SEGMENTS) {
+  let active = segments;
+  if (AUTO_SHED && psiCpu10() > 30) {
+    active = active.filter((name) => name === "cost" || name === "todos");
+  }
+  const want = (name) => active.includes(name);
+  const [cost, activity] = await Promise.all([
+    want("cost") ? apiCost() : Promise.resolve(null),
+    want("activity") ? apiActivity() : Promise.resolve(null),
+  ]);
+  return { cost, activity, todos: want("todos") ? apiTodos() : [] };
 }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
@@ -2782,7 +2869,10 @@ const server = http.createServer(async (req, res) => {
     const client = { write: (ev, data) => { try { res.write("event: " + ev + "\ndata: " + JSON.stringify(data) + "\n\n"); } catch { /* client gone */ } } };
     SSE_CLIENTS.add(client);
     try {
-      client.write("snapshot", await ssePayload());
+      const segs = params.segments
+        ? String(params.segments).split(",").map((s) => s.trim()).filter(Boolean)
+        : SEGMENTS;
+      client.write("snapshot", await ssePayload(segs));
     } catch {
       client.write("snapshot", { cost: null, activity: null, todos: [] });
     }
@@ -2912,6 +3002,8 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/export") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-sessions.csv" });
     res.end(apiExport());
+  } else if (url === "/api/resources") {
+    send(res, 200, JSON.stringify(apiResources()), "application/json");
   } else {
     send(res, 404, "not found\n", "text/plain");
   }
@@ -2938,7 +3030,7 @@ setInterval(async () => {
   try { payload = await ssePayload(); } catch { SSE_REFRESHING = false; return; }
   SSE_REFRESHING = false;
   for (const c of SSE_CLIENTS) c.write("delta", payload);
-}, 5000);
+}, SSE_MS);
 server.listen(port, host, () => {
   console.log("opencode observability: http://" + host + ":" + port + "  (db: " + dbPath + ")");
   // No eager pre-warm. The worker is single-threaded: pre-computing
