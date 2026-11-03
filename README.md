@@ -49,7 +49,68 @@ out at its first prose use where the abbreviation could be ambiguous):
 | WAL | Write-Ahead Logging (SQLite journal mode) |
 | WCAG | Web Content Accessibility Guidelines (W3C) |
 
-## Status — where we are, how we got here, next steps (2026-10-16)
+## Current state — 2026-11-03 (CPU recovery + resource telemetry)
+
+### How we got here
+- The host (`.24`) had a platform/EC frequency lock: all Ryzen 7 4700U cores at
+  **399 MHz** with `scaling_max_freq=2000 MHz` and governor `performance`. An
+  EC reset (power off, unplug AC, pinhole/power hold, boot) restored
+  **3.2–4.2 GHz**. The runbook records the baseline and compares after reboot.
+- Caddy exited **255** at Docker start because it binds specific host addresses
+  (`192.168.4.24:4096`, `10.100.0.24:4096`, `127.0.0.1:4096`) before those
+  addresses are assigned. `scripts/web.sh` now waits for the bind addresses and
+  re-creates caddy if it is `restarting`/`exited`. `WEB_BIND_IPS` overrides the
+  derived list; `docker compose up -d opencode-web caddy` remains the manual
+  recovery.
+- Dashboard commit `65b8d41` adds `GET /api/resources` (cgroup, PSI, RSS, SSE
+  clients), a nav badge (`cpu <psi>% rss <MB> live <n>`), and segment controls:
+  `DASH_SEGMENTS`, `DASH_SSE_MS`, `DASH_AUTO_SHED` (drop activity when CPU
+  PSI > 30).
+
+### Where we are
+- Stack: `opencode-web` + `caddy`, Basic auth from `.env.local`; web UI
+  `https://127.0.0.1:4096` (401 = alive), dashboard `https://127.0.0.1:5099`
+  (or `10.100.0.24:5099`). `/api/resources` and `/api/rev` return 200.
+- CPU recovered; contention remains from the web/opencode process, the
+  dashboard sidecar, Chrome, and optional containers. The dashboard stays
+  enabled; use the toggles or `05-resource-toggles.sh` in the RAG repo.
+- RAG engine: `~/Documents/2282af3557819803/repo/production-local-rag`
+  (v1.3.1 + hardening): CLI, retrieval-only MCP (`search_docs`/`status`),
+  tests, and runbooks 01–06. Retrieval works; local generation is optional.
+- `reload-opencode-web.sh` is obsolete; `scripts/web.sh` and
+  `scripts/web-restart.sh` are the canonical entry points.
+
+### How to use now
+
+```
+cd ~/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
+./scripts/web.sh            # start/ensure web + caddy (bind-IP preflight + retry)
+./scripts/web-restart.sh    # restart
+./scripts/web-logs.sh       # logs
+./scripts/web-stop.sh       # stop
+```
+
+```
+curl -sS http://127.0.0.1:5099/api/resources   # resource/segment telemetry
+DASH_SEGMENTS=cost,activity,todos
+DASH_SSE_MS=5000
+DASH_AUTO_SHED=1
+```
+
+```
+cd ~/Documents/2282af3557819803/repo/production-local-rag
+./scripts/rag-cli.sh status
+./scripts/04-retrieval-only.sh --query "What is the pet policy?"
+./scripts/06-runbook.sh --phase 1 --stress 10
+```
+
+- Desktop: `~/.local/share/applications/opencode-web.desktop` and
+  `~/Desktop/opencode-web.desktop` run `~/.local/bin/opencode-web-launch.sh`.
+- If the host IP changes: update `docker/docker-compose.yml` or set
+  `WEB_BIND_IPS`, then `./scripts/web.sh`.
+- The 2026-10-16 status below is historical.
+
+## Status — 2026-10-16 (historical)
 
 ### How we got here
 A dockerized OpenCode + DeepSeek + Jev stack with a read-only `:5099` dashboard,

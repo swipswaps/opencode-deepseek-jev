@@ -44,6 +44,69 @@ fi
 ENV_FILE="$REPO_DIR/.env.local"
 COMPOSE_DIR="$REPO_DIR/docker"
 
+BIND_IPS="${WEB_BIND_IPS:-}"
+if [ -z "$BIND_IPS" ] && [ -f "$COMPOSE_DIR/docker-compose.yml" ]; then
+    BIND_IPS=$(grep -E '^[[:space:]]*- "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:(4096|5099):' "$COMPOSE_DIR/docker-compose.yml" \
+        | awk -F'"' '{print $2}' | cut -d: -f1 | sort -u | tr '\n' ' ')
+fi
+[ -n "$BIND_IPS" ] || BIND_IPS="127.0.0.1 10.100.0.24 192.168.4.24"
+case " $BIND_IPS " in
+    *" 127.0.0.1 "*) ;;
+    *) BIND_IPS="127.0.0.1 $BIND_IPS" ;;
+esac
+
+wait_for_bind_ips() {
+    local ip tries addrs
+    if ! command -v ip > /dev/null; then
+        printf 'WARN: ip command missing; skipping bind-address preflight\n'
+        return 0
+    fi
+    for ip in $BIND_IPS; do
+        [ "$ip" = "127.0.0.1" ] && continue
+        [ "$ip" = "0.0.0.0" ] && continue
+        tries=0
+        while [ "$tries" -lt 30 ]; do
+            addrs=$(ip -4 addr show 2>&1)
+            case "$addrs" in
+                *"inet $ip/"*)
+                    printf 'bind address ready: %s\n' "$ip"
+                    break
+                    ;;
+            esac
+            tries=$((tries + 1))
+            sleep 1
+        done
+        if [ "$tries" -ge 30 ]; then
+            printf 'WARN: %s not up after 30s; caddy may exit 255\n' "$ip"
+        fi
+    done
+    return 0
+}
+
+ensure_caddy() {
+    local tries=0 status
+    while [ "$tries" -lt 3 ]; do
+        status=$(docker inspect --format '{{.State.Status}}' opencode-caddy 2>&1)
+        case "$status" in
+            running) return 0 ;;
+            restarting|exited|created)
+                printf 'caddy status=%s; retrying after bind-address check\n' "$status"
+                wait_for_bind_ips
+                docker compose up -d --force-recreate caddy
+                ;;
+            *No*such*|*Error*)
+                printf 'caddy not inspectable yet: %s\n' "$status"
+                wait_for_bind_ips
+                docker compose up -d --force-recreate caddy
+                ;;
+            *) return 0 ;;
+        esac
+        tries=$((tries + 1))
+        sleep 2
+    done
+    return 0
+}
+
 main() {
     local insecure=0
     case "${1:-}" in
@@ -121,6 +184,7 @@ main() {
     fi
 
     cd "$COMPOSE_DIR"
+    wait_for_bind_ips
     # ---- TLS certs (Caddy terminates :4096/:5099; see Caddyfile) ----
     local certout=""
     if [ -x "$COMPOSE_DIR/certs-init.sh" ]; then
@@ -137,10 +201,12 @@ main() {
         printf 'FAIL: docker compose up returned %d\n' "$rc"
         return 1
     fi
+    ensure_caddy
     case "$certout" in
         *ROTATED*)
             printf 'certs ROTATED; restarting caddy to pick up new pair\n'
             docker compose restart caddy
+            ensure_caddy
             ;;
     esac
 
