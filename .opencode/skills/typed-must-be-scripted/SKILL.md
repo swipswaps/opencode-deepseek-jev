@@ -1,6 +1,6 @@
 ---
 name: typed-must-be-scripted
-description: Use when the operator pastes shell commands, or asks for reusable tooling, in any repo. The standing rule is: if it can be typed, it MUST be scripted. Every pasted command becomes a constraint-compliant script with telemetry-first output, verification, and per-repo commit — never a one-off paste.
+description: Use when the operator pastes shell commands, asks for reusable tooling, or when any response recommends an action. The standing rule is: if it can be typed, it MUST be scripted. Every pasted command becomes a constraint-compliant script with telemetry-first output, verification, and per-repo commit — never a one-off paste; every recommendation carries a runnable script or exact command plus a verification line.
 ---
 
 # typed-must-be-scripted
@@ -8,6 +8,16 @@ description: Use when the operator pastes shell commands, or asks for reusable t
 The operator's standing principle: **if it can be typed, it MUST be scripted.**
 A pasted command that works once and vanishes is a liability; a script that
 prints its own evidence is an asset. Apply on every paste, in every repo.
+
+## 0. Response contract
+
+Every response that recommends an action MUST include a runnable script path
+or an exact copy-paste command, plus a verification line. Prose-only advice is
+incomplete. If the action can be typed, create or extend
+`<repo>/scripts/<verb>-<noun>.sh`, commit it per repo, and include the exact
+invocation. If the action is physical (EC reset, firmware menu), include the
+exact procedure and a verification script. No "should", "consider", or
+"you could" without an executable.
 
 ## 1. Convert (paste -> script, same turn)
 
@@ -58,3 +68,9 @@ prints its own evidence is an asset. Apply on every paste, in every repo.
   browsing, not by memory.
 - Report: telemetry rows, files changed, verification commands and their
   output, what remains unproven and its exact next probe.
+
+## 5. Offer executable choices
+
+When a decision is open, present 3-5 options (RULES #83) and attach a
+copy-paste command or heredoc to EVERY option, with a verification line.
+An option the operator cannot paste is prose, not a choice (RULES #88).
