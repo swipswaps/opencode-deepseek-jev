@@ -74,6 +74,10 @@ out at its first prose use where the abbreviation could be ambiguous):
 - CPU recovered; contention remains from the web/opencode process, the
   dashboard sidecar, Chrome, and optional containers. The dashboard stays
   enabled; use the toggles or `05-resource-toggles.sh` in the RAG repo.
+- Bottleneck migration after the EC reset: CPU PSI is low (`cpu_psi_10` < 1)
+  while I/O PSI can be high (observed `full` ~60%). Check for `updatedb`/
+  `plocate` scans and dashboard DB/SSE load; reduce with `DASH_SSE_MS`,
+  `DASH_SEGMENTS`, or `DASH_AUTO_SHED`.
 - RAG engine: `~/Documents/2282af3557819803/repo/production-local-rag`
   (v1.3.1 + hardening): CLI, retrieval-only MCP (`search_docs`/`status`),
   tests, and runbooks 01–06. Retrieval works; local generation is optional.
@@ -91,7 +95,7 @@ cd ~/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
 ```
 
 ```
-curl -sS http://127.0.0.1:5099/api/resources   # resource/segment telemetry
+curl -sS https://127.0.0.1:5099/api/resources   # resource/segment telemetry
 DASH_SEGMENTS=cost,activity,todos
 DASH_SSE_MS=5000
 DASH_AUTO_SHED=1
