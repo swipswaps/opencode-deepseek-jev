@@ -206,6 +206,12 @@ Last updated: 2026-11-04
       duration), 14-day cost trend on Overview, and Chrome install prompt.
       Desktop/mobile Playwright rechecked; installability `[]`.
 
+- [x] **UX-5 — 2026-11-04.** Added deterministic demo mode (`?demo=1` and
+      `.github.io`) and created `swipswaps/opencode-observability` with a
+      standalone Vite/MUI Pages build, app manifest/service worker, Pages
+      workflow, monitoring, and xdg-open. Public URL:
+      <https://swipswaps.github.io/opencode-observability/>.
+
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.

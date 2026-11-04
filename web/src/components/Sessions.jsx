@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import SearchIcon from "@mui/icons-material/Search";
+import { IS_DEMO } from "../lib.js";
 import {
   dateStr,
   fmtCompact,
@@ -109,9 +110,11 @@ export default function Sessions({ sessions, error, isMobile }) {
                     {parseModel(s.model)} · {s.agent || "?"}
                   </Typography>
                 </Box>
-                <IconButton size="small" component="a" href={sessionHref(s.id)} target="_blank" rel="noopener" aria-label="Open session">
-                  <OpenInNewIcon fontSize="small" />
-                </IconButton>
+                {!IS_DEMO && (
+                  <IconButton size="small" component="a" href={sessionHref(s.id)} target="_blank" rel="noopener" aria-label="Open session">
+                    <OpenInNewIcon fontSize="small" />
+                  </IconButton>
+                )}
               </Stack>
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
                 <Chip size="small" label={fmtUsd(s.cost)} color={Number(s.cost) >= 0.1 ? "error" : "default"} variant={Number(s.cost) >= 0.1 ? "filled" : "outlined"} />
@@ -175,11 +178,15 @@ export default function Sessions({ sessions, error, isMobile }) {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Open session">
-                      <IconButton size="small" component="a" href={sessionHref(s.id)} target="_blank" rel="noopener" aria-label="Open session">
-                        <OpenInNewIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {IS_DEMO ? (
+                      <Typography variant="caption" color="text.secondary">demo</Typography>
+                    ) : (
+                      <Tooltip title="Open session">
+                        <IconButton size="small" component="a" href={sessionHref(s.id)} target="_blank" rel="noopener" aria-label="Open session">
+                          <OpenInNewIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

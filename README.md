@@ -396,6 +396,12 @@ cd web && npm ci && npm run build
 [`web/README.md`](web/README.md) for dev/PWA notes. The app is also installable (`Page.getInstallabilityErrors: []`) and the build is
 570 kB minified / 176 kB gzip. The legacy no-build page at `/` remains.
 
+A standalone **public Pages demo** is live at
+<https://swipswaps.github.io/opencode-observability/> (repo
+`swipswaps/opencode-observability`). It runs the same UI with deterministic
+synthetic data (`?demo=1` also works locally), its own manifest/service worker,
+and an Actions Pages workflow. The local `/app/` keeps the live APIs.
+
 ![MUI Overview](docs/ux/status-mui-desktop.png)
 
 ![MUI Activity](docs/ux/status-mui-activity-desktop.png)
