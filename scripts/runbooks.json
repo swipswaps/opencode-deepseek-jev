@@ -47,7 +47,21 @@
       "laya-serve",
       "./scripts/test-jev-laya-ab.sh"
     ],
-    "note": "Manual: laya-serve is long-running; run it in its own terminal (POST /v1/systemone on http://127.0.0.1:8000), then run the A/B test."
+    "note": "Manual: laya-serve is long-running; run it in its own terminal (POST /v1/systemone on http://127.0.0.1:8000), then run the A/B test. Guard route (opt-in): jev-guard reads JEV_BASE_URL, so re-add plugin jev-guard and set JEV_BASE_URL=http://<docker-host>:8000 plus JEV_GUARD_TIMEOUT_MS=2000; the jev-review MCP cannot use Laya (its client hardcodes api.typesafe.ai)."
+  },
+  {
+    "id": "subq",
+    "title": "Typed decisions via SubQ Snap (JEV replacement)",
+    "purpose": "First-pass typed decisions (noul/choice/score) without the JEV cloud: SubQ Snap bills input only (~$0.05/1M), output free, and returns calibrated probabilities.",
+    "where": "host",
+    "manual": false,
+    "commands": [
+      "./scripts/subq_snap.py --state-file /tmp/state.txt --question escalate --instructions \"...\"",
+      "./scripts/subq_snap.py --state \"...\" --question queue --type choice --criteria \"a=descA,b=descB,c\"",
+      "./scripts/subq_snap.py --dry-run --state \"...\" --question acuity --type score --criteria \"within a week,within a day,within an hour\"",
+      "./scripts/subq_snap.py --self-test"
+    ],
+    "note": "SUBQ_API_KEY comes from .env.local; use it as the cheap triage gate before an expensive review. This is the default typed-decision route while JEV cloud is disabled."
   },
   {
     "id": "rotate-api-keys",

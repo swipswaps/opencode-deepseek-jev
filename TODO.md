@@ -4,9 +4,45 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## Done (most recent first)
+
+- [x] **GUARD-SUBQ — 2026-10-22.** Guard backend picked by measured
+      latency: Laya 23 s (2 questions) / 33-37 s (4) on this CPU vs SubQ
+      1.4 s (4) and 1.6 s (choice). `.env.local` now sets
+      JEV_BASE_URL=https://api.subq.ai, model subq-snap-preview, 5 s
+      budget; Laya stays for batch A/B. jev-guard 0.3.1 (npm latest)
+      ignores JEV_BASE_URL, so `docker/patch-jev-guard.sh` adds the custom
+      backend at every container start (proven: ALLOW rc 0 / DENY rc 2 via
+      SubQ, ~1.9 s). Remove the patch when a release ships the feature.
+
+- [x] **JEV-OFF — 2026-10-21.** Cloud JEV disabled after the rotation smoke
+      timed out at 180 s (the key itself is fine: direct balance 200, $7.35).
+      Removed `jev-guard` (plugin), `jev-review` (MCP) and `/opt/jev-review/skills`
+      from `opencode.json`; preflight/ensure-env no longer require
+      `JEV_API_KEY`; audit-config reports the disabled state; rotate-api-keys
+      skips JEV and preserves the line. The image installs jev-guard
+      **globally**, so `docker/patch-global-config.sh` (called by both
+      entrypoints) strips it from the global config at every start and replaces
+      the hardcoded LiteLLM key with `{env:LITELLM_MASTER_KEY}` (the image layer
+      still holds the old literal: rotate it). Replacement: **SubQ**
+      (`subq_snap.py`, new runbook) for typed decisions; **Laya** is the opt-in
+      guard route via `JEV_BASE_URL` (jev-review's client hardcodes
+      `api.typesafe.ai`, so the MCP cannot use it). **Action:** restart web.
+
+- [x] **F1/F2/F3 — 2026-10-21.** Leak containment, external-claim decay,
+      visible search degradation. `secret-leak-response.sh` audits at-rest
+      artifacts (found real keys in `data/observability/guard.log` and snapshot
+      `litellm.config.yaml`/`opencode.key`), proves ignore coverage (walking up
+      past the `data/opencode` symlink), flags root chrome, and installs a
+      tracked `.githooks/pre-commit` (`core.hooksPath`). `progress-review` now
+      requires observed `state`+`ts` for a blocked-external PASS and expires it
+      after `PROGRESS_EXTERNAL_TTL` (default 8) into `external-stale` FAIL with
+      a re-audit instruction. `doSearch`/`doSearch2` use a 20 s deadline and
+      render `search degraded` instead of silent `no matches`; the UI harness
+      proves it by stubbing a timeout. **Still human:** revoke the disclosed
+      provider keys (matrix in the script).
 
 - [x] **OBS-1 — 2026-10-20.** `:5099` no longer leaves **Live activity** and
       **Todos** at `loading...`: `/api/stream` was stringifying the *promises*
@@ -270,8 +306,12 @@ Last updated: 2026-10-20
       **(a)+(b) PATCHED 2026-10-21** in mesh-recover.sh: check2 logs
       `UPSTREAM-DOWN` and never restarts local nebula; local restarts require
       2 consecutive checks/>=120 s + backoff 120→300→600→1800; `lo` uses
-      operstate; `--self-test` PASS (exit 0/2). Still to do: deploy on ws24,
-      confirm `recover.log` shows no `restarting nebula`, then post to #5.
+      operstate; `--self-test` PASS (exit 0/2). Pushed 9d0850a + 6cd102c;
+      6 stale proactive tasks closed; alert + proactive minted `T-c39910`.
+      Still to do: 1 h verification as a **telemetry-first script** (heartbeat
+      per interval: ts/elapsed/new restarts/healthy/last verdict; `--self-test`
+      fixture; exit 0/2; `--close-task` opt-in) — the silent `sleep 3600`
+      heredoc was wrong — then close `T-993fc4` and post #5.
 - [x] G8: host TUI reads the server store — CLOSED as document path.
       Decision (2026-10-01): `attach -s` proven end to end via tmux
       pty; README documents auth-carrying attach + transcript fallback;

@@ -636,6 +636,13 @@ secret-scan.sh
     handoff-brief.sh on its source transcript. --paths, --json, --quiet,
     --self-test.
 
+secret-leak-response.sh
+    Contain a credential leak (F1): audit at-rest artifacts, prove .env*/auth
+    paths are ignored (walks up past the data/opencode symlink), flag root
+    chrome, install a tracked .githooks/pre-commit (core.hooksPath) that
+    refuses credential-shaped paths and staged secret patterns, then print the
+    human-only rotation matrix. --audit, --install, --json, --self-test.
+
 sentinel.sh
     Periodic threshold monitor (user timer, every 5 min): trips only on
     actionable news — T1 latest over budget, T2 latest on a deny-listed model,
@@ -776,6 +783,15 @@ rotate-server-password.sh
     verify): --fresh (default) resets, --resume skips done steps after a crash.
     --env, --self-test (incl. checkpoint/resume).
 
+rotation-progress.sh
+    Read-only progress view for the OPEN rotation terminal and the background
+    workers behind :4096. Reports the rotate-server-password.sh tree (pid/tty/
+    state/wchan/stdin), its durable-run checkpoint, whether .env.local still
+    matches .bak.rotate (cmp only, never values), the newest smoke log, the
+    ROTATED proof from the chat DB, container/process/HTTP/timer state, and
+    chat-store counts including stale running/pending tool parts. Writes
+    nothing; --watch SEC, --json, --no-net, --host, --db, --env.
+
 verify-from-inside.sh
     In-container self-check (no docker): opencode binary, auth.json, key env
     vars, opencode.json parse, jev-review server.js. --full adds a live "PONG"
@@ -896,6 +912,34 @@ test-jev-laya-ab.sh
     report latency. Skips the diff with the exact start commands if Laya is not
     reachable.
 
+laya-wire.sh
+    Probe for a running Laya server (docker bridge gateway, loopback, host
+    addresses) and point jev-guard at it: writes JEV_BASE_URL,
+    JEV_GUARD_TIMEOUT_MS=2000, JEV_MODEL=english and an optional
+    JEV_BASE_API_KEY, then restarts and verifies. Rejects loopback-only servers
+    (the container cannot reach the host's 127.0.0.1). Does not install Laya.
+    --wire · --url · --key · --json · --self-test.
+
+laya-install.sh
+    Install laya[serve] into $HOME/.venvs/laya (prefers 3.12/3.11/3.10 over 3.14
+    for torch wheels), generate a bearer key, run laya-serve as a systemd user
+    unit bound to the docker bridge gateway, preload the English checkpoint,
+    probe up to 4 minutes, then call laya-wire.sh --wire. Host-only.
+    --port · --device · --gateway · --no-systemd.
+
+decision-router.py
+    Redundant System One router: Laya (local, free) and SubQ (remote, paid)
+    both speak POST /v1/systemone, so one JEV_BASE_URL can fail over. Chooses
+    by rolling reliability (observability.db), circuit state, and cost per 1M
+    input tokens; records every attempt in decision_route; exposes /healthz and
+    /stats. --serve · --explain · --self-test.
+
+decision-router-install.sh
+    Install decision-router.py as a systemd user unit bound to the docker
+    bridge, with Laya/SubQ keys in a 0600 env file, then point jev-guard at the
+    router (JEV_BASE_URL, 4 s guard timeout) and verify. Host-only.
+    --port · --gateway · --no-wire · --uninstall · --self-test.
+
 code-index.py
     Assemble, index and flag the repo's own code into data/observability/code.db
     (per-file metadata, top-level symbols, blacklist patterns, TODO/FIXME) so
@@ -984,6 +1028,12 @@ dns-audit.sh
     paste all output back. Changes nothing: no restarts, no writes outside
     /tmp/opencode-dns.txt.
 
+audit-a1286-network.sh
+    Read-only MacBookPro A1286/A1278 / Fedora 43 / X11-XFCE network-loss forensics.
+    Run on the failing box (after a reboot it still reads the previous boot).
+    Prints ranked cause candidates - route/DHCP, rfkill, association, wl/
+    brcmsmac, NetworkManager polkit/keyring, powersave - then the raw capture.
+
 dns-guard.sh
     Automated DNS-recovery-loop telemetry (detection always, remediation only
     with --fix), using the ledger DB as the durable record so the next occurrence
@@ -992,6 +1042,25 @@ dns-guard.sh
 web-logs.sh / web-stop.sh
     Show the opencode-web container logs (-f follows) / stop the OpenCode web UI
     container. cd into docker/ first so `docker compose` finds its config.
+
+Recovery, triage, handoff
+-------------------------
+
+09-refresh-handoff.sh
+    Rebuild the CURRENT session transcript from opencode.db (no browser),
+    regenerate the redacted handoff brief, and print the rotation sequence.
+    Deterministic: no model call, no spend, no fork/continue.
+
+incident-resolve.sh
+    Classify recurring log signatures (tmux no-server, already-paused,
+    embedding cold-load, pgrep >15, pubkey denial, guard blocks, stale
+    edits) from a file, stdin, or --db; --auto resolves the safe ones.
+    Self-test: ./scripts/incident-resolve.sh --self-test
+
+triage-dirty.sh
+    Classify working-tree changes: syntax, secret-scan, reference count,
+    bucket, and recommendation (COMMIT/ARCHIVE/REVIEW/FIX). Exit 1 on a
+    failed syntax or secret check. --staged checks only the index.
 
 Archive
 -------

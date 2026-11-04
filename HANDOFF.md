@@ -1,5 +1,19 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-10-21 (JEV-OFF):** cloud JEV is disabled by policy. After the
+> rotation, `opencode run` smoke hit the 180 s timeout, but the new DeepSeek key
+> is valid (direct balance 200, $7.35), so the timeout is client/store latency,
+> not auth. `opencode.json` no longer carries `jev-guard`, `jev-review` or the
+> cloud skills; preflight/ensure-env treat `JEV_API_KEY` as optional; the rotate
+> script skips JEV. The guard/decisions backend is now **SubQ**
+> (`scripts/subq_snap.py`; runbook `subq`): measured 1.4 s for the 4 guard
+> questions vs Laya's 33-37 s on this CPU, so Laya is batch-only. jev-guard
+> 0.3.1 ignores JEV_BASE_URL; `docker/patch-jev-guard.sh` adds it at start. **Laya** is opt-in for the guard:
+> `jev-guard` honors `JEV_BASE_URL`, but `jev-review` hardcodes
+> `https://api.typesafe.ai/v1/systemone`, so the review MCP cannot use Laya.
+> **Restart `opencode-web` to apply.** History: `docs/todo-archive-2026.md`
+> (JEV 401s) and `test-jev-laya-ab.sh` (A/B harness).
+
 > **PIN 2026-10-20 (OBS-1):** `:5099` Live activity and Todos stuck at
 > `loading...` was a server bug, not a browser one. `/api/stream` sent
 > `{"cost":{},"activity":{}}` because `ssePayload()` returned the **promises**
@@ -26,8 +40,11 @@
 > (2026-10-21): peer/lighthouse loss is `UPSTREAM-DOWN` and never restarts
 > local nebula; local restarts need 2 consecutive checks over >=120 s plus
 > backoff 120→300→600→1800; `lo` judged by operstate; `--self-test` PASS.
-> Remaining: deploy the patched script on ws24 and post the recover.log
-> evidence + cadence to #5.
+> Pushed `9d0850a`/`6cd102c`; 6 stale proactive tasks closed; ledger alert +
+> proactive minted `T-c39910` (tunnel_flap). `T-993fc4` stays open until the
+> 1 h check. Verification must be **telemetry-first** (heartbeat line every
+> interval: ts/elapsed/restarts/healthy/last verdict; `--self-test`; exit 0/2;
+> `--close-task` opt-in), not a silent `sleep 3600`. Then post #5.
 
 > **PIN 2026-10-20 (LAT-2):** T4 now **names** the cause of a slow-fetch burst
 > instead of reporting it unexplained. A fetch interval `[ts-duration, ts]`

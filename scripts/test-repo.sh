@@ -151,7 +151,7 @@ gate_env() {
     printf '\nG2 .env.local\n'
     local f="$REPO_DIR/.env.local"
     if [ ! -f "$f" ]; then
-        bad "$f missing" "create it with DEEPSEEK_API_KEY and JEV_API_KEY"
+        bad "$f missing" "create it with DEEPSEEK_API_KEY (JEV_API_KEY optional)"
         return
     fi
     ok "$f present"
@@ -171,15 +171,15 @@ gate_env() {
         bad "DEEPSEEK_API_KEY empty"
     fi
     if [ -n "$jv" ]; then
-        ok "JEV_API_KEY set (len ${#jv})"
+        ok "JEV_API_KEY set (len ${#jv}; unused — JEV cloud disabled)"
+        case "$jv" in
+            apikey_*|sk-*|ts_*|jev-*) ok "JEV_API_KEY prefix recognized" ;;
+            *) bad "JEV_API_KEY prefix not recognized" \
+                   "expected apikey_, sk-, ts_, or jev-" ;;
+        esac
     else
-        bad "JEV_API_KEY empty"
+        ok "JEV_API_KEY not set (JEV cloud disabled; optional)"
     fi
-    case "$jv" in
-        apikey_*|sk-*|ts_*|jev-*) ok "JEV_API_KEY prefix recognized" ;;
-        *) bad "JEV_API_KEY prefix not recognized" \
-               "expected apikey_, sk-, ts_, or jev-" ;;
-    esac
 }
 
 # ----------------------------------------------------------------------------

@@ -1223,5 +1223,65 @@
       "bash scripts/tunnel-link-probe.sh --json",
       "bash scripts/tunnel-link-probe.sh --self-test"
     ]
+  },
+  {
+    "id": "secret-leak-response",
+    "title": "Credential-leak containment + pre-commit guard (F1)",
+    "where": "host",
+    "purpose": "Contain a leaked key instead of re-leaking it: value-free at-rest scan (delegates to secret-scan.sh), ignore proof for .env*/auth.json (walks up past the data/opencode symlink), root-chrome check, and a tracked .githooks/pre-commit wired via core.hooksPath that refuses credential-shaped paths and staged secret patterns. Prints the human-only rotation matrix; provider revocation has no CLI.",
+    "commands": [
+      "bash scripts/secret-leak-response.sh --audit",
+      "bash scripts/secret-leak-response.sh --install --audit",
+      "bash scripts/secret-leak-response.sh --json",
+      "bash scripts/secret-leak-response.sh --self-test"
+    ]
+  },
+  {
+    "id": "laya-wire",
+    "title": "Point jev-guard at a running Laya (JEV_BASE_URL)",
+    "where": "host",
+    "purpose": "Probe for a running Laya server (docker bridge gateway, loopback, host addresses) and, with --wire, write JEV_BASE_URL/JEV_GUARD_TIMEOUT_MS/JEV_MODEL (+ optional JEV_BASE_API_KEY) to .env.local, restart the web container, and verify the guard is ON. Rejects loopback-only servers because the container cannot reach the host's 127.0.0.1. Does not install Laya.",
+    "commands": [
+      "bash scripts/laya-wire.sh",
+      "bash scripts/laya-wire.sh --wire",
+      "bash scripts/laya-wire.sh --url http://172.18.0.1:8000 --wire",
+      "bash scripts/laya-wire.sh --json",
+      "bash scripts/laya-wire.sh --self-test"
+    ]
+  },
+  {
+    "id": "laya-install",
+    "title": "Install + run Laya and wire jev-guard",
+    "where": "host",
+    "purpose": "Install laya[serve] into $HOME/.venvs/laya (prefers 3.12/3.11/3.10), generate a bearer key, run laya-serve as a systemd user unit bound to the docker bridge gateway, preload the English checkpoint, probe up to 4 minutes, then wire JEV_BASE_URL/JEV_MODEL/JEV_BASE_API_KEY and restart the web container. Host-only.",
+    "commands": [
+      "bash scripts/laya-install.sh",
+      "bash scripts/laya-install.sh --device cpu",
+      "bash scripts/laya-install.sh --no-systemd",
+      "bash scripts/laya-install.sh --gateway 172.28.0.1"
+    ]
+  },
+  {
+    "id": "decision-router",
+    "title": "Redundant System One router (Laya -> SubQ)",
+    "where": "host",
+    "purpose": "One POST /v1/systemone endpoint for jev-guard. Chooses Laya (local, free) or SubQ (remote, paid) by rolling reliability from observability.db, circuit state, and cost per 1M input tokens; fails over and records every attempt in decision_route. /healthz and /stats expose the measured table. --serve/--explain/--self-test.",
+    "commands": [
+      "python3 scripts/decision-router.py --explain",
+      "python3 scripts/decision-router.py --serve --host 172.28.0.1 --port 8010",
+      "python3 scripts/decision-router.py --self-test"
+    ]
+  },
+  {
+    "id": "decision-router-install",
+    "title": "Install + wire the Laya/SubQ router",
+    "where": "host",
+    "purpose": "Install decision-router.py as a systemd user unit bound to the docker bridge, read LAYA_API_KEY from the Laya unit and SUBQ_API_KEY from .env.local into a 0600 env file, then point jev-guard at the router (JEV_BASE_URL, 4 s timeout) and verify.",
+    "commands": [
+      "bash scripts/decision-router-install.sh",
+      "bash scripts/decision-router-install.sh --no-wire",
+      "bash scripts/decision-router-install.sh --uninstall",
+      "bash scripts/decision-router-install.sh --self-test"
+    ]
   }
 ]
