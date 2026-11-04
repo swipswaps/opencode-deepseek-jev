@@ -35,7 +35,8 @@ authorize-container-key.sh
     RUN ON THE HOST. Append the web container's current public key
     (<repo>/container-key.pub) to ~/.ssh/authorized_keys (0600), print only the
     fingerprint, then remove the public-key file. Needed after a web recreate:
-    /home/node is container-local and its key is regenerated.
+    /home/node is container-local and its key is regenerated. RESTRICT=1
+    prefixes `restrict` (no pty/forwarding) for the durable key.
 
 readme-audit.sh
     Audit reader-facing docs: root "what this is" + start path, catalog

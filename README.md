@@ -120,6 +120,9 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - The compose override no longer mounts `/home/owner`; the 2026-11-04 recreate
   applied it. `security-posture.sh` is **15/0** (mounts, caps, loopback,
   modes, scrub, TLS, red-team).
+- The RAG repo is mounted read-only at `/rag`. Host access uses the durable
+  `~/.config/opencode/container_key`, authorized once with `restrict` via
+  `authorize-container-key.sh`; the host home is not mounted.
 - Tool results are scanned for prompt-injection markers and logged as
   `"verdict":"injection"` (advisory, value-free). This is telemetry, not
   prevention: model-level prompt injection remains a residual risk.

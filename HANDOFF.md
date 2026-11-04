@@ -7,8 +7,11 @@
 > the blacklist `sensitive-read` rule and a prompt-injection tripwire are in
 > the module. The compose override no longer mounts `/home/owner`; the
 > 2026-11-04 recreate applied it and `security-posture.sh` is **15/0**.
-> Residual: prompt injection is model-level; the regex guard is
-> defense-in-depth, not a sandbox.
+> Host access is now durable: `~/.config/opencode/container_key` (host-mounted,
+> authorized once with `restrict`), `/rag:ro` for the RAG repo, and
+> `openssh-client` in the Dockerfile (rebuild to bake it; `11-host-access.sh
+> --install` covers the current container). Residual: prompt injection is
+> model-level; the regex guard is defense-in-depth, not a sandbox.
 
 > **PIN 2026-10-21 (JEV-OFF):** cloud JEV is disabled by policy. After the
 > rotation, `opencode run` smoke hit the 180 s timeout, but the new DeepSeek key

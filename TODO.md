@@ -13,7 +13,10 @@ Last updated: 2026-11-04
       85 findings scrubbed (logs redacted, snapshots/env backups purged,
       post-scan 0/2224); red-team offline+live; `sensitive-read` rule;
       prompt-injection tripwire; host-home mount removed from the override and
-      applied by the 2026-11-04 recreate; `security-posture.sh` 15/0.
+      applied by the 2026-11-04 recreate; `security-posture.sh` 15/0; durable
+      key `.config/opencode/container_key` (restrict), `/rag:ro`, and
+      `openssh-client` in the Dockerfile (rebuild; `11 --install` for the
+      current container).
 
 - [x] **GUARD-SUBQ — 2026-10-22.** Guard backend picked by measured
       latency: Laya 23 s (2 questions) / 33-37 s (4) on this CPU vs SubQ
