@@ -2994,8 +2994,15 @@ async function load(){
 load();
 </script></body></html>`;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://swipswaps.github.io",
+  "Access-Control-Allow-Private-Network": "true",
+  "Vary": "Origin",
+};
+
 function send(res, code, body, type) {
   res.writeHead(code, {
+    ...CORS_HEADERS,
     "Content-Type": type,
     "Cache-Control": "no-store",
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
@@ -3075,6 +3082,16 @@ async function ssePayload(segments = SEGMENTS) {
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      ...CORS_HEADERS,
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "600",
+    });
+    res.end();
+    return;
+  }
   if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
     res.end();
@@ -3131,7 +3148,7 @@ const server = http.createServer(async (req, res) => {
     // snapshot -> deltas (durable-pi pattern): one server-side broadcast loop
     // feeds every client, so clients never poll; a reconnect gets a fresh
     // snapshot. Replaces per-client polling (the single-thread contention).
-    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
+    res.writeHead(200, { ...CORS_HEADERS, "Content-Type": "text/event-stream", "Cache-Control": "no-store", "Connection": "keep-alive", "X-Accel-Buffering": "no" });
     const client = { write: (ev, data) => { try { res.write("event: " + ev + "\ndata: " + JSON.stringify(data) + "\n\n"); } catch { /* client gone */ } } };
     SSE_CLIENTS.add(client);
     try {

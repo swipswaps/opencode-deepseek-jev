@@ -213,6 +213,11 @@ Last updated: 2026-11-04
       workflow, monitoring, and xdg-open included. Public URL:
       <https://swipswaps.github.io/opencode-observability/>.
 
+- [x] **UX-6 — 2026-11-04.** Pages app now probes the live API and renders the
+      real Shell when reachable; screenshots remain the fallback. Dashboard
+      permits only `https://swipswaps.github.io` with CORS + Private Network
+      Access preflight. No changes to the other receipts Pages sites.
+
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.

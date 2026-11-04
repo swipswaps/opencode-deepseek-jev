@@ -400,7 +400,10 @@ A standalone **public Pages screenshot preview** is live at
 <https://swipswaps.github.io/opencode-observability/> (repo
 `swipswaps/opencode-observability`). GitHub Pages cannot reach the local API,
 so that build shows real captures from the live UI (`status-mui-*.png`) and
-makes no API calls or fake metrics. The local `/app/` keeps the live APIs.
+makes no API calls or fake metrics. When the local API is reachable from the
+browser, the Pages app auto-detects it and renders live data instead; the
+dashboard permits only `https://swipswaps.github.io` via CORS/PNA. The local
+`/app/` keeps the live APIs.
 
 ![MUI Overview](docs/ux/status-mui-desktop.png)
 
