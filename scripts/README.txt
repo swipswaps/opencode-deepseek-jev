@@ -86,6 +86,12 @@ dashboard.sh
     scatter, part timeline, bigram pivot (d3 + Observable Plot vendored under
     scripts/vendor/). /runbooks renders the runbooks (/api/runbooks is data).
 
+dashboard-restart.sh
+    Host-only: restart the :5099 dashboard with DASH_SEGMENTS=cost,activity,todos.
+    Finds the node process via /proc (no pgrep), stops it with the shell builtin,
+    waits for the container port, starts the new code, and verifies the HTTPS
+    caddy snapshot carries activity and todos. --status, --dry-run.
+
 cost-bottlenecks.sh
     Ranks where API cost goes: totals + effective $/1k-input, top sessions by
     cost and by input tokens, worst effective $/1k-input, tiny-session
