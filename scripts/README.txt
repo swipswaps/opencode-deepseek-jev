@@ -83,7 +83,9 @@ cost.sh
 dashboard.sh
     Read-only observability sidecar on http://127.0.0.1:5099 (DASH_PORT/
     DASH_HOST). Reads the DB read-only, no docker/external deps. Cost cards +
-    live activity + todos; /api/session?id= (detail + parts) and
+    live activity + todos + a live d3 diagnostic timeline (last 30 parts,
+    moving now); copy buttons for session IDs, activity text/commands, and the
+    timeline JSON; /api/session?id= (detail + parts) and
     /api/export/session?id=&format=txt|md|json (redacted); /api/search.
     /api/health is CACHED (HEALTH_TTL_MS 15s): ~7s of sync aggregation that
     would otherwise block every other request in the single Node process.

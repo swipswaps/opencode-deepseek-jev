@@ -16,6 +16,7 @@ Panels (hash routing activates the tab server-side, no clicks needed):
     trends    /explore#charts      cost/sessions per day
     signals   /explore#signals     session health + guard
     patterns  /explore#patterns    recurring tool n-grams + known fixes
+    timeline  /                    focused status-timeline.png (d3 Gantt)
 
 Light theme is forced (?theme=light) so the shots read.
 Every shot is shrunk with png-shrink.mjs from the ORIGINAL bytes, trying the
@@ -78,7 +79,7 @@ def self_test() -> int:
 
 def check(out: pathlib.Path) -> int:
     """Report which expected shots are missing; never fail the build on a host gap."""
-    expected = ["status-%s.png" % name for name, _ in PANELS]
+    expected = ["status-%s.png" % name for name, _ in PANELS] + ["status-timeline.png"]
     missing = [e for e in expected if not (out / e).exists()]
     print("panels-tour: %d/%d expected shots present in %s" % (len(expected) - len(missing), len(expected), out))
     if missing:
@@ -128,6 +129,16 @@ def main() -> int:
                 print("shot", shot)
             except Exception as e:
                 print("WARN %s: %s" % (name, str(e)[:80]))
+        try:
+            pg.goto(a.base + "/?theme=light", wait_until="domcontentloaded", timeout=30000)
+            pg.wait_for_selector("#timeline svg", timeout=30000)
+            pg.wait_for_timeout(1000)
+            shot = str(out / "status-timeline.png")
+            pg.locator("#timeline-card").screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+        except Exception as e:
+            print("WARN timeline: %s" % str(e)[:80])
         ctx.close()
 
         # 2) Tour video: its own short, low-res context so the .webm stays under

@@ -1122,6 +1122,26 @@ const html = `<!doctype html>
  .live{color:#3fb950}.idle{color:#8b949e}
  #session{font-size:13px;margin-bottom:4px}
  :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
+ body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;user-select:text}
+ .muted{color:#b1bac4}
+ .card h2{font-size:14px;color:#c9d1d9}
+ .item{font-size:13.5px;line-height:1.55;user-select:text}
+ table{font-size:13px}
+ th{color:#b1bac4}
+ .srow .exp{user-select:none}
+ .copy{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;font-size:11px;padding:1px 5px;margin-left:6px;cursor:pointer;user-select:none;font-family:inherit}
+ .copy:hover{color:#fff;border-color:#58a6ff}
+ .item .copy{float:right;margin-left:8px}
+ #timeline{min-height:120px;overflow-x:auto;user-select:text;color:#c9d1d9}
+ #timeline svg{display:block;max-width:100%}
+ #timeline text{fill:#c9d1d9;font-size:11px}
+ .light .muted{color:#57606a}
+ .light .card h2{color:#24292f}
+ .light .item{color:#24292f}
+ .light .copy{background:#f6f8fa;color:#24292f;border-color:#d0d7de}
+ .light #timeline{color:#57606a}
+ .light #timeline text{fill:#24292f}
+ .light #timeline svg{color:#57606a}
 </style></head>
 <body>
 ${nav("dashboard")}
@@ -1134,9 +1154,11 @@ ${nav("dashboard")}
 <div class="card"><h2>Config audit <span class="muted">(actual vs expected)</span></h2><div id="config" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Sessions <span class="muted">(▸ expands inline · title opens the session in a new tab)</span> <span class="muted" data-tz></span></h2><div id="sessions" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Session detail <span class="muted" id="drill-id"></span></h2><div id="drill"><span class="muted">click a session row to drill down</span></div></div>
-<div class="card"><h2>Live activity <span class="muted">(click to expand)</span> <span class="muted" data-tz></span></h2><div id="activity" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card"><h2>Live activity <span class="muted">(more/less expands)</span> <span class="muted" data-tz></span></h2><div id="activity" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
+<div class="card" id="timeline-card"><h2>Diagnostic timeline <span class="muted">(last 30 parts · live)</span> <button class="copy" type="button" data-copy-target="timeline-data">copy JSON</button></h2><div id="timeline" aria-live="polite"><span class="muted" data-loading>loading...</span></div><textarea id="timeline-data" hidden aria-hidden="true"></textarea></div>
 <div class="card"><h2>Todos</h2><div id="todos" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 </main>
+<script src="/vendor/d3.min.js"></script>
 <script>
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(n){n=Number(n)||0;return n>=1000?(n/1000).toFixed(1)+'k':''+n;}
@@ -1151,6 +1173,28 @@ function ts(t){var d=new Date(Number(t));return d.toLocaleTimeString(undefined,{
 async function j(u,ms){try{var o=(ms&&typeof AbortSignal!=='undefined')?{signal:AbortSignal.timeout(ms)}:undefined;var r=await fetch(u,o);return r.ok?r.json():null;}catch(e){return null;}}
 function failIfPristine(id,msg){var el=document.getElementById(id);if(el&&el.querySelector('[data-loading]'))el.innerHTML='<span class="muted" data-error>'+msg+'</span>';}
 var expanded={};
+var lastActivity=null;
+function copyText(t,btn){
+  t=String(t==null?'':t);
+  function done(){if(btn){var o=btn.textContent;btn.textContent='copied';setTimeout(function(){btn.textContent=o;},1200);}}
+  function fallback(){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);done();}catch(e){}}
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,fallback);return;}}catch(e){}
+  fallback();
+}
+document.addEventListener('click',function(ev){
+  var b=ev.target&&ev.target.closest?ev.target.closest('[data-copy],[data-copy-target]'):null;
+  if(!b)return;
+  ev.preventDefault();ev.stopPropagation();
+  var t=b.getAttribute('data-copy');
+  if(t==null){var id=b.getAttribute('data-copy-target');var el=id&&document.getElementById(id);t=el?(el.value!=null?el.value:el.textContent):'';}
+  copyText(t,b);
+},true);
+document.addEventListener('click',function(ev){
+  var b=ev.target&&ev.target.closest?ev.target.closest('[data-tog]'):null;
+  if(!b)return;
+  ev.preventDefault();ev.stopPropagation();
+  tog(b.getAttribute('data-tog'));
+},true);
 function item(x){
   var cls=String(x.type||'').toUpperCase();
   var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':cls;
@@ -1160,9 +1204,10 @@ function item(x){
   if(x.type==='tool'){short=esc(x.tool)+' ['+esc(x.status)+'] '+esc((x.cmd||'').slice(0,90));full=esc(x.tool)+' ['+esc(x.status)+'] '+esc(x.cmd||'');}
   else if(x.type==='reasoning'||x.type==='text'){short=esc((x.text||'').slice(0,140));full=esc(x.text||'');}
   else if(x.type==='patch'){short=esc(x.files||'');full=short;}
-  var click=(full&&full!==short)?' style="cursor:pointer" onclick="tog('+x.ts+')" title="'+(expanded[x.ts]?'click to collapse':'click to expand')+'"':'';
   var body=expanded[x.ts]?full:short;
-  return '<div class="item"'+click+'><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span></div>';
+  var more=(full&&full!==short)?' <button class="copy" type="button" data-tog="'+x.ts+'">'+(expanded[x.ts]?'less':'more')+'</button>':'';
+  var copy=full?' <button class="copy" type="button" data-copy="'+full+'" title="copy full '+esc(x.type)+'">copy</button>':'';
+  return '<div class="item"><span class="tag '+tag+'">'+esc(x.type)+'</span>'+body+' <span class="muted">'+ts(x.ts)+'</span>'+more+copy+'</div>';
 }
 function tog(ts){expanded[ts]=expanded[ts]?0:1;refreshActivity();}
 function dur(s){
@@ -1217,7 +1262,7 @@ function sessRow(s){
   var href=esc(sessOpenHref(s.id||''));
   return '<tr class="srow" data-id="'+id+'">'
     +'<td class="exp" data-exp="'+id+'" role="button" tabindex="0" title="expand details">▸</td>'
-    +'<td><a class="sopen" href="'+href+'" target="_blank" rel="noopener" title="open session in new tab">'+esc(s.title||'(untitled)')+'</a></td>'
+    +'<td><a class="sopen" href="'+href+'" target="_blank" rel="noopener" title="open session in new tab">'+esc(s.title||'(untitled)')+'</a> <button class="copy" type="button" data-copy="'+id+'" title="copy session id">copy id</button></td>'
     +'<td>'+esc(mid)+'</td>'
     +'<td class="muted">'+esc(dir)+'</td>'
     +'<td class="num">'+esc(upd)+'</td>'
@@ -1253,7 +1298,39 @@ function renderCost(c){
   }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
 async function refreshCost(){ renderCost(await j('/api/cost')); }
+function renderDiagTimeline(a,shed){
+  if(a)lastActivity=a;
+  var el=document.getElementById('timeline');if(!el)return;
+  var data=(lastActivity||[]).slice(-30);
+  var dataEl=document.getElementById('timeline-data');if(dataEl)dataEl.value=JSON.stringify(data);
+  if(typeof d3==='undefined'){el.innerHTML='<span class="muted" data-error>d3 unavailable (/vendor/d3.min.js)</span>';return;}
+  if(!data.length){el.innerHTML='<span class="muted">'+(shed?'(activity paused)':'(no activity)')+'</span>';return;}
+  var now=Date.now();
+  var rows=data.map(function(x){var s=Number(x.ts)||now;var e=Number(x.te)||now;if(e<s)e=s;if(e-s<150)e=s+150;return {x:x,s:s,e:e};});
+  var t0=d3.min(rows,function(d){return d.s;});
+  var t1=d3.max(rows.concat([{e:now}]),function(d){return d.e;});
+  if(t1<=t0)t1=t0+1000;
+  var W=Math.max(560,el.clientWidth||560),rowH=18,m={top:8,right:12,bottom:24,left:150};
+  var H=m.top+m.bottom+rows.length*rowH;
+  var x=d3.scaleTime().domain([new Date(t0),new Date(t1)]).range([m.left,W-m.right]);
+  var svg=d3.select(el).html('').append('svg').attr('width',W).attr('height',H).attr('role','img').attr('aria-label','Diagnostic timeline of the last 30 parts');
+  var color=d3.scaleOrdinal().domain(['TOOL','TEXT','REASONING','STEP','PATCH']).range(['#58a6ff','#3fb950','#d2a8ff','#8b949e','#f85149']);
+  var g=svg.append('g');
+  rows.forEach(function(d,i){
+    var y=m.top+i*rowH;
+    var label=(d.x.type==='tool'?d.x.tool:(d.x.type||'?'))+(d.x.status?' ['+d.x.status+']':'');
+    g.append('text').attr('x',m.left-8).attr('y',y+12).attr('text-anchor','end').text(String(label).slice(0,22));
+    var type=String(d.x.type||'').toUpperCase();
+    var fill=(d.x.status==='error')?'#f85149':(color(type)||'#8b949e');
+    g.append('rect').attr('x',x(new Date(d.s))).attr('y',y+3).attr('width',Math.max(2,x(new Date(d.e))-x(new Date(d.s)))).attr('height',12).attr('rx',2).attr('fill',fill).attr('opacity',0.9).append('title').text(label+'\\n'+ts(d.s)+' - '+ts(d.e)+(d.x.cmd?'\\n'+d.x.cmd:''));
+  });
+  svg.append('line').attr('x1',x(new Date(now))).attr('x2',x(new Date(now))).attr('y1',m.top).attr('y2',H-m.bottom).attr('stroke','#f85149').attr('stroke-width',1).attr('stroke-dasharray','3,2');
+  svg.append('text').attr('x',x(new Date(now))).attr('y',m.top-2).attr('text-anchor','middle').attr('fill','#f85149').attr('font-size',10).text('now');
+  svg.append('g').attr('transform','translate(0,'+(H-m.bottom)+')').call(d3.axisBottom(x).ticks(5).tickFormat(d3.timeFormat('%H:%M:%S')));
+}
+setInterval(function(){if(lastActivity&&lastActivity.length)renderDiagTimeline();},2000);
 function renderActivity(a,shed){
+  renderDiagTimeline(a,shed);
   if(a){var h='';for(var i=0;i<a.length;i++){h+=item(a[i]);}
     document.getElementById('activity').innerHTML=h||'<div class="item">(no activity)</div>';}
   else{failIfPristine('activity', shed ? '(activity paused: CPU PSI > 30; DASH_AUTO_SHED=1)' : '(activity unavailable)');}
@@ -1388,12 +1465,11 @@ document.getElementById('searchres').addEventListener('click',function(ev){
   if(t){drill(t.getAttribute('data-go'));}
 });
 document.getElementById('sessions').addEventListener('click',function(ev){
+  if(ev.target&&ev.target.closest&&ev.target.closest('[data-copy],[data-tog]'))return;
   var a=ev.target&&ev.target.closest?ev.target.closest('a.sopen'):null;
   if(a){return;}
   var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;
   if(ex){toggleSessRow(ex.getAttribute('data-exp'));return;}
-  var tr=ev.target&&ev.target.closest?ev.target.closest('tr.srow'):null;
-  if(tr){toggleSessRow(tr.getAttribute('data-id'));}
 });
 document.getElementById('sessions').addEventListener('keydown',function(ev){
   var ex=ev.target&&ev.target.closest?ev.target.closest('[data-exp]'):null;

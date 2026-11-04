@@ -6,15 +6,25 @@ through a local guard. A separate RAG repo provides local document retrieval.
 The stack runs on one host (`ws24`, `192.168.4.24`); there is no cloud control
 plane.
 
-**Latest verified state (2026-11-04).** Provider keys rotated (SubQ, Anthropic,
-LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; LiteLLM is
-DB-backed and `admin` login returns 200; the TLS leaf was rotated with the same
-CA; `red-team.sh` passes (offline + live); readme audits are 8/0 (harness) and
-6/0 (RAG); artifact scan **0/2224**; harness `4 passed, 0 failed`.
-`security-posture.sh` is **16/3** on the pre-recreate container: the three
-`repo_secrets` failures are `.env.local`, `docker/litellm-db.env`, and
-`docker/certs/*` still visible through `/workspace`; the empty binds in the
-override clear them on the next `web-restart.sh --recreate` (expect **19/0**).
+## Latest verified state (2026-11-04)
+
+- The web UI and the `:5099` dashboard are running. The dashboard streams
+  cost, live activity, todos, and a live **d3 diagnostic timeline** (last 30
+  parts, moving "now" line); the activity items and session rows have copy
+  buttons, and text is selectable.
+- LiteLLM has a private Postgres. The admin UI at `127.0.0.1:4000/ui` accepts
+  `admin` + `LITELLM_MASTER_KEY` (HTTP 200); `/v1/models` is 200.
+- Provider keys were rotated. The guard allows benign reads and denies
+  destructive, exfiltration, and quote/substitution-obfuscated calls.
+- TLS was reissued with the **same local CA**, so browsers that trusted the CA
+  keep working.
+- Security posture: **16 of 19** checks pass. The 3 remaining are the
+  repo-mounted secrets (`.env.local`, `docker/litellm-db.env`,
+  `docker/certs/*`); the empty binds in the override clear them on the next
+  `web-restart.sh --recreate` (expect 19/0).
+- Artifact scan: **0 findings in 2224 files**.
+- Gates: fast harness **3/0 in 73s**; lint **328/0**; test-hygiene **63/0**;
+  dashboard inline-script execution test **PASS** (home + explore).
 
 ## Start here (first 10 minutes)
 
@@ -334,16 +344,22 @@ Regenerate every panel + a short `.webm` tour with the scripted capture:
 `python3 scripts/panels-tour.py` (needs a launchable chromium —
 `playwright install chromium`; the sandbox lacks the system libs, so run it on
 the host). It writes
-`docs/ux/status-{home,overview,board,trends,signals,patterns}.png` and
-`docs/ux/tour.webm`, shrinking each shot under the 150 KiB image budget (from
-the original, so it never double-shrinks) and recording a separate 960x540 tour
-under the 2 MiB video budget. `python3 scripts/panels-tour.py --check` lists any
-expected shot that is still missing (it reports, it does not fake a pass).
+`docs/ux/status-{home,overview,board,trends,signals,patterns}.png`, a focused
+`docs/ux/status-timeline.png`, and `docs/ux/tour.webm`, shrinking each shot
+under the 150 KiB image budget (from the original, so it never double-shrinks)
+and recording a separate 960x540 tour under the 2 MiB video budget.
+`python3 scripts/panels-tour.py --check` lists any expected shot that is still
+missing (it reports, it does not fake a pass).
 
 Dashboard home — **Flags** (bottlenecks · cost · slowdowns · stalls), sessions
 with time-zone-labelled times, cost, live activity:
 
 ![Dashboard home](docs/ux/status-home.png)
+
+Diagnostic timeline — the last 30 activity parts as a live d3 Gantt. The red
+line is “now”; the card’s **copy JSON** button copies the raw data:
+
+![Diagnostic timeline](docs/ux/status-timeline.png)
 
 `/explore ▸ overview` — search everything + the compact sessions table:
 

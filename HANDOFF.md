@@ -8,7 +8,9 @@
 > load **19** (`dsh web` 117% CPU + many Chromium renderers) and no harness
 > process remained. Use `./scripts/gate-watch.sh ./scripts/harness.sh` to rerun
 > with a live log + heartbeat and read the last `ms=/ts=` line; `test-hygiene`
-> is 63/0. The dashboard is verified separately (activity 80, todos 4). **Missing / will break:**
+> is 63/0. The dashboard is verified separately (activity 80, todos 4); its UX
+> now has a live d3 diagnostic timeline, copy buttons, and selectable,
+> higher-contrast text; screenshots (home + timeline) refreshed 2026-11-04. **Missing / will break:**
 > 1. The repo is mounted at `/workspace`, so the web container can still read
 >    `/workspace/.env.local`, `/workspace/docker/litellm-db.env`, and
 >    `/workspace/docker/certs/*`. The override now hides them with empty binds

@@ -177,6 +177,12 @@ Last updated: 2026-11-04
       `.env.local` and 08; added the `shed` flag/message and
       `dashboard-restart.sh`; live proof activity=80, todos=4.
 
+- [x] **UX-1 — 2026-11-04.** `:5099` readability/copy: larger high-contrast
+      text, selectable content, copy buttons for session IDs, activity
+      text/commands and timeline JSON, expand only on the control, and a live
+      d3 diagnostic Gantt (last 30 parts, moving now). Screenshots refreshed
+      (`status-home`, `status-timeline`); headless UI test PASS.
+
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.
