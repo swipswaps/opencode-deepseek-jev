@@ -93,6 +93,16 @@ table in `HANDOFF.md`. The repo almost always has a local tool for it:
 - search history → `./scripts/semantic-search.sh` / `fuzzy-search.py`.
 - read the DB → `opencode db "SQL"`; raw telemetry → `./scripts/logs.sh`.
 - read a doc → `/docs`; cost → `./scripts/cost.sh`.
+- errors: read them at the layer they name (RULES #90). `command not found` =
+  absent binary; `error connecting to <socket>` / `No such file or directory`
+  on a socket = absent server. Check `command -v` and `systemctl is-active` /
+  `ss` before claiming a gap. `./scripts/incident-resolve.sh --db --auto`
+  classifies recurring DB/guard signatures and resolves the safe ones
+  (RULES #92): it starts a tmux server, treats already-paused as success, and
+  warms a cold embedding model.
+- timeouts: a deadline is telemetry (RULES #91). Print its measured basis,
+  elapsed time, sample count, and last sample. Never fail with a bare
+  "timed out"; an env override does not replace the measurement.
 
 `ux-trace.py --ocr` is the scripted form of "read the screenshots back": it
 stores each shot's OCR text in the `ux_shot` table. OCR text and any UI/log

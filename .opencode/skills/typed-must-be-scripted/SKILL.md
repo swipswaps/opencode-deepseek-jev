@@ -44,6 +44,14 @@ exact procedure and a verification script. No "should", "consider", or
   outranks a theory). Reach for them before any new instrumentation.
 - Never suppress stderr: no `2>/dev/null`, no `head`-truncated proof,
   no "should work". A claim without a row/line is a guess — label it so.
+- Timeouts are measurements, not magic numbers: derive the bound from an
+  observed cold-load/p95/rate, print the basis and elapsed time, and print
+  the last sample on expiry. An env override does not replace the
+  measurement; a bare "timed out" is not evidence.
+- Read errors at the layer they name: `command not found` = absent binary;
+  `error connecting to <socket>` / `No such file or directory` on a socket =
+  absent server. Verify with `command -v` and `systemctl is-active`/`ss`
+  before declaring a capability gap.
 - Destructive steps (deletes, restarts, re-signs) require typed confirmation
   (`YES`) and a trap that restores prior state on ANY exit, Ctrl-C included.
   Forwards/rules are never auto-deleted; snapshots print before mutation.
