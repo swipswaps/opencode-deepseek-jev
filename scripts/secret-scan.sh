@@ -53,7 +53,7 @@ PATTERNS = [
     ("env_assignment", re.compile(
         r"(?:^|[^A-Za-z0-9])[A-Z][A-Z0-9_]*(?:API_KEY|PASSWORD|SECRET|TOKEN|MASTER_KEY)\s*=\s*[\"']?[A-Za-z0-9_./+\-]{12,}")),
     ("yaml_secret", re.compile(
-        r"(?i)^\s*[A-Za-z0-9_.-]*(?:api_?key|password|secret|token|master_key|server_password)\s*:\s*[\"']?[A-Za-z0-9_./+\-]{20,}")),
+        r"(?i)^\s*[A-Za-z0-9_.-]*(?:api_?key|password|secret|token|master_key|server_password)\s*:\s*(?!os\.environ/|env:|{{|\$\{|\$[A-Za-z_])[\"']?[A-Za-z0-9_./+\-]{20,}")),
 ]
 SKIP_NAMES = {".env.local", ".env", ".git"}
 SKIP_EXT = {".db", ".db-wal", ".db-shm", ".png", ".jpg", ".jpeg", ".gif", ".webp",
@@ -132,7 +132,9 @@ open(d + "/dirty.log", "w").write(
     + "\nOPENCODE_SERVER_PASSWORD=" + "c" * 24 + "\n")
 open(d + "/clean.log", "w").write(
     "all good, no keys here\n# Password: regenerate ONLY on missing or --rotate.\n"
-    "rotate-server-password: self-test PASS\n")
+    "rotate-server-password: self-test PASS\n"
+    "api_key: os.environ/DEEPSEEK_API_KEY\n"
+    "api_key: ${DEEPSEEK_API_KEY}\n")
 PYEOF
     out=$(bash "${BASH_SOURCE[0]}" --paths "$work" --json 2>&1)
     printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["count"] >= 3, "count"; assert all(set(("file","line","kind")) == set(f) for f in d["findings"]), "shape"' \

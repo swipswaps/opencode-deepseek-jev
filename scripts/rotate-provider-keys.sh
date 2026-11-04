@@ -218,8 +218,12 @@ main() {
         section "recreate"
         "$REPO/scripts/web-restart.sh" --recreate || printf 'WARN web recreate failed\n'
         if docker ps --format '{{.Names}}' 2>&1 | grep -qx litellm; then
-            ( cd "$REPO/docker" && docker compose -f docker-compose.litellm.yml up -d --force-recreate litellm ) \
-                || printf 'WARN litellm recreate failed\n'
+            if [ -f "$REPO/docker/litellm-db.env" ]; then
+                ( cd "$REPO/docker" && docker compose -f docker-compose.litellm.yml up -d --force-recreate litellm ) \
+                    || printf 'WARN litellm recreate failed\n'
+            else
+                printf 'litellm DB not initialised; run ./scripts/litellm-db.sh --apply\n'
+            fi
         else
             printf 'litellm not running; proxy recreate skipped\n'
         fi

@@ -7,8 +7,9 @@ The stack runs on one host (`ws24`, `192.168.4.24`); there is no cloud control
 plane.
 
 **Latest verified state (2026-11-04).** Provider keys rotated (SubQ, Anthropic,
-LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; harness gate
-`4 passed, 0 failed`.
+LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; LiteLLM is
+DB-backed and `admin` login returns 200; the TLS leaf was rotated with the same
+CA; `red-team.sh` passes (offline + live); harness `4 passed, 0 failed`.
 
 ## Start here (first 10 minutes)
 
@@ -43,6 +44,7 @@ Then open the agent at `https://127.0.0.1:4096` and the read-only dashboard at
 | `opencode-web` | container | Docker | `:4096`, `:5099` | agent web UI + dashboard sidecar |
 | `caddy` | container | Docker | `:443`, `:4096`, `:5099` | TLS edge; binds host IPs |
 | `litellm` | container | Docker | `127.0.0.1:4000` | local model proxy / master key |
+| `litellm-db` | container | Docker | internal | private Postgres for proxy auth + spend |
 | `opencode-grafana` | container | Docker | `127.0.0.1:3001` | optional ops view (may be paused) |
 | `dockge`, `mesh-console`, `paypal` | containers | Docker | internal | optional services |
 | `ollama` | host service | host | `127.0.0.1:11434` | optional local models (RAG) |
@@ -75,7 +77,11 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 | read logs | `./scripts/logs.sh --source error|guard|signal` |
 | triage a known log signature | `./scripts/incident-resolve.sh --db --auto` |
 | rotate provider keys | `./scripts/rotate-provider-keys.sh`, `./scripts/open-rotation-pages.sh --open` |
+| set up / repair the LiteLLM DB + UI | `./scripts/litellm-db.sh --apply` |
 | verify the guard | `./scripts/guard-verify.sh` |
+| run the adversarial gate | `./scripts/red-team.sh` (`--offline` skips SubQ) |
+| rotate the TLS leaf (same CA) | `./scripts/rotate-tls.sh --apply --yes` |
+| scrub leaked artifacts | `./scripts/scrub-secrets.sh --apply --yes --purge-snapshots --purge-env-backups` |
 | inspect model policy/cost | `./scripts/models.sh`, `./scripts/cost.sh` |
 | use the RAG engine | `cd ../2282af3557819803/repo/production-local-rag && ./scripts/04-retrieval-only.sh --query "..."` |
 
@@ -86,12 +92,20 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
   do not bypass it.
 - Caddy exits `255` at boot when its bind IPs are not up yet. `web.sh` waits and
   recreates it; override with `WEB_BIND_IPS` if the host IP changes.
-- The LiteLLM admin UI says **"Not connected to DB!"** by design: this stack
-  runs no Postgres, so the UI login cannot work. Use the proxy API or
-  `rotate-provider-keys.sh`; the proxy itself is healthy.
+- The LiteLLM admin UI is DB-backed: `./scripts/litellm-db.sh --apply` starts
+  the private `litellm-db`, writes `LITELLM_DATABASE_URL`, and proves
+  `admin` + `LITELLM_MASTER_KEY` login. If the UI says **"Not connected to
+  DB!"**, run that script before trying the console.
 - A guard `401` means the running web container has an old/revoked key.
   `env_file` is read at container creation: recreate the web container to pick
   up `.env.local`.
+- Host-secret reads (`/etc/passwd`, `~/.ssh`, `~/.aws`, `/proc/*/environ`) are
+  blocked by the blacklist `sensitive-read` rule. A changed plugin loads only
+  in a new process: `./scripts/web-restart.sh --recreate` (drops the session).
+- If `rotate-tls.sh --check` says the live key matches a snapshot, run
+  `./scripts/rotate-tls.sh --apply --yes` (same CA, so clients keep trust).
+  Then run `./scripts/scrub-secrets.sh --apply --yes --purge-snapshots`
+  yourself; the agent guard blocks destructive purges by design.
 - `./scripts/incident-resolve.sh --db --auto` classifies recurring signatures
   (tmux no-server, already-paused, embedding cold-load, `pgrep` >15 chars,
   pubkey denial, guard blocks, stale edits) and resolves the safe ones.

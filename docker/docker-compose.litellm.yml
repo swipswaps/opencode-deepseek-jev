@@ -6,6 +6,11 @@
 #   docker compose -f docker/docker-compose.litellm.yml config --quiet
 #   docker compose -f docker/docker-compose.litellm.yml up -d
 #
+# The DB credentials live in docker/litellm-db.env (0600, gitignored) and the
+# proxy URL in .env.local. Create both, start the stack, and verify the admin
+# login with:
+#   ./scripts/litellm-db.sh --apply
+#
 # `name: litellm` keeps this a separate compose project so it never treats
 # the agent containers as orphans (and never removes them by accident).
 #
@@ -17,6 +22,20 @@
 name: litellm
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: litellm-db
+    restart: unless-stopped
+    env_file:
+      - ./litellm-db.env
+    volumes:
+      - litellm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: litellm
@@ -26,5 +45,11 @@ services:
       - ./litellm.config.yaml:/app/config.yaml
     env_file:
       - ../.env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: ["--config", "/app/config.yaml"]
     restart: unless-stopped
+
+volumes:
+  litellm_pgdata:

@@ -805,6 +805,30 @@ open-rotation-pages.sh
     (:4000/ui); done DeepSeek; optional JEV/Gemini. --list, --open,
     --only a,b, --all, --dry-run, --opener xdg-open|cdp|print.
 
+litellm-db.sh
+    Create/repair the private Postgres for LiteLLM (docker/litellm-db.env,
+    0600, gitignored), add LITELLM_DATABASE_URL to .env.local, start postgres
+    + litellm, wait for both, and verify admin login + /v1/models. --status,
+    --dry-run, --apply. Values are never printed.
+
+red-team.sh
+    Falsifiable adversarial gate: blacklist self-test (including host-secret
+    reads), .env read-block rules, and live jev-guard/SubQ classification
+    (ALLOW/DENY/ASK) for destructive, exfiltration, out-of-workspace, and
+    quote/substitution-obfuscated commands. --offline skips the SubQ calls.
+    The commands are classified, never executed.
+
+rotate-tls.sh
+    Reissue the caddy leaf key/cert with the SAME local CA, restart caddy, and
+    verify the served fingerprint on :4096/:5099. --check also reports whether
+    the live key matches a leaked snapshot. --apply requires --yes.
+
+scrub-secrets.sh
+    Redact secret-shaped values in logs/ and data/observability with
+    redact.mjs; optionally purge snapshot dirs containing private keys/yaml
+    secrets and .env.local.bak.*. Dry run by default; --apply --yes to write.
+    Values are never printed.
+
 rotation-progress.sh
     Read-only progress view for the OPEN rotation terminal and the background
     workers behind :4096. Reports the rotate-server-password.sh tree (pid/tty/

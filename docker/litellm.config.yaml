@@ -45,19 +45,17 @@ fallbacks:
   - deepseek-flash-pro: [deepseek-flash]
 
 # Spend persistence (enables the max_budget cap + admin UI history).
-# NOT active: requires a Postgres the compose stack does not run yet.
-# Host enable path: add a postgres service, set DATABASE_URL below to
-# os.environ/LITELLM_DATABASE_URL, recreate litellm. Until then max_budget
-# stays decorative (see note under litellm_settings).
-# general_settings:
-#   database_url: os.environ/LITELLM_DATABASE_URL
+# The compose file starts a private Postgres (litellm-db) with credentials
+# from docker/litellm-db.env; DATABASE_URL comes from .env.local via
+# scripts/litellm-db.sh. The DB is not published to the host.
+general_settings:
+  database_url: os.environ/LITELLM_DATABASE_URL
 
 litellm_settings:
   # Hard cap in USD. 30d = rolling 30 days; also: 1d, 1h.
   # Budgets / virtual keys: https://docs.litellm.ai/docs/proxy/virtual_keys
-  # NOTE (measured 2026-09-30): the proxy logs that a proxy-wide budget is
-  # NOT enforced without DATABASE_URL — max_budget below is currently
-  # decorative. Wiring spend persistence is queued (G4 follow-up).
+  # With the DB above, the proxy-wide budget is enforced and the admin UI
+  # can authenticate (username admin, password LITELLM_MASTER_KEY).
   max_budget: 5.0
   budget_duration: 30d
   request_timeout: 120

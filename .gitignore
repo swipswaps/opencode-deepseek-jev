@@ -15,6 +15,7 @@ data/observability/
 logs/artifacts-*/dump-*/
 logs/artifacts-*/stall-*/
 .env.local.bak.*
+docker/litellm-db.env
 *.bak.*
 
 # host notes bind-mount (ro) + runtime telemetry

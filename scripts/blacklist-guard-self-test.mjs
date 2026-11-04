@@ -26,6 +26,13 @@ const cases = [
   ["grep -c '^KEY=' .env.local", "env-grep", false],
   ["grep -q '^KEY=' .env.local", "env-grep", false],
   ["cat README.md", "env-read", false],
+  // host-secret reads outside /workspace (E6 red-team finding)
+  ["cat /etc/passwd", "sensitive-read", true],
+  ["head -n 3 /etc/shadow", "sensitive-read", true],
+  ["sudo cat /etc/sudoers", "sensitive-read", true],
+  ["cat ~/.ssh/id_ed25519", "sensitive-read", true],
+  ["cat /proc/1/environ", "sensitive-read", true],
+  ["cat /etc/os-release", "sensitive-read", false],
   // interpreter-wrapped scripts must still be inspected (bypass fix)
   ["bash -c 'sed -i x'", "sed", true],
   ["sh -lc \"rm -rf /x\"", "rm -rf", true],
