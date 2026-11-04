@@ -1,9 +1,47 @@
 scripts/ — operating scripts for the OpenCode + DeepSeek + Jev environment
 ===========================================================================
 
-Two tools run the environment; two more manage the workflow. One entry per
-script: what it does, its flags/seams, and any gate. Conventions + paths are
-at the end.
+This is the per-script reference, not the repo introduction. Read
+../README.md first for the stack and the 10-minute start path.
+
+Start here
+----------
+Quick index by job:
+
+  health/gates    preflight.sh, harness.sh, doctor.sh, test-*.sh
+  start/restart   web.sh, web-restart.sh, web-stop.sh, web-logs.sh
+  recovery        07-io-triage.sh, 08-gated-recovery.sh, 09-ollama-start.sh,
+                  10-recovery-autopilot.sh, incident-resolve.sh
+  security        guard-verify.sh, guard-env-read.sh, red-team.sh,
+                  security-posture.sh, secret-scan.sh,
+                  secret-leak-response.sh, rotate-*.sh, rotate-tls.sh,
+                  scrub-secrets.sh, authorize-container-key.sh
+  models/cost     models.sh, cost.sh, cost-bottlenecks.sh
+  RAG             sibling production-local-rag/README.txt
+
+Conventions:
+- Numbered NN-*.sh are ordered runbooks; unnumbered scripts are tools.
+- "Host-only" means run on ws24 (docker/systemctl/ollama); "container" means
+  the web container. Each entry says which.
+- Every tracked top-level script must appear here or in tools.json
+  (test-hygiene enforces it). Add a tool = script + self-test + README entry +
+  tools.json + ./scripts/harness.sh.
+- Scripts print telemetry first; a timeout prints its measured basis, elapsed
+  time, and last sample (RULES #91).
+
+Host access
+-----------
+authorize-container-key.sh
+    RUN ON THE HOST. Append the web container's current public key
+    (<repo>/container-key.pub) to ~/.ssh/authorized_keys (0600), print only the
+    fingerprint, then remove the public-key file. Needed after a web recreate:
+    /home/node is container-local and its key is regenerated.
+
+readme-audit.sh
+    Audit reader-facing docs: root "what this is" + start path, catalog
+    start-here/conventions, vendor integrity baseline, plans link, every
+    tracked script documented, and every local markdown link resolves.
+    --repo DIR, --write PATH.
 
 Operate the environment
 -----------------------

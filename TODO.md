@@ -12,8 +12,8 @@ Last updated: 2026-11-04
       200); same-CA TLS leaf rotation after the live key matched 3 snapshots;
       85 findings scrubbed (logs redacted, snapshots/env backups purged,
       post-scan 0/2224); red-team offline+live; `sensitive-read` rule;
-      prompt-injection tripwire; host-home mount removed from the override
-      (live apply needs `web-restart.sh --recreate`); `security-posture.sh`.
+      prompt-injection tripwire; host-home mount removed from the override and
+      applied by the 2026-11-04 recreate; `security-posture.sh` 15/0.
 
 - [x] **GUARD-SUBQ — 2026-10-22.** Guard backend picked by measured
       latency: Laya 23 s (2 questions) / 33-37 s (4) on this CPU vs SubQ

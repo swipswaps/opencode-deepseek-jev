@@ -1,8 +1,12 @@
 # Plans as pull requests
 
-These are PR-ready bodies. Each file has a title, a summary, the exact files,
-a falsifiable test plan, risks, and the host-only steps. To open one as a real
-pull request from a branch:
+This directory holds **PR-ready plan bodies**, not implementation docs. Read
+the repo [`README.md`](../../README.md) first; use a plan when a change needs a
+reviewable branch, an explicit falsifiable test, and a rollback path.
+
+Each file has a title, a summary, the exact files, a falsifiable test plan,
+risks, and the host-only steps. To open one as a real pull request from a
+branch:
 
     git switch -c <branch>
     # apply the change described in the body

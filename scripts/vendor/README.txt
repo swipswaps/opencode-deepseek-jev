@@ -32,3 +32,15 @@ To refresh:
     curl -s -o scripts/vendor/plot.umd.min.js \
       https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17/dist/plot.umd.min.js
     # then update the versions above and re-run ./scripts/test-dashboard.sh
+
+Integrity baseline (local pins, 2026-11-04)
+-------------------------------------------
+Verify with `sha256sum scripts/vendor/*.js`:
+
+  f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539  d3.min.js
+  8286db5d6aa049cc6e8a546708943b79dfb4daaefb0ccf42af674ec0ee4c86be  d3-sankey.min.js
+  4358086467740777dd788d6b27a95cebdbaefdd50c730a3060117073bd7134cb  plot.umd.min.js
+
+A version bump updates these hashes in the same change as the files; a hash
+mismatch means the vendored artifact changed without a documented refresh.
+

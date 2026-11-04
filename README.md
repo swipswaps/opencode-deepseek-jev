@@ -9,7 +9,8 @@ plane.
 **Latest verified state (2026-11-04).** Provider keys rotated (SubQ, Anthropic,
 LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; LiteLLM is
 DB-backed and `admin` login returns 200; the TLS leaf was rotated with the same
-CA; `red-team.sh` passes (offline + live); harness `4 passed, 0 failed`.
+CA; `red-team.sh` passes (offline + live); `security-posture.sh` is **15/0**;
+artifact scan **0/2224**; harness `4 passed, 0 failed`.
 
 ## Start here (first 10 minutes)
 
@@ -116,9 +117,9 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - `./scripts/security-posture.sh` checks the invariants that are not one
   command: host-home exposure, container caps/user, loopback-only LiteLLM,
   secret-file modes, artifact cleanliness, TLS, and the local red-team layer.
-- The compose override no longer mounts `/home/owner`; the live container keeps
-  the old mount until `./scripts/web-restart.sh --recreate` (drops the session).
-  Until then the posture gate reports exactly that one FAIL.
+- The compose override no longer mounts `/home/owner`; the 2026-11-04 recreate
+  applied it. `security-posture.sh` is **15/0** (mounts, caps, loopback,
+  modes, scrub, TLS, red-team).
 - Tool results are scanned for prompt-injection markers and logged as
   `"verdict":"injection"` (advisory, value-free). This is telemetry, not
   prevention: model-level prompt injection remains a residual risk.

@@ -5,10 +5,10 @@
 > key matched 3 snapshots; 85 findings were scrubbed (logs redacted, snapshot
 > and env backups purged, post-scan 0/2224). `red-team.sh` passes offline+live;
 > the blacklist `sensitive-read` rule and a prompt-injection tripwire are in
-> the module. The compose override no longer mounts `/home/owner`;
-> `security-posture.sh` is 14/1 until `web-restart.sh --recreate` loads the new
-> mount/plugin (drops the session). Residual: prompt injection is model-level;
-> the regex guard is defense-in-depth, not a sandbox.
+> the module. The compose override no longer mounts `/home/owner`; the
+> 2026-11-04 recreate applied it and `security-posture.sh` is **15/0**.
+> Residual: prompt injection is model-level; the regex guard is
+> defense-in-depth, not a sandbox.
 
 > **PIN 2026-10-21 (JEV-OFF):** cloud JEV is disabled by policy. After the
 > rotation, `opencode run` smoke hit the 180 s timeout, but the new DeepSeek key
