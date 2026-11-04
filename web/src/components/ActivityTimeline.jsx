@@ -225,6 +225,8 @@ export default function ActivityTimeline({ activity, shed }) {
   const maxMs = Math.max(150, ...timings.map((t) => t.ms));
   const t1 = Math.max(now, ...timings.map((t) => t.end)) + 60000;
   const t0 = Math.min(now, ...timings.map((t) => t.start));
+  const nowPct = t1 > t0 ? Math.max(0, Math.min(100, ((now - t0) / (t1 - t0)) * 100)) : 100;
+  const clock = (t) => new Date(t).toLocaleTimeString(undefined, { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const isMobile = useMediaQuerySmall();
 
   if (activity == null) {
@@ -304,6 +306,33 @@ export default function ActivityTimeline({ activity, shed }) {
           }}
         />
       </Paper>
+
+      {!isMobile && rows.length > 0 && (
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "90px 116px 84px 110px 64px minmax(0,1fr) 96px",
+            columnGap: 1,
+            alignItems: "center",
+            px: 1.25,
+            pb: 0.5,
+            color: "text.secondary",
+          }}
+          aria-hidden="true"
+        >
+          <Typography variant="caption">time</Typography>
+          <Box sx={{ position: "relative", height: 20 }}>
+            <Typography variant="caption" sx={{ position: "absolute", left: 0, top: 0, whiteSpace: "nowrap" }}>{clock(t0)}</Typography>
+            <Typography variant="caption" sx={{ position: "absolute", right: 0, top: 0, whiteSpace: "nowrap" }}>{clock(t1)}</Typography>
+            <Typography variant="caption" sx={{ position: "absolute", left: `${nowPct}%`, top: 0, transform: "translateX(-50%)", color: "error.main", fontWeight: 700 }}>now</Typography>
+          </Box>
+          <Typography variant="caption">rel. dur</Typography>
+          <Typography variant="caption">type</Typography>
+          <Typography variant="caption">dur</Typography>
+          <Typography variant="caption">detail</Typography>
+          <Typography variant="caption" />
+        </Box>
+      )}
 
       {rows.length === 0 ? (
         <Alert severity="info">No activity matches this filter.</Alert>
