@@ -1,6 +1,107 @@
 # OpenCode + DeepSeek V4.1 Flash + Jev
 
-Docker-based setup. All project code stays inside this repository.
+**What this is.** A self-hosted AI coding workspace. OpenCode (the agent UI)
+runs in Docker, calls DeepSeek for generation, and sends risky tool calls
+through a local guard. A separate RAG repo provides local document retrieval.
+The stack runs on one host (`ws24`, `192.168.4.24`); there is no cloud control
+plane.
+
+**Latest verified state (2026-11-04).** Provider keys rotated (SubQ, Anthropic,
+LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; harness gate
+`4 passed, 0 failed`.
+
+## Start here (first 10 minutes)
+
+If you are new, read in this order:
+
+1. this README (what exists and how to start it),
+2. [`HANDOFF.md`](HANDOFF.md) (current state, open risks),
+3. [`RULES.md`](RULES.md) (constraints the scripts enforce),
+4. [`TODO.md`](TODO.md) (what is queued),
+5. [`scripts/README.txt`](scripts/README.txt) (one entry per tool).
+
+Minimal path:
+
+```bash
+cd ~/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
+# 1. secrets live in .env.local (mode 0600); never print them
+#    required: DEEPSEEK_API_KEY, OPENCODE_SERVER_PASSWORD
+#    optional: JEV_API_KEY (cloud Jev is disabled), SUBQ_API_KEY
+./scripts/web.sh              # start/recover web + caddy
+./scripts/preflight.sh        # fail-closed health + budget check
+./scripts/harness.sh --fast   # gates, telemetry, cost, TODO
+```
+
+Then open the agent at `https://127.0.0.1:4096` and the read-only dashboard at
+`https://127.0.0.1:5099` (Basic auth from `.env.local`; `401` from a bare
+`curl` means the server is alive).
+
+## What runs where
+
+| Piece | Type | Where | Address | What it does |
+|---|---|---|---|---|
+| `opencode-web` | container | Docker | `:4096`, `:5099` | agent web UI + dashboard sidecar |
+| `caddy` | container | Docker | `:443`, `:4096`, `:5099` | TLS edge; binds host IPs |
+| `litellm` | container | Docker | `127.0.0.1:4000` | local model proxy / master key |
+| `opencode-grafana` | container | Docker | `127.0.0.1:3001` | optional ops view (may be paused) |
+| `dockge`, `mesh-console`, `paypal` | containers | Docker | internal | optional services |
+| `ollama` | host service | host | `127.0.0.1:11434` | optional local models (RAG) |
+| `scripts/*` | host tools | host | — | gates, runbooks, rotation, recovery |
+
+Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
+`.env.local` is the only secret store; it is 0600 and gitignored.
+
+## Project words (not acronyms)
+
+- **Jev** — the name of this stack; also the old cloud guard/review service.
+  Cloud Jev is **disabled by policy** (2026-10-21).
+- **SubQ** — the current guard backend (`JEV_BASE_URL=https://api.subq.ai`),
+  reached through `jev-guard`, a plugin that classifies tool calls.
+- **Laya** — optional self-hosted model server for the same guard protocol;
+  slower on this CPU, used for batch/A-B only.
+- **RAG** — the separate retrieval engine at
+  `~/Documents/2282af3557819803/repo/production-local-rag`.
+- **Harness** — this repo's gate/telemetry/learning layer (`scripts/harness.sh`).
+- **Dashboard** — the read-only `:5099` observability UI; it is not the agent UI.
+
+## Common tasks
+
+| I want to... | Run |
+|---|---|
+| start / restart / stop the web stack | `./scripts/web.sh` / `./scripts/web-restart.sh` / `./scripts/web-stop.sh` |
+| check current state | `./scripts/preflight.sh`, `./scripts/harness.sh --fast` |
+| run the full delivery gate | `./scripts/harness.sh` |
+| diagnose a sick host | `./scripts/doctor.sh` |
+| read logs | `./scripts/logs.sh --source error|guard|signal` |
+| triage a known log signature | `./scripts/incident-resolve.sh --db --auto` |
+| rotate provider keys | `./scripts/rotate-provider-keys.sh`, `./scripts/open-rotation-pages.sh --open` |
+| verify the guard | `./scripts/guard-verify.sh` |
+| inspect model policy/cost | `./scripts/models.sh`, `./scripts/cost.sh` |
+| use the RAG engine | `cd ../2282af3557819803/repo/production-local-rag && ./scripts/04-retrieval-only.sh --query "..."` |
+
+## If something is wrong
+
+- `preflight.sh` prints **STOP** for a missing key, a red last gate, low
+  balance, an off-policy model, or an over-budget session. Fix the named cause;
+  do not bypass it.
+- Caddy exits `255` at boot when its bind IPs are not up yet. `web.sh` waits and
+  recreates it; override with `WEB_BIND_IPS` if the host IP changes.
+- The LiteLLM admin UI says **"Not connected to DB!"** by design: this stack
+  runs no Postgres, so the UI login cannot work. Use the proxy API or
+  `rotate-provider-keys.sh`; the proxy itself is healthy.
+- A guard `401` means the running web container has an old/revoked key.
+  `env_file` is read at container creation: recreate the web container to pick
+  up `.env.local`.
+- `./scripts/incident-resolve.sh --db --auto` classifies recurring signatures
+  (tmux no-server, already-paused, embedding cold-load, `pgrep` >15 chars,
+  pubkey denial, guard blocks, stale edits) and resolves the safe ones.
+
+## Read next
+
+- Detailed tool catalog: [`scripts/README.txt`](scripts/README.txt)
+- Roadmap/PR bodies: [`docs/plans/README.md`](docs/plans/README.md)
+- RAG engine README: `~/Documents/2282af3557819803/repo/production-local-rag/README.txt`
+- Horizon and lessons: [`ECC-SKILLS.md`](ECC-SKILLS.md), [`HANDOFF.md`](HANDOFF.md)
 
 ## Glossary — acronyms and rule citations
 
