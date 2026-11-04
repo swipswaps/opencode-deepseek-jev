@@ -1253,10 +1253,10 @@ function renderCost(c){
   }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
 async function refreshCost(){ renderCost(await j('/api/cost')); }
-function renderActivity(a){
+function renderActivity(a,shed){
   if(a){var h='';for(var i=0;i<a.length;i++){h+=item(a[i]);}
     document.getElementById('activity').innerHTML=h||'<div class="item">(no activity)</div>';}
-  else{failIfPristine('activity','(activity unavailable)');}
+  else{failIfPristine('activity', shed ? '(activity paused: CPU PSI > 30; DASH_AUTO_SHED=1)' : '(activity unavailable)');}
 }
 async function refreshActivity(){ renderActivity(await j('/api/activity')); }
 function renderTodos(td){
@@ -1434,7 +1434,7 @@ if(typeof EventSource!=='undefined'){
   var _onflow=function(ev){try{var p=JSON.parse(ev.data);}catch(e){return;}
     // One stale/malformed pane must not starve the other two into "loading...".
     try{renderCost(p.cost);}catch(e){}
-    try{renderActivity(p.activity);}catch(e){}
+    try{renderActivity(p.activity,p.shed);}catch(e){}
     try{renderTodos(p.todos);}catch(e){}
   };
   _es.addEventListener('snapshot',_onflow);
@@ -2844,8 +2844,9 @@ function apiResources() {
 // snapshot real. Returning the promises stringified to `{}`, which made the
 // client render nothing and left "Live activity"/"Todos" at "loading...".
 async function ssePayload(segments = SEGMENTS) {
+  const shed = AUTO_SHED && psiCpu10() > 30;
   let active = segments;
-  if (AUTO_SHED && psiCpu10() > 30) {
+  if (shed) {
     active = active.filter((name) => name === "cost" || name === "todos");
   }
   const want = (name) => active.includes(name);
@@ -2853,7 +2854,7 @@ async function ssePayload(segments = SEGMENTS) {
     want("cost") ? apiCost() : Promise.resolve(null),
     want("activity") ? apiActivity() : Promise.resolve(null),
   ]);
-  return { cost, activity, todos: want("todos") ? apiTodos() : [] };
+  return { cost, activity, todos: want("todos") ? apiTodos() : [], shed };
 }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
