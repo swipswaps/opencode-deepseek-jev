@@ -799,6 +799,12 @@ rotate-provider-keys.sh
     input, masked confirmation, values never printed; SUBQ also updates
     JEV_BASE_API_KEY. --self-test.
 
+open-rotation-pages.sh
+    Open the correct key page for each credential from the F1 matrix:
+    pending SUBQ (console.subq.ai), Anthropic (/settings/keys), local LiteLLM
+    (:4000/ui); done DeepSeek; optional JEV/Gemini. --list, --open,
+    --only a,b, --all, --dry-run, --opener xdg-open|cdp|print.
+
 rotation-progress.sh
     Read-only progress view for the OPEN rotation terminal and the background
     workers behind :4096. Reports the rotate-server-password.sh tree (pid/tty/

@@ -60,13 +60,15 @@ rotation_matrix() {
     printf '%s\n' \
         '  OPENCODE_SERVER_PASSWORD  ./scripts/rotate-server-password.sh'
     printf '%s\n' \
-        '  LITELLM_MASTER_KEY        LiteLLM proxy admin UI (no CLI) — revoke, then rewrite .env.local'
+        '  LITELLM_MASTER_KEY        LiteLLM proxy admin UI: http://127.0.0.1:4000/ui (local, no CLI)'
     printf '%s\n' \
-        '  SUBQ_API_KEY              provider console (no CLI) — revoke, then rewrite .env.local'
+        '  SUBQ_API_KEY              console.subq.ai (no CLI) — revoke, then rewrite .env.local'
     printf '%s\n' \
-        '  ANTHROPIC_API_KEY         console.anthropic.com (no CLI) — revoke, then rewrite .env.local'
+        '  ANTHROPIC_API_KEY         console.anthropic.com/settings/keys (no CLI) — revoke, then rewrite .env.local'
     printf '%s\n' \
-        '  GEMINI_API_KEY            aistudio.google.com (placeholder here; rotate only if real)'
+        '  GEMINI_API_KEY            aistudio.google.com/apikey (placeholder here; rotate only if real)'
+    printf '%s\n' \
+        '  Open pending pages: ./scripts/open-rotation-pages.sh --open'
     printf '%s\n' \
         '  Treat every key printed to a terminal as DISCLOSED, even if the paste stayed local.'
     printf '%s\n' \

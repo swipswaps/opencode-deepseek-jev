@@ -170,10 +170,11 @@ main() {
     [ -f "$ENVF" ] || { printf 'FAIL: no env file at %s\n' "$ENVF"; return 2; }
 
     section "revoke the OLD keys first (browser)"
-    printf '  SUBQ:      https://api.subq.ai  (or https://subq.ai keys)\n'
+    printf '  SUBQ:      https://console.subq.ai/ (create/revoke keys)\n'
     printf '  Anthropic: https://console.anthropic.com/settings/keys\n'
     printf '  LiteLLM:   local master; regenerated here (old proxy key dies on recreate)\n'
     printf '  DeepSeek and the server password are already rotated.\n'
+    printf '  Open pending pages: ./scripts/open-rotation-pages.sh --open\n'
 
     local NEW_SUBQ="" NEW_ANTH="" NEW_LIT="" yn=""
     printf '\nNew SUBQ key (hidden; empty = leave unchanged): '
