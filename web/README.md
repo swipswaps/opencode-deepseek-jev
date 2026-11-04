@@ -60,12 +60,6 @@ on a 60 s interval.
 - Current verification: zero page/console errors; 390 px width = viewport;
   installability `[]`.
 
-## Demo mode
-
-Append `?demo=1` to use deterministic synthetic data without the local API.
-The standalone public Pages repo (`opencode-observability`) enables this mode
-automatically on `.github.io`; the local `/app/` keeps live APIs.
-
 ## Tests / evidence
 
 - `npm run build` (Vite build is the source-level gate).

@@ -1,7 +1,3 @@
-import { IS_DEMO } from "./demo.js";
-
-export { IS_DEMO };
-
 export async function fetchJSON(path, ms = 12000) {
   const opts = ms && typeof AbortSignal !== "undefined" && AbortSignal.timeout
     ? { signal: AbortSignal.timeout(ms) }
@@ -113,7 +109,6 @@ export function sessionDuration(s) {
 }
 
 export function sessionHref(id) {
-  if (IS_DEMO) return "#";
   try {
     const srv = `${location.protocol}//${location.hostname}:4096`;
     const b64 = btoa(srv).replace(/=+$/, "");

@@ -34,7 +34,6 @@ import ActivityTimeline from "./components/ActivityTimeline.jsx";
 import Sessions from "./components/Sessions.jsx";
 import Todos from "./components/Todos.jsx";
 import { makeTheme } from "./theme.js";
-import { IS_DEMO } from "./lib.js";
 import { timeStr } from "./lib.js";
 import { useLive, useRemote } from "./useLive.js";
 
@@ -121,7 +120,6 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
             label={live.connected ? "live" : "offline"}
             variant={live.connected ? "filled" : "outlined"}
           />
-          {IS_DEMO && <Chip size="small" color="info" label="demo" />}
           {live.shed && <Chip size="small" color="warning" label="paused" />}
           <Box sx={{ flexGrow: 1 }} />
           <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>

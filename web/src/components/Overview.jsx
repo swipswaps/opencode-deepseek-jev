@@ -14,7 +14,6 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { IS_DEMO } from "../lib.js";
 import {
   dateStr,
   fmtCompact,
@@ -171,7 +170,7 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
                 </Stack>
               </Box>
             ))}
-            {recent.length > 0 && !IS_DEMO && (
+            {recent.length > 0 && (
               <Button
                 size="small"
                 startIcon={<ArrowForwardIcon />}

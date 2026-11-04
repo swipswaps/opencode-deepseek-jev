@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { fetchJSON } from "./lib.js";
-import { IS_DEMO, demoSnapshot, demoHealth, demoSessions, makeDemoEvent } from "./demo.js";
 
 const initial = {
   cost: null,
@@ -13,22 +12,9 @@ const initial = {
 };
 
 export function useLive() {
-  const [state, setState] = useState(() =>
-    IS_DEMO ? { ...demoSnapshot(), connected: true, last: Date.now(), error: null } : initial,
-  );
+  const [state, setState] = useState(initial);
 
   useEffect(() => {
-    if (IS_DEMO) {
-      const timer = setInterval(() => {
-        setState((s) => ({
-          ...s,
-          last: Date.now(),
-          activity: [makeDemoEvent(Date.now(), s.activity.length), ...s.activity].slice(0, 80),
-        }));
-      }, 12000);
-      return () => clearInterval(timer);
-    }
-
     let closed = false;
     let es = null;
 
@@ -104,17 +90,6 @@ export function useRemote(path, interval = 60000) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (IS_DEMO) {
-      const data = path.includes("/health")
-        ? demoHealth
-        : path.includes("/sessions")
-          ? demoSessions
-          : null;
-      setData(data);
-      setError(null);
-      return;
-    }
-
     let closed = false;
     const load = async () => {
       try {
