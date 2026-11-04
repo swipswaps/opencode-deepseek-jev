@@ -80,6 +80,7 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 | set up / repair the LiteLLM DB + UI | `./scripts/litellm-db.sh --apply` |
 | verify the guard | `./scripts/guard-verify.sh` |
 | run the adversarial gate | `./scripts/red-team.sh` (`--offline` skips SubQ) |
+| audit security posture | `./scripts/security-posture.sh` |
 | rotate the TLS leaf (same CA) | `./scripts/rotate-tls.sh --apply --yes` |
 | scrub leaked artifacts | `./scripts/scrub-secrets.sh --apply --yes --purge-snapshots --purge-env-backups` |
 | inspect model policy/cost | `./scripts/models.sh`, `./scripts/cost.sh` |
@@ -109,6 +110,20 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - `./scripts/incident-resolve.sh --db --auto` classifies recurring signatures
   (tmux no-server, already-paused, embedding cold-load, `pgrep` >15 chars,
   pubkey denial, guard blocks, stale edits) and resolves the safe ones.
+
+## Security posture (residual risks)
+
+- `./scripts/security-posture.sh` checks the invariants that are not one
+  command: host-home exposure, container caps/user, loopback-only LiteLLM,
+  secret-file modes, artifact cleanliness, TLS, and the local red-team layer.
+- The compose override no longer mounts `/home/owner`; the live container keeps
+  the old mount until `./scripts/web-restart.sh --recreate` (drops the session).
+  Until then the posture gate reports exactly that one FAIL.
+- Tool results are scanned for prompt-injection markers and logged as
+  `"verdict":"injection"` (advisory, value-free). This is telemetry, not
+  prevention: model-level prompt injection remains a residual risk.
+- The regex blacklist and `sensitive-read` are defense-in-depth, not a sandbox.
+  The LiteLLM UI is `127.0.0.1:4000`; Postgres has no published port.
 
 ## Read next
 

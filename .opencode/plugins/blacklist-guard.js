@@ -92,6 +92,23 @@ const RULES = [
 
 for (const r of RULES) r.re = new RegExp(r.pattern);
 
+// Prompt-injection tripwire for tool RESULTS (untrusted data, never
+// instructions). Advisory only: it records a value-free marker so the
+// dashboard/logs can surface the attempt. The actual defense remains the
+// approval policy + jev-guard's from-untrusted risk score.
+const INJECTION_PATTERNS = [
+  ["ignore-previous", /ignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above)\s+instructions/i],
+  ["system-override", /system\s+override/i],
+  ["disregard", /disregard\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above)/i],
+  ["reveal-prompt", /(?:reveal|print|show)\s+(?:your|the)\s+(?:system\s+)?(?:prompt|instructions)/i],
+  ["jevpwned", /JEVPWNED/i],
+];
+export function injectionVerdict(text) {
+  const s = String(text ?? "");
+  for (const [name, re] of INJECTION_PATTERNS) if (re.test(s)) return name;
+  return "";
+}
+
 const REDIRECT_RE = /2>\s*\/dev\/null/g;
 
 // Blank single/double-quoted regions so `grep 'sed'` is not treated as `sed`.
@@ -365,6 +382,13 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         await log("warn", "blacklist warning (not blocked)", { patterns: names, command: command.slice(0, 200) });
         record("warn", "blacklist warning (not blocked)", { patterns: names, command: command.slice(0, 200) });
       }
+    },
+    "tool.execute.after": async (input, output) => {
+      try {
+        const text = String((output && (output.result || output.output || output.text)) || "");
+        const marker = injectionVerdict(text);
+        if (marker) record("injection", "prompt-injection marker in tool result", { tool: input && input.tool, marker });
+      } catch { /* fail open */ }
     },
   };
 };

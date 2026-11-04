@@ -829,6 +829,12 @@ scrub-secrets.sh
     secrets and .env.local.bak.*. Dry run by default; --apply --yes to write.
     Values are never printed.
 
+security-posture.sh
+    Read-only gate for the residual invariants: no whole-host-home mount,
+    no-new-privileges + cap_drop ALL + non-root, LiteLLM loopback and an
+    internal Postgres, secret-file modes, clean artifacts, TLS, and the
+    offline red-team layer. --offline skips live docker checks.
+
 rotation-progress.sh
     Read-only progress view for the OPEN rotation terminal and the background
     workers behind :4096. Reports the rotate-server-password.sh tree (pid/tty/
