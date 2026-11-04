@@ -165,6 +165,18 @@ Last updated: 2026-11-04
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
+- [ ] **OPS-4 — gate observability, not blind timeouts.** Use
+      `./scripts/gate-watch.sh ./scripts/harness.sh` (live log + heartbeat, no
+      deadline) and record the last `ms=/ts=` line. The full-harness attempt
+      was killed by a tool-level 420 s timeout under host load 19 (`dsh web`
+      117% + Chromium), not a harness hang. Relieve the load and rerun; never
+      add a blind timer.
+
+- [x] **DASH-1 — 2026-11-04.** `08` persisted `DASH_SEGMENTS=cost`, so the SSE
+      snapshot omitted activity/todos. Restored `cost,activity,todos` in
+      `.env.local` and 08; added the `shed` flag/message and
+      `dashboard-restart.sh`; live proof activity=80, todos=4.
+
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.

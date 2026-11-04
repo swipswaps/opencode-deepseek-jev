@@ -140,7 +140,14 @@ main() {
         fi
         if [ -x "$REPO/scripts/models.sh" ]; then
             section "model catalog (-> data/observability/models.json)"
-            "$REPO/scripts/models.sh" --write 2>&1 | head -n 22
+            local mstart mend mrc mout mbound
+            mbound="${MODELS_TIMEOUT:-30}"
+            mstart=$(date +%s)
+            mout=$(timeout "$mbound" "$REPO/scripts/models.sh" --write 2>&1); mrc=$?
+            mend=$(date +%s)
+            printf '%s\n' "$mout" | head -n 22
+            printf 'model catalog: elapsed=%ss rc=%s bound=%ss (normal <1s on ws24; override MODELS_TIMEOUT)\n' "$((mend - mstart))" "$mrc" "$mbound"
+            [ "$mrc" -eq 124 ] && printf 'model catalog: SKIP after %ss; last line above; host load, not a gate\n' "$mbound"
         fi
         if [ -x "$REPO/scripts/doc-budget.sh" ]; then
             section "doc budget (context cost of the read-first corpus)"

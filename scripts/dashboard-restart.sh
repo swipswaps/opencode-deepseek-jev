@@ -24,6 +24,8 @@ AUDIT="/workspace/scripts/audit-config.sh"
 MJS="/workspace/scripts/dashboard.mjs"
 LOG="${LOG:-/tmp/dashboard.log}"
 MODE="apply"
+PORT_BOUND="${PORT_BOUND:-15}"
+START_BOUND="${START_BOUND:-30}"
 
 log() { printf '%s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; }
@@ -39,6 +41,7 @@ usage() {
   printf '%s\n' "  --dry-run  print the plan"
   printf '%s\n' ""
   printf '%s\n' "  C=$C PORT=$PORT LOG=$LOG"
+  printf '%s\n' "  PORT_BOUND=${PORT_BOUND}s START_BOUND=${START_BOUND}s (dashboard start measured ~18s)"
 }
 
 parse_args() {
@@ -133,26 +136,29 @@ apply() {
     pass "dashboard stopped"
   fi
   local i=0 code=""
-  while [ "$i" -lt 15 ]; do
+  while [ "$i" -lt "$PORT_BOUND" ]; do
     code=$(container_resources)
+    printf '  port sample=%s elapsed=%ss container=%s bound=%ss\n' "$((i + 1))" "$i" "${code:-unknown}" "$PORT_BOUND"
     [ "$code" = "000" ] && break
     i=$((i + 1)); sleep 1
   done
-  [ "$code" = "000" ] || { fail "container port $PORT still in use (last=$code)"; return 1; }
-  pass "container port $PORT free"
+  [ "$code" = "000" ] || { fail "container port $PORT still in use after ${PORT_BOUND}s (last=$code)"; return 1; }
+  pass "container port $PORT free at ${i}s"
   docker exec -d "$C" sh -c "DASH_SEGMENTS=cost,activity,todos DASH_SSE_MS=30000 DASH_AUTO_SHED=1 exec node --no-warnings --experimental-sqlite $MJS $DB $PORT 0.0.0.0 $AUDIT >>$LOG 2>&1" \
     || die "could not start the dashboard"
   i=0
-  while [ "$i" -lt 30 ]; do
-    if [ "$(container_resources)" = "200" ] && snapshot_check >/dev/null 2>&1; then
+  while [ "$i" -lt "$START_BOUND" ]; do
+    code=$(container_resources)
+    printf '  start sample=%s elapsed=%ss container=%s bound=%ss\n' "$((i + 1))" "$i" "${code:-unknown}" "$START_BOUND"
+    if [ "$code" = "200" ] && snapshot_check >/dev/null 2>&1; then
       snapshot_check
-      pass "snapshot carries activity and todos"
+      pass "snapshot carries activity and todos at ${i}s"
       log "refresh the page; if CPU PSI > 30 the activity card says 'paused'"
       return 0
     fi
     i=$((i + 1)); sleep 1
   done
-  fail "dashboard did not reach /api/resources=200 with activity/todos; see $LOG"
+  fail "dashboard did not reach /api/resources=200 with activity/todos after ${START_BOUND}s; see $LOG"
   docker exec "$C" tail -20 "$LOG" 2>&1 || true
   return 1
 }

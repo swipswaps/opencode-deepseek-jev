@@ -66,6 +66,11 @@ doctor.sh
     functional proof (Tier 9), and the repo gates (Tier 10). Exit 0 on
     success, non-zero otherwise; the output is the diagnostic.
 
+gate-watch.sh
+    Run a gate with a live log and heartbeat; no deadline. Prints the last log
+    line and elapsed seconds every HEARTBEAT; the exit code is the child's.
+    Use when a gate is slow or the host is loaded, instead of a blind timer.
+
 Monitor cost and activity
 -------------------------
 

@@ -3,7 +3,12 @@
 > **PIN 2026-11-04 (SEC-3 / HANDOFF):** verified: LiteLLM DB login 200, TLS
 > leaf rotated (same CA), artifact scan 0/2224, red-team offline+live, readme
 > audits 8/0 and 6/0, harness 4/0, `security-posture.sh` **16/3** on the
-> running container. **Missing / will break:**
+> running container. **Gate note:** the later full-harness attempt was killed
+> by a **tool-level 420 s timeout**, not a harness deadline; the host was at
+> load **19** (`dsh web` 117% CPU + many Chromium renderers) and no harness
+> process remained. Use `./scripts/gate-watch.sh ./scripts/harness.sh` to rerun
+> with a live log + heartbeat and read the last `ms=/ts=` line; `test-hygiene`
+> is 63/0. The dashboard is verified separately (activity 80, todos 4). **Missing / will break:**
 > 1. The repo is mounted at `/workspace`, so the web container can still read
 >    `/workspace/.env.local`, `/workspace/docker/litellm-db.env`, and
 >    `/workspace/docker/certs/*`. The override now hides them with empty binds
