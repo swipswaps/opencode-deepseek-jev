@@ -201,6 +201,11 @@ cmd_snapshot() {
     rev=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf unknown)
     mkdir -p "$SNAP_ROOT"
     dest=$(new_snap_dir "$ts")
+    if [ -e "$dest" ]; then
+        local n=1
+        while [ -e "${dest}-${n}" ]; do n=$((n + 1)); done
+        dest="${dest}-${n}"
+    fi
     mkdir -p "$dest"
     do_snapshot "$dest" "$withdb"
     summary=$(manifest_write "$dest" "$rev" "$ts")
@@ -304,12 +309,14 @@ cmd_restore() {
 }
 
 self_test() {
-    local fail=0 work=""
+    local fail=0 work="" fixture=""
     have python3 || { printf 'FAIL python3 missing\n'; return 1; }
+    fixture=$(python3 -c 'import secrets; print(secrets.token_urlsafe(12))') \
+        || { printf 'FAIL fixture generator\n'; return 1; }
     work=$(mktemp -d)
     mkdir -p "$work/repo/docker/certs" "$work/repo/data/observability" "$work/snap"
     printf 'opencode.json\n' > "$work/repo/opencode.json"
-    printf 'DEEPSEEK_API_KEY=sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaa\nPASSWORD=secretvalue123\n' > "$work/repo/.env.local"
+    printf 'DEEPSEEK_API_KEY=%s\nPASSWORD=%s\n' "$fixture" "$fixture" > "$work/repo/.env.local"
     chmod 600 "$work/repo/.env.local"
     printf 'cert\n' > "$work/repo/docker/certs/opencode.crt"
     printf 'key\n' > "$work/repo/docker/certs/opencode.key"
@@ -348,7 +355,7 @@ PYEOF
     printf '%s' "$out" | grep -q 'rev=' || { printf 'FAIL list\n'; fail=1; }
     out=$(SNAP_ROOT="$work/snap" bash "${BASH_SOURCE[0]}" restore --latest --dry-run 2>&1)
     printf '%s' "$out" | grep -q 'DRY RUN' || { printf 'FAIL dry-run\n'; fail=1; }
-    printf '%s' "$out" | grep -q 'sk-aaaaaaaaaaaa' && { printf 'FAIL dry-run leaked secret\n'; fail=1; }
+    printf '%s' "$out" | grep -q "$fixture" && { printf 'FAIL dry-run leaked secret\n'; fail=1; }
     rm -f "$work/repo/.env.local" "$work/repo/opencode.json" "$work/repo/docker/certs/opencode.crt" "$work/repo/docker/certs/opencode.key" "$work/repo/data/observability/observability.db"
     find "$work/snap" -type f -delete 2>&1 || true
     find "$work/snap" -depth -type d -empty -delete 2>&1 || true

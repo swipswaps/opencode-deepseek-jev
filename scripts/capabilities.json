@@ -6,7 +6,8 @@
       "id": "blacklist-guard",
       "purpose": "block sed/rm -rf/subprocess.run, fix 2>/dev/null, warn echo in Thinking",
       "impl": ".opencode/plugins/blacklist-guard.js",
-      "registration": { "kind": "symlink", "path": "~/.config/opencode/plugins/blacklist-guard.js", "target": ".opencode/plugins/blacklist-guard.js" },
+      "registration": { "kind": "contains", "path": "docker/web-entrypoint.sh", "marker": "blacklist-guard.js" },
+      "note": "The container entrypoint creates ~/.config/opencode/plugins/blacklist-guard.js -> /workspace/... at start; the host sees that bind-mounted symlink but cannot resolve /workspace, so registration is proven by the wiring, not by a host-side readlink.",
       "test": "scripts/blacklist-guard-self-test.mjs",
       "evidence": { "path": "data/observability/guard.log", "marker": "\"verdict\":\"loaded\"" }
     },
