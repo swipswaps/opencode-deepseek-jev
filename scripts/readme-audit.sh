@@ -84,10 +84,14 @@ check_catalogs() {
     bad "missing scripts/README.txt"
   fi
   local v="$REPO/scripts/vendor/README.txt"
-  if [ -f "$v" ]; then
-    grep -qi 'integrity baseline' "$v" && ok "vendor README pins an integrity baseline" || bad "vendor README lacks an integrity baseline"
+  if [ -d "$REPO/scripts/vendor" ]; then
+    if [ -f "$v" ]; then
+      grep -qi 'integrity baseline' "$v" && ok "vendor README pins an integrity baseline" || bad "vendor README lacks an integrity baseline"
+    else
+      bad "missing scripts/vendor/README.txt"
+    fi
   else
-    bad "missing scripts/vendor/README.txt"
+    log "  SKIP  no scripts/vendor (not a vendored-asset repo)"
   fi
   local p="$REPO/docs/plans/README.md"
   if [ -f "$p" ]; then
