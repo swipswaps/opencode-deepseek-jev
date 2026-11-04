@@ -1,5 +1,36 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-04 (SEC-3 / HANDOFF):** verified: LiteLLM DB login 200, TLS
+> leaf rotated (same CA), artifact scan 0/2224, red-team offline+live, readme
+> audits 8/0 and 6/0, harness 4/0, `security-posture.sh` **16/3** on the
+> running container. **Missing / will break:**
+> 1. The repo is mounted at `/workspace`, so the web container can still read
+>    `/workspace/.env.local`, `/workspace/docker/litellm-db.env`, and
+>    `/workspace/docker/certs/*`. The override now hides them with empty binds
+>    (`/dev/null`, `empty-certs`); the 3 `repo_secrets` checks stay red until
+>    `./scripts/web-restart.sh --recreate` (drops the session). Expect 19/0.
+>    Container-side copies of host-only scripts (`preflight`, `ensure-env`,
+>    `certs-verify`, `rotate-*`) will see empty files after that; run them on
+>    the host via the durable SSH key.
+> 2. `.env.local` values still enter the container environment (`env_file`)
+>    because the app needs them; the agent shell inherits them. Removing that
+>    needs a separate app/agent user or sidecar. `env` is ASK, not a sandbox.
+> 3. `/rag:ro` and `openssh-client` are in the override/Dockerfile but not in
+>    the running image/container. The current container uses the durable key
+>    plus a runtime ssh client; the next recreate/rebuild applies them. The
+>    `/rag` venv is host-specific and read-only: edit via SSH, don't run it
+>    in the container.
+> 4. The durable key is in the rw `~/.config/opencode` mount. `restrict`
+>    blocks pty/forwarding but not exfiltration; rotate/revoke if compromised.
+> 5. Stale `opencode-container` public keys remain in `~/.ssh/authorized_keys`;
+>    harmless without private keys, clean when convenient.
+> 6. Prompt injection is model-level. The tripwire logs `verdict=injection`
+>    (advisory); the regex guard is defense-in-depth, not a sandbox.
+> **Next probes:** recreate web -> `security-posture.sh` (expect 19/0);
+> rebuild the image to bake `openssh-client`; `readme-audit.sh` both repos;
+> `red-team.sh` after recreate; clean stale authorized keys; consider an
+> app/agent env split.
+
 > **PIN 2026-11-04 (SEC-2):** LiteLLM is DB-backed (private postgres,
 > `admin` login 200); the TLS leaf was rotated with the same CA after the live
 > key matched 3 snapshots; 85 findings were scrubbed (logs redacted, snapshot

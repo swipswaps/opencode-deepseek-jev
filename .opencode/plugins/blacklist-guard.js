@@ -70,12 +70,14 @@ export function semanticVerdict(command) {
 }
 
 const RULES = [
-  { name: "env-read", pattern: "(?:^|[;&|()]\\s*)(?:cat|less|more|head|tail|nl|xxd|od|strings)\\b[^\\n]*\\.env", sev: "block",
+  { name: "env-read", pattern: "(?:^|[;&|()]\\s*)(?:cat|less|more|head|tail|nl|xxd|od|strings)\\b[^\\n]*\\.env", sev: "block", raw: true,
     fix: "never print .env: use awk -F= '/^KEY=/{print length($2)}' .env.local, or the rotate scripts (they mask)", rule: "security" },
-  { name: "env-grep", pattern: "(?:^|[;&|()]\\s*)grep\\s+(?![^\\n]*(?:\\s*-[A-Za-z]*[qc]\\b|\\s*--count\\b|\\s*--quiet\\b))[^\\n]*\\.env", sev: "block",
+  { name: "env-grep", pattern: "(?:^|[;&|()]\\s*)grep\\s+(?![^\\n]*(?:\\s*-[A-Za-z]*[qc]\\b|\\s*--count\\b|\\s*--quiet\\b))[^\\n]*\\.env", sev: "block", raw: true,
     fix: "grep -c/-q only (count/match, no value); otherwise awk length or the rotate scripts", rule: "security" },
-  { name: "sensitive-read", pattern: "(?:^|[;&|()]\\s*)(?:sudo\\s+)?(?:cat|less|more|head|tail|nl|xxd|od|strings|grep|awk)\\b[^\\n]*(?:/etc/(?:passwd|shadow|sudoers|gshadow)|(?:^|/)\\.ssh/|(?:^|/)\\.aws/credentials|/proc/[0-9]+/environ)", sev: "block",
+  { name: "sensitive-read", pattern: "(?:^|[;&|()]\\s*)(?:sudo\\s+)?(?:cat|less|more|head|tail|nl|xxd|od|strings|grep|awk)\\b[^\\n]*(?:/etc/(?:passwd|shadow|sudoers|gshadow)|(?:^|/)\\.ssh/|(?:^|/)\\.aws/credentials|/proc/[0-9]+/environ|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
     fix: "read only inside /workspace; ask the operator for host files", rule: "security" },
+  { name: "secret-interpreter-read", pattern: "(?:^|[;&|()]\\s*)(?:python3?|node|ruby|perl|php)\\b[^\\n]*(?:\\.env(?:\\.local)?|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
+    fix: "read only inside /workspace; ask the operator for secrets", rule: "security" },
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",
@@ -158,7 +160,7 @@ export function inspect(command) {
   const scan = (text) => {
     const bare = stripQuotes(text);
     for (const r of RULES) {
-      if (!seen.has(r.name) && r.re.test(bare)) {
+      if (!seen.has(r.name) && r.re.test(r.raw ? text : bare)) {
         seen.add(r.name);
         hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
       }

@@ -9,8 +9,12 @@ plane.
 **Latest verified state (2026-11-04).** Provider keys rotated (SubQ, Anthropic,
 LiteLLM); `guard-verify.sh` returns ALLOW rc 0 / DENY rc 2; LiteLLM is
 DB-backed and `admin` login returns 200; the TLS leaf was rotated with the same
-CA; `red-team.sh` passes (offline + live); `security-posture.sh` is **15/0**;
-artifact scan **0/2224**; harness `4 passed, 0 failed`.
+CA; `red-team.sh` passes (offline + live); readme audits are 8/0 (harness) and
+6/0 (RAG); artifact scan **0/2224**; harness `4 passed, 0 failed`.
+`security-posture.sh` is **16/3** on the pre-recreate container: the three
+`repo_secrets` failures are `.env.local`, `docker/litellm-db.env`, and
+`docker/certs/*` still visible through `/workspace`; the empty binds in the
+override clear them on the next `web-restart.sh --recreate` (expect **19/0**).
 
 ## Start here (first 10 minutes)
 
@@ -117,9 +121,13 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - `./scripts/security-posture.sh` checks the invariants that are not one
   command: host-home exposure, container caps/user, loopback-only LiteLLM,
   secret-file modes, artifact cleanliness, TLS, and the local red-team layer.
-- The compose override no longer mounts `/home/owner`; the 2026-11-04 recreate
-  applied it. `security-posture.sh` is **15/0** (mounts, caps, loopback,
-  modes, scrub, TLS, red-team).
+- The compose override no longer mounts `/home/owner`. The repo is still
+  mounted at `/workspace`, so `.env.local`, `docker/litellm-db.env`, and
+  `docker/certs/*` were readable by the web container. The override now hides
+  them with empty binds (`/dev/null`, `empty-certs`); the running container is
+  **16/3** until `./scripts/web-restart.sh --recreate` applies them (expect
+  **19/0**). `.env.local` values still enter the container environment because
+  the app needs them; a separate app/agent user is the next structural step.
 - The RAG repo is mounted read-only at `/rag`. Host access uses the durable
   `~/.config/opencode/container_key`, authorized once with `restrict` via
   `authorize-container-key.sh`; the host home is not mounted.

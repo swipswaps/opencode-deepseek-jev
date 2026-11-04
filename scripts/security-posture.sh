@@ -61,6 +61,13 @@ compose_checks() {
   else
     ok "no read-write host Documents mount in the override"
   fi
+  if grep -q '/dev/null:/workspace/.env.local' "$f" \
+    && grep -q '/dev/null:/workspace/docker/litellm-db.env' "$f" \
+    && grep -q 'empty-certs:/workspace/docker/certs' "$f"; then
+    ok "repo-mounted secrets hidden by empty binds"
+  else
+    bad "override does not hide repo-mounted secrets"
+  fi
 }
 
 live_mounts() {
@@ -86,6 +93,27 @@ for i in issues: print("ISSUE", i)
     *PARSE*) printf '%s\n' "$out"; bad "could not inspect mounts";;
     *) ok "live web mounts are repo/config/notes only";;
   esac
+}
+
+repo_secrets() {
+  log "=== repo-mounted secrets ==="
+  if docker exec "$C" test -s /workspace/.env.local; then
+    bad ".env.local is non-empty inside the web container (empty bind not applied; recreate web)"
+  else
+    ok ".env.local hidden from the web container"
+  fi
+  if docker exec "$C" test -s /workspace/docker/litellm-db.env; then
+    bad "litellm-db.env is non-empty inside the web container (recreate web)"
+  else
+    ok "litellm-db.env hidden from the web container"
+  fi
+  local files
+  files=$(docker exec "$C" sh -c 'find /workspace/docker/certs -type f 2>&1 | head -1')
+  if [ -z "$files" ]; then
+    ok "docker/certs hidden from the web container"
+  else
+    bad "docker/certs exposes a file inside the web container: $files (recreate web)"
+  fi
 }
 
 container_hardening() {
@@ -181,6 +209,7 @@ main() {
   if [ "$OFFLINE" -eq 0 ]; then
     have docker || die "docker missing (use --offline for compose/file checks)"
     live_mounts
+    repo_secrets
     container_hardening
     litellm_loopback
   else

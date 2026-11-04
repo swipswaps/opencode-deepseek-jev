@@ -6,6 +6,9 @@ services:
       - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
       - /home/owner/.config/opencode:/home/node/.config/opencode:rw
       - /home/owner/Documents/2282af3557819803/repo/production-local-rag:/rag:ro
+      - /dev/null:/workspace/.env.local:ro
+      - /dev/null:/workspace/docker/litellm-db.env:ro
+      - /home/owner/.config/opencode/empty-certs:/workspace/docker/certs:ro
     networks:
       - default
       - litellm_default
@@ -17,6 +20,9 @@ services:
       - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
       - /home/owner/.config/opencode:/home/node/.config/opencode:rw
       - /home/owner/Documents/2282af3557819803/repo/production-local-rag:/rag:ro
+      - /dev/null:/workspace/.env.local:ro
+      - /dev/null:/workspace/docker/litellm-db.env:ro
+      - /home/owner/.config/opencode/empty-certs:/workspace/docker/certs:ro
 
 networks:
   litellm_default:

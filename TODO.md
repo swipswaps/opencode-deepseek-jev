@@ -13,8 +13,9 @@ Last updated: 2026-11-04
       85 findings scrubbed (logs redacted, snapshots/env backups purged,
       post-scan 0/2224); red-team offline+live; `sensitive-read` rule;
       prompt-injection tripwire; host-home mount removed from the override and
-      applied by the 2026-11-04 recreate; `security-posture.sh` 15/0; durable
-      key `.config/opencode/container_key` (restrict), `/rag:ro`, and
+      applied by the 2026-11-04 recreate; `security-posture.sh` 16/3
+      pre-recreate (the 3 `repo_secrets` checks; expect 19/0 after SEC-3);
+      durable key `.config/opencode/container_key` (restrict), `/rag:ro`, and
       `openssh-client` in the Dockerfile (rebuild; `11 --install` for the
       current container).
 
@@ -163,6 +164,21 @@ Last updated: 2026-11-04
 
 
 ## Outstanding issues (audited — resolve or explicitly accept)
+
+- [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
+      container still reads `/workspace/.env.local`,
+      `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.
+      The override now hides them with empty binds (`/dev/null`, `empty-certs`);
+      run `./scripts/web-restart.sh --recreate` and expect
+      `security-posture.sh` **19/0**. Then: rebuild the image to bake
+      `openssh-client`, clean stale `opencode-container` authorized keys, and
+      consider an app/agent env split (`.env.local` values still reach the
+      agent shell; the guard asks, it is not a sandbox).
+
+- [~] **Prompt-injection residual (accepted, model-level).** The tripwire logs
+      `verdict=injection` but cannot prevent compliance. Re-run
+      `red-team.sh` after any model/policy change; keep untrusted content out
+      of instruction position.
 
 - [x] **Script catalog was incomplete (resolved 2026-10-18, see Done).** The
       dead-ref sweep found 30 tracked scripts uncataloged (the audit's 23 was a
