@@ -320,11 +320,13 @@ export default function ActivityTimeline({ activity, shed }) {
           }}
           aria-hidden="true"
         >
-          <Typography variant="caption">time</Typography>
+          <Typography variant="caption">
+            time <Box component="span" sx={{ color: "error.main", fontWeight: 700 }}>· now</Box>
+          </Typography>
           <Box sx={{ position: "relative", height: 20 }}>
             <Typography variant="caption" sx={{ position: "absolute", left: 0, top: 0, whiteSpace: "nowrap" }}>{clock(t0)}</Typography>
             <Typography variant="caption" sx={{ position: "absolute", right: 0, top: 0, whiteSpace: "nowrap" }}>{clock(t1)}</Typography>
-            <Typography variant="caption" sx={{ position: "absolute", left: `${nowPct}%`, top: 0, transform: "translateX(-50%)", color: "error.main", fontWeight: 700 }}>now</Typography>
+            <Box sx={{ position: "absolute", left: `${nowPct}%`, top: 0, bottom: 0, borderLeft: "1px dashed", borderColor: "error.main", opacity: 0.8 }} />
           </Box>
           <Typography variant="caption">rel. dur</Typography>
           <Typography variant="caption">type</Typography>
