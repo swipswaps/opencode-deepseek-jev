@@ -77,6 +77,25 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+      <Box
+        component="a"
+        href="#main"
+        sx={{
+          position: "fixed",
+          left: -9999,
+          top: 8,
+          zIndex: 2000,
+          px: 2,
+          py: 1,
+          borderRadius: 1,
+          bgcolor: "primary.main",
+          color: "#0d1117",
+          fontWeight: 700,
+          "&:focus": { left: 8 },
+        }}
+      >
+        Skip to main content
+      </Box>
       <AppBar position="fixed" color="inherit" sx={{ zIndex: theme.zIndex.drawer + 1, bgcolor: "background.paper" }}>
         <Toolbar sx={{ gap: 1, minHeight: { xs: 56, md: 64 } }}>
           <Box
@@ -178,7 +197,7 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
         </Box>
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, pt: { xs: "56px", md: "64px" }, pb: { xs: "80px", md: 0 } }}>
+      <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1, minWidth: 0, pt: { xs: "56px", md: "64px" }, pb: { xs: "80px", md: 0 }, outline: "none" }}>
         <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
           {view === "overview" && (
             <Overview

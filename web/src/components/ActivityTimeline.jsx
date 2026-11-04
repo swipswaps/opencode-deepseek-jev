@@ -17,6 +17,7 @@ import {
   useTheme,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -41,7 +42,7 @@ const FILTERS = [
   ["errors", "Errors"],
 ];
 
-function CopyButton({ text, label = "Copy", json = false }) {
+function CopyButton({ text, label = "Copy" }) {
   const [done, setDone] = useState(false);
   return (
     <Tooltip title={done ? "Copied" : label}>
@@ -253,6 +254,7 @@ export default function ActivityTimeline({ activity, shed }) {
             <Button size="small" variant="outlined" onClick={() => setShowAll((v) => !v)}>
               {showAll ? "Show 30" : "Show all"}
             </Button>
+            <CopyButton text={JSON.stringify(rows, null, 2)} label="Copy visible JSON" />
           </Stack>
         </Stack>
 
@@ -291,6 +293,13 @@ export default function ActivityTimeline({ activity, shed }) {
                   <SearchIcon fontSize="small" />
                 </InputAdornment>
               ),
+              endAdornment: query ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" aria-label="Clear activity filter" onClick={() => setQuery("")}>
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
             },
           }}
         />
