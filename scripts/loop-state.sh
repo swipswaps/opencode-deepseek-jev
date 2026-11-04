@@ -57,6 +57,7 @@ jd = os.environ["LOOP_JOB_DIR"]
 as_json = os.environ.get("LOOP_JSON") == "1"
 path = os.path.join(jd, "dev-loop.jsonl")
 begins, ends = {}, {}
+last_end = None
 if os.path.exists(path):
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.strip()
@@ -74,14 +75,13 @@ if os.path.exists(path):
         elif step.startswith("e:") and e.get("ok"):
             parts = step.split(":")
             if len(parts) >= 2:
-                ends[parts[1]] = {"gate": (parts[2] if len(parts) > 2 else "green"), "ts": e.get("ts")}
+                gate = parts[2] if len(parts) > 2 else "green"
+                ends[parts[1]] = {"gate": gate, "ts": e.get("ts")}
+                last_end = {"unit": parts[1], "gate": gate, "ts": e.get("ts")}
 inflight = [b for s, b in begins.items() if s not in ends]
 inflight.sort(key=lambda x: x.get("ts") or 0)
 cur = inflight[-1] if inflight else None
-done = None
-if ends:
-    lid = max(ends, key=lambda s: ends[s].get("ts") or 0)
-    done = {"unit": lid, "gate": ends[lid]["gate"], "ts": ends[lid]["ts"]}
+done = last_end
 out = {"in_flight": cur, "last_done": done, "n_in_flight": len(inflight)}
 if as_json:
     print(json.dumps(out))

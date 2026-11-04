@@ -643,6 +643,16 @@ secret-leak-response.sh
     refuses credential-shaped paths and staged secret patterns, then print the
     human-only rotation matrix. --audit, --install, --json, --self-test.
 
+guard-env-read.sh
+    Install/check the .env read-block rules in the blacklist guard: block
+    cat/less/more/head/tail/nl/xxd/od/strings on .env*, and grep unless
+    -c/-q (no value printed). --check, --install.
+
+guard-verify.sh
+    Prove jev-guard is loaded in the running web container and its backend
+    answers: a read-only call ALLOWs and a destructive one DENYs. --restart,
+    --recreate; the classified commands are never executed.
+
 sentinel.sh
     Periodic threshold monitor (user timer, every 5 min): trips only on
     actionable news — T1 latest over budget, T2 latest on a deny-listed model,
@@ -782,6 +792,12 @@ rotate-server-password.sh
     rollback on mismatch. Checkpointed (backup -> rewrite -> recreate ->
     verify): --fresh (default) resets, --resume skips done steps after a crash.
     --env, --self-test (incl. checkpoint/resume).
+
+rotate-provider-keys.sh
+    Rotate the remaining exposed credentials (SUBQ_API_KEY, ANTHROPIC_API_KEY,
+    LITELLM_MASTER_KEY; DeepSeek/password have their own scripts). Hidden
+    input, masked confirmation, values never printed; SUBQ also updates
+    JEV_BASE_API_KEY. --self-test.
 
 rotation-progress.sh
     Read-only progress view for the OPEN rotation terminal and the background
