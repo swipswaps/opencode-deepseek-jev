@@ -29,15 +29,17 @@ Vite proxies `/api`, `/manifest.webmanifest`, and the icons to
 
 ## What it shows
 
-- **Overview** — total cost, input/output/reasoning/cache tokens, health
-  findings, recent sessions.
-- **Activity timeline** — the same `/api/activity` rows as the legacy page:
-  newest first, filters (All/Tools/Text/Reasoning/Errors/Steps), search,
-  last-30/all, expand/collapse, copy, duration, and a start-dot/relative-bar
-  timeline on desktop.
-- **Sessions** — `/api/sessions?limit=200`, search, cost/tokens/model/update,
-  desktop table and mobile cards, links into the OpenCode session URL.
+- **Overview** — total cost, token mix, health findings, a 14-day cost trend,
+  and recent sessions.
+- **Activity timeline** — the same `/api/activity` rows: newest first, filters
+  (All/Tools/Text/Reasoning/Errors), a Steps switch (off by default), `/`
+  focuses search, last-30/all, expand/collapse, copy, duration, and a
+  start-dot/relative-bar timeline on desktop.
+- **Sessions** — `/api/sessions?limit=200`, search, sort by recent/cost/tokens/
+  duration, cost/tokens/model/update, desktop table and mobile cards, links into
+  the OpenCode session URL.
 - **Todos** — `/api/todos` with status chips.
+- **Install** — Chrome `beforeinstallprompt` surfaces an Install button/icon.
 
 Live data uses one `EventSource` on `/api/stream` (snapshot → delta) with an
 initial REST fallback. `/api/health` and `/api/sessions` are fetched separately

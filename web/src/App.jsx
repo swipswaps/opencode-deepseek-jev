@@ -22,6 +22,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import AddToHomeScreenIcon from "@mui/icons-material/AddToHomeScreen";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -48,7 +49,7 @@ const viewFromHash = () => {
   return VIEWS.some((v) => v.id === id) ? id : "overview";
 };
 
-function Shell({ mode, onToggleMode }) {
+function Shell({ mode, onToggleMode, canInstall, onInstall }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [view, setView] = useState(viewFromHash);
@@ -105,6 +106,24 @@ function Shell({ mode, onToggleMode }) {
           <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
             {live.last ? `updated ${timeStr(live.last)}` : "waiting for stream"}
           </Typography>
+          {canInstall && (
+            <>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AddToHomeScreenIcon />}
+                onClick={onInstall}
+                sx={{ display: { xs: "none", sm: "inline-flex" } }}
+              >
+                Install
+              </Button>
+              <Tooltip title="Install app">
+                <IconButton aria-label="Install app" onClick={onInstall} sx={{ display: { xs: "inline-flex", sm: "none" } }}>
+                  <AddToHomeScreenIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
           <Tooltip title={mode === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
             <IconButton aria-label="Toggle light or dark theme" onClick={onToggleMode}>
               {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
@@ -209,6 +228,32 @@ export default function App() {
     }
   });
   const theme = useMemo(() => makeTheme(mode), [mode]);
+  const [installEvent, setInstallEvent] = useState(null);
+
+  useEffect(() => {
+    const onPrompt = (e) => {
+      e.preventDefault();
+      setInstallEvent(e);
+    };
+    const onInstalled = () => setInstallEvent(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const install = async () => {
+    if (!installEvent) return;
+    try {
+      installEvent.prompt();
+      await installEvent.userChoice;
+    } catch {
+      /* prompt unavailable */
+    }
+    setInstallEvent(null);
+  };
 
   useEffect(() => {
     try {
@@ -223,7 +268,12 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Shell mode={mode} onToggleMode={() => setMode((m) => (m === "dark" ? "light" : "dark"))} />
+      <Shell
+        mode={mode}
+        onToggleMode={() => setMode((m) => (m === "dark" ? "light" : "dark"))}
+        canInstall={Boolean(installEvent)}
+        onInstall={install}
+      />
     </ThemeProvider>
   );
 }

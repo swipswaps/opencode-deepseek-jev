@@ -81,13 +81,14 @@ contracts and has its own `/app-manifest.webmanifest` with
 **How it was adopted:** as a separate `web/` app rather than a rewrite.
 - Stack: React 19.3, MUI 9.5, Emotion 11, Vite 8.3. Vite builds to `web/dist`
   and the Node dashboard serves `/app/` + `/app/assets/*`.
-- The app has an Overview (cost/tokens/health/recent sessions), an Activity
-  timeline with filters/search/expand/copy, a responsive Sessions table/cards,
-  and Todos.
+- The app has an Overview (cost/tokens/health/14-day trend/recent sessions),
+  an Activity timeline with filters/search/expand/copy and steps hidden by
+  default, a responsive Sessions table/cards with sorting, Todos, `/` search
+  focus, hash routes, and an Install action from `beforeinstallprompt`.
 - Layout: permanent MUI Drawer at `md+`, MUI `BottomNavigation` under `md`;
   the AppBar/drawer/bottom nav respect safe areas.
 - The legacy `/` page still exists; `/app/` is linked from the primary nav.
-- Trade-off: the MUI bundle is 550.7 kB minified / 170.9 kB gzip, plus a build step.
+- Trade-off: the MUI bundle is 569.6 kB minified / 175.8 kB gzip, plus a build step.
   That is acceptable for the richer app but not ideal to force on the tiny
   read-only fallback page.
 
@@ -137,7 +138,7 @@ Legacy `/`:
   `docs/ux/status-mobile.png` (390 px card).
 
 MUI `/app/`:
-- `npm run build`: 550.7 kB minified / 170.9 kB gzip; no build errors.
+- `npm run build`: 569.6 kB minified / 175.8 kB gzip; no build errors.
 - Desktop and 390 px Playwright: zero page errors, zero console errors.
 - Mobile: document width `390 = innerWidth`, activity rows render, Sessions
   (123) and Todos (5) render, bottom navigation is fixed at 64 px + safe area,

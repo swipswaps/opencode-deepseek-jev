@@ -6,6 +6,7 @@ import {
   Chip,
   IconButton,
   InputAdornment,
+  MenuItem,
   Skeleton,
   Stack,
   Table,
@@ -32,6 +33,7 @@ import {
 
 export default function Sessions({ sessions, error, isMobile }) {
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("recent");
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (Array.isArray(sessions) ? sessions : [])
@@ -40,8 +42,14 @@ export default function Sessions({ sessions, error, isMobile }) {
         return [s.title, s.id, s.directory, s.agent, s.model].join(" ").toLowerCase().includes(q);
       })
       .slice()
-      .sort((a, b) => Number(b.time_updated) - Number(a.time_updated));
-  }, [sessions, query]);
+      .sort((a, b) => {
+        if (sort === "cost") return (Number(b.cost) || 0) - (Number(a.cost) || 0);
+        if (sort === "tokens") return ((Number(b.tokens_input) || 0) + (Number(b.tokens_output) || 0)) - ((Number(a.tokens_input) || 0) + (Number(a.tokens_output) || 0));
+        if (sort === "duration") return sessionDuration(b) - sessionDuration(a);
+        return Number(b.time_updated) - Number(a.time_updated);
+      });
+  }, [sessions, query, sort]);
+  const totalCost = rows.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
 
   return (
     <Box>
@@ -49,25 +57,40 @@ export default function Sessions({ sessions, error, isMobile }) {
         <Box>
           <Typography variant="h4">Sessions</Typography>
           <Typography variant="body2" color="text.secondary">
-            {rows.length} sessions · cost, tokens, model, and last update
+            {rows.length} sessions · {fmtUsd(totalCost)} · cost, tokens, model, and last update
           </Typography>
         </Box>
-        <TextField
-          size="small"
-          placeholder="Search title, model, directory…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          sx={{ minWidth: { sm: 320 } }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <TextField
+            select
+            size="small"
+            label="Sort"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            sx={{ minWidth: 140 }}
+          >
+            <MenuItem value="recent">Recent</MenuItem>
+            <MenuItem value="cost">Cost</MenuItem>
+            <MenuItem value="tokens">Tokens</MenuItem>
+            <MenuItem value="duration">Duration</MenuItem>
+          </TextField>
+          <TextField
+            size="small"
+            placeholder="Search title, model, directory…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ minWidth: { sm: 300 } }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        </Stack>
       </Stack>
 
       {error && <Alert severity="warning" sx={{ mb: 1 }}>{error}</Alert>}

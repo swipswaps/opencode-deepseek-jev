@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   Chip,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   Paper,
   Skeleton,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -37,7 +39,6 @@ const FILTERS = [
   ["text", "Text"],
   ["reasoning", "Reasoning"],
   ["errors", "Errors"],
-  ["steps", "Steps"],
 ];
 
 function CopyButton({ text, label = "Copy", json = false }) {
@@ -178,11 +179,29 @@ export default function ActivityTimeline({ activity, shed }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [showSteps, setShowSteps] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const searchRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+        e.preventDefault();
+        if (searchRef.current) searchRef.current.focus();
+      }
+      if (e.key === "Escape" && document.activeElement === searchRef.current) {
+        setQuery("");
+        searchRef.current.blur();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const all = activity || [];
@@ -190,6 +209,7 @@ export default function ActivityTimeline({ activity, shed }) {
     const q = query.trim().toLowerCase();
     return all.filter((x) => {
       if (!matchesFilter(x, filter)) return false;
+      if (!showSteps && String(x.type || "").startsWith("step")) return false;
       if (!q) return true;
       return (
         activityDetail(x).toLowerCase().includes(q) ||
@@ -197,7 +217,7 @@ export default function ActivityTimeline({ activity, shed }) {
         String(x.status || "").toLowerCase().includes(q)
       );
     });
-  }, [all, filter, query]);
+  }, [all, filter, query, showSteps]);
 
   const rows = showAll ? filtered : filtered.slice(0, 30);
   const timings = useMemo(() => rows.map((x) => activityTiming(x, now)), [rows, now]);
@@ -224,7 +244,7 @@ export default function ActivityTimeline({ activity, shed }) {
           <Box>
             <Typography variant="h5">Activity timeline</Typography>
             <Typography variant="caption" color="text.secondary">
-              {rows.length} of {all.length} parts{filtered.length !== all.length ? ` · ${filtered.length} match` : ""} · newest first
+              {rows.length} of {filtered.length} parts{filtered.length !== all.length ? ` · ${all.length} total` : ""} · newest first
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -248,14 +268,21 @@ export default function ActivityTimeline({ activity, shed }) {
               onClick={() => setFilter(id)}
             />
           ))}
+          <FormControlLabel
+            control={<Switch size="small" checked={showSteps} onChange={(e) => setShowSteps(e.target.checked)} inputProps={{ "aria-label": "Show step rows" }} />}
+            label={<Typography variant="caption">Steps</Typography>}
+            sx={{ ml: 0, mr: 0, minHeight: 32 }}
+          />
         </Box>
 
         <TextField
           size="small"
           fullWidth
-          placeholder="Filter commands and text…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          inputRef={searchRef}
+          aria-keyshortcuts="/"
+          placeholder="Filter commands and text…  ( / )"
           sx={{ mt: 1.5 }}
           slotProps={{
             input: {

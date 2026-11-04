@@ -380,9 +380,12 @@ returns `[]`); use Chrome's **Install app** after trusting the local CA:
 ### Material UI app (`/app/`)
 
 The full React version lives in `web/` (React 19 + Material UI 9.5 + Vite 8).
-It reuses the same `/api/*` endpoints and has an Overview, Activity timeline,
-Sessions, and Todos. Desktop uses a permanent MUI Drawer; under `md` it uses a
-MUI `BottomNavigation`; rows/cards stack at 390 px. Build once:
+It reuses the same `/api/*` endpoints and has an Overview (including a 14-day
+cost trend), Activity timeline (steps hidden by default; `/` focuses search),
+Sessions (sort by recent/cost/tokens/duration), and Todos. Desktop uses a
+permanent MUI Drawer; under `md` it uses a MUI `BottomNavigation`; rows/cards
+stack at 390 px; Chrome's install prompt is wired to a visible Install action.
+Build once:
 
 ```bash
 cd web && npm ci && npm run build
@@ -391,7 +394,7 @@ cd web && npm ci && npm run build
 `scripts/dashboard.mjs` serves `web/dist` at `/app/` and the hashed assets under
 `/app/assets/*`; `/app-manifest.webmanifest` sets `start_url=/app/`. See
 [`web/README.md`](web/README.md) for dev/PWA notes. The app is also installable (`Page.getInstallabilityErrors: []`) and the build is
-551 kB minified / 171 kB gzip. The legacy no-build page at `/` remains.
+570 kB minified / 176 kB gzip. The legacy no-build page at `/` remains.
 
 ![MUI Overview](docs/ux/status-mui-desktop.png)
 

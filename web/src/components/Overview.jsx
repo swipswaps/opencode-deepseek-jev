@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Alert,
   Box,
@@ -9,6 +10,7 @@ import {
   LinearProgress,
   Skeleton,
   Stack,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -44,10 +46,40 @@ function Kpi({ label, value, hint, color = "text.primary" }) {
 
 export default function Overview({ cost, health, healthError, sessions, onNavigate }) {
   const totals = cost?.totals || {};
-  const recent = (sessions && sessions.length ? sessions : cost?.sessions || []).slice(0, 5);
+  const allSessions = sessions && sessions.length ? sessions : cost?.sessions || [];
+  const recent = allSessions.slice(0, 5);
   const findings = health?.findings || [];
   const counts = health?.counts || {};
   const active = cost?.active;
+
+  const trend = useMemo(() => {
+    const days = new Map();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      days.set(d.toDateString(), {
+        key: d.toDateString(),
+        label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        cost: 0,
+        n: 0,
+      });
+    }
+    for (const s of allSessions) {
+      const t = Number(s.time_updated || s.time_created);
+      if (!t) continue;
+      const d = new Date(t);
+      d.setHours(0, 0, 0, 0);
+      const row = days.get(d.toDateString());
+      if (!row) continue;
+      row.cost += Number(s.cost) || 0;
+      row.n += 1;
+    }
+    return [...days.values()];
+  }, [allSessions]);
+  const trendTotal = trend.reduce((sum, d) => sum + d.cost, 0);
+  const trendMax = Math.max(0.01, ...trend.map((d) => d.cost));
 
   return (
     <Box>
@@ -72,6 +104,38 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
         <Kpi label="Cache read" value={fmtCompact(totals.cr)} hint="prompt cache" color="secondary.main" />
         <Kpi label="Health findings" value={health ? String(findings.length) : "…"} hint={health ? `${counts.running_tools || 0} running tools` : "loading"} color={findings.length ? "warning.main" : "success.main"} />
       </Box>
+
+      <Card sx={{ mt: 1.5 }}>
+        <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Typography variant="h6">Cost · last 14 days</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Sum of session cost by local day
+              </Typography>
+            </Box>
+            <Chip size="small" color="primary" label={fmtUsd(trendTotal)} />
+          </Stack>
+          <Box sx={{ display: "flex", alignItems: "flex-end", gap: { xs: 0.5, sm: 1 }, height: { xs: 78, sm: 110 }, mt: 1.5 }} role="img" aria-label="Cost by day for the last 14 days">
+            {trend.map((d) => (
+              <Tooltip key={d.key} title={`${d.label}: ${fmtUsd(d.cost)} · ${d.n} session${d.n === 1 ? "" : "s"}`}>
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 4,
+                    height: `${d.cost ? Math.max(4, (d.cost / trendMax) * 100) : 2}%`,
+                    bgcolor: d.cost ? "primary.main" : "action.hover",
+                    borderRadius: "4px 4px 0 0",
+                  }}
+                />
+              </Tooltip>
+            ))}
+          </Box>
+          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+            {trend[0]?.label} – {trend[trend.length - 1]?.label}
+          </Typography>
+        </CardContent>
+      </Card>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.25fr .75fr" }, gap: 2, mt: 2 }}>
         <Card>

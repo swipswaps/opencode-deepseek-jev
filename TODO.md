@@ -201,6 +201,11 @@ Last updated: 2026-11-04
       `status-mui-{desktop,activity-desktop,mobile,activity}.png`; details
       `web/README.md`, `docs/UX-MOBILE-AUDIT.md`.
 
+- [x] **UX-4 — 2026-11-04.** Second `/app/` UX pass: steps hidden by default
+      (switch), `/` focuses Activity search, Sessions sort (recent/cost/tokens/
+      duration), 14-day cost trend on Overview, and Chrome install prompt.
+      Desktop/mobile Playwright rechecked; installability `[]`.
+
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.
