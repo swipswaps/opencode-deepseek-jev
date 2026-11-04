@@ -220,6 +220,7 @@ const c = L.apiCostFresh(db);
 if (!c.totals || !Array.isArray(c.sessions)) process.exit(1);
 const a = L.apiActivityFresh(db);
 if (!Array.isArray(a)) process.exit(1);
+if (a.length && a.some((x) => typeof x.te !== "number" || x.te < x.ts)) process.exit(1);
 ' > "$work/offloop-bodies.txt" 2>&1; then
         ok 'off-loop bodies: search/integrations/cost/activity'
     else

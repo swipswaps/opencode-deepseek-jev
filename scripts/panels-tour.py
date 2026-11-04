@@ -16,7 +16,8 @@ Panels (hash routing activates the tab server-side, no clicks needed):
     trends    /explore#charts      cost/sessions per day
     signals   /explore#signals     session health + guard
     patterns  /explore#patterns    recurring tool n-grams + known fixes
-    timeline  /                    focused status-timeline.png (d3 Gantt)
+    timeline  /                    focused status-timeline.png (time-aligned table)
+    mui       /app/                MUI desktop + mobile overview/activity shots
 
 Light theme is forced (?theme=light) so the shots read.
 Every shot is shrunk with png-shrink.mjs from the ORIGINAL bytes, trying the
@@ -79,7 +80,9 @@ def self_test() -> int:
 
 def check(out: pathlib.Path) -> int:
     """Report which expected shots are missing; never fail the build on a host gap."""
-    expected = ["status-%s.png" % name for name, _ in PANELS] + ["status-timeline.png"]
+    expected = ["status-%s.png" % name for name, _ in PANELS] + ["status-timeline.png", "status-mobile.png",
+                "status-mui-desktop.png", "status-mui-activity-desktop.png",
+                "status-mui-mobile.png", "status-mui-activity.png"]
     missing = [e for e in expected if not (out / e).exists()]
     print("panels-tour: %d/%d expected shots present in %s" % (len(expected) - len(missing), len(expected), out))
     if missing:
@@ -131,15 +134,71 @@ def main() -> int:
                 print("WARN %s: %s" % (name, str(e)[:80]))
         try:
             pg.goto(a.base + "/?theme=light", wait_until="domcontentloaded", timeout=30000)
-            pg.wait_for_selector("#timeline svg", timeout=30000)
-            pg.wait_for_timeout(1000)
+            pg.wait_for_selector("#timeline .tl-row .tl-text", state="attached", timeout=30000)
+            pg.wait_for_timeout(1500)
             shot = str(out / "status-timeline.png")
-            pg.locator("#timeline-card").screenshot(path=shot)
+            pg.locator("#activity-card").screenshot(path=shot)
             shrink(shot, repo)
             print("shot", shot)
         except Exception as e:
             print("WARN timeline: %s" % str(e)[:80])
         ctx.close()
+        # Android-sized capture of the combined activity card (390 CSS px,
+        # DPR 2). This is the regression shot for the mobile layout.
+        try:
+            mctx = b.new_context(viewport={"width": 390, "height": 844},
+                                 device_scale_factor=2, is_mobile=True, has_touch=True,
+                                 ignore_https_errors=True)
+            mpg = mctx.new_page()
+            mpg.goto(a.base + "/?theme=light", wait_until="domcontentloaded", timeout=30000)
+            mpg.wait_for_selector("#timeline .tl-row .tl-text", state="attached", timeout=30000)
+            mpg.wait_for_timeout(1500)
+            shot = str(out / "status-mobile.png")
+            mpg.locator("#activity-card").screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+            mctx.close()
+        except Exception as e:
+            print("WARN mobile: %s" % str(e)[:80])
+
+        try:
+            dctx = b.new_context(viewport={"width": 1280, "height": 900}, ignore_https_errors=True)
+            dpg = dctx.new_page()
+            dpg.goto(a.base + "/app/", wait_until="domcontentloaded", timeout=30000)
+            dpg.wait_for_selector(".MuiCard-root", timeout=30000)
+            dpg.wait_for_timeout(4000)
+            shot = str(out / "status-mui-desktop.png")
+            dpg.screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+            dpg.get_by_text("Activity", exact=True).first.click()
+            dpg.wait_for_timeout(1000)
+            shot = str(out / "status-mui-activity-desktop.png")
+            dpg.screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+            dctx.close()
+
+            mctx2 = b.new_context(viewport={"width": 390, "height": 844},
+                                  device_scale_factor=2, is_mobile=True, has_touch=True,
+                                  ignore_https_errors=True)
+            mpg2 = mctx2.new_page()
+            mpg2.goto(a.base + "/app/", wait_until="domcontentloaded", timeout=30000)
+            mpg2.wait_for_selector(".MuiCard-root", timeout=30000)
+            mpg2.wait_for_timeout(4000)
+            shot = str(out / "status-mui-mobile.png")
+            mpg2.screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+            mpg2.get_by_role("button", name="Activity").click()
+            mpg2.wait_for_timeout(1000)
+            shot = str(out / "status-mui-activity.png")
+            mpg2.screenshot(path=shot)
+            shrink(shot, repo)
+            print("shot", shot)
+            mctx2.close()
+        except Exception as e:
+            print("WARN mui: %s" % str(e)[:80])
 
         # 2) Tour video: its own short, low-res context so the .webm stays under
         # the 2 MiB video budget (the 1280x860/6s version was 7.7 MiB).

@@ -112,13 +112,13 @@ export function apiCostFresh(dbPath) {
 export function apiActivityFresh(dbPath) {
   const rows = queryDb(
     dbPath,
-    "SELECT time_created, data FROM part WHERE session_id IN (SELECT id FROM session ORDER BY time_updated DESC LIMIT 12) ORDER BY time_created DESC LIMIT 80"
+    "SELECT time_created, time_updated, data FROM part WHERE session_id IN (SELECT id FROM session ORDER BY time_updated DESC LIMIT 12) ORDER BY time_created DESC LIMIT 80"
   );
   const items = [];
   for (const row of rows) {
     let d;
     try { d = JSON.parse(row.data); } catch { continue; }
-    const it = { ts: row.time_created, type: d.type };
+    const it = { ts: row.time_created, te: row.time_updated, type: d.type };
     if (d.type === "tool") {
       it.tool = d.tool;
       it.status = (d.state && d.state.status) || "?";

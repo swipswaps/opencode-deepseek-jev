@@ -83,9 +83,15 @@ cost.sh
 dashboard.sh
     Read-only observability sidecar on http://127.0.0.1:5099 (DASH_PORT/
     DASH_HOST). Reads the DB read-only, no docker/external deps. Cost cards +
-    live activity + todos + a live d3 diagnostic timeline (last 30 parts,
-    moving now); copy buttons for session IDs, activity text/commands, and the
-    timeline JSON; /api/session?id= (detail + parts) and
+    todos + one combined Activity timeline (the former live-activity list and
+    diagnostic timeline): newest first, filter chips, 30/all toggle, expand and
+    copy per row, start dot on the time axis, relative-duration bar, exact
+    duration, full command/text, moving now line. Copy buttons for session IDs,
+    each timeline row, and the visible timeline JSON; /api/session?id= (detail
+    and parts), the installable PWA shell (/manifest.webmanifest, /sw.js,
+    /icon-192.png, /icon-512.png; Chrome installability check returns []), the
+    separate MUI/React app at /app/ (built from web/ to web/dist, with
+    /app-manifest.webmanifest; build: cd web && npm ci && npm run build), and
     /api/export/session?id=&format=txt|md|json (redacted); /api/search.
     /api/health is CACHED (HEALTH_TTL_MS 15s): ~7s of sync aggregation that
     would otherwise block every other request in the single Node process.
@@ -1072,6 +1078,12 @@ png-shrink.mjs
     Downscale a PNG to a byte budget (box filter, opaque RGB) using the
     repo-pinned pngjs (no apt/pip). Overwrites the input file.
     node scripts/png-shrink.mjs <file.png> [scale=0.75] [budget=153600]
+
+pwa-icons.mjs
+    Regenerate the 192/512 Android/PWA icons from the activity-bar mark using
+    the repo-pinned pngjs. The manifest and /sw.js are served by dashboard.sh;
+    Android installability also needs HTTPS with a trusted local CA.
+    node scripts/pwa-icons.mjs
 
 ux.sh
     One router for the web-probe workflow (a single verb table shared by

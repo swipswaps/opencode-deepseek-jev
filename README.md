@@ -9,9 +9,13 @@ plane.
 ## Latest verified state (2026-11-04)
 
 - The web UI and the `:5099` dashboard are running. The dashboard streams
-  cost, live activity, todos, and a live **d3 diagnostic timeline** (last 30
-  parts, moving "now" line); the activity items and session rows have copy
-  buttons, and text is selectable.
+  cost, todos, and one combined **activity timeline** (the old Live activity and
+  diagnostic timeline are merged): newest first, filter chips, 30/all toggle,
+  per-row expand/copy, start dot on the time axis, relative-duration bar, exact
+  duration, full command/text, and a moving "now" line. It is responsive at
+  390 px and has an installable PWA shell for Android Chrome. A **separate
+  MUI/React app** is available at `/app/` (source `web/`; build with
+  `cd web && npm ci && npm run build`).
 - LiteLLM has a private Postgres. The admin UI at `127.0.0.1:4000/ui` accepts
   `admin` + `LITELLM_MASTER_KEY` (HTTP 200); `/v1/models` is 200.
 - Provider keys were rotated. The guard allows benign reads and denies
@@ -345,21 +349,57 @@ Regenerate every panel + a short `.webm` tour with the scripted capture:
 `playwright install chromium`; the sandbox lacks the system libs, so run it on
 the host). It writes
 `docs/ux/status-{home,overview,board,trends,signals,patterns}.png`, a focused
-`docs/ux/status-timeline.png`, and `docs/ux/tour.webm`, shrinking each shot
+`docs/ux/status-timeline.png`, `docs/ux/status-mobile.png`, the four
+`docs/ux/status-mui-*.png` shots, and `docs/ux/tour.webm`, shrinking each shot
 under the 150 KiB image budget (from the original, so it never double-shrinks)
 and recording a separate 960x540 tour under the 2 MiB video budget.
 `python3 scripts/panels-tour.py --check` lists any expected shot that is still
 missing (it reports, it does not fake a pass).
 
 Dashboard home — **Flags** (bottlenecks · cost · slowdowns · stalls), sessions
-with time-zone-labelled times, cost, live activity:
+with time-zone-labelled times, cost, and the combined activity timeline. The
+mobile/MUI/PWA decision and sources are in
+[`docs/UX-MOBILE-AUDIT.md`](docs/UX-MOBILE-AUDIT.md):
 
 ![Dashboard home](docs/ux/status-home.png)
 
-Diagnostic timeline — the last 30 activity parts as a live d3 Gantt. The red
-line is “now”; the card’s **copy JSON** button copies the raw data:
+Activity timeline — one card for the same `/api/activity` rows (no duplicate
+list). Newest first, filter chips, 30/all toggle, expand/collapse and copy per
+row, a start dot on the time axis, a relative-duration bar, and the exact
+duration. The red dashed line is "now"; **copy JSON** copies the visible rows:
 
-![Diagnostic timeline](docs/ux/status-timeline.png)
+![Activity timeline](docs/ux/status-timeline.png)
+
+Android layout at 390 px — no horizontal page overflow, 44 px touch targets,
+single-column rows, and the activity card moved near the top. The manifest +
+service worker pass Chrome's installability check (`Page.getInstallabilityErrors`
+returns `[]`); use Chrome's **Install app** after trusting the local CA:
+
+![Android activity timeline](docs/ux/status-mobile.png)
+
+### Material UI app (`/app/`)
+
+The full React version lives in `web/` (React 19 + Material UI 9.5 + Vite 8).
+It reuses the same `/api/*` endpoints and has an Overview, Activity timeline,
+Sessions, and Todos. Desktop uses a permanent MUI Drawer; under `md` it uses a
+MUI `BottomNavigation`; rows/cards stack at 390 px. Build once:
+
+```bash
+cd web && npm ci && npm run build
+```
+
+`scripts/dashboard.mjs` serves `web/dist` at `/app/` and the hashed assets under
+`/app/assets/*`; `/app-manifest.webmanifest` sets `start_url=/app/`. See
+[`web/README.md`](web/README.md) for dev/PWA notes. The app is also installable (`Page.getInstallabilityErrors: []`) and the build is
+551 kB minified / 171 kB gzip. The legacy no-build page at `/` remains.
+
+![MUI Overview](docs/ux/status-mui-desktop.png)
+
+![MUI Activity](docs/ux/status-mui-activity-desktop.png)
+
+![MUI Android Overview](docs/ux/status-mui-mobile.png)
+
+![MUI Android Activity](docs/ux/status-mui-activity.png)
 
 `/explore ▸ overview` — search everything + the compact sessions table:
 

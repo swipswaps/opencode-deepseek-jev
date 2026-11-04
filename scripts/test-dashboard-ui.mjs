@@ -90,6 +90,22 @@ async function main() {
   } catch (e) {
     fail("cannot reach " + BASE + PATH + " (" + e.message + ")");
   }
+  const manifests = await fetch(BASE + "/manifest.webmanifest");
+  if (!manifests.ok) fail("manifest: HTTP " + manifests.status);
+  const manifest = await manifests.json();
+  if (!Array.isArray(manifest.icons) || manifest.icons.length < 2) fail("manifest: missing icons");
+  const appManifest = await fetch(BASE + "/app-manifest.webmanifest");
+  if (!appManifest.ok) fail("app manifest: HTTP " + appManifest.status);
+  const appManifestJson = await appManifest.json();
+  if (appManifestJson.start_url !== "/app/") fail("app manifest: start_url is not /app/");
+  const appPage = await fetch(BASE + "/app/");
+  if (!appPage.ok || !(await appPage.text()).includes('id="root"')) fail("app: /app/ shell missing");
+  const sw = await (await fetch(BASE + "/sw.js")).text();
+  if (sw.indexOf('addEventListener("fetch"') < 0) fail("sw.js: no fetch handler");
+  for (const icon of manifest.icons.map((i) => i.src)) {
+    const r = await fetch(new URL(icon, BASE));
+    if (!r.ok || !String(r.headers.get("content-type") || "").startsWith("image/png")) fail("icon " + icon + ": bad response");
+  }
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   if (!scripts.length) fail("no inline <script> in " + PATH);
   const code = scripts.join("\n;\n");
@@ -132,7 +148,7 @@ async function main() {
     process.exit(0);
   }
 
-  const panes = ["session", "stats", "sessions", "activity", "config"];
+  const panes = ["session", "stats", "sessions", "timeline", "config"];
   // Per-pane wait. #activity aggregates recent parts and can exceed 20s on a
   // loaded host; a slow-but-correct pane is not a broken page. Callers that
   // gate a deploy (deploy.sh) raise UI_PANE_MS so load does not false-fail.
@@ -169,6 +185,15 @@ async function main() {
     fail("F3: search failure rendered no degraded state: " + sres.innerHTML);
   }
   console.log("PASS search: timeout renders a visible degraded state");
+  console.log("PASS pwa: manifests, /app/ shell, service worker, and PNG icons served");
+
+  if (!getEl("activity-card") || !getEl("activity")) fail("combined activity card missing (#activity-card/#activity)");
+  const tl = getEl("timeline");
+  const tlHtml = (tl && tl._html) || "";
+  if (tlHtml.indexOf("tl-text") < 0 || tlHtml.indexOf("data-copy=") < 0 || tlHtml.indexOf("tl-now") < 0) {
+    fail("timeline: expected time-aligned rows with detail/copy/now, got " + tlHtml.slice(0, 200));
+  }
+  console.log("PASS timeline: rows expose full command/text, duration bar, now line, copy");
 
   process.exit(ok ? 0 : 1);
 }

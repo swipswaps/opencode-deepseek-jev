@@ -179,9 +179,27 @@ Last updated: 2026-11-04
 
 - [x] **UX-1 — 2026-11-04.** `:5099` readability/copy: larger high-contrast
       text, selectable content, copy buttons for session IDs, activity
-      text/commands and timeline JSON, expand only on the control, and a live
-      d3 diagnostic Gantt (last 30 parts, moving now). Screenshots refreshed
-      (`status-home`, `status-timeline`); headless UI test PASS.
+      text/commands, timeline rows, and timeline JSON; expand only on the
+      control; and a live d3-assisted diagnostic table (last 30 parts: start dot
+      on the time axis, relative-duration bar, full command/text, exact
+      duration, moving now). Screenshots refreshed (`status-home`,
+      `status-timeline`); headless UI test PASS.
+
+- [x] **UX-2 — 2026-11-04.** Combined Live activity + Diagnostic timeline into
+      one Activity timeline (newest first, filter chips, 30/all, expand/copy,
+      start dot, relative duration, full command/text, exact duration). Moved it
+      under the stats; mobile 390 px layout stacks rows with 44 px controls;
+      added PWA manifest/service worker/icons and verified Chrome installability
+      (`[]`). Decision/sources: `docs/UX-MOBILE-AUDIT.md`. Screenshots
+      `status-timeline` + `status-mobile`.
+
+- [x] **UX-3 — 2026-11-04.** Added the separate full MUI/React observability
+      app at `/app/` (`web/`: React 19.3 + MUI 9.5 + Vite 8.3; Overview,
+      Activity, Sessions, Todos; permanent drawer + mobile bottom nav; app
+      manifest + shared service worker; Chrome installability `[]`). Build is
+      550 kB minified / 171 kB gzip; legacy `/` remains. Screenshots
+      `status-mui-{desktop,activity-desktop,mobile,activity}.png`; details
+      `web/README.md`, `docs/UX-MOBILE-AUDIT.md`.
 
 - [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
       container still reads `/workspace/.env.local`,
