@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Managed by scripts/secret-leak-response.sh --install. Do not edit in place.
+# Refuse credential-shaped paths and staged secret patterns. Values are never
+# printed: secret-scan.sh reports file:line:kind only.
+set -o pipefail
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -n "$staged" ] || exit 0
+bad=0
+blocked=$(printf '%s\n' "$staged" \
+    | grep -Ei '(^|/)(\.env(\..*)?|auth\.json(\..*)?|.*\.(pem|key|p12|pfx|jks))$' || true)
+if [ -n "$blocked" ]; then
+    printf 'BLOCK: credential-shaped path staged:\n%s\n' "$blocked"
+    bad=1
+fi
+if [ -x ./scripts/secret-scan.sh ]; then
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        [ -f "$p" ] || continue
+        if ! ./scripts/secret-scan.sh --paths "$p" --quiet; then
+            printf 'BLOCK: secret pattern in staged file: %s\n' "$p"
+            bad=1
+        fi
+    done <<EOF
+$staged
+EOF
+fi
+if [ "$bad" -eq 0 ]; then printf 'secret-leak-response: pre-commit clean\n'; fi
+exit "$bad"

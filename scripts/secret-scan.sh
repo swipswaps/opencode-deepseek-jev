@@ -51,7 +51,9 @@ PATTERNS = [
     ("bearer_token", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]{16,}")),
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("env_assignment", re.compile(
-        r"(?i)\b(?:API_KEY|PASSWORD|SECRET|TOKEN|MASTER_KEY|SERVER_PASSWORD)\s*[:=]\s*[\"']?[A-Za-z0-9_./+\-]{8,}")),
+        r"(?:^|[^A-Za-z0-9])[A-Z][A-Z0-9_]*(?:API_KEY|PASSWORD|SECRET|TOKEN|MASTER_KEY)\s*=\s*[\"']?[A-Za-z0-9_./+\-]{12,}")),
+    ("yaml_secret", re.compile(
+        r"(?i)^\s*[A-Za-z0-9_.-]*(?:api_?key|password|secret|token|master_key|server_password)\s*:\s*[\"']?[A-Za-z0-9_./+\-]{20,}")),
 ]
 SKIP_NAMES = {".env.local", ".env", ".git"}
 SKIP_EXT = {".db", ".db-wal", ".db-shm", ".png", ".jpg", ".jpeg", ".gif", ".webp",
@@ -126,11 +128,14 @@ self_test() {
 import sys
 d = sys.argv[1]
 open(d + "/dirty.log", "w").write(
-    "env dump\nDEEPSEEK_API_KEY=sk-" + "a" * 30 + "\nJEV_API_KEY=apikey_" + "b" * 24 + "\n")
-open(d + "/clean.log", "w").write("all good, no keys here\n")
+    "env dump\nDEEPSEEK_API_KEY=sk-" + "a" * 30 + "\nJEV_API_KEY=apikey_" + "b" * 24
+    + "\nOPENCODE_SERVER_PASSWORD=" + "c" * 24 + "\n")
+open(d + "/clean.log", "w").write(
+    "all good, no keys here\n# Password: regenerate ONLY on missing or --rotate.\n"
+    "rotate-server-password: self-test PASS\n")
 PYEOF
     out=$(bash "${BASH_SOURCE[0]}" --paths "$work" --json 2>&1)
-    printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["count"] >= 2, "count"; assert all(set(("file","line","kind")) == set(f) for f in d["findings"]), "shape"' \
+    printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["count"] >= 3, "count"; assert all(set(("file","line","kind")) == set(f) for f in d["findings"]), "shape"' \
         || { printf 'FAIL json contract\n'; fail=1; }
     # The report must never contain the raw secret bytes.
     printf '%s' "$out" | grep -q "aaaaaaaaaaaaaaaaaaaa" && { printf 'FAIL report leaked value\n'; fail=1; }

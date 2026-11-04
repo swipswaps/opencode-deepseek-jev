@@ -70,6 +70,10 @@ export function semanticVerdict(command) {
 }
 
 const RULES = [
+  { name: "env-read", pattern: "(?:^|[;&|()]\\s*)(?:cat|less|more|head|tail|nl|xxd|od|strings)\\b[^\\n]*\\.env", sev: "block",
+    fix: "never print .env: use awk -F= '/^KEY=/{print length($2)}' .env.local, or the rotate scripts (they mask)", rule: "security" },
+  { name: "env-grep", pattern: "(?:^|[;&|()]\\s*)grep\\s+(?![^\\n]*(?:\\s*-[A-Za-z]*[qc]\\b|\\s*--count\\b|\\s*--quiet\\b))[^\\n]*\\.env", sev: "block",
+    fix: "grep -c/-q only (count/match, no value); otherwise awk length or the rotate scripts", rule: "security" },
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",

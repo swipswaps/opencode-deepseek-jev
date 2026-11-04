@@ -19,6 +19,13 @@ const cases = [
   ["echo hello", "echo", true],
   ["printf '%s\\n' hello", "echo", false],
   ["grep 'rm -rf' .", "rm -rf", false],
+  ["cat -n .env.local", "env-read", true],
+  ["head -n 5 .env.production", "env-read", true],
+  ["cat .env.local | less", "env-read", true],
+  ["grep '^KEY=' .env.local", "env-grep", true],
+  ["grep -c '^KEY=' .env.local", "env-grep", false],
+  ["grep -q '^KEY=' .env.local", "env-grep", false],
+  ["cat README.md", "env-read", false],
   // interpreter-wrapped scripts must still be inspected (bypass fix)
   ["bash -c 'sed -i x'", "sed", true],
   ["sh -lc \"rm -rf /x\"", "rm -rf", true],

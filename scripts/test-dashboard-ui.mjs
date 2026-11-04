@@ -148,6 +148,28 @@ async function main() {
     console.log((n > 0 ? "PASS " : "FAIL ") + "pane #" + id + " populated (" + n + " bytes, " + (Date.now() - t0) + "ms)");
     if (n <= 0) ok = false;
   }
+  // F3: a failed/timed-out search must render a VISIBLE degraded state. The old
+  // code used a null-returning helper, so a saturated server looked like
+  // "no matches". Stub fetch to fail both legs and drive the real doSearch().
+  const qel = getEl("q");
+  const sres = getEl("searchres");
+  if (!qel || !sres) fail("F3: #q/#searchres missing from served page");
+  qel.value = "session";
+  sres.innerHTML = "";
+  const liveFetch = sandbox.fetch;
+  sandbox.fetch = () => Promise.reject(Object.assign(new Error("timed out"), { name: "TimeoutError" }));
+  try {
+    await sandbox.doSearch();
+  } catch (e) {
+    sandbox.fetch = liveFetch;
+    fail("F3: doSearch threw on a timeout: " + e.message);
+  }
+  sandbox.fetch = liveFetch;
+  if (String(sres.innerHTML).indexOf("search degraded") < 0) {
+    fail("F3: search failure rendered no degraded state: " + sres.innerHTML);
+  }
+  console.log("PASS search: timeout renders a visible degraded state");
+
   process.exit(ok ? 0 : 1);
 }
 
