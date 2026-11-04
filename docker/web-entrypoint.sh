@@ -47,6 +47,19 @@ else
     printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json left untouched\n' >&2
 fi
 
+# JEV-OFF (2026-10-21): the image installs jev-guard GLOBALLY, so removing it
+# from /workspace/opencode.json is not enough. patch-global-config.sh deactivates
+# jev-guard/jev-review in the global config (and replaces a literal LiteLLM key
+# with an env reference). Shared with the interactive entrypoint; idempotent.
+if [ -f /workspace/docker/patch-global-config.sh ]; then
+    sh /workspace/docker/patch-global-config.sh || printf '[web-entrypoint] global config patch failed (continuing)\n' >&2
+fi
+# jev-guard 0.3.1 ignores JEV_BASE_URL (typesafe-only); add the custom backend
+# to the cached package. Must run every start: the cache is in the container FS.
+if [ -f /workspace/docker/patch-jev-guard.sh ]; then
+    sh /workspace/docker/patch-jev-guard.sh || printf '[web-entrypoint] jev-guard patch failed (continuing)\n' >&2
+fi
+
 # Load the repo's blacklist-guard for EVERY project. The interactive web UI
 # creates sessions rooted at $HOME/.opencode (observed: directory=/home/node/.opencode
 # via "booting location services"), NOT /workspace, so the project-scoped

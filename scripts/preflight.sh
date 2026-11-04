@@ -10,7 +10,8 @@
 #
 # Critical (STOP, exit 1):
 #   - repo/database missing
-#   - .env.local missing any of DEEPSEEK_API_KEY / JEV_API_KEY / OPENCODE_SERVER_PASSWORD
+#   - .env.local missing DEEPSEEK_API_KEY / OPENCODE_SERVER_PASSWORD
+#     (JEV_API_KEY is optional: the JEV cloud guard/MCP is disabled by policy)
 #   - the last `harness.sh` run recorded a failed gate (data/observability/last-gate.json)
 #   - no recorded gate run yet
 #   - DeepSeek balance below MIN_BALANCE (default 1.00 USD)
@@ -114,9 +115,14 @@ main() {
 
     if [ -f "$envf" ]; then
         local k
-        for k in DEEPSEEK_API_KEY JEV_API_KEY OPENCODE_SERVER_PASSWORD; do
+        for k in DEEPSEEK_API_KEY OPENCODE_SERVER_PASSWORD; do
             if grep -q "^$k=" "$envf"; then good "$k set (name only)"; else crit "$k missing from .env.local"; fi
         done
+        if grep -q '^JEV_API_KEY=' "$envf"; then
+            good "JEV_API_KEY present but unused (JEV cloud disabled; Laya/SubQ route)"
+        else
+            good "JEV cloud disabled (no JEV_API_KEY required)"
+        fi
     else
         crit "no .env.local at $envf"
     fi

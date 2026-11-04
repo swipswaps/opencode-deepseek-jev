@@ -22,6 +22,7 @@ services:
     image: opencode-deepseek-jev:robust
     container_name: opencode-deepseek-jev
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    entrypoint: ["/workspace/docker/jev-off-entrypoint.sh"]
     stdin_open: true
     tty: true
     working_dir: /workspace
@@ -29,9 +30,13 @@ services:
       - ..:/workspace
       - ../data/opencode:/home/node/.local/share/opencode
       - /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/notes:/workspace/notes:ro
+    env_file:
+      - ../.env.local
     environment:
       - DEEPSEEK_API_KEY
       - JEV_API_KEY
+      - JEV_BASE_URL
+      - JEV_BASE_API_KEY
       - GEMINI_API_KEY
       - OPENCODE_DISABLE_DEFAULT_PLUGINS=true
     security_opt:

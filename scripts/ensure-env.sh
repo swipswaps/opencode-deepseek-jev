@@ -84,7 +84,7 @@ from datetime import datetime, timezone
 repo = pathlib.Path(sys.argv[1])
 rotate = sys.argv[2] == "1"
 env = repo / ".env.local"
-wanted = ("DEEPSEEK_API_KEY", "JEV_API_KEY", "GEMINI_API_KEY",
+wanted = ("DEEPSEEK_API_KEY", "GEMINI_API_KEY",
           "OPENCODE_SERVER_PASSWORD", "SUBQ_API_KEY")
 known = set(wanted)
 
@@ -171,7 +171,7 @@ for k in wanted:
     v = merged.get(k, "")
     print(("present " if v else "missing ") + k + (" len=" + str(len(v)) if v else ""))
 
-for k in ("DEEPSEEK_API_KEY", "JEV_API_KEY"):
+for k in ("DEEPSEEK_API_KEY",):
     if not merged.get(k):
         print("WARN: " + k + " empty — add it to .env.local")
 if short_present and not generated:

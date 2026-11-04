@@ -8,10 +8,10 @@
 #
 # Expected spec (the "ought be"):
 #   .env.local present, mode 0600
-#   DEEPSEEK_API_KEY (sk-*) and JEV_API_KEY (apikey_*) set
+#   DEEPSEEK_API_KEY (sk-*) set; JEV_API_KEY optional (JEV cloud disabled)
 #   OPENCODE_SERVER_PASSWORD set, length >= 12
 #   opencode.json parses; model == opencode-go/deepseek-v4.1-flash;
-#     mcp.servers includes jev-review; plugin includes jev-guard
+#     jev-review MCP / jev-guard plugin absent by policy (Laya/SubQ route)
 #   docker-compose.yml opencode-web: no-new-privileges, cap_drop ALL,
 #     publishes 127.0.0.1:5099 (and 4096)
 #   .gitignore ignores .env.local and *.bak.*
@@ -155,13 +155,16 @@ main() {
         emit deepseek-key FATAL MISSING "set" "empty" "add DEEPSEEK_API_KEY to .env.local"
     fi
 
+    # JEV cloud is disabled by policy (2026-10-21): the key is optional and, if
+    # present, unused. Laya (self-hosted) is the guard route; SubQ is the
+    # scripted typed-decision route (scripts/subq_snap.py).
     if [ -n "$JV" ]; then
         case "$JV" in
-            apikey_*|sk-*|ts_*|jev-*) emit jev-key OK OK "apikey_*" "set" "" ;;
-            *) emit jev-key WARN DRIFT "apikey_*" "unexpected prefix" "issue a new key" ;;
+            apikey_*|sk-*|ts_*|jev-*) emit jev-key OK OK "optional" "set (unused)" "" ;;
+            *) emit jev-key WARN DRIFT "optional" "unexpected prefix" "delete it or re-issue" ;;
         esac
     else
-        emit jev-key FATAL MISSING "set" "empty" "add JEV_API_KEY to .env.local"
+        emit jev-key OK OK "optional" "not set (disabled)" ""
     fi
 
     if [ -n "$PW" ]; then
@@ -187,12 +190,12 @@ main() {
             emit opencode-model ERROR DRIFT "opencode-go/deepseek-v4.1-flash" "$model" "set \"model\" in opencode.json"
         fi
         case ",$mcp," in
-            *,jev-review,*) emit jev-mcp OK OK "jev-review" "$mcp" "" ;;
-            *) emit jev-mcp ERROR DRIFT "jev-review" "$mcp" "add jev-review to mcp.servers" ;;
+            *,jev-review,*) emit jev-mcp WARN DRIFT "absent (disabled)" "$mcp" "JEV cloud disabled; remove jev-review" ;;
+            *) emit jev-mcp OK OK "absent (disabled)" "$mcp" "" ;;
         esac
         case ",$plugin," in
-            *,jev-guard,*) emit jev-plugin OK OK "jev-guard" "$plugin" "" ;;
-            *) emit jev-plugin ERROR DRIFT "jev-guard" "$plugin" "add jev-guard to plugin" ;;
+            *,jev-guard,*) emit jev-plugin WARN DRIFT "absent (disabled)" "$plugin" "re-enable only with JEV_BASE_URL=Laya" ;;
+            *) emit jev-plugin OK OK "absent (disabled)" "$plugin" "" ;;
         esac
     else
         emit opencode-json FATAL MISSING "valid JSON" "missing or invalid" "fix opencode.json"

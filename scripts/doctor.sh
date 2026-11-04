@@ -420,6 +420,10 @@ tier8() {
 # ----------------------------------------------------------------------------
 tier9() {
     printf 'Tier 9: Jev functional proof\n'
+    if ! grep -q '"jev-review"' "$REPO_DIR/opencode.json" 2>&1; then
+        skip "JEV cloud disabled (no jev-review MCP; Laya/SubQ route)"
+        return
+    fi
     if [ "$FULL" -ne 1 ]; then
         skip "run with --full to enable (costs ~3e-4 USD)"
         return

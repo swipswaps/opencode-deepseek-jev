@@ -130,6 +130,10 @@ main() {
     printf 'TS: %s\n' "$TS"
 
     gate_container || return 1
+    if ! docker exec "$C" sh -c 'grep -q "jev-review" /workspace/opencode.json'; then
+        printf 'SKIP: JEV cloud disabled (no jev-review in opencode.json)\n'
+        return 0
+    fi
     gate_server_file || return 1
     gate_invoke
     if gate_evidence; then

@@ -1,0 +1,46 @@
+{
+  "$comment": "System One router policy. Laya is free/local; SubQ is paid/remote; Jev is disabled (cloud login failed 2026-10-21). cost_per_m_input is USD per 1M input tokens; output is free on both Laya and SubQ Snap.",
+  "policy": {
+    "window": 50,
+    "cold_samples": 5,
+    "min_reliability": 0.9,
+    "circuit_failures": 3,
+    "circuit_seconds": 60,
+    "timeout_ms": 1500
+  },
+  "providers": [
+    {
+      "id": "laya",
+      "url": "http://127.0.0.1:8000/v1/systemone",
+      "url_env": "LAYA_URL",
+      "model": "english",
+      "key_env": "LAYA_API_KEY",
+      "cost_per_m_input": 0.0,
+      "local": true,
+      "enabled": true,
+      "timeout_ms": 2000
+    },
+    {
+      "id": "subq",
+      "url": "https://api.subq.ai/v1/systemone",
+      "url_env": "SUBQ_URL",
+      "model": "subq-snap-preview",
+      "key_env": "SUBQ_API_KEY",
+      "cost_per_m_input": 0.05,
+      "local": false,
+      "enabled": true,
+      "timeout_ms": 1500
+    },
+    {
+      "id": "jev",
+      "url": "https://api.typesafe.ai/v1/systemone",
+      "url_env": "JEV_URL",
+      "model": "jev-latest",
+      "key_env": "JEV_API_KEY",
+      "cost_per_m_input": 0.042,
+      "local": false,
+      "enabled": false,
+      "timeout_ms": 1500
+    }
+  ]
+}

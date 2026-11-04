@@ -12,16 +12,29 @@
         "deepseek-flash": {
           "id": "deepseek-flash",
           "name": "DeepSeek V4.1 Flash",
-          "limit": { "context": 1000000, "output": 384000 },
+          "limit": {
+            "context": 1000000,
+            "output": 384000
+          },
           "attachment": true,
-          "modalities": { "input": ["text", "image"], "output": ["text"] }
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
         }
       }
     },
     "gemini": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Google Gemini",
-      "env": ["GEMINI_API_KEY"],
+      "env": [
+        "GEMINI_API_KEY"
+      ],
       "options": {
         "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "apiKey": "{env:GEMINI_API_KEY}"
@@ -29,37 +42,75 @@
       "models": {
         "gemini-2.5-flash": {
           "name": "Gemini 2.5 Flash",
-          "limit": { "context": 1000000, "output": 65536 },
-          "cost": { "input": 0.3, "output": 2.5, "cache_read": 0.075, "cache_write": 0 },
+          "limit": {
+            "context": 1000000,
+            "output": 65536
+          },
+          "cost": {
+            "input": 0.3,
+            "output": 2.5,
+            "cache_read": 0.075,
+            "cache_write": 0
+          },
           "attachment": true,
-          "modalities": { "input": ["text", "image"], "output": ["text"] }
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
         },
         "gemini-2.5-flash-lite": {
           "name": "Gemini 2.5 Flash-Lite",
-          "limit": { "context": 1000000, "output": 65536 },
-          "cost": { "input": 0.1, "output": 0.4, "cache_read": 0.025, "cache_write": 0 },
+          "limit": {
+            "context": 1000000,
+            "output": 65536
+          },
+          "cost": {
+            "input": 0.1,
+            "output": 0.4,
+            "cache_read": 0.025,
+            "cache_write": 0
+          },
           "attachment": true,
-          "modalities": { "input": ["text", "image"], "output": ["text"] }
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "text"
+            ]
+          }
         }
       }
     }
   },
   "model": "opencode-go/deepseek-v4.1-flash",
-  "compaction": { "auto": true, "prune": true, "tail_turns": 20 },
-  "plugin": [ "jev-guard" ],
-  "skills": [ "/opt/jev-review/skills" ],
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "tail_turns": 20
+  },
   "mcp": {
     "servers": {
-      "jev-review": {
-        "type": "local",
-        "command": [ "node", "/opt/jev-review/dist/server.js" ],
-        "environment": { "JEV_API_KEY": "{env:JEV_API_KEY}" }
-      },
       "repo-tools": {
         "type": "local",
-        "command": [ "node", "scripts/repo-mcp.mjs" ],
+        "command": [
+          "node",
+          "scripts/repo-mcp.mjs"
+        ],
         "environment": {}
       }
+    }
+  },
+  "references": {
+    "rag": {
+      "path": "/home/owner/Documents/2282af3557819803/repo/production-local-rag",
+      "description": "Local-first RAG engine (Python, sqlite-vec, Ollama). Use for chunking, embedding, KNN retrieval, and the RAG contract. External reference; treat as read-only."
     }
   }
 }

@@ -9,11 +9,14 @@
 #
 #   ./scripts/web-restart.sh
 #
-# Two modes:
-#   docker present  -> `docker compose restart opencode-web` (the host path)
-#   docker absent   -> restart the local `dashboard.mjs` process (the sandbox
-#                      path; this is why :5099 goes STALE after every commit
-#                      here — nothing was restarting it)
+# Three modes:
+#   docker present        -> `docker compose restart opencode-web` (the host path)
+#   --recreate            -> `docker compose up -d --force-recreate opencode-web`
+#                            (REQUIRED after .env.local or compose changes:
+#                            restart keeps the container's original environment)
+#   docker absent         -> restart the local `dashboard.mjs` process (the
+#                            sandbox path; this is why :5099 goes STALE after
+#                            every commit here — nothing was restarting it)
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
 # No 2>/dev/null. No subprocess.run. No kill without signal.
@@ -78,18 +81,50 @@ dashboard_pids() {
 }
 
 main() {
+    local MODE="restart"
+    case "${1:-}" in
+        --recreate) MODE="recreate" ;;
+        -h | --help) printf 'usage: %s [--recreate]\n' "$0"; return 0 ;;
+        "") ;;
+        *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
+    esac
     printf '=== web-restart.sh ===\n'
     local head
     head=$(git -C "$REPO_DIR" rev-parse --short HEAD 2>&1) || head="unknown"
     printf 'HEAD: %s\n' "$head"
 
     if have docker; then
-        printf 'mode: docker compose restart opencode-web\n'
-        ( cd "$REPO_DIR/docker" && docker compose restart opencode-web ) || {
-            printf 'FAIL: docker compose restart failed\n'
-            printf 'hint: is the docker daemon reachable? try: docker ps\n'
-            return 1
-        }
+        if [ "$MODE" = "recreate" ]; then
+            printf 'mode: docker compose up -d --force-recreate opencode-web\n'
+            ( cd "$REPO_DIR/docker" && docker compose up -d --force-recreate opencode-web ) || {
+                printf 'FAIL: docker compose up --force-recreate failed\n'
+                printf 'hint: is the docker daemon reachable? try: docker ps\n'
+                return 1
+            }
+        else
+            printf 'mode: docker compose restart opencode-web\n'
+            ( cd "$REPO_DIR/docker" && docker compose restart opencode-web ) || {
+                printf 'FAIL: docker compose restart failed\n'
+                printf 'hint: is the docker daemon reachable? try: docker ps\n'
+                return 1
+            }
+            # restart keeps the container's ORIGINAL environment; warn when the
+            # env file is newer, because the change silently did not apply.
+            local created envm ce
+            created=$(docker inspect -f '{{.Created}}' opencode-deepseek-web 2>&1)
+            envm=$(stat -c %Y "$REPO_DIR/.env.local" 2>&1)
+            ce=$(date -d "$created" +%s 2>&1)
+            case "$ce" in ""|*[!0-9]*) ;; *)
+                case "$envm" in ""|*[!0-9]*) ;; *)
+                    if [ "$envm" -gt "$ce" ]; then
+                        printf 'WARN: .env.local is newer than the container; restart does NOT reload env_file.\n'
+                        printf '      re-run: %s --recreate\n' "$0"
+                    fi
+                    ;;
+                esac
+                ;;
+            esac
+        fi
     else
         printf 'mode: dockerless (local dashboard.mjs process)\n'
         local pids first args pid k

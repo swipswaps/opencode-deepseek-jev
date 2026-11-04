@@ -7,12 +7,12 @@ main() {
     if docker info > /dev/null; then echo "PASS: docker daemon reachable"
     else echo "FAIL: docker daemon not reachable. Output:"; docker info; return 1; fi
 
-    echo "Running: docker run -it --rm --user $(id -u):$(id -g) -e DEEPSEEK_API_KEY -e JEV_API_KEY $IMAGE_NAME"
+    echo "Running: docker run -it --rm --user $(id -u):$(id -g) -e DEEPSEEK_API_KEY $IMAGE_NAME"
     docker run -it --rm \
         --user "$(id -u):$(id -g)" \
+        --entrypoint /workspace/docker/jev-off-entrypoint.sh \
         -v "$REPO_DIR:/workspace" \
         -e DEEPSEEK_API_KEY \
-        -e JEV_API_KEY \
         -e OPENCODE_DISABLE_DEFAULT_PLUGINS=true \
         --security-opt no-new-privileges:true \
         --cap-drop ALL \
