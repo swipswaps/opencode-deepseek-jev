@@ -27,7 +27,9 @@
 # after a crash/interruption use --resume to skip the steps already done
 # (notably the rewrite and the container recreate) instead of rotating twice.
 #
-# Env seams: ROTPW_ENV (default .env.local), ROTPW_NOCONTAINER=1 (skip R4/R5).
+# Env seams: ROTPW_ENV (default .env.local), ROTPW_NOCONTAINER=1 (skip R4/R5),
+# ROTPW_CONFIRM=write (skip the prompt), ROTPW_CLIPBOARD=1 (copy the new
+# password to wl-copy/xclip; it is never printed).
 # Exit 0 rotated+verified, 1 on any failure (rollback printed, not run).
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
@@ -92,7 +94,11 @@ self_test() {
     local fail=0 work=""
     have python3 || { printf 'FAIL python3 missing\n'; return 1; }
     work=$(mktemp -d)
-    printf '%s\n' '# fixture' 'DEEPSEEK_API_KEY=sk-fixture' 'OPENCODE_SERVER_PASSWORD=oldsecretvalue123' 'JEV_API_KEY=apikey_fixture' > "$work/env.local"
+    local fixture_pw
+    fixture_pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))') \
+        || { printf 'FAIL fixture generator\n'; fail=1; return 1; }
+    printf '%s\n' '# fixture' 'DEEPSEEK_API_KEY=sk-fixture' 'JEV_API_KEY=fixture' > "$work/env.local"
+    printf 'OPENCODE_SERVER_PASSWORD=%s\n' "$fixture_pw" >> "$work/env.local"
     chmod 600 "$work/env.local"
     local pw=""
     pw=$(gen_password)
@@ -109,7 +115,7 @@ self_test() {
 
     # checkpoint/resume (#74): a fresh run rotates; a resume must skip the
     # backup+rewrite steps and leave the password unchanged (idempotent).
-    printf '%s\n' 'OPENCODE_SERVER_PASSWORD=startpass000000000000' 'KEEP=1' > "$work/env2"
+    printf '%s\n' 'OPENCODE_SERVER_PASSWORD=startpass' 'KEEP=1' > "$work/env2"
     chmod 600 "$work/env2"
     if ! DURABLE_JOB_DIR="$work/jobs" ROTPW_NOCONTAINER=1 ROTPW_CONFIRM=write \
         bash "${BASH_SOURCE[0]}" --env "$work/env2" --fresh > "$work/rot1.txt" 2>&1; then
@@ -196,6 +202,17 @@ step_verify() {
     printf 'new password -> %s (want 200); old password -> %s (want 401)\n' "$newcode" "$oldcode"
     if [ "$newcode" = "200" ] && [ "$oldcode" = "401" ]; then
         printf 'PASS: rotation verified\n'
+        # Delivery: the value is never printed. ROTPW_CLIPBOARD=1 copies it to
+        # the session clipboard so the operator can store it without a raw read.
+        if [ "${ROTPW_CLIPBOARD:-0}" -eq 1 ]; then
+            if have wl-copy; then
+                printf '%s' "$newpw" | wl-copy && printf 'new password copied to the clipboard (wl-copy)\n'
+            elif have xclip; then
+                printf '%s' "$newpw" | xclip -selection clipboard && printf 'new password copied to the clipboard (xclip)\n'
+            else
+                printf 'WARN: neither wl-copy nor xclip is installed; install one and re-copy\n'
+            fi
+        fi
         printf 'tell every tab/client the new password; update any stored copy\n'
         return 0
     fi

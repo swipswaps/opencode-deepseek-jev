@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 #
-# rotate-api-keys.sh — guided rotation of DEEPSEEK_API_KEY and JEV_API_KEY.
+# rotate-api-keys.sh — guided rotation of DEEPSEEK_API_KEY (JEV is optional).
 #
 # The upstream revocation/creation is a browser task at:
 #   DeepSeek: https://platform.deepseek.com/api_keys
-#   JEV:      https://console.typesafe.ai/keys
+#   JEV:      https://console.typesafe.ai/keys   (only when JEV is enabled)
 # Neither offers a CLI. Everything else is scripted here.
+#
+# JEV_ON is auto-detected from opencode.json: when the jev-review MCP and
+# jev-guard plugin are absent (the 2026-10-21 policy), the JEV steps are
+# skipped and the existing JEV line is preserved untouched.
 #
 # Flow:
 #   R0  pre-flight: repo, .env.local, container, docker compose
@@ -42,6 +46,7 @@
 set -o pipefail
 
 C="opencode-deepseek-web"
+JEV_ON=1
 MODEL="deepseek/deepseek-flash"
 HTTP_URL="http://127.0.0.1:4096"
 CONTAINER_AUTH="/home/node/.local/share/opencode/auth.json"
@@ -129,14 +134,21 @@ r1_browser_checklist() {
     printf '    3. Click Revoke / Delete on that key\n'
     printf '    4. Create a new key; copy it (prefix sk-)\n'
     printf '\n'
-    printf '  JEV (typesafe.ai):\n'
-    printf '    5. Open https://console.typesafe.ai/keys\n'
-    printf '    6. Locate the key currently in .env.local\n'
-    printf '    7. Click Revoke / Delete on that key\n'
-    printf '    8. Create a new key; copy it (prefix apikey_)\n'
-    printf '\n'
-    printf '  Both old keys will stop working the moment you revoke them.\n'
-    printf '  That is expected — this script replaces them in .env.local and\n'
+    if [ "$JEV_ON" -eq 1 ]; then
+        printf '  JEV (typesafe.ai):\n'
+        printf '    5. Open https://console.typesafe.ai/keys\n'
+        printf '    6. Locate the key currently in .env.local\n'
+        printf '    7. Click Revoke / Delete on that key\n'
+        printf '    8. Create a new key; copy it (prefix apikey_)\n'
+        printf '\n'
+        printf '  Both old keys will stop working the moment you revoke them.\n'
+    else
+        printf '  JEV: disabled by policy (no jev-review/jev-guard) — steps 5-8 skipped.\n'
+        printf '  The existing JEV line is preserved unchanged.\n'
+        printf '\n'
+        printf '  The old DeepSeek key will stop working the moment you revoke it.\n'
+    fi
+    printf '  That is expected — this script replaces it in .env.local and\n'
     printf '  recreates the container.\n'
     printf '\n'
     printf '  Type exactly "rotate" to continue, or anything else to abort: '
@@ -159,8 +171,11 @@ r2_backup_and_show() {
     printf '\n  current keys (masked):\n'
     while IFS='=' read -r k v; do
         case "$k" in
-            DEEPSEEK_API_KEY|JEV_API_KEY)
+            DEEPSEEK_API_KEY)
                 printf '    %s=%s\n' "$k" "$(mask "$v")"
+                ;;
+            JEV_API_KEY)
+                [ "$JEV_ON" -eq 1 ] && printf '    %s=%s\n' "$k" "$(mask "$v")"
                 ;;
         esac
     done < "$R_ENV"
@@ -172,11 +187,13 @@ r3_prompt_new_keys() {
     printf '\nPaste NEW DeepSeek key (input hidden), then Enter: '
     read -r -s NEW_DEEPSEEK
     printf '\n'
-    printf 'Paste NEW JEV key (input hidden), then Enter:      '
-    read -r -s NEW_JEV
-    printf '\n'
+    if [ "$JEV_ON" -eq 1 ]; then
+        printf 'Paste NEW JEV key (input hidden), then Enter:      '
+        read -r -s NEW_JEV
+        printf '\n'
+    fi
 
-    if [ -z "$NEW_DEEPSEEK" ] || [ -z "$NEW_JEV" ]; then
+    if [ -z "$NEW_DEEPSEEK" ] || { [ "$JEV_ON" -eq 1 ] && [ -z "$NEW_JEV" ]; }; then
         printf '\n  GATE FAIL: one or both keys empty; aborting without changes\n'
         return 1
     fi
@@ -186,14 +203,16 @@ r3_prompt_new_keys() {
         sk-*) ;;
         *) printf '  WARN: DeepSeek key does not start with "sk-" — continuing\n' ;;
     esac
-    case "$NEW_JEV" in
-        apikey_*) ;;
-        *) printf '  WARN: JEV key does not start with "apikey_" — continuing\n' ;;
-    esac
+    if [ "$JEV_ON" -eq 1 ]; then
+        case "$NEW_JEV" in
+            apikey_*) ;;
+            *) printf '  WARN: JEV key does not start with "apikey_" — continuing\n' ;;
+        esac
+    fi
 
     # Confirm masked so the user can spot a paste error before we write.
     printf '\n  new DeepSeek: %s\n' "$(mask "$NEW_DEEPSEEK")"
-    printf '  new JEV:      %s\n' "$(mask "$NEW_JEV")"
+    [ "$JEV_ON" -eq 1 ] && printf '  new JEV:      %s\n' "$(mask "$NEW_JEV")"
     printf '\n  Type "write" to proceed, anything else to abort: '
     local answer=""
     read -r answer
@@ -217,12 +236,19 @@ r4_write_env() {
     while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
             DEEPSEEK_API_KEY=*) printf 'DEEPSEEK_API_KEY=%s\n' "$NEW_DEEPSEEK" >> "$tmp"; seen_ds=1 ;;
-            JEV_API_KEY=*)      printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"; seen_jev=1 ;;
+            JEV_API_KEY=*)
+                if [ "$JEV_ON" -eq 1 ]; then
+                    printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"
+                else
+                    printf '%s\n' "$line" >> "$tmp"
+                fi
+                seen_jev=1
+                ;;
             *)                  printf '%s\n' "$line" >> "$tmp" ;;
         esac
     done < "$R_ENV"
     [ "$seen_ds" -eq 1 ]  || printf 'DEEPSEEK_API_KEY=%s\n' "$NEW_DEEPSEEK" >> "$tmp"
-    [ "$seen_jev" -eq 1 ] || printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"
+    [ "$JEV_ON" -eq 1 ] && { [ "$seen_jev" -eq 1 ] || printf 'JEV_API_KEY=%s\n' "$NEW_JEV" >> "$tmp"; }
     chmod 600 "$tmp"
     mv "$tmp" "$R_ENV"
     chmod 600 "$R_ENV"
@@ -313,6 +339,12 @@ main() {
     printf 'TS: %s\n' "$R_TS"
 
     if ! r0_preflight;   then return 1; fi
+    if grep -q '"jev-review"' "$R_REPO/opencode.json" 2>&1 \
+        || grep -q '"jev-guard"' "$R_REPO/opencode.json" 2>&1; then
+        JEV_ON=1
+    else
+        JEV_ON=0
+    fi
     if ! r1_browser_checklist; then return 1; fi
     if ! r2_backup_and_show "$R_TS"; then return 1; fi
     if ! r3_prompt_new_keys; then return 1; fi
