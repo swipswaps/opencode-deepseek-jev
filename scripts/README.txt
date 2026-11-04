@@ -38,6 +38,14 @@ authorize-container-key.sh
     /home/node is container-local and its key is regenerated. RESTRICT=1
     prefixes `restrict` (no pty/forwarding) for the durable key.
 
+receipts-pages-monitor.sh
+    Host-side gh monitor for the three receipts GitHub Pages sites
+    (receipts-ocr, receipts-ocr-rag, receipts-ocr-rag-v2). Checks Pages status,
+    latest deploy + Quality Gates run, HTTP status, and can gh run watch and
+    xdg-open each result. Requires gh auth, curl, python3, and a display for
+    --open. Run on the host.
+    bash scripts/receipts-pages-monitor.sh [--open] [--watch] [--json]
+
 readme-audit.sh
     Audit reader-facing docs: root "what this is" + start path, catalog
     start-here/conventions, vendor integrity baseline, plans link, every
