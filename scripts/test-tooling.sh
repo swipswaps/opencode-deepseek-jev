@@ -78,7 +78,9 @@ EXPRS=()
 start() {
     local name="$1" file="$2" expr="$3"; shift 3
     NAMES+=("$name"); FILES+=("$file"); EXPRS+=("$expr")
-    ( "$@" > "$file" 2>&1 ) &
+    # A contract tool that hangs must fail with a measured bound, not wedge the
+    # whole gate. Normal phase is <20s on ws24; 60s is 3x the measured normal.
+    ( timeout "${TEST_TOOLING_TIMEOUT:-60}" "$@" > "$file" 2>&1 ) &
 }
 
 main() {
@@ -97,6 +99,7 @@ main() {
     work=$(mktemp -d)
 
     printf '=== test-tooling.sh ===\n'
+    printf 'bound: %ss per contract (normal <20s on ws24; TEST_TOOLING_TIMEOUT overrides)\n' "${TEST_TOOLING_TIMEOUT:-60}"
 
     local ltw=""
     local FIXDB="$work/live.db"
