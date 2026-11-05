@@ -69,5 +69,11 @@
 		header Content-Disposition "attachment; filename=opencode-local-ca.crt"
 		file_server
 	}
+	handle /5099* {
+		redir https://{host}:5099/ permanent
+	}
+	handle /4096* {
+		redir https://{host}:4096/ permanent
+	}
 	reverse_proxy opencode-web:5099
 }
