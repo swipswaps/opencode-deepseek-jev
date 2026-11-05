@@ -89,6 +89,29 @@
       }
     }
   },
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "docker/certs/*": "deny",
+      "docker/litellm-db.env": "deny"
+    },
+    "edit": {
+      "*": "allow",
+      "docker/certs/*": "deny",
+      "opencode.json": "ask"
+    },
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "deny",
+      "opencode debug config*": "deny",
+      "sqlite3 *opencode.db*": "ask"
+    },
+    "task": "ask",
+    "webfetch": "ask",
+    "doom_loop": "ask"
+  },
   "model": "opencode-go/deepseek-v4.1-flash",
   "compaction": {
     "auto": true,

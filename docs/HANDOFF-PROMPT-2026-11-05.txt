@@ -1,29 +1,46 @@
-Handoff prompt — 2026-11-05
-===========================
+Handoff prompt — 2026-11-05 (security/rotation/a11y close)
+================================================================
 
 Objective
-  Close the SEC-3 recreate safely, then keep the live surfaces green:
-  legacy `/`, MUI `/app/`, 443, 5099, 4096, and the public
-  opencode-observability Pages app. Falsifiable: security posture 19/0,
-  https-selfheal ALL PASS, and both local UIs render live data after recreate.
+  Keep the live surfaces green and close the remaining external work after the
+  2026-11-05 security/rotation/a11y close. Falsifiable: harness 4/0 (hygiene
+  64/0), security posture 19/0, verify-rotation-go 12/0/1 manual, doc budget
+  under 35K, and the tunnel issue either reproduced or explicitly deferred.
 
 Context (read first)
   README.md, docs/HANDOFF-2026-11-05.md, HANDOFF.md, RULES.md, TODO.md,
   scripts/README.txt.
 
+State already closed
+  - SEC-3: web container runs with empty secret binds and /rag:ro; 19/0.
+  - Rotated: DeepSeek, SUBQ, Anthropic, LiteLLM, OPENCODE_SERVER_PASSWORD,
+    OPENCODE_CONSOLE_TOKEN. secret-leak-response --audit clean.
+  - a11y: hidden timeline JSON textarea has an accessible name (50c535b).
+  - Prompt injection: deterministic permission policy denies .env*/certs reads
+    and `opencode debug config`; task/webfetch/doom_loop ask.
+  - Tier-1 docs: 33,873 / 35,000 (within budget).
+
 Constraints
   - Follow RULES.md; no sed, no 2>/dev/null, no set -e, no rm -rf.
-  - Do not print secrets from .env.local.
+  - Do not print secrets. Never run `opencode debug config`.
+  - Do not edit the read-only chat DB; rotate credentials instead.
   - Do not modify receipts-ocr, receipts-ocr-rag, or receipts-ocr-rag-v2
     without explicit approval.
   - The PC's checkout has no .git; copy scripts explicitly.
 
 Acceptance
+  - ./scripts/harness.sh (or gate-watch) -> 4/0; hygiene 64/0.
   - ./scripts/security-posture.sh -> 19/0.
-  - ./scripts/https-selfheal.sh --check -> exit 0.
-  - ./scripts/certs-verify.sh -> ALL CHECKS PASSED.
-  - curl --cacert docker/certs/ca.crt https://10.100.0.24:5099/app/ -> 200.
-  - https://10.100.0.24:4096/ -> 401 (alive), not 404.
-  - Panel screenshots refreshed and README audit 8/0.
+  - ./scripts/verify-rotation-go.sh -> 12/0/1 manual (or 11/0/1/1 with
+    --no-smoke).
+  - ./scripts/doc-budget.sh --fail -> exit 0.
+  - ./scripts/red-team.sh -> all layers pass.
+  - Chat DB scan is reported, not gated: historical rows remain by design.
+
+Next
+  - Re-run the gate after the permission/docs change and commit it.
+  - Then investigate swipswaps/proxmox-dual-plane-mesh#5 and T-c39910 with
+    ./scripts/issue-bridge.py and ./scripts/tunnel-link-probe.sh; host journal
+    access is required for the final proof.
 
 Do not change other GitHub Pages sites in this segment.

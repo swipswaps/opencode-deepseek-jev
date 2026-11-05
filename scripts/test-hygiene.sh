@@ -649,6 +649,17 @@ PY
         bad 'gemini provider declared + policy allows it'
     fi
 
+    if python3 -c 'import json,sys
+o=json.load(open(sys.argv[1])); p=o.get("permission",{}); r=p.get("read",{}); b=p.get("bash",{})
+assert r.get("*.env")=="deny" and r.get("*.env.*")=="deny", "env read"
+assert r.get("docker/certs/*")=="deny" and r.get("docker/litellm-db.env")=="deny", "cert/db read"
+assert p.get("task")=="ask" and p.get("webfetch")=="ask" and p.get("doom_loop")=="ask", "ask gates"
+assert b.get("opencode debug config*")=="deny" and b.get("rm -rf *")=="deny", "bash deny"' "$REPO/opencode.json"; then
+        ok 'permission policy denies secrets + config dump; asks on task/webfetch/doom_loop'
+    else
+        bad 'permission policy denies secrets + config dump; asks on task/webfetch/doom_loop'
+    fi
+
     if [ -f "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
         if python3 -c '
 import sys, re

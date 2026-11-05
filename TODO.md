@@ -8,6 +8,13 @@ Last updated: 2026-11-05
 
 ## Done (most recent first)
 
+- [x] **DOCS-2 / SEC-4 — 2026-11-05.** Archived older HANDOFF PINs and TODO
+      Done entries to restore tier-1 to **33,873 / 35,000**. Added a
+      deterministic `permission` policy (deny secret/cert reads and
+      `opencode debug config`; ask on task/webfetch/doom_loop) and a
+      `test-hygiene` assertion for it, mitigating the prompt-injection
+      residual. Host gate re-run pending after the permission/docs change.
+
 - [x] **TLS-2 / UX-7 — 2026-11-05.** Added 443 + Tailscale + LAN + Nebula TLS
       redundancy, SAN verification, `/ca.crt`, path redirects, and the HTTPS
       self-heal/client CA scripts. PC trust installed (system/Firefox/Chromium);
@@ -31,149 +38,7 @@ Last updated: 2026-11-05
       `openssh-client` in the Dockerfile (rebuild; `11 --install` for the
       current container).
 
-- [x] **GUARD-SUBQ — 2026-10-22.** Guard backend picked by measured
-      latency: Laya 23 s (2 questions) / 33-37 s (4) on this CPU vs SubQ
-      1.4 s (4) and 1.6 s (choice). `.env.local` now sets
-      JEV_BASE_URL=https://api.subq.ai, model subq-snap-preview, 5 s
-      budget; Laya stays for batch A/B. jev-guard 0.3.1 (npm latest)
-      ignores JEV_BASE_URL, so `docker/patch-jev-guard.sh` adds the custom
-      backend at every container start (proven: ALLOW rc 0 / DENY rc 2 via
-      SubQ, ~1.9 s). Remove the patch when a release ships the feature.
-
-- [x] **JEV-OFF — 2026-10-21.** Cloud JEV disabled after the rotation smoke
-      timed out at 180 s (the key itself is fine: direct balance 200, $7.35).
-      Removed `jev-guard` (plugin), `jev-review` (MCP) and `/opt/jev-review/skills`
-      from `opencode.json`; preflight/ensure-env no longer require
-      `JEV_API_KEY`; audit-config reports the disabled state; rotate-api-keys
-      skips JEV and preserves the line. The image installs jev-guard
-      **globally**, so `docker/patch-global-config.sh` (called by both
-      entrypoints) strips it from the global config at every start and replaces
-      the hardcoded LiteLLM key with `{env:LITELLM_MASTER_KEY}` (the image layer
-      still holds the old literal: rotate it). Replacement: **SubQ**
-      (`subq_snap.py`, new runbook) for typed decisions; **Laya** is the opt-in
-      guard route via `JEV_BASE_URL` (jev-review's client hardcodes
-      `api.typesafe.ai`, so the MCP cannot use it). **Action:** restart web.
-
-- [x] **F1/F2/F3 — 2026-10-21.** Leak containment, external-claim decay,
-      visible search degradation. `secret-leak-response.sh` audits at-rest
-      artifacts (found real keys in `data/observability/guard.log` and snapshot
-      `litellm.config.yaml`/`opencode.key`), proves ignore coverage (walking up
-      past the `data/opencode` symlink), flags root chrome, and installs a
-      tracked `.githooks/pre-commit` (`core.hooksPath`). `progress-review` now
-      requires observed `state`+`ts` for a blocked-external PASS and expires it
-      after `PROGRESS_EXTERNAL_TTL` (default 8) into `external-stale` FAIL with
-      a re-audit instruction. `doSearch`/`doSearch2` use a 20 s deadline and
-      render `search degraded` instead of silent `no matches`; the UI harness
-      proves it by stubbing a timeout. **Still human:** revoke the disclosed
-      provider keys (matrix in the script).
-
-- [x] **OBS-1 — 2026-10-20.** `:5099` no longer leaves **Live activity** and
-      **Todos** at `loading...`: `/api/stream` was stringifying the *promises*
-      from `apiCost()`/`apiActivity()`, so every snapshot/delta carried
-      `{"cost":{},"activity":{}}` and `renderCost({})` threw before the other
-      two panes ran. `ssePayload()` now awaits both (single-flight deltas), the
-      client isolates each pane, and `test-dashboard.sh` asserts the snapshot
-      contains `cost.totals` + an `activity` array. Repro: `curl -N
-      :5099/api/stream` (was 0/`{}`, now materialized).
-
-- [x] **LAT-2 — 2026-10-20.** T4 no longer reports an unexplained slow-fetch
-      burst: a fetch interval `[ts-duration, ts]` overlapping a long tool part
-      is named from the read-only DB (`— overlaps tool bash 307.9s in ses_…`),
-      and `latency-timeline.sh` labels the same fetch (`<- tool:bash 307.9s`;
-      `attributed_to` in `--json`). Proven on the real 16:55–17:02 pattern: the
-      307.9s gate span overlaps the 170s `/config` fetch. Both self-tests
-      assert the attribution. Also fixed the reported "slowest" URI (the loop
-      variable leaked the last URI).
-
-- [x] **Loop equilibrium + gate debt + doc headroom — 2026-10-20.** `.gitignore`
-      now covers the `data/opencode` symlink and `data/opencode.bak-*` (the
-      backup's `auth.json` was untracked but NOT ignored); audit/reset-forensics
-      scripts cataloged; one-shots archived; older HANDOFF PINs/snapshots →
-      `docs/handoff-archive-2026.md` (tier-1 34,959 → 32,458 tok). Re-ran full
-      `harness.sh` at HEAD (4/0: lint 278 · hygiene 62 · patterns 6 ·
-      dashboard 135); T4/T3 triaged (queueing vs provider). Queue re-ranked:
-      LAT-1 local first.
-
-- [x] **LAT-1 — 2026-10-20.** `latency-timeline.sh` on `ses_ea5b5ab6…` and the
-      16:30–17:06 slice of `ses_eab7cff1…` shows the 17:02 T4 burst overlapping
-      long tool spans: a 308 s gate run (16:55–17:00) and a 200 s `sleep`
-      (16:43–16:48), while normal steps are seconds. The 8 s `/api/semantic` and
-      170 s `/config` are queueing, not handler cost (single-threaded server).
-      No timeout raised. Follow-up: LAT-2.
-
-- [x] **Proactive agent — 2026-10-20.** `proactive-agent.sh` (15-min timer)
-      turns NEW ADVISORY rows into owned tasks (cursor-bounded, bootstrap
-      creates none; owner `proactive`, idempotent by title) and writes a durable
-      `proactive.json` digest; a preflight STOP auto-hands off. Systemd timer +
-      installer; `durable-agents.sh` now arms five; self-tests offline.
-      progress-review now records a blocked-external PASS, not a stall FAIL.
-
-- [x] **Checkpointed long jobs — 2026-10-19.** `recover-4096 --recover` records
-      the compose restart (`durable-run`, job recover-4096; `--resume` skips a
-      second restart and re-probes); `rotate-server-password` checkpoints
-      backup→rewrite→recreate→verify (`--fresh` resets, `--resume` skips done
-      steps; verify reads new/old from the env/backup, never memory). Both
-      self-test the resume path offline; test-durable 16/0. pi-durable gap row
-      updated (interactive rotate-api-keys stays manual).
-
-- [x] **FTS base refresh timer — 2026-10-19.** `/api/semantic` serves the atomic
-      on-disk FTS base + an overlay for new parts, so the base must refresh
-      out-of-band: `fts-refresh-install.sh` arms a user timer (15 min,
-      randomized, Nice=19/idle/CPUQuota=50%) running
-      `semantic-search.sh --rebuild` (temp+rename). `durable-agents.sh` now
-      arms four agents; `test-durable.sh` self-tests all seven templates/four
-      installers. Staleness bound: base <=15 min.
-
-- [x] **Remaining sync /api routes audited — 2026-10-19.** Live cold times:
-      search 6.8s, integrations 8.6s, config 5.2s, cost 1.9s, activity 0.3s;
-      sessions/overview cheap (<0.5s). search/integrations/cost/activity now
-      share query-lib bodies and run in query-worker (cached); config spawns
-      the audit with `execFile` + single-flight, so no 45s sync block.
-      test-dashboard asserts the bodies + served shapes (130/0).
-
-- [x] **Cold search/health + trends off the loop — 2026-10-19.** A capture
-      burst produced a 10.7 s `GET /api/trends`; the route was a sync cold
-      compute. trends/cost/search/integrations/activity moved to query-lib +
-      worker pools; `/api/semantic` 22s→1.8s (atomic on-disk FTS base +
-      incremental overlay), `/api/signals` 32s→0.03s and `/api/health`
-      26s→0.02s (persisted snapshots); heavy jobs get their own worker.
-      test-dashboard 133/0 (#72: duration is time-in-system).
-
-- [x] **UX accessibility gate + durable-agent arming — 2026-10-19.** New
-      `a11y-audit.mjs` gates WCAG basics (landmarks, heading order, control
-      names, focus-visible, reduced motion, contrast) in `test-dashboard.sh`;
-      dashboard fixes: `main tabindex="-1"`, named nav, no `outline:none`,
-      Gantt drill rectangles keyboard-activatable + named; **treemap/sankey**
-      marks are focusable with `aria-label` + Enter/Space tooltip (test 134/0). New
-      `durable-agents.sh` arms/verifies sentinel + notify-sink + progress-review
-      in one idempotent command (host enablement pending). Media: `panels-tour`
-      now covers overview/signals/patterns; `--check` reports 3 missing shots
-      (host browser required). Plans/PR bodies + chat-DB tool audit in
-      `docs/plans/`. Gate: lint 274 · hygiene 62 · patterns 6 · dashboard 123.
-
-- [x] **G1 UX drill-down — every session-bearing datum drills (telemetry (3)) —
-      2026-10-19.** Closed the named residual. The **health** panel (stall/blank
-      findings + budget/deny risks) now opens the session detail (`data-go` +
-      delegated listener); **patterns** bigram bars gained `example_sid`
-      (`MAX(session_id)` in `apiPatternsFresh`) and drill the same way; the
-      **pivot** cells carry a Plot `href` to an example session, intercepted for
-      in-page detail; and **word-cloud** terms drill into ranked session search
-      (set `#q2` → overview). `test-dashboard.sh` asserts the `example_sid`
-      contract + the three delegated listeners (falsifiable). Gate: lint 271/0 ·
-      patterns 6/0 · dashboard 123/0.
-
-- [x] **Auto-handoff action (#76, RULES #87) — 2026-10-18.** The budget STOP was
-      advice the agent had to remember to act on. New `auto-handoff.sh`: at the
-      trip point it targets the **latest** over-budget session (the row
-      `preflight.sh` gates on), runs the brief chain (redacted, leak-checked),
-      and prints the paste path — **idempotent** (an existing brief is reused;
-      `--force` regenerates), no model call, never `--fork/--continue`.
-      `preflight.sh` calls it on the budget STOP (`JEV_AUTO_HANDOFF=0`
-      disables). Gated: `test-durable.sh` (+1 → 12/0), and the **wiring** itself
-      is now locked (preflight must call it, and the switch must gate it) → 13/0.
-      New **RULE #87**. Live: this session crossed budget and the auto-handoff
-      produced its own brief.
-
+- [x] **Older Done (2026-10-22 and earlier) archived 2026-11-05.** See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md).
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
@@ -240,10 +105,14 @@ Last updated: 2026-11-05
       consider an app/agent env split (`.env.local` values still reach the
       agent shell; the guard asks, it is not a sandbox).
 
-- [~] **Prompt-injection residual (accepted, model-level).** The tripwire logs
-      `verdict=injection` but cannot prevent compliance. Re-run
-      `red-team.sh` after any model/policy change; keep untrusted content out
-      of instruction position.
+- [x] **Prompt-injection residual (mitigated 2026-11-05).** The tripwire still
+      logs `verdict=injection` and model-level compliance remains a residual,
+      but the blast radius is now bounded deterministically: `opencode.json`
+      denies `.env*`, `docker/certs/*`, and `docker/litellm-db.env` reads,
+      denies `opencode debug config`, and asks on `task`/`webfetch`/`doom_loop`.
+      `test-hygiene.sh` asserts the policy; re-run `red-team.sh` after any
+      model/policy change and keep untrusted content out of instruction
+      position.
 
 - [x] **Script catalog was incomplete (resolved 2026-10-18, see Done).** The
       dead-ref sweep found 30 tracked scripts uncataloged (the audit's 23 was a
