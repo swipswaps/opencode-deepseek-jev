@@ -6,39 +6,47 @@ through a local guard. A separate RAG repo provides local document retrieval.
 The stack runs on one host (`ws24`, `192.168.4.24`); there is no cloud control
 plane.
 
-## Latest verified state (2026-11-04)
+## Latest verified state (2026-11-05)
 
-- The web UI and the `:5099` dashboard are running. The dashboard streams
-  cost, todos, and one combined **activity timeline** (the old Live activity and
-  diagnostic timeline are merged): newest first, filter chips, 30/all toggle,
-  per-row expand/copy, start dot on the time axis, relative-duration bar, exact
-  duration, full command/text, and a moving "now" line. It is responsive at
-  390 px and has an installable PWA shell for Android Chrome. A **separate
-  MUI/React app** is available at `/app/` (source `web/`; build with
-  `cd web && npm ci && npm run build`).
+- The web UI, legacy dashboard `/`, and MUI app `/app/` are live. Canonical
+  access: `https://10.100.0.24:5099/app/` (MUI), `https://10.100.0.24:5099`
+  (legacy dashboard), or 443 `https://10.100.0.24/app/`. The 443 site redirects
+  `/5099` and `/4096` to the real ports. `:4096` is the agent UI behind Basic
+  auth (`401` is alive).
+- The combined **activity timeline** is live on both UIs: newest first, filters,
+  30/all, expand/copy, full command/text, exact duration, start dot, relative
+  bar, and a **`time · now`** legend with a red marker. Legacy and MUI headers
+  no longer collide.
+- TLS is redundant and verified: 443/4096/5099 on loopback, Nebula
+  (`10.100.0.24`), LAN (`192.168.4.24`), and Tailscale
+  (`100.119.125.16`); SANs cover all of them. The public CA is downloadable at
+  `/ca.crt`; the PC was trusted for system, Firefox, and Chromium stores.
+- `https-selfheal.sh` checks/repairs SANs, Caddy, ports, CA, CORS/PNA, and the
+  dashboard; `trust-ca-client.sh` bootstraps a client CA. Both pass on the host
+  and the client check passes on the PC.
+- MUI/React `web/` is served at `/app/`; the public Pages app
+  <https://swipswaps.github.io/opencode-observability/> probes the live API and
+  falls back to real captured screenshots when the private API is unreachable.
 - LiteLLM has a private Postgres. The admin UI at `127.0.0.1:4000/ui` accepts
   `admin` + `LITELLM_MASTER_KEY` (HTTP 200); `/v1/models` is 200.
 - Provider keys were rotated. The guard allows benign reads and denies
   destructive, exfiltration, and quote/substitution-obfuscated calls.
-- TLS was reissued with the **same local CA**, so browsers that trusted the CA
-  keep working.
-- Security posture: **16 of 19** checks pass. The 3 remaining are the
-  repo-mounted secrets (`.env.local`, `docker/litellm-db.env`,
-  `docker/certs/*`); the empty binds in the override clear them on the next
-  `web-restart.sh --recreate` (expect 19/0).
-- Artifact scan: **0 findings in 2224 files**.
-- Gates: fast harness **3/0 in 73s**; lint **328/0**; test-hygiene **63/0**;
-  dashboard inline-script execution test **PASS** (home + explore).
+- Security posture remains **16 of 19** pending the staged SEC-3 recreate
+  (repo-mounted secrets; expect 19/0 after).
+- Verified gates: lint **335/0**, README audit **8/0**, panels **12/12**,
+  inline UI/PWA test PASS, `certs-verify` ALL PASS, `https-selfheal --check`
+  ALL PASS, PC strict TLS 200/verify=0 on 5099 + 443 + LAN.
 
 ## Start here (first 10 minutes)
 
 If you are new, read in this order:
 
 1. this README (what exists and how to start it),
-2. [`HANDOFF.md`](HANDOFF.md) (current state, open risks),
-3. [`RULES.md`](RULES.md) (constraints the scripts enforce),
-4. [`TODO.md`](TODO.md) (what is queued),
-5. [`scripts/README.txt`](scripts/README.txt) (one entry per tool).
+2. [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md) (current handoff),
+3. [`HANDOFF.md`](HANDOFF.md) (durable history and PINs),
+4. [`RULES.md`](RULES.md) (constraints the scripts enforce),
+5. [`TODO.md`](TODO.md) (what is queued),
+6. [`scripts/README.txt`](scripts/README.txt) (one entry per tool).
 
 Minimal path:
 
@@ -52,16 +60,18 @@ cd ~/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
 ./scripts/harness.sh --fast   # gates, telemetry, cost, TODO
 ```
 
-Then open the agent at `https://127.0.0.1:4096` and the read-only dashboard at
-`https://127.0.0.1:5099` (Basic auth from `.env.local`; `401` from a bare
-`curl` means the server is alive).
+Then open the agent at `https://10.100.0.24:4096` (Basic auth from
+`.env.local`) and the dashboard at `https://10.100.0.24:5099`. The MUI app is
+`/app/`; use `https://10.100.0.24/app/` (443) if you want no port. Trust the CA
+once with `./scripts/trust-ca-client.sh --server https://10.100.0.24:5099` or
+download `/ca.crt`. `10.100.0.1` is the client PC, not the server.
 
 ## What runs where
 
 | Piece | Type | Where | Address | What it does |
 |---|---|---|---|---|
 | `opencode-web` | container | Docker | `:4096`, `:5099` | agent web UI + dashboard sidecar |
-| `caddy` | container | Docker | `:443`, `:4096`, `:5099` | TLS edge; binds host IPs |
+| `caddy` | container | Docker | `:443`, `:4096`, `:5099` | TLS edge; loopback + Nebula + LAN + Tailscale |
 | `litellm` | container | Docker | `127.0.0.1:4000` | local model proxy / master key |
 | `litellm-db` | container | Docker | internal | private Postgres for proxy auth + spend |
 | `opencode-grafana` | container | Docker | `127.0.0.1:3001` | optional ops view (may be paused) |
@@ -102,6 +112,9 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 | run the adversarial gate | `./scripts/red-team.sh` (`--offline` skips SubQ) |
 | audit security posture | `./scripts/security-posture.sh` |
 | rotate the TLS leaf (same CA) | `./scripts/rotate-tls.sh --apply --yes` |
+| monitor/self-heal HTTPS + CA | `./scripts/https-selfheal.sh --check` / `--fix --watch` |
+| trust the CA on the PC | `./scripts/trust-ca-client.sh --server https://10.100.0.24:5099` |
+| refresh screenshots | `python3 scripts/panels-tour.py --no-video` |
 | scrub leaked artifacts | `./scripts/scrub-secrets.sh --apply --yes --purge-snapshots --purge-env-backups` |
 | inspect model policy/cost | `./scripts/models.sh`, `./scripts/cost.sh` |
 | use the RAG engine | `cd ../2282af3557819803/repo/production-local-rag && ./scripts/04-retrieval-only.sh --query "..."` |
@@ -382,10 +395,11 @@ returns `[]`); use Chrome's **Install app** after trusting the local CA:
 
 The full React version lives in `web/` (React 19 + Material UI 9.5 + Vite 8).
 It reuses the same `/api/*` endpoints and has an Overview (including a 14-day
-cost trend), Activity timeline (steps hidden by default; `/` focuses search),
-Sessions (sort by recent/cost/tokens/duration), and Todos. Desktop uses a
-permanent MUI Drawer; under `md` it uses a MUI `BottomNavigation`; rows/cards
-stack at 390 px; Chrome's install prompt is wired to a visible Install action.
+cost trend), Activity timeline (steps hidden by default; `/` focuses search;
+`time · now`/relative-duration axis), Sessions (sort by recent/cost/tokens/
+duration), and Todos. Desktop uses a permanent MUI Drawer; under `md` it uses a
+MUI `BottomNavigation`; rows/cards stack at 390 px; Chrome's install prompt is
+wired to a visible Install action. Hash routes preserve the view.
 Build once:
 
 ```bash
@@ -395,16 +409,16 @@ cd web && npm ci && npm run build
 `scripts/dashboard.mjs` serves `web/dist` at `/app/` and the hashed assets under
 `/app/assets/*`; `/app-manifest.webmanifest` sets `start_url=/app/`. See
 [`web/README.md`](web/README.md) for dev/PWA notes. The app is also installable (`Page.getInstallabilityErrors: []`) and the build is
-570 kB minified / 176 kB gzip. The legacy no-build page at `/` remains.
+571 kB minified / 176 kB gzip. The legacy no-build page at `/` remains.
 
-A standalone **public Pages screenshot preview** is live at
+A standalone **public Pages app** is live at
 <https://swipswaps.github.io/opencode-observability/> (repo
-`swipswaps/opencode-observability`). GitHub Pages cannot reach the local API,
-so that build shows real captures from the live UI (`status-mui-*.png`) and
-makes no API calls or fake metrics. When the local API is reachable from the
-browser, the Pages app auto-detects it and renders live data instead; the
-dashboard permits only `https://swipswaps.github.io` via CORS/PNA. The local
-`/app/` keeps the live APIs.
+`swipswaps/opencode-observability`). It probes `https://10.100.0.24:5099` and
+renders the live MUI shell when the browser permits private-network access and
+trusts the CA; otherwise it shows real captures from the live UI
+(`status-mui-*.png`), never synthetic metrics. The dashboard permits only
+`https://swipswaps.github.io` via CORS/PNA. The local `/app/` keeps the live
+APIs. The new repo's Pages deploy is active and monitored with `gh`.
 
 ![MUI Overview](docs/ux/status-mui-desktop.png)
 

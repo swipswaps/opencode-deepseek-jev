@@ -125,7 +125,17 @@ def main() -> int:
         for name, path in PANELS:
             try:
                 pg.goto(a.base + path, wait_until="domcontentloaded", timeout=30000)
-                pg.wait_for_timeout(6000)  # let SSE snapshot + charts render
+                if name == "board":
+                    try:
+                        pg.wait_for_selector("#boardgantt svg", timeout=60000)
+                    except Exception:
+                        pg.wait_for_timeout(2000)
+                else:
+                    pg.wait_for_timeout(6000)  # let SSE snapshot + charts render
+                try:
+                    pg.evaluate("var e=document.getElementById('rev'); if(e) e.style.display='none'")
+                except Exception:
+                    pass
                 shot = str(out / ("status-%s.png" % name))
                 pg.screenshot(path=shot)
                 shrink(shot, repo)

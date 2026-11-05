@@ -24,8 +24,9 @@ npm run dev -- --host 0.0.0.0
 # http://127.0.0.1:5174/app/
 ```
 
-Vite proxies `/api`, `/manifest.webmanifest`, and the icons to
-`https://127.0.0.1:5099` (self-signed cert accepted for local dev).
+Vite proxies `/api` to `https://127.0.0.1:5099` (self-signed cert accepted
+for local dev). The production app is served at `/app/` by `dashboard.mjs`.
+The public Pages build lives in the separate `opencode-observability` repo.
 
 ## What it shows
 
@@ -34,7 +35,7 @@ Vite proxies `/api`, `/manifest.webmanifest`, and the icons to
 - **Activity timeline** — the same `/api/activity` rows: newest first, filters
   (All/Tools/Text/Reasoning/Errors), a Steps switch (off by default), `/`
   focuses search, last-30/all, expand/collapse, copy, duration, and a
-  start-dot/relative-bar timeline on desktop.
+  start-dot/relative-bar timeline with a `time · now` axis on desktop.
 - **Sessions** — `/api/sessions?limit=200`, search, sort by recent/cost/tokens/
   duration, cost/tokens/model/update, desktop table and mobile cards, links into
   the OpenCode session URL.
@@ -58,23 +59,32 @@ on a 60 s interval.
   view through Android back/refresh; the desktop drawer also links to the
   classic `/` view.
 - Current verification: zero page/console errors; 390 px width = viewport;
-  installability `[]`.
+  installability `[]`; strict TLS 200 on 5099/443/LAN after the CA import.
 
 ## Tests / evidence
 
 - `npm run build` (Vite build is the source-level gate).
 - Playwright (host browser) exercised Overview, Activity, Sessions (123 rows),
   Todos (5), desktop 1280×900 and mobile 390×844.
-- Screenshots:
+- Screenshots (refreshed 2026-11-05):
   - `docs/ux/status-mui-desktop.png`
   - `docs/ux/status-mui-activity-desktop.png`
   - `docs/ux/status-mui-mobile.png`
   - `docs/ux/status-mui-activity.png`
+- Public Pages app: <https://swipswaps.github.io/opencode-observability/>
+  (auto-probes the API; falls back to these real screenshots).
 
 ## Libraries / notes
 
 - MUI 9.5, React 19.3, Emotion 11.14, Vite 8.3.
 - No MUI X dependency yet. Add `@mui/x-charts` for burn-down/trend charts.
-- The bundle is ~550 kB minified / ~171 kB gzip; code-split if it grows.
+- The bundle is ~571 kB minified / ~176 kB gzip; code-split if it grows.
 - The app is read-only and uses the server's existing API/CSP. Do not put
   secrets in this app; it is served from the same local origin.
+- Live API on Pages: Caddy allows only `https://swipswaps.github.io` with
+  CORS + Private Network Access. If the browser blocks private access, use
+  the **Open live app** link or allow local-network access; otherwise the
+  screenshot fallback is shown.
+- Host HTTPS self-heal/CA bootstrap:
+  `./scripts/https-selfheal.sh --check` and
+  `./scripts/trust-ca-client.sh --server https://10.100.0.24:5099`.

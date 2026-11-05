@@ -1,0 +1,29 @@
+Handoff prompt — 2026-11-05
+===========================
+
+Objective
+  Close the SEC-3 recreate safely, then keep the live surfaces green:
+  legacy `/`, MUI `/app/`, 443, 5099, 4096, and the public
+  opencode-observability Pages app. Falsifiable: security posture 19/0,
+  https-selfheal ALL PASS, and both local UIs render live data after recreate.
+
+Context (read first)
+  README.md, docs/HANDOFF-2026-11-05.md, HANDOFF.md, RULES.md, TODO.md,
+  scripts/README.txt.
+
+Constraints
+  - Follow RULES.md; no sed, no 2>/dev/null, no set -e, no rm -rf.
+  - Do not print secrets from .env.local.
+  - Do not modify receipts-ocr, receipts-ocr-rag, or receipts-ocr-rag-v2
+    without explicit approval.
+  - The PC's checkout has no .git; copy scripts explicitly.
+
+Acceptance
+  - ./scripts/security-posture.sh -> 19/0.
+  - ./scripts/https-selfheal.sh --check -> exit 0.
+  - ./scripts/certs-verify.sh -> ALL CHECKS PASSED.
+  - curl --cacert docker/certs/ca.crt https://10.100.0.24:5099/app/ -> 200.
+  - https://10.100.0.24:4096/ -> 401 (alive), not 404.
+  - Panel screenshots refreshed and README audit 8/0.
+
+Do not change other GitHub Pages sites in this segment.

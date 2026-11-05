@@ -4,9 +4,21 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 ## Done (most recent first)
+
+- [x] **TLS-2 / UX-7 — 2026-11-05.** Added 443 + Tailscale + LAN + Nebula TLS
+      redundancy, SAN verification, `/ca.crt`, path redirects, and the HTTPS
+      self-heal/client CA scripts. PC trust installed (system/Firefox/Chromium);
+      strict verification 200 on 5099/443/LAN. Fixed the legacy `time · now`
+      header collision and refreshed all 12 screenshots. Added the public
+      `opencode-observability` Pages app with live API probing and real
+      screenshot fallback. Handoff: `docs/HANDOFF-2026-11-05.md`.
+
+- [x] **DOCS-1 — 2026-11-05.** README, web/README, scripts catalog, UX audit,
+      handoff PIN, TODO, screenshots, and the new Pages README refreshed for
+      the current TLS/Pages/scripts state.
 
 - [x] **SEC-2 — 2026-11-04.** DB-backed LiteLLM (private postgres, admin login
       200); same-CA TLS leaf rotation after the live key matched 3 snapshots;

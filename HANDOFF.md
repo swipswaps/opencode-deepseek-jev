@@ -1,5 +1,16 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-05 (UX/TLS/Pages):** live state is green. Legacy `/` and MUI
+> `/app/` both render live data; the Activity header is `time · now` with no
+> overlap. Caddy serves 443/4096/5099 on loopback + Nebula + LAN + Tailscale;
+> cert SANs cover all, `/ca.crt` is downloadable, and the PC now trusts the CA
+> (strict 200 on 5099/443/LAN). `https-selfheal.sh --check` and
+> `certs-verify.sh` pass. The public
+> <https://swipswaps.github.io/opencode-observability/> app auto-probes the live
+> API and falls back to real screenshots; no synthetic data. Screenshots were
+> refreshed 2026-11-05. SEC-3 remains 16/3 pending the explicit recreate.
+> Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
+
 > **PIN 2026-11-04 (SEC-3 / HANDOFF):** verified: LiteLLM DB login 200, TLS
 > leaf rotated (same CA), artifact scan 0/2224, red-team offline+live, readme
 > audits 8/0 and 6/0, harness 4/0, `security-posture.sh` **16/3** on the

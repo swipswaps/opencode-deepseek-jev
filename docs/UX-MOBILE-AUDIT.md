@@ -1,4 +1,4 @@
-# Observability UX / Android / MUI audit — 2026-11-04
+# Observability UX / Android / MUI audit — 2026-11-05
 
 Scope: the `:5099` dashboard. "Android support" is interpreted as a responsive,
 installable web app in Chrome on Android (not a native APK). A Trusted Web
@@ -88,7 +88,7 @@ contracts and has its own `/app-manifest.webmanifest` with
 - Layout: permanent MUI Drawer at `md+`, MUI `BottomNavigation` under `md`;
   the AppBar/drawer/bottom nav respect safe areas.
 - The legacy `/` page still exists; `/app/` is linked from the primary nav.
-- Trade-off: the MUI bundle is 569.6 kB minified / 175.8 kB gzip, plus a build step.
+- Trade-off: the MUI bundle is ~571 kB minified / ~176 kB gzip, plus a build step.
   That is acceptable for the richer app but not ideal to force on the tiny
   read-only fallback page.
 
@@ -138,24 +138,32 @@ Legacy `/`:
   `docs/ux/status-mobile.png` (390 px card).
 
 MUI `/app/`:
-- `npm run build`: 569.6 kB minified / 175.8 kB gzip; no build errors.
+- `npm run build`: ~571 kB minified / ~176 kB gzip; no build errors.
 - Desktop and 390 px Playwright: zero page errors, zero console errors.
 - Mobile: document width `390 = innerWidth`, activity rows render, Sessions
   (123) and Todos (5) render, bottom navigation is fixed at 64 px + safe area,
   and the filter chips wrap instead of overflowing.
 - `/app-manifest.webmanifest` `200 application/manifest+json`; app service
   worker registration `1`; Chrome `Page.getInstallabilityErrors` `[]`.
-- Screenshots: `docs/ux/status-mui-desktop.png`,
+- Activity header: `time · now` legend + red marker; no overlapping `now` text.
+- Screenshots (refreshed 2026-11-05): `docs/ux/status-mui-desktop.png`,
   `docs/ux/status-mui-activity-desktop.png`,
   `docs/ux/status-mui-mobile.png`, `docs/ux/status-mui-activity.png`.
+- Public Pages app: <https://swipswaps.github.io/opencode-observability/>.
+  It probes the live API with CORS/PNA; when unreachable it shows the same real
+  screenshots. No synthetic metrics are served.
+- TLS/CA: 443/4096/5099 on loopback + Nebula + LAN + Tailscale; cert SANs
+  cover all; `/ca.crt` is downloadable. `https-selfheal.sh --check` and the
+  PC's `trust-ca-client.sh --check` pass.
 
 ## MUI app follow-ups
 
-1. Add MUI X Charts (`@mui/x-charts`) for cost burn-down / per-day trends.
+1. MUI X Charts (`@mui/x-charts`) remains optional; the Overview currently
+   uses a small native 14-day cost trend so no extra runtime bundle is needed.
 2. Hash deep links are implemented (`#overview`, `#activity`, `#sessions`,
    `#todos`), so Android back/refresh preserves the view; move to React Router
    if path routes become necessary.
-3. Code-split the MUI bundle if the 550 kB warning becomes a problem.
+3. Code-split the MUI bundle if the ~571 kB warning becomes a problem.
 4. Decide whether to make `/app/` the primary PWA `start_url` after the legacy
    page is retired; both manifests are currently installable separately.
 5. Keep the common `/api/*` contracts and the server's read-only posture.
