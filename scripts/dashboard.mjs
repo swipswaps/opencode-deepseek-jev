@@ -1254,7 +1254,7 @@ ${nav("dashboard")}
  <button class="chip" type="button" data-limit="all" id="tl-limit">show all</button>
 </div>
 <div id="activity" aria-live="polite"><div id="timeline" aria-label="Activity timeline"><span class="muted" data-loading>loading...</span></div></div>
-<textarea id="timeline-data" hidden aria-hidden="true"></textarea></div>
+<textarea id="timeline-data" hidden aria-hidden="true" aria-label="Activity timeline data"></textarea></div>
 
 <div class="card" id="flags-card" style="border-color:#d29922"><h2>Flags <span class="muted">(bottlenecks · cost · slowdowns · stalls — click an example)</span></h2><div id="flags" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card"><h2>Search <span class="muted">(ranked FTS: title · text · commands)</span></h2><input id="q" placeholder="search across sessions..." aria-label="Search sessions" aria-keyshortcuts="/"><div id="searchres" aria-live="polite"></div></div>
