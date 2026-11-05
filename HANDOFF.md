@@ -1,6 +1,6 @@
 # Handoff — opencode-deepseek-jev
 
-> **PIN 2026-11-05 (security/rotation/a11y):** SEC-3 is closed; `security-posture.sh` is **19/0**; DeepSeek, SUBQ, Anthropic, LiteLLM, the server password, and the OpenCode console token were rotated; `verify-rotation-go.sh` is **11/0/1/1** (manual console-token check) and `harness.sh` last verified **4/0** at `50c535b`; re-run after the permission/docs change. The a11y fix is `50c535b` (commit `03e63ad` pushed). The chat DB is read-only and still lists historical pasted secrets; rotate, do not edit it. Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
+> **PIN 2026-11-05 (security/rotation/a11y):** SEC-3 is closed; `security-posture.sh` is **19/0**; DeepSeek, SUBQ, Anthropic, LiteLLM, the server password, and the OpenCode console token were rotated; `verify-rotation-go.sh` is **11/0/1/1** (manual console-token check); `harness.sh` is **4/0** at **2026-11-05T19:48Z** (hygiene 64/0, tier-1 docs 33,997/35,000); the a11y fix is `50c535b` and the docs/permission close is `77782a5` (pushed). The chat DB is read-only and still lists historical pasted secrets; rotate, do not edit it. The only remaining queue unit is external: `proxmox-dual-plane-mesh#5` / `T-c39910` (tunnel flap). Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
 
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
