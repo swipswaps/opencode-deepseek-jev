@@ -719,6 +719,19 @@ secret-scan.sh
     handoff-brief.sh on its source transcript. --paths, --json, --quiet,
     --self-test.
 
+scan-chat-secrets.sh
+    Value-free scan of the OpenCode chat DB (part.data text/reasoning/tool
+    strings): deepseek/jev keys, bearer tokens, env assignments, and
+    OPENCODE_SERVER_PASSWORD. Reports session:part [kind] only. Read-only;
+    defaults to the newest 5000 parts. --tls-check compares any PEM block to
+    docker/certs/*.key and reports the filename/session/part on a live match
+    (values never printed); --cert-dir overrides. --db, --limit, --all,
+    --json, --quiet, --self-test.
+
+env-inspect.sh
+    Safe replacement for `cat .env.local`: names, presence, value LENGTHS,
+    file mode, and line count only. --env, --json, --check KEY, --self-test.
+
 secret-leak-response.sh
     Contain a credential leak (F1): audit at-rest artifacts, prove .env*/auth
     paths are ignored (walks up past the data/opencode symlink), flag root
@@ -882,6 +895,15 @@ rotate-provider-keys.sh
     input, masked confirmation, values never printed; SUBQ also updates
     JEV_BASE_API_KEY. --self-test.
 
+rotate-opencode-token.sh
+    Rotate OPENCODE_CONSOLE_TOKEN (the token printed by `opencode debug
+    config`): browser revoke checklist, hidden new-token input, atomic single
+    line add/replace in .env.local (0600 kept), backup, recreate, then the
+    exact opencode-go/deepseek-v4.1-flash "Reply with exactly: ROTATED" smoke.
+    Values never printed. The backup is removed after a successful verified
+    smoke; --keep-backup retains it. --no-recreate, --no-smoke, --env,
+    --self-test.
+
 open-rotation-pages.sh
     Open the correct key page for each credential from the F1 matrix:
     pending SUBQ (console.subq.ai), Anthropic (/settings/keys), local LiteLLM
@@ -917,6 +939,15 @@ security-posture.sh
     no-new-privileges + cap_drop ALL + non-root, LiteLLM loopback and an
     internal Postgres, secret-file modes, clean artifacts, TLS, and the
     offline red-team layer. --offline skips live docker checks.
+
+verify-rotation-go.sh
+    Host-side one-command proof for the 2026-11-05 rotation: preflight,
+    secret-file modes, console-token presence (manual), stale .env.local.bak.*
+    files, cert ignore, secret-scan, containment audit, security-posture,
+    HTTPS self-heal, red-team, and the exact OpenCode Go
+    "Reply with exactly: ROTATED" smoke. Never prints a value and never
+    rotates; the smoke is one small paid call. --no-smoke, --no-preflight,
+    --json.
 
 rotation-progress.sh
     Read-only progress view for the OPEN rotation terminal and the background

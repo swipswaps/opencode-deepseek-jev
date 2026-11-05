@@ -1283,5 +1283,50 @@
       "bash scripts/decision-router-install.sh --uninstall",
       "bash scripts/decision-router-install.sh --self-test"
     ]
+  },
+  {
+    "id": "verify-rotation-go",
+    "title": "One-shot rotation + OpenCode Go proof",
+    "where": "host",
+    "purpose": "Runs the containment gates after a credential rotation: preflight, .env.local mode, console-token presence (manual), stale .env.local.bak.* files, docker/certs ignore, secret-scan, secret-leak-response --audit, security-posture, https-selfheal, red-team, and the exact opencode-go/deepseek-v4.1-flash 'Reply with exactly: ROTATED' smoke. Never prints a value; --no-smoke and --no-preflight skip the paid call and balance GET.",
+    "commands": [
+      "./scripts/verify-rotation-go.sh",
+      "./scripts/verify-rotation-go.sh --no-smoke",
+      "./scripts/verify-rotation-go.sh --json"
+    ]
+  },
+  {
+    "id": "scan-chat-secrets",
+    "title": "Value-free secret scan of the OpenCode chat DB",
+    "where": "host",
+    "purpose": "Reads the chat DB read-only and walks part.data text/reasoning/tool strings for deepseek/jev keys, bearer tokens, env assignments, and OPENCODE_SERVER_PASSWORD. Reports session:part [kind] only, never a value. --tls-check compares PEM blocks to docker/certs/*.key and reports a live match by filename/session/part (still value-free). Newest 5000 parts by default; --all for the full DB.",
+    "commands": [
+      "./scripts/scan-chat-secrets.sh",
+      "./scripts/scan-chat-secrets.sh --limit 2000 --json",
+      "./scripts/scan-chat-secrets.sh --limit 2000 --tls-check",
+      "./scripts/scan-chat-secrets.sh --self-test"
+    ]
+  },
+  {
+    "id": "env-inspect",
+    "title": "Inspect .env.local without printing values",
+    "where": "host",
+    "purpose": "Safe replacement for `cat .env.local`: prints key names, presence, value lengths, file mode, and line count only. --check KEY exits 0 when present. Never prints a value.",
+    "commands": [
+      "./scripts/env-inspect.sh",
+      "./scripts/env-inspect.sh --check OPENCODE_SERVER_PASSWORD",
+      "./scripts/env-inspect.sh --self-test"
+    ]
+  },
+  {
+    "id": "rotate-opencode-token",
+    "title": "Rotate the OpenCode console token",
+    "where": "host",
+    "purpose": "Console-only revocation checklist, hidden new-token input, atomic add/replace of OPENCODE_CONSOLE_TOKEN in .env.local (0600 kept), backup, web recreate, then the exact opencode-go/deepseek-v4.1-flash 'Reply with exactly: ROTATED' smoke. Values are never printed; the backup is removed after a verified smoke (--keep-backup retains it); --no-recreate and --no-smoke skip the host actions.",
+    "commands": [
+      "./scripts/rotate-opencode-token.sh",
+      "./scripts/rotate-opencode-token.sh --no-smoke",
+      "./scripts/rotate-opencode-token.sh --self-test"
+    ]
   }
 ]

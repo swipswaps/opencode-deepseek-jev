@@ -60,6 +60,8 @@ rotation_matrix() {
     printf '%s\n' \
         '  OPENCODE_SERVER_PASSWORD  ./scripts/rotate-server-password.sh'
     printf '%s\n' \
+        '  OPENCODE_CONSOLE_TOKEN    OpenCode console: revoke the token, then /connect or opencode auth login (no CLI revoke)'
+    printf '%s\n' \
         '  LITELLM_MASTER_KEY        LiteLLM proxy admin UI: http://127.0.0.1:4000/ui (local, no CLI)'
     printf '%s\n' \
         '  SUBQ_API_KEY              console.subq.ai (no CLI) — revoke, then rewrite .env.local'

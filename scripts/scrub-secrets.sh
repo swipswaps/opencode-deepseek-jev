@@ -99,6 +99,15 @@ check_tls() {
   pass "live TLS key does not match a leaked snapshot"
 }
 
+purge_env_backups() {
+  local n=0 b
+  while IFS= read -r b; do
+    [ -f "$b" ] || continue
+    rm -f "$b" && n=$((n + 1))
+  done < <(find "$REPO" -maxdepth 1 -type f -name '.env.local.bak.*' 2>&1)
+  pass "removed $n .env.local.bak.* file(s)"
+}
+
 main() {
   parse_args "$@"
   [ -x "$REPO/scripts/secret-scan.sh" ] || die "secret-scan.sh missing"
@@ -118,6 +127,9 @@ print("\n".join(sorted({f["file"] for f in d.get("findings", [])})))
   log "findings=$count files=$(printf '%s\n' "$files" | grep -c .)"
   if [ "$count" -eq 0 ]; then
     pass "no secret-shaped values in logs/ or data/observability/"
+    if [ "$APPLY" -eq 1 ] && [ "$YES" -eq 1 ] && [ "$PURGE_ENV_BACKUPS" -eq 1 ]; then
+      purge_env_backups
+    fi
     [ "$CHECK_TLS" -eq 1 ] && check_tls
     return 0
   fi
@@ -191,12 +203,7 @@ EOF
   fi
 
   if [ "$PURGE_ENV_BACKUPS" -eq 1 ]; then
-    local n=0 b
-    while IFS= read -r b; do
-      [ -f "$b" ] || continue
-      rm -f "$b" && n=$((n + 1))
-    done < <(find "$REPO" -maxdepth 1 -type f -name '.env.local.bak.*' 2>&1)
-    pass "removed $n .env.local.bak.* file(s)"
+    purge_env_backups
   fi
 
   local remaining

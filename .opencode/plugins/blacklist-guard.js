@@ -78,6 +78,8 @@ const RULES = [
     fix: "read only inside /workspace; ask the operator for host files", rule: "security" },
   { name: "secret-interpreter-read", pattern: "(?:^|[;&|()]\\s*)(?:python3?|node|ruby|perl|php)\\b[^\\n]*(?:\\.env(?:\\.local)?|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
     fix: "read only inside /workspace; ask the operator for secrets", rule: "security" },
+  { name: "config-dump", pattern: "(?:^|[;&|()]\\s*)(?:[^\\s;&|()]*/)?opencode\\s+debug\\s+config\\b", sev: "block",
+    fix: "resolved config substitutes {env:...} with plaintext; never dump it into a logged terminal — use provider metadata or a redacted view", rule: "security" },
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",

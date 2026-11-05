@@ -39,6 +39,12 @@ const cases = [
   ["python3 -c \"print(open('/workspace/.env.local').read())\"", "secret-interpreter-read", true],
   ["node -e \"fs.readFileSync('/workspace/docker/certs/opencode.key')\"", "secret-interpreter-read", true],
   ["python3 -c \"print('hi')\"", "secret-interpreter-read", false],
+  // resolved config prints env-substituted credentials (live leak, 2026-11-05)
+  ["opencode debug config", "config-dump", true],
+  ["/home/node/.opencode/bin/opencode debug config --pure", "config-dump", true],
+  ["opencode debug config | python3 -c 'pass'", "config-dump", true],
+  ["opencode debug --help", "config-dump", false],
+  ["printf '%s' 'opencode debug config'", "config-dump", false],
   // interpreter-wrapped scripts must still be inspected (bypass fix)
   ["bash -c 'sed -i x'", "sed", true],
   ["sh -lc \"rm -rf /x\"", "rm -rf", true],
