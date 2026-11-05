@@ -83,6 +83,7 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - **RAG** — the separate retrieval engine at
   `~/Documents/2282af3557819803/repo/production-local-rag`.
 - **Harness** — this repo's gate/telemetry/learning layer (`scripts/harness.sh`).
+- **TLS / HTTPS** — Caddy serves `443`, `4096`, and `5099` on loopback, `10.100.0.24` (Nebula), `192.168.4.24` (LAN), and `100.119.125.16` (Tailscale). The cert SANs cover all of them plus `localhost`/`127.0.0.1`. Download the public CA at `https://10.100.0.24:5099/ca.crt` and trust it once (or run `./docker/certs-trust.sh` on the host). `10.100.0.1` is a **client** address (the PC), not the server; use `.24`.
 - **Dashboard** — the read-only `:5099` observability UI; it is not the agent UI.
 
 ## Common tasks

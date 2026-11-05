@@ -46,10 +46,10 @@ COMPOSE_DIR="$REPO_DIR/docker"
 
 BIND_IPS="${WEB_BIND_IPS:-}"
 if [ -z "$BIND_IPS" ] && [ -f "$COMPOSE_DIR/docker-compose.yml" ]; then
-    BIND_IPS=$(grep -E '^[[:space:]]*- "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:(4096|5099):' "$COMPOSE_DIR/docker-compose.yml" \
+    BIND_IPS=$(grep -E '^[[:space:]]*- "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:(4096|5099|443):' "$COMPOSE_DIR/docker-compose.yml" \
         | awk -F'"' '{print $2}' | cut -d: -f1 | sort -u | tr '\n' ' ')
 fi
-[ -n "$BIND_IPS" ] || BIND_IPS="127.0.0.1 10.100.0.24 192.168.4.24"
+[ -n "$BIND_IPS" ] || BIND_IPS="127.0.0.1 10.100.0.24 192.168.4.24 100.119.125.16"
 case " $BIND_IPS " in
     *" 127.0.0.1 "*) ;;
     *) BIND_IPS="127.0.0.1 $BIND_IPS" ;;

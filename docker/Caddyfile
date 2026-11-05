@@ -48,5 +48,26 @@
 	# No caching here: :5099 serves the live observability dashboard (inline
 	# HTML + dynamic /api/* JSON); stale responses would be wrong. Only the
 	# opencode-web SPA on :4096 has cacheable static assets.
+	handle /ca.crt {
+		root * /certs
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=opencode-local-ca.crt"
+		file_server
+	}
+	reverse_proxy opencode-web:5099
+}
+
+:443 {
+	tls /certs/opencode.crt /certs/opencode.key
+	log {
+		output stdout
+		format json
+	}
+	handle /ca.crt {
+		root * /certs
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=opencode-local-ca.crt"
+		file_server
+	}
 	reverse_proxy opencode-web:5099
 }

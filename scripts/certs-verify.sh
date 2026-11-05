@@ -55,12 +55,17 @@ main() {
     fi
 
     printf '== 2. SAN coverage ==\n'
-    local sans neb=""
+    local sans neb="" tail="" lan="" lanif=""
     sans="$(openssl x509 -in "$CRT" -noout -ext subjectAltName 2>&1)" || sans=""
     if command -v ip > /dev/null; then
         neb="$(ip -brief addr show nebula0 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^10\./) print a[1]}}')" || neb=""
+        tail="$(ip -brief addr show tailscale0 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^100\./) print a[1]}}')" || tail=""
+        lanif="$(ip route show default 2>&1 | awk '{print $5; exit}')"
+        if [ -n "$lanif" ]; then
+            lan="$(ip -brief addr show "$lanif" 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^192\.168\./) print a[1]}}')" || lan=""
+        fi
     fi
-    local want="localhost 127.0.0.1 $neb" w hit=0 miss=0
+    local want="localhost 127.0.0.1 $neb $tail $lan" w hit=0 miss=0
     for w in $want; do
         [ -n "$w" ] || continue
         case "$sans" in *"$w"*) hit=$((hit + 1)) ;; *) miss=$((miss + 1)); bad "SAN missing: $w" ;; esac

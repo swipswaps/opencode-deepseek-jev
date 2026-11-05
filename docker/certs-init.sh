@@ -43,8 +43,15 @@ needed_sans() {
     if command -v ip > /dev/null; then
         neb="$(ip -brief addr show nebula0 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^10\./) print "IP:"a[1]}}')" || neb=""
     fi
-    local ip
-    for ip in $neb; do
+    local ip tail="" lan="" lanif=""
+    if command -v ip > /dev/null; then
+        tail="$(ip -brief addr show tailscale0 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^100\./) print "IP:"a[1]}}')" || tail=""
+        lanif="$(ip route show default 2>&1 | awk '{print $5; exit}')"
+        if [ -n "$lanif" ]; then
+            lan="$(ip -brief addr show "$lanif" 2>&1 | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^192\.168\./) print "IP:"a[1]}}')" || lan=""
+        fi
+    fi
+    for ip in $neb $tail $lan; do
         case ",$sans," in *",$ip,"*) ;; *) sans="$sans,$ip" ;; esac
     done
     if [ -n "${CERT_EXTRA_SANS:-}" ]; then
