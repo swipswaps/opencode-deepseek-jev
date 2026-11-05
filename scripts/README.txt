@@ -38,6 +38,23 @@ authorize-container-key.sh
     /home/node is container-local and its key is regenerated. RESTRICT=1
     prefixes `restrict` (no pty/forwarding) for the durable key.
 
+https-selfheal.sh
+    Host-side HTTPS/CA self-heal + monitor. Verifies cert SANs, 443/5099 on
+    loopback/Nebula/LAN/Tailscale, Caddy, CA download, CORS/PNA preflight, and
+    dashboard APIs. --fix reissues missing SANs, reloads/recreates Caddy, and
+    restarts the dashboard; --watch monitors without a deadline; --open opens
+    the live app. Requires docker/curl/openssl on the host.
+    bash scripts/https-selfheal.sh --check
+    bash scripts/https-selfheal.sh --fix --watch
+
+trust-ca-client.sh
+    Client-side CA bootstrap for the PC. Downloads the public CA from the
+    reachable server, verifies its fingerprint, optionally installs it into
+    system/Firefox/Chromium NSS trust, and prints macOS/Windows/Android and
+    local-network-access instructions. --check only verifies; --dry-run prints.
+    bash scripts/trust-ca-client.sh --server https://10.100.0.24:5099
+    bash scripts/trust-ca-client.sh --check
+
 receipts-pages-monitor.sh
     Host-side gh monitor for the three receipts GitHub Pages sites
     (receipts-ocr, receipts-ocr-rag, receipts-ocr-rag-v2). Checks Pages status,

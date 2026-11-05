@@ -1432,9 +1432,9 @@ function renderDiagTimeline(a,shed){
   var nowPct=pct(now);
   var fmt=(typeof d3!=='undefined'&&d3.timeFormat)?d3.timeFormat('%H:%M:%S'):function(d){return d.toLocaleTimeString(undefined,{hour12:false});};
   var maxDur=150;rows.forEach(function(r){var d=r.e-r.s;if(d>maxDur)maxDur=d;});
-  var h='<div class="tl-row tl-head"><span>time</span><div class="tl-lane tl-axis" id="tl-axis">';
+  var h='<div class="tl-row tl-head"><span>time <span style="color:#f85149">· now</span></span><div class="tl-lane tl-axis" id="tl-axis">';
   for(var i=0;i<3;i++){var p=i/2;var st=i===0?'left:0;transform:none;text-align:left':i===2?'left:100%;transform:translateX(-100%);text-align:right':'left:50%';h+='<span class="tl-tick" style="'+st+'">'+esc(fmt(new Date(t0+p*(t1-t0))))+'</span>';}
-  h+='<span id="tl-now-label" class="tl-nowlabel" style="left:'+nowPct+'%">now</span></div><span>rel. dur</span><span>type</span><span>dur</span><span>detail</span><span></span></div>';
+  h+='<i class="tl-now" style="left:'+nowPct+'%"></i></div><span>rel. dur</span><span>type</span><span>dur</span><span>detail</span><span></span></div>';
   rows.forEach(function(r){
     var x=r.x,type=String(x.type||'').toUpperCase();
     var tag=(x.type==='step-start'||x.type==='step-finish')?'STEP':type;
@@ -1467,7 +1467,6 @@ function tickTimeline(){
   p=Math.max(0,Math.min(100,p));
   var nodes=document.querySelectorAll('#timeline .tl-now');
   for(var i=0;i<nodes.length;i++)nodes[i].style.left=p+'%';
-  var l=document.getElementById('tl-now-label');if(l)l.style.left=p+'%';
 }
 setInterval(tickTimeline,1000);
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
