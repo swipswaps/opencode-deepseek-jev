@@ -1,5 +1,12 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-06 (gate green):** `harness.sh` is **4/0** at `4107b0f`
+> (lint 343/0, hygiene 64/0, patterns 6/0, dashboard 136/0); `next-action` is
+> clean (`ahead=0`, docs 34,028/35,000). `test-tooling` contracts are bounded
+> at 60s, so a hung tool fails by name instead of wedging the gate. The only
+> open unit is external TUNNEL-1 (`proxmox-dual-plane-mesh#5` / `T-c39910`).
+> Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
+
 > **PIN 2026-11-05 (security/rotation/a11y):** SEC-3 is closed; `security-posture.sh` is **19/0**; DeepSeek, SUBQ, Anthropic, LiteLLM, the server password, and the OpenCode console token were rotated; `verify-rotation-go.sh` is **11/0/1/1** (manual console-token check); `harness.sh` is **4/0** at **2026-11-05T19:48Z** (hygiene 64/0, tier-1 docs 33,997/35,000); the a11y fix is `50c535b` and the docs/permission close is `77782a5` (pushed). The chat DB is read-only and still lists historical pasted secrets; rotate, do not edit it. The only remaining queue unit is external: `proxmox-dual-plane-mesh#5` / `T-c39910` (tunnel flap). Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
 
 ## What this is
