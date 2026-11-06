@@ -278,7 +278,7 @@ self_test() {
     printf '%s\n' '# TODO' '' '## Queue (ranked, top first)' '' '- [ ] UNIT-A do the first thing' '- [ ] UNIT-B do the second thing' > "$work/TODO.md"
     printf '%s\n' '{"ts":"20260101T000000Z","passed":3,"failed":0}' > "$work/data/observability/last-gate.json"
     printf '%s\n' '{"tier1_tokens":100,"budget":35000,"over":0}' > "$work/data/observability/docs.json"
-    git -C "$work" init -q && git -C "$work" add -A && git -C "$work" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -qm init
+    git -C "$work" init -q && git -C "$work" add -A && git -C "$work" -c user.email=t@t -c user.name=t -c commit.gpgsign=false -c core.hooksPath=/dev/null commit --no-verify -qm init
     local wrev=""
     wrev=$(git -C "$work" rev-parse --short HEAD)
     python3 - "$work/data/observability/observability.db" "$wrev" <<'PY'
