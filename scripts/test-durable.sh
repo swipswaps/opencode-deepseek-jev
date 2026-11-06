@@ -19,6 +19,9 @@ ok()  { pass=$((pass + 1)); printf '  [PASS] %s\n' "$1"; }
 no()  { fail=$((fail + 1)); printf '  [FAIL] %s\n' "$1"; }
 
 chk() { # chk "name" cmd...  (bounded; names the hung sub-check)
+    # RULES #91: a deadline is telemetry. GNU timeout is the bound; on expiry
+    # print the sub-check name, elapsed, and its last lines instead of a silent
+    # 60s gate failure. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
     local name="$1"; shift
     local tmp rc t0 dt step="${DURABLE_STEP_TIMEOUT:-30}"
     tmp=$(mktemp)

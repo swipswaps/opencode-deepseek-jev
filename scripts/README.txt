@@ -405,6 +405,14 @@ usability-guide.sh
     Runs on the host where the browser lives; the in-app /usability runner is
     the zero-driver path. --opener/--base/--self-test.
 
+usability-autopilot.sh
+    One cited front-end for a fresh terminal: A1 provenance + the three host-stall
+    fixes (bounded test-durable sub-checks, isolated self-test git config, bounded
+    fixture cleanup), A2 citation log, A3 executable runner, A4 streamed/bounded
+    gates, A5 build/restart/served==HEAD/tasks/redirect/asset, A6 closeout, A7
+    push only a clean tree. Then it launches the guided retest. --base/--repo/
+    --hygiene-timeout/--dry-run/--self-test.
+
 usability-proceed.sh
     The end-to-end gated command: locate the correct repo, assert the remote and
     usability files, build web/, restart from the repo root, run harness --fast,

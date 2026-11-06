@@ -1457,5 +1457,17 @@
       "./scripts/usability-proceed.sh --base https://10.100.0.24:5099",
       "./scripts/usability-proceed.sh --self-test"
     ]
+  },
+  {
+    "id": "usability-autopilot",
+    "title": "One command: all asserts, then the guided retest",
+    "where": "host",
+    "purpose": "Thin cited front-end over usability-proceed.sh. A1 provenance + the three host-stall fixes (bounded sub-checks, isolated git config, bounded fixture cleanup); A2 citation log; A3 executable gate runner; A4 streamed/bounded gates; A5 build/restart/served==HEAD/tasks/redirect/asset; A6 closeout; A7 push only a clean tree. The only human step is the guided retest.",
+    "commands": [
+      "./scripts/usability-autopilot.sh --base https://10.100.0.24:5099",
+      "./scripts/usability-autopilot.sh --base http://127.0.0.1:5099",
+      "./scripts/usability-autopilot.sh --dry-run",
+      "./scripts/usability-autopilot.sh --self-test"
+    ]
   }
 ]

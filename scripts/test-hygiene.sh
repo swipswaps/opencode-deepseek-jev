@@ -216,6 +216,13 @@ PY
         cat "$work/proceed_st.txt"
     fi
 
+    if bash "$REPO/scripts/usability-autopilot.sh" --self-test > "$work/autopilot_st.txt" 2>&1; then
+        ok 'usability-autopilot: self-test'
+    else
+        bad 'usability-autopilot: self-test'
+        cat "$work/autopilot_st.txt"
+    fi
+
     if have node && [ -f "$REPO/scripts/blacklist-guard-self-test.mjs" ]; then
         if node "$REPO/scripts/blacklist-guard-self-test.mjs" > "$work/bg_st.txt" 2>&1; then
             ok 'blacklist-guard: self-test'

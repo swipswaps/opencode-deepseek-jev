@@ -22,6 +22,27 @@
 #     human test and re-check; any other block stops
 #   6 push (optional) only when the tree is clean and credentials exist
 #
+#
+# Citations (verified 2026-11-06; full log: docs/USABILITY-TESTING.md §8):
+#   ISO 9241-11:2018  https://www.iso.org/standard/63500.html
+#   ISO 9241-210:2019 https://www.iso.org/standard/77520.html
+#   W3C WCAG 2.2      https://www.w3.org/TR/WCAG22/
+#   W3C SC 2.5.8      https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+#   W3C SC 1.4.10     https://www.w3.org/WAI/WCAG22/Understanding/reflow.html
+#   Playwright a11y   https://playwright.dev/docs/accessibility-testing
+#   Deque axe-core    https://github.com/dequelabs/axe-core
+#   Core Web Vitals   https://web.dev/articles/vitals
+#   web-vitals impl   https://github.com/GoogleChrome/web-vitals
+#   NN/g heuristics   https://www.nngroup.com/articles/ten-usability-heuristics/
+#   Nielsen 1993      ISBN 978-0-12-518406-9
+#   SUS (Lewis 2018)  https://doi.org/10.1080/10447318.2018.1455307
+#   Automation bias   https://doi.org/10.1518/001872097778543886
+#   Reduced motion    https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
+#   Git config env    https://git-scm.com/docs/git-config#Documentation/git-config.txt-GITCONFIGGLOBAL
+#   git commit flags  https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---no-verify
+#   GNU rm prompt     https://www.gnu.org/software/coreutils/manual/html_node/rm-invocation.html
+#   Project rule      RULES.md #93 (completion is a gate, not a claim)
+
 # Plain ASCII. No sed. No rm -rf. No set -e. No 2>/dev/null.
 # No subprocess.run. No kill without signal. printf only. main() wrapper.
 #
@@ -208,6 +229,8 @@ main() {
     done
     BASE="${BASE%/}"
 
+    # Assert 1 (provenance): the patch targets swipswaps/opencode-deepseek-jev,
+    # not any other checkout; RULES #54/#93 and the remote URL decide.
     section "1. locate and assert the repo"
     REPO=$(find_target) || {
         bad "no repo with origin containing '$EXPECT_REMOTE'; pass --repo /path/to/opencode-deepseek-jev"
@@ -265,6 +288,8 @@ main() {
         return 0
     fi
 
+    # Assert 2 (reproducible build): the served app must be the built source,
+    # not a stale web/dist (web/package.json + Vite; asset hash below).
     section "2. build web/"
     ( cd "$REPO/web" && npm run build ) || { bad "npm run build"; return 1; }
     dist_asset=$(asset_name "$REPO/web/dist/index.html")
@@ -273,10 +298,15 @@ main() {
     [ -n "$dist_asset" ] && ok "built asset: $dist_asset" || { bad "web/dist/index.html has no asset"; return 1; }
     [ "$dist_mtime" -ge "$src_mtime" ] && ok "web/dist newer than web/src ($dist_mtime >= $src_mtime)" || { bad "web/dist older than web/src"; return 1; }
 
+    # Assert 3 (deployment): web-restart.sh from the repo root is the only path
+    # that reloads server routes and the new dist; `cd web && ./scripts/...`
+    # is a path error (the reason this wrapper exists).
     section "3. restart from the repo root"
     ( cd "$REPO" && ./scripts/web-restart.sh ) || { bad "web-restart.sh"; return 1; }
     ok "web-restart.sh rc=0"
 
+    # Assert 4 (served truth): HTTP 200 + served==HEAD + tasks API + redirect +
+    # identical asset hash. A build is not a deployment until the server proves it.
     section "4. verify the served build"
     local code rev served tasks appexp asset
     code=$(http_code "$BASE/app/")
@@ -290,6 +320,9 @@ main() {
     asset=$(curl -sS --max-time 8 "$BASE/app/" 2>&1 | python3 -c 'import re,sys; h=sys.stdin.read(); m=re.search(r"/app/assets/(index-[A-Za-z0-9_-]+\.js)",h); print(m.group(1) if m else "")' 2>&1)
     [ "$asset" = "$dist_asset" ] && ok "served asset == built asset" || { bad "served asset=$asset built=$dist_asset"; return 1; }
 
+    # Assert 4b (falsifiable gates): lint + test-hygiene + test-patterns with
+    # streamed output. RULES #37: SKIP is not PASS; RULES #91: a timeout prints
+    # its bound, elapsed, and last sample rather than a bare "timed out".
     section "4b. gates (streamed, bounded)"
     if [ "$SKIP_GATES" -eq 1 ]; then
         warn "skipping gates (--skip-gates); closeout will verify last-gate freshness"
@@ -297,6 +330,8 @@ main() {
         run_gates || return 1
     fi
 
+    # Assert 5 (completion): RULES #93 closeout; a UI change without a NEW
+    # guided session is a BLOCK, not a green build.
     section "5. closeout gate"
     local out rc
     out=$(mktemp)
@@ -329,6 +364,8 @@ PY
     fi
     rm -f "$out"
 
+    # Assert 6 (delivery): push only a clean tree; a missing credential is a
+    # warning, never a fabricated success (RULES #37).
     section "6. push (optional)"
     if [ "$DO_PUSH" -eq 0 ]; then
         warn "push disabled (--no-push)"

@@ -162,6 +162,33 @@ redirect from `/app/<legacy>` to `/<legacy>`. The session is stored as
 [`docs/evidence/usability-guided-20261106.json`](evidence/usability-guided-20261106.json).
 It is the baseline for the retest, not a claim that the current build passes.
 
+### One command: `usability-autopilot.sh`
+
+```bash
+./scripts/usability-autopilot.sh --base https://10.100.0.24:5099
+# or: --base http://127.0.0.1:5099
+```
+
+It is a cited front-end over `usability-proceed.sh`:
+
+- **A1** correct remote + required files + the three host-stall fixes:
+  bounded `test-durable` sub-checks (`DURABLE_STEP_TIMEOUT`), isolated
+  self-test git config (`GIT_CONFIG_GLOBAL=/dev/null`), and bounded fixture
+  cleanup (`timeout 10 rm -r`).
+- **A2** the citation log is still present.
+- **A3** the gate runner is executable.
+- **A4** lint + test-hygiene + test-patterns, streamed and bounded.
+- **A5** build, restart, `served==HEAD`, `/api/usability/tasks`, `/app/explore`
+  redirect, and served asset == built asset.
+- **A6** RULES #93 closeout.
+- **A7** push only a clean tree.
+
+The three stall fixes have their own sources: Git config precedence
+(`GIT_CONFIG_GLOBAL`) and `--no-verify` (git-scm.com/docs/git-config,
+git-commit), and GNU `rm` prompting on a TTY for write-protected Git objects
+unless `-f` (GNU coreutils manual, `rm` invocation). The cleanup is bounded
+because a wedged fixture must fail by name, not hang the gate (RULES #91).
+
 ### Closeout: do not say "done" before the gate
 
 RULES #93 and `scripts/closeout-gate.py` make the completion questions

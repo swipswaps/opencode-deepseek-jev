@@ -478,5 +478,17 @@
       "./scripts/usability-proceed.sh --no-push"
     ],
     "note": "Run from the host with a browser for the guided retest. Use --base http://127.0.0.1:5099 if curl does not trust the TLS CA."
+  },
+  {
+    "id": "usability-autopilot",
+    "title": "Autopilot: assert everything, then run the guided retest",
+    "purpose": "One host command from any cwd. Refuses the wrong repo or a tree missing the host-stall fixes; streams/bounds gates; builds/restarts/verifies; runs closeout; launches the real guided retest when that is the only block.",
+    "where": "host",
+    "manual": false,
+    "commands": [
+      "./scripts/usability-autopilot.sh --base https://10.100.0.24:5099",
+      "./scripts/usability-autopilot.sh --dry-run"
+    ],
+    "note": "Use --base http://127.0.0.1:5099 if curl does not trust the TLS CA. The guided retest needs a browser or a facilitator; the in-app /app/#usability path also records it."
   }
 ]
