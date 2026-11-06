@@ -18,9 +18,25 @@ pass=0 fail=0
 ok()  { pass=$((pass + 1)); printf '  [PASS] %s\n' "$1"; }
 no()  { fail=$((fail + 1)); printf '  [FAIL] %s\n' "$1"; }
 
-chk() { # chk "name" cmd...
+chk() { # chk "name" cmd...  (bounded; names the hung sub-check)
     local name="$1"; shift
-    if "$@" > /dev/null 2>&1; then ok "$name"; else no "$name"; fi
+    local tmp rc t0 dt step="${DURABLE_STEP_TIMEOUT:-30}"
+    tmp=$(mktemp)
+    t0=$(date +%s)
+    timeout -k 5 "$step" "$@" > "$tmp" 2>&1
+    rc=$?
+    dt=$(( $(date +%s) - t0 ))
+    if [ "$rc" -eq 0 ]; then
+        ok "$name"
+    else
+        if [ "$rc" -eq 124 ]; then
+            no "$name (timeout ${step}s, elapsed ${dt}s)"
+        else
+            no "$name (rc=$rc, elapsed ${dt}s)"
+        fi
+        tail -n 3 "$tmp" | while IFS= read -r line; do printf '        %s\n' "$line"; done
+    fi
+    rm -f "$tmp"
 }
 
 printf '=== test-durable ===\n'
