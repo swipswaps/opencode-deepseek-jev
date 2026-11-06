@@ -43,6 +43,9 @@ resolve_repo() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# self-test git must not inherit host hooks/filters/signing
+git_clean() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git "$@"; }
+
 report() {
     # report REPO HEAD AHEAD MODIFIED UNTRACKED COMMITS — one python pass.
     local REPO="$1" HEAD="$2" AHEAD="$3" DIRTY="$4" UNTRACKED="$5" COMMITS="$6"
@@ -278,7 +281,7 @@ self_test() {
     printf '%s\n' '# TODO' '' '## Queue (ranked, top first)' '' '- [ ] UNIT-A do the first thing' '- [ ] UNIT-B do the second thing' > "$work/TODO.md"
     printf '%s\n' '{"ts":"20260101T000000Z","passed":3,"failed":0}' > "$work/data/observability/last-gate.json"
     printf '%s\n' '{"tier1_tokens":100,"budget":35000,"over":0}' > "$work/data/observability/docs.json"
-    git -C "$work" init -q && git -C "$work" add -A && git -C "$work" -c user.email=t@t -c user.name=t -c commit.gpgsign=false -c core.hooksPath=/dev/null commit --no-verify -qm init
+    git_clean -C "$work" init -q && git_clean -C "$work" add -A && git_clean -C "$work" -c user.email=t@t -c user.name=t commit --no-verify -qm init
     local wrev=""
     wrev=$(git -C "$work" rev-parse --short HEAD)
     python3 - "$work/data/observability/observability.db" "$wrev" <<'PY'
