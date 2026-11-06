@@ -42,6 +42,8 @@ SKIP_GATES=0
 GATE_TIMEOUT="${GATE_TIMEOUT:-300}"
 HYGIENE_TIMEOUT="${HYGIENE_TIMEOUT:-600}"
 PATTERNS_TIMEOUT="${PATTERNS_TIMEOUT:-120}"
+# Bound each test-durable sub-check so a hung self-test is named, not silent.
+export DURABLE_STEP_TIMEOUT="${DURABLE_STEP_TIMEOUT:-60}"
 [ -n "${USABILITY_BASE:-}" ] && BASE_GIVEN=1
 
 resolve_repo() {
