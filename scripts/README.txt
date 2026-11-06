@@ -405,6 +405,14 @@ usability-guide.sh
     Runs on the host where the browser lives; the in-app /usability runner is
     the zero-driver path. --opener/--base/--self-test.
 
+usability-proceed.sh
+    The end-to-end gated command: locate the correct repo, assert the remote and
+    usability files, build web/, restart from the repo root, run harness --fast,
+    verify /app/ + served==HEAD + /api/usability/tasks + /app/explore 302 + the
+    served asset hash, run closeout-gate, and launch the real guided retest when
+    that is the only block. --no-retest/--no-push/--base/--repo/--dry-run/
+    --self-test. It never fabricates the human session.
+
 closeout-gate.py
     RULES #93 completion gate. --check verifies the command root, web/dist
     freshness after web/src changes, served==HEAD + /api/usability/tasks,

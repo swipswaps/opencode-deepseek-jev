@@ -1445,5 +1445,17 @@
       "./scripts/web-build-restart.sh --dry-run",
       "./scripts/web-build-restart.sh --self-test"
     ]
+  },
+  {
+    "id": "usability-proceed",
+    "title": "One gated command: assert, build, restart, verify, retest",
+    "where": "host",
+    "purpose": "Finds the opencode-deepseek-jev repo, asserts the usability files and remote, builds web/, restarts from the repo root, refreshes the gates, verifies /app/ + served==HEAD + tasks + redirect + asset hash, runs closeout, and launches the real guided retest when that is the only block. Never fakes the human session.",
+    "commands": [
+      "./scripts/usability-proceed.sh",
+      "./scripts/usability-proceed.sh --no-retest",
+      "./scripts/usability-proceed.sh --base https://10.100.0.24:5099",
+      "./scripts/usability-proceed.sh --self-test"
+    ]
   }
 ]

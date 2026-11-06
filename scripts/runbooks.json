@@ -465,5 +465,18 @@
       "./scripts/harness.sh --fast"
     ],
     "note": "Use --base for the host URL. The host sync/restart question remains a WARN until confirmed there."
+  },
+  {
+    "id": "usability-proceed",
+    "title": "Proceed from patch to verified retest in one gated command",
+    "purpose": "The end-to-end script for the fix: locate the correct repo, build, restart, gate, verify, and launch the guided test. Stops on any assert; a retest is the only human step.",
+    "where": "host",
+    "manual": false,
+    "commands": [
+      "./scripts/usability-proceed.sh",
+      "./scripts/usability-proceed.sh --no-retest",
+      "./scripts/usability-proceed.sh --no-push"
+    ],
+    "note": "Run from the host with a browser for the guided retest. Use --base http://127.0.0.1:5099 if curl does not trust the TLS CA."
   }
 ]
