@@ -188,21 +188,26 @@ self_test() {
     git -C "$work/repo" init -q && git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t -c commit.gpgsign=false -c core.hooksPath=/dev/null commit --no-verify -qm init
     local S="$work/state/p.json" L="$work/obs.db" N="$work/repo"
     local o=""
+    printf "  stage: tick1-init\n"
     # tick 1: init (no trip)
     o=$(NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --no-log --json 2>&1)
     printf '%s' "$o" | grep -q '"decision": "init"' || { printf 'FAIL tick1 init\n'; fail=1; }
+    printf "  stage: tick2-quiet\n"
     # tick 2: one quiet tick (no trip)
     o=$(NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --no-log --json 2>&1)
     printf '%s' "$o" | grep -q '"decision": "quiet"' || { printf 'FAIL tick2 quiet\n'; fail=1; }
+    printf "  stage: tick3-stall\n"
     # tick 3: stall trips
     NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --no-log --json > "$work/t3.txt" 2>&1
     [ "$?" -eq 1 ] || { printf 'FAIL tick3 exit 1\n'; fail=1; }
     grep -q '"decision": "stall"' "$work/t3.txt" || { printf 'FAIL tick3 stall\n'; fail=1; }
+    printf "  stage: advance-commit\n"
     # a commit advances -> PASS row, ticks reset
     printf 'x\n' > "$work/repo/NEW"; git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t -c commit.gpgsign=false -c core.hooksPath=/dev/null commit --no-verify -qm advance
     o=$(NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --json 2>&1)
     printf '%s' "$o" | grep -q '"decision": "advance"' || { printf 'FAIL advance\n'; fail=1; }
     LEDGER_DB="$L" python3 "$REPO/scripts/ledger.py" show --grep progress 2>&1 | grep -q 'ADVISORY' || { printf 'FAIL ledger rows\n'; fail=1; }
+    printf "  stage: blocked-external\n"
     # blocked-external: an external next unit WITH observed state+ts is a quiet
     # PASS, not a FAIL.
     local S2="$work/state/blocked.json"
@@ -211,6 +216,7 @@ self_test() {
     PROGRESS_NEXT_JSON="$NJ" NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S2" PROGRESS_STALL_TICKS=1 bash "${BASH_SOURCE[0]}" --once --no-log --json > "$work/b2.txt" 2>&1
     [ "$?" -eq 0 ] || { printf 'FAIL blocked-external exit\n'; fail=1; }
     grep -q '"decision": "blocked-external"' "$work/b2.txt" || { printf 'FAIL blocked-external decision\n'; fail=1; }
+    printf "  stage: unobserved-claim\n"
     # F2: an unobserved claim (no state/ts) is NOT accepted as blocked-external.
     local S3="$work/state/unobserved.json"
     local NE='{"rev":"abc","last_gate":{"ts":"20261020T000000Z"},"next":{"text":"TUNNEL-1: the link fix is external"},"external":[{"resource":"o/r#5"}],"blockers":[],"since_gate":{}}'
@@ -220,6 +226,7 @@ self_test() {
     [ "$?" -eq 1 ] || { printf 'FAIL unobserved claim accepted (want stall)\n'; fail=1; }
     grep -q '"decision": "stall"' "$work/b4.txt" || { printf 'FAIL unobserved decision\n'; fail=1; }
     grep -q 'lacks observed state/ts' "$work/b4.txt" || { printf 'FAIL unobserved detail\n'; fail=1; }
+    printf "  stage: external-ttl\n"
     # F2: a fresh-but-stale claim decays after PROGRESS_EXTERNAL_TTL sweeps.
     local S4="$work/state/ttl.json"
     local i rc
@@ -231,6 +238,7 @@ self_test() {
     grep -q '"decision": "blocked-external"' "$work/t2.txt" || { printf 'FAIL external TTL still fresh\n'; fail=1; }
     grep -q '"decision": "external-stale"' "$work/t3.txt" || { printf 'FAIL external TTL decay\n'; fail=1; }
     grep -q 're-audit the attribution' "$work/t3.txt" || { printf 'FAIL external TTL detail\n'; fail=1; }
+    printf "  stage: cleanup\n"
     rm -f "$work/repo/NEW" "$work/repo/TODO.md" "$work/repo/opencode.json" "$work/repo/docker/Dockerfile" "$work/repo/data/observability/last-gate.json" "$work/repo/data/observability/docs.json" "$work/state/p.json" "$S2" "$S3" "$S4" "$work/t3.txt" "$work/t1.txt" "$work/t2.txt" "$work/b1.txt" "$work/b2.txt" "$work/b3.txt" "$work/b4.txt" "$work/obs.db"
     rm -r "$work/repo/.git"
     rmdir "$work/repo/data/observability" "$work/repo/data" "$work/repo/docker" "$work/repo" "$work/state" "$work"
