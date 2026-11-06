@@ -185,7 +185,7 @@ self_test() {
     printf '%s\n' '# TODO' '' '## Queue (ranked, top first)' '' '- [ ] UNIT-A' > "$work/repo/TODO.md"
     printf '%s\n' '{"ts":"20260101T000000Z","passed":3,"failed":0}' > "$work/repo/data/observability/last-gate.json"
     printf '%s\n' '{"tier1_tokens":100,"budget":35000,"over":0}' > "$work/repo/data/observability/docs.json"
-    git -C "$work/repo" init -q && git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t commit -qm init
+    git -C "$work/repo" init -q && git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -qm init
     local S="$work/state/p.json" L="$work/obs.db" N="$work/repo"
     local o=""
     # tick 1: init (no trip)
@@ -199,7 +199,7 @@ self_test() {
     [ "$?" -eq 1 ] || { printf 'FAIL tick3 exit 1\n'; fail=1; }
     grep -q '"decision": "stall"' "$work/t3.txt" || { printf 'FAIL tick3 stall\n'; fail=1; }
     # a commit advances -> PASS row, ticks reset
-    printf 'x\n' > "$work/repo/NEW"; git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t commit -qm advance
+    printf 'x\n' > "$work/repo/NEW"; git -C "$work/repo" add -A && git -C "$work/repo" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -qm advance
     o=$(NEXT_ACTION_REPO="$N" LEDGER_DB="$L" PROGRESS_STATE="$S" PROGRESS_STALL_TICKS=2 bash "${BASH_SOURCE[0]}" --once --json 2>&1)
     printf '%s' "$o" | grep -q '"decision": "advance"' || { printf 'FAIL advance\n'; fail=1; }
     LEDGER_DB="$L" python3 "$REPO/scripts/ledger.py" show --grep progress 2>&1 | grep -q 'ADVISORY' || { printf 'FAIL ledger rows\n'; fail=1; }
