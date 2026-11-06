@@ -14,6 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { useRemote } from "../useLive.js";
 import {
   dateStr,
   fmtCompact,
@@ -51,6 +52,7 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
   const findings = health?.findings || [];
   const counts = health?.counts || {};
   const active = cost?.active;
+  const pulse = useRemote("/api/pulse", 30000).data;
 
   const trend = useMemo(() => {
     const days = new Map();
@@ -95,6 +97,31 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
           <Chip size="small" variant="outlined" label={cost?.cached ? "cached" : "live"} />
         </Stack>
       </Stack>
+
+      <Card sx={{ mb: 1.5 }}>
+        <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="overline" color="text.secondary">Project pulse</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                {pulse?.headline || "Pulse unavailable — run ./scripts/pulse.py"}
+              </Typography>
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.75 }}>
+                {["security", "stalls", "tunnel"].map((a) => (
+                  <Chip key={a} size="small" variant="outlined" label={`${a} ${pulse?.scores?.[a] == null ? "n/a" : pulse.scores[a]}`} />
+                ))}
+                <Chip size="small" variant="outlined" label={`${pulse?.pending_choices || 0} decisions`} />
+                <Chip size="small" color={pulse?.usability?.verdict === "PASS" ? "success" : pulse?.usability?.verdict === "FAIL" ? "error" : "default"} label={`usability ${pulse?.usability?.verdict || "n/a"}`} />
+                {pulse?.guided?.id && <Chip size="small" variant="outlined" label={`guided #${pulse.guided.id}`} />}
+              </Stack>
+            </Box>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="outlined" onClick={() => onNavigate && onNavigate("usability")}>Usability</Button>
+              <Button size="small" href="/" target="_blank" rel="noopener">Classic pulse</Button>
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(3,minmax(0,1fr))", xl: "repeat(6,minmax(0,1fr))" }, gap: 1.5 }}>
         <Kpi label="Cost" value={fmtUsd(totals.c)} hint={`${fmtCompact(totals.n)} sessions`} color="primary.main" />

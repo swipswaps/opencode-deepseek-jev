@@ -124,6 +124,18 @@ main() {
 
     curl -s "http://$HOST:$PORT/explore" > "$work/explore.html"
     has '<title>opencode explore</title>' "$work/explore.html" && ok 'explore title' || bad 'explore title'
+    curl -s "http://$HOST:$PORT/graph" > "$work/graph.html"
+    has '<title>opencode graph</title>' "$work/graph.html" && ok 'graph title' || bad 'graph title'
+    has 'id="cv"' "$work/graph.html" && ok 'graph canvas present' || bad 'graph canvas present'
+    has 'id="side-body"' "$work/graph.html" && ok 'graph editor panel present' || bad 'graph editor panel present'
+    has '/api/graph/edit' "$work/graph.html" && ok 'graph writes edits' || bad 'graph writes edits'
+    code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://$HOST:$PORT/app/explore")
+    case "$code" in 302*"/explore") ok 'app legacy path redirects (/app/explore -> /explore)' ;; *) bad "app legacy path redirect ($code)" ;; esac
+    curl -s "http://$HOST:$PORT/usability" > "$work/usability.html"
+    has '<title>opencode usability</title>' "$work/usability.html" && ok 'usability title' || bad 'usability title'
+    has 'id="u-start"' "$work/usability.html" && ok 'usability guided start' || bad 'usability guided start'
+    has 'id="auto-body"' "$work/usability.html" && ok 'usability automated evidence' || bad 'usability automated evidence'
+    has 'id="u-history"' "$work/usability.html" && ok 'usability history' || bad 'usability history'
     has 'id="treemap"' "$work/explore.html" && ok 'explore treemap section' || bad 'explore treemap section'
     has 'id="burn"' "$work/explore.html" && ok 'explore burn section' || bad 'explore burn section'
     has 'id="scatter"' "$work/explore.html" && ok 'explore scatter section' || bad 'explore scatter section'
@@ -320,7 +332,7 @@ if (!j || j.value.ok !== 1 || typeof j.at !== "number") process.exit(2);
     python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,list) and d and all("id" in x and "commands" in x and "where" in x for x in d) else 1)' "$work/tools.json" && ok 'api/tools valid' || bad 'api/tools valid'
 
     local page pname
-    for page in "$work/home.html" "$work/explore.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html" "$work/manage.html"; do
+    for page in "$work/home.html" "$work/explore.html" "$work/graph.html" "$work/usability.html" "$work/runbooks.html" "$work/docs.html" "$work/models.html" "$work/manage.html"; do
         pname=$(basename "$page")
         python3 -c 'import sys,re; h=open(sys.argv[1]).read(); print("\n;\n".join(re.findall(r"<script>(.*?)</script>", h, re.S)))' "$page" > "$work/${pname}.js"
         if [ -s "$work/${pname}.js" ] && node --check "$work/${pname}.js" 2>"$work/${pname}.err"; then
@@ -496,8 +508,10 @@ PY
         python3 - "$work/ov.json" "$work/ov200.json" <<'PY'
 import json, sys
 a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
-# param-aware key: limit=5 and limit=200 must not share an entry
-sys.exit(0 if len(a.get("sessions", [])) != len(b.get("sessions", [])) else 1)
+# param-aware key: limit=5 and limit=200 must not share an entry. Compare the
+# echoed limit, not row counts: a small store returns the same rows for both
+# limits, and a count-only check would false-fail on a fixture.
+sys.exit(0 if a.get("limit") == 5 and b.get("limit") == 200 else 1)
 PY
         if [ "$?" -eq 0 ]; then ok 'api/overview cache keyed by limit (5 != 200)'; else bad 'api/overview cache keyed by limit (5 != 200)'; fi
         curl -s "http://$HOST:$PORT/api/schema" > "$work/schema.json"
@@ -532,6 +546,22 @@ PY
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("cards"),list) and isinstance(d.get("sessions"),list) and isinstance(d.get("milestones"),list) and isinstance(d.get("estimates"),dict) else 1)' "$work/board.json" && ok 'api/board (kanban+gantt payload)' || bad 'api/board (kanban+gantt payload)'
         curl -s "http://$HOST:$PORT/api/board" > "$work/board2.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("cached") is True and isinstance(d.get("age_ms"),int) else 1)' "$work/board2.json" && ok 'api/board served from cache' || bad 'api/board served from cache'
+        curl -s "http://$HOST:$PORT/api/graph" > "$work/graph.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); n=d.get("nodes") or []; l=d.get("links") or []; sys.exit(0 if isinstance(n,list) and isinstance(l,list) and n and "editable" in d else 1)' "$work/graph.json" && ok 'api/graph shape (real nodes+links)' || bad 'api/graph shape'
+        curl -s "http://$HOST:$PORT/api/pulse" > "$work/pulse.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("available") is False or ("headline" in d and isinstance(d.get("metrics"),list)) else 1)' "$work/pulse.json" && ok 'api/pulse' || bad 'api/pulse'
+        curl -s "http://$HOST:$PORT/api/benchmark" > "$work/bench.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("available") is False or isinstance(d.get("metrics"),list) else 1)' "$work/bench.json" && ok 'api/benchmark' || bad 'api/benchmark'
+        curl -s "http://$HOST:$PORT/api/choices" > "$work/choices.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); c=d.get("choices") or []; sys.exit(0 if isinstance(c,list) and c and "recommended" in c[0] else 1)' "$work/choices.json" && ok 'api/choices' || bad 'api/choices'
+        curl -s "http://$HOST:$PORT/api/usability" > "$work/usability.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("available") is False or (d.get("verdict") in ("PASS","FAIL") and isinstance(d.get("axes"),dict)) else 1)' "$work/usability.json" && ok 'api/usability' || bad 'api/usability'
+        curl -s "http://$HOST:$PORT/api/usability/tasks" > "$work/utasks.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); t=d.get("tasks") or []; sys.exit(0 if isinstance(t,list) and len(t)>=5 and all("id" in x and "instruction" in x for x in t) else 1)' "$work/utasks.json" && ok 'api/usability/tasks' || bad 'api/usability/tasks'
+        curl -s "http://$HOST:$PORT/api/usability/guided" > "$work/uguided.json"
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) else 1)' "$work/uguided.json" && ok 'api/usability/guided' || bad 'api/usability/guided'
+        code=$(curl -s -o "$work/ubad.json" -w '%{http_code}' -X POST "http://$HOST:$PORT/api/usability/guided" -H 'content-type: application/json' -d '{"tasks":[{"id":"not-a-task","success":true}]}')
+        if [ "$code" = "400" ] && grep -q '"ok":false' "$work/ubad.json"; then ok 'api/usability/guided rejects unknown task (400)'; else bad 'api/usability/guided validation'; fi
         curl -s "http://$HOST:$PORT/api/export/ocr" > "$work/ocr.csv"
         has 'id,ts,image' "$work/ocr.csv" && ok 'api/export/ocr csv' || bad 'api/export/ocr csv'
         curl -s "http://$HOST:$PORT/api/export/patterns" > "$work/pat.csv"
@@ -554,6 +584,18 @@ PY
         else
             bad 'headless UI: explore script executes'
             cat "$work/ui-x.txt"
+        fi
+        if node "$REPO/scripts/test-dashboard-ui.mjs" "http://$HOST:$PORT" graph > "$work/ui-g.txt" 2>&1; then
+            ok 'headless UI: graph script executes'
+        else
+            bad 'headless UI: graph script executes'
+            cat "$work/ui-g.txt"
+        fi
+        if node "$REPO/scripts/test-dashboard-ui.mjs" "http://$HOST:$PORT" usability > "$work/ui-u.txt" 2>&1; then
+            ok 'headless UI: usability script executes'
+        else
+            bad 'headless UI: usability script executes'
+            cat "$work/ui-u.txt"
         fi
     else
         bad 'test-dashboard-ui.mjs present'
@@ -613,7 +655,7 @@ PY
     fi
 
     local r404="" rcode route
-    for route in / /explore /runbooks /manage /docs /models /api/rev /api/tools \
+    for route in / /explore /graph /usability /runbooks /manage /docs /models /api/rev /api/tools /api/graph /api/pulse /api/benchmark /api/choices /api/usability /api/usability/tasks /api/usability/guided \
         /api/providers /api/code /api/cost /api/balance /api/schema /api/integrations \
         /api/ab /api/ocr /api/duplicates /api/signals /api/guard /api/health /api/patterns \
         /api/solutions /api/runbooks /api/export /api/export/ocr /api/export/patterns \

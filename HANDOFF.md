@@ -1,5 +1,12 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-06 (status automation):** added `issue-benchmark.py`
+> (security/stall/tunnel metrics -> `issue_bench` + `benchmark.json`),
+> `choice-gate.py` (+ `choices.json`) for the human-only residuals, `pulse.py`
+> (one status screen), and `/graph` (editable 3D graph of real repo data with
+> `graph_edit` persistence). Map: `docs/STATUS-AUTOMATION.md`. First audit on
+> this checkout: running_tools=3, blank_tails=2, over_budget=18; tunnel clean.
+
 > **PIN 2026-11-06 (gate green):** `harness.sh` is **4/0** at `4107b0f`
 > (lint 343/0, hygiene 64/0, patterns 6/0, dashboard 136/0); `next-action` is
 > clean (`ahead=0`, docs 34,028/35,000). `test-tooling` contracts are bounded
@@ -65,6 +72,15 @@ the contained exposure, the 2026-09-29 head-of-line-blocking addendum — moved 
 | `sentinel.sh [--once] [--json] [--no-log] [--self-test]` | daily **advisory** sweep (systemd timer): T1 latest over budget, T2 latest on a deny-listed model, T3 new gateway-failure lines, T4 slow caddy fetches, **T5 a non-latest deny-listed session active since the last sweep** (T2 covers only the latest), **T6 a non-latest over-budget session active since the last sweep** (T1 covers only the latest), **T7 a recent session whose tool has been `running` past `session-health`'s run_ms since the last sweep** (the DB-native stall, S0); reads via `session-health.mjs`, logs ADVISORY to the ledger with a **stable per-incident key** (a persisting condition stays ONE row, not one per sweep) and writes a DB-only `session-digest.sh` next to each non-latest trip, never stops or kills sessions |
 | `harness.sh [--fast] [--export] [--json]` | one command for the whole state: every gate + telemetry + cost + TODO in-flight; `--export` writes a report, `--json` emits only `{ts,rev,passed,failed,gates[]}`; `--fast` skips the slow dashboard gate |
 | `preflight.sh [--json] [--allow-pro]` | fail-closed spend gate: keys, last gate result, balance, model; exit 1 = do not spend until resolved |
+| `issue-benchmark.py [--run] [--json] [--history N]` | named metrics for the security/stall/tunnel claims; writes `issue_bench` + `benchmark.json`; SKIP is not PASS |
+| `pulse.py [--refresh] [--json] [--open]` | one status screen: scores, attention (metric + pending choice), next automatic; serves `pulse.json` at `/api/pulse` |
+| `choice-gate.py [--apply ID=OPT] [--auto]` | the multiple-choice surface for human-only residuals; safe scripts auto-run, human steps print, decision + ledger row |
+| `usability-suite.py [--static-only] [--browser] [--axe] [--watch N]` | cited usability screen: ISO 9241-11 tasks, WCAG automated subset, CWV lab, targets, keyboard, reflow; rows carry thresholds + citations; SKIP != PASS |
+| `usability-install.sh [--full]` | user timer for the static usability screen every 30 min; `.github/workflows/usability.yml` runs the browser layer nightly |
+| `usability-guided.py [--interactive\|--guide\|--import F] [--list]` | human-guided session (timer, success, SUS); `/usability` is the classic runner, `/app/` has a Usability view |
+| `usability-guide.sh [--opener xdg\|playwright\|selenium\|cdp]` | optional facilitator wrapper that opens each task page before recording |
+| `closeout-gate.py` | RULES #93: root/build/served/gate/retest/tracked/citations; BLOCKED = not done |
+| `web-build-restart.sh` | build web/ + restart from root + verify served asset; avoids the `cd web` path error |
 | `models.sh [--write] [--json]` / `models.py` | model catalog + cost policy from `opencode models --verbose`; verdict ALLOW / ASK / BLOCK; surfaced at `/models` |
 | `doc-budget.sh [--json] [--fail]` | token size + content-hash of the read-first doc corpus (RULES/HANDOFF/README/TODO/DESIGN/skills); budget `DOC_BUDGET_TOKENS`; unchanged hash = nothing new to re-learn |
 | `test-tooling.sh` | contract test for the tooling's `--json` interfaces (preflight/doc-budget/learn-rules/issue-solutions/audit-tool-calls/prompt-lint/models/logs); wired into `test-hygiene.sh`, never calls `harness.sh` |

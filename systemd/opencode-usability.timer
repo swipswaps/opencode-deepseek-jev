@@ -1,0 +1,12 @@
+[Unit]
+Description=Screen the opencode UI for usability regressions every 30 minutes
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=90
+Unit=opencode-usability.service
+
+[Install]
+WantedBy=timers.target

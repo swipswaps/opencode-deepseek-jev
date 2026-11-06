@@ -1,0 +1,90 @@
+name: usability
+
+# "Always be testing": a cheap static screen on every push/PR, and the full
+# Playwright task/Core-Web-Vitals layer nightly + on demand. The suite writes
+# a JSON report and the observability DB; the job fails only on a hard FAIL.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: usability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Self-test the grader (offline)
+        run: python3 scripts/usability-suite.py --self-test
+      - name: Serve a fixture store and run the static screen
+        run: |
+          rm -f data/opencode
+          mkdir -p data/opencode
+          ./scripts/test-fixture-db.sh --out data/opencode/opencode.db
+          node --experimental-sqlite scripts/dashboard.mjs data/opencode/opencode.db 5099 127.0.0.1 &
+          echo $! > /tmp/dashboard.pid
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:5099/ >/dev/null && break
+            sleep 0.5
+          done
+          python3 scripts/usability-suite.py --static-only --base http://127.0.0.1:5099 --json > usability-static.json
+          kill "$(cat /tmp/dashboard.pid)" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usability-static
+          path: usability-static.json
+          if-no-files-found: warn
+
+  browser:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright + axe-core
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+          npm install --no-save axe-core
+      - name: Serve a fixture store and run the full layer
+        run: |
+          rm -f data/opencode
+          mkdir -p data/opencode
+          ./scripts/test-fixture-db.sh --out data/opencode/opencode.db
+          node --experimental-sqlite scripts/dashboard.mjs data/opencode/opencode.db 5099 127.0.0.1 &
+          echo $! > /tmp/dashboard.pid
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:5099/ >/dev/null && break
+            sleep 0.5
+          done
+          python3 scripts/usability-suite.py --browser --axe --base http://127.0.0.1:5099 --json > usability-browser.json
+          kill "$(cat /tmp/dashboard.pid)" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usability-browser
+          path: |
+            usability-browser.json
+            data/observability/usability.json
+          if-no-files-found: warn

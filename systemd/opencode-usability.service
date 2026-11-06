@@ -1,0 +1,18 @@
+[Unit]
+Description=opencode usability screen (static WCAG/reachability; ledger-logged)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/usability-install.sh (no sudo needed).
+# The static layer needs no browser: it fetches the served pages and runs
+# a11y-audit.mjs. Use scripts/usability-install.sh --full for the Playwright
+# layer (tasks + Core Web Vitals + keyboard/reflow).
+EnvironmentFile=-__REPO__/.env.local
+ExecStart=__REPO__/scripts/usability-suite.py --static-only --base http://127.0.0.1:5099
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=50%
+NoNewPrivileges=true

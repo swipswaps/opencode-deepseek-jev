@@ -1328,5 +1328,122 @@
       "./scripts/rotate-opencode-token.sh --no-smoke",
       "./scripts/rotate-opencode-token.sh --self-test"
     ]
+  },
+  {
+    "id": "issue-benchmark",
+    "title": "Benchmark security, stalls, and the tunnel link",
+    "where": "container",
+    "purpose": "One repeatable measurement of the issues claimed fixed: posture pass/fail, guard/injection counts, running/blank tools, over-budget sessions, and the newest tunnel probe. Writes issue_bench history + benchmark.json; the dashboard shows it at /api/benchmark and /graph. A source it cannot read is SKIP, never PASS.",
+    "commands": [
+      "./scripts/issue-benchmark.py --run",
+      "./scripts/issue-benchmark.py --json",
+      "./scripts/issue-benchmark.py --history 20",
+      "./scripts/issue-benchmark.py --self-test"
+    ]
+  },
+  {
+    "id": "choice-gate",
+    "title": "Turn a blocking human decision into an explicit choice",
+    "where": "container",
+    "purpose": "Most 'human' turns only needed a decision. Reads scripts/choices.json, shows the recommended option, auto-runs safe script options, prints exact commands for browser-only steps, and records the selection in choices.json + the ledger. The dashboard serves the same list at /api/choices.",
+    "commands": [
+      "./scripts/choice-gate.py",
+      "./scripts/choice-gate.py --apply browser-tabs=open-tabs",
+      "./scripts/choice-gate.py --auto",
+      "./scripts/choice-gate.py --self-test"
+    ]
+  },
+  {
+    "id": "pulse",
+    "title": "One-screen project pulse (truth, decisions, next action)",
+    "where": "container",
+    "purpose": "Abstracts next-action + issue-benchmark + choice-gate into one headline, score row, attention list, and next automatic command. Writes pulse.json; the dashboard home panel and /api/pulse read the same document.",
+    "commands": [
+      "./scripts/pulse.py",
+      "./scripts/pulse.py --refresh --json",
+      "./scripts/pulse.py --open",
+      "./scripts/pulse.py --self-test"
+    ]
+  },
+  {
+    "id": "project-graph",
+    "title": "Editable 3D project graph (real repo data)",
+    "where": "host",
+    "purpose": "A selectable, draggable 3D force graph of tools, runbooks, APIs, files, stores, metrics, decisions, and external issues. Positions/labels/notes/edges persist to observability.db.graph_edit; export is JSON. No synthetic nodes.",
+    "commands": [
+      "xdg-open http://127.0.0.1:5099/graph",
+      "curl -s http://127.0.0.1:5099/api/graph"
+    ]
+  },
+  {
+    "id": "usability-suite",
+    "title": "Cited usability screen: tasks, WCAG, CWV, keyboard, reflow",
+    "where": "host",
+    "purpose": "Operationalises ISO 9241-11 (effectiveness/efficiency/satisfaction), WCAG 2.2 A/AA automated subset, Core Web Vitals lab probes, target size, keyboard navigation, reflow at 320px, and reduced motion. Static layer needs no browser; Playwright layer adds scripted tasks + CWV. Writes usability_run/usability_result + usability.json; SKIP is not PASS.",
+    "commands": [
+      "./scripts/usability-suite.py --self-test",
+      "./scripts/usability-suite.py --static-only --base http://127.0.0.1:5099",
+      "./scripts/usability-suite.py --browser --axe",
+      "./scripts/usability-suite.py --sus-file logs/sus.json"
+    ]
+  },
+  {
+    "id": "usability-install",
+    "title": "Arm the always-testing usability timer",
+    "where": "host",
+    "purpose": "Installs a user-level systemd timer that runs the static usability screen every 30 minutes (or the full Playwright layer with --full), with an exclusive run lock so browsers never stack. No sudo.",
+    "commands": [
+      "./scripts/usability-install.sh",
+      "./scripts/usability-install.sh --full",
+      "./scripts/usability-install.sh --self-test",
+      "./scripts/usability-install.sh --uninstall"
+    ]
+  },
+  {
+    "id": "usability-guided",
+    "title": "Guided human usability session (or import the in-app one)",
+    "where": "host",
+    "purpose": "Reads the shared scripts/usability-tasks.json. --interactive runs a facilitator-led session in the terminal (per-task timer, success/fail, difficulty, note, 10 SUS items); --import ingests the JSON submitted by /usability. Persists usability_guided + usability-guided.json. Never fabricates human data.",
+    "commands": [
+      "./scripts/usability-guided.py --tasks",
+      "./scripts/usability-guided.py --interactive --participant p1",
+      "./scripts/usability-guided.py --import logs/guided.json",
+      "./scripts/usability-guided.py --self-test"
+    ]
+  },
+  {
+    "id": "usability-guide",
+    "title": "Facilitator guide that opens each task page",
+    "where": "host",
+    "purpose": "Wraps usability-guided.py --guide: opens each task URL with xdg-open, an already-open CDP browser, headed Playwright, or Selenium (fallback: print), then records success/time/difficulty/note/SUS. Use the in-app /usability runner when no browser driver is available.",
+    "commands": [
+      "./scripts/usability-guide.sh --opener auto",
+      "./scripts/usability-guide.sh --opener xdg",
+      "./scripts/usability-guide.sh --opener playwright",
+      "./scripts/usability-guide.sh --self-test"
+    ]
+  },
+  {
+    "id": "closeout-gate",
+    "title": "Answer the completion questions before declaring done",
+    "where": "container",
+    "purpose": "RULES #93: verifies command root, web/dist freshness, served==HEAD + /api/usability/tasks, last-gate freshness, a NEW guided session after the UI change, tracked tool/runbook scripts, and the citation log. Exit 1 = not done; a deferral needs a reason and is recorded in closeout.json.",
+    "commands": [
+      "./scripts/closeout-gate.py --check",
+      "./scripts/closeout-gate.py --ask",
+      "./scripts/closeout-gate.py --answer retest=defer --reason \"waiting on operator\"",
+      "./scripts/closeout-gate.py --self-test"
+    ]
+  },
+  {
+    "id": "web-build-restart",
+    "title": "Build the MUI app and restart from the repo root",
+    "where": "host",
+    "purpose": "Removes the `cd web && ./scripts/web-restart.sh` path error: builds in web/, runs scripts/web-restart.sh from the repo root, then verifies /app/ 200, served==HEAD, /api/usability/tasks 200, and that the served asset hash is the built one.",
+    "commands": [
+      "./scripts/web-build-restart.sh",
+      "./scripts/web-build-restart.sh --dry-run",
+      "./scripts/web-build-restart.sh --self-test"
+    ]
   }
 ]

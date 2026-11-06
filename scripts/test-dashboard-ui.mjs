@@ -12,7 +12,7 @@ import vm from "node:vm";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5099";
 const MODE = process.argv[3] || "home";
-const PATH = MODE === "explore" ? "/explore" : "/";
+const PATH = MODE === "explore" ? "/explore" : MODE === "graph" ? "/graph" : MODE === "usability" ? "/usability" : "/";
 
 class El {
   constructor(tag) {
@@ -35,6 +35,10 @@ class El {
   addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }
   setAttribute(k, v) { this.attrs[k] = v; }
   getAttribute(k) { return this.attrs[k]; }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 640, height: 400, right: 640, bottom: 400 }; }
+  getContext() { return makeStub(); }
+  setPointerCapture() {}
+  releasePointerCapture() {}
   querySelector() { return null; }
   querySelectorAll() { return []; }
   closest() { return null; }
@@ -117,6 +121,7 @@ async function main() {
     console, navigator: {},
     setTimeout, clearTimeout,
     setInterval: (fn) => { timers.push(fn); return timers.length; },
+    requestAnimationFrame: (fn) => { timers.push(fn); return timers.length; },
     clearInterval: noop,
     Date, JSON, Math, Number, String, Boolean, Object, Array, Promise, RegExp,
     encodeURIComponent, decodeURIComponent, URLSearchParams,
@@ -125,6 +130,12 @@ async function main() {
   };
   if (MODE === "explore") sandbox.d3 = makeStub();
   if (MODE === "explore") sandbox.Plot = makeStub();
+  if (MODE === "graph") {
+    sandbox.requestAnimationFrame = () => 0; // draw loop is browser-only; never reschedule in the shim
+    sandbox.confirm = () => false;
+    sandbox.URL = URL;
+    sandbox.Blob = Blob;
+  }
 
   try {
     vm.createContext(sandbox);
@@ -145,6 +156,34 @@ async function main() {
       fail("explore: #tabs click handler not wired (id present?)");
     }
     console.log("PASS explore: inline script executes and #tabs is wired (d3 stubbed)");
+    process.exit(0);
+  }
+
+  if (MODE === "graph") {
+    await new Promise((r) => setTimeout(r, 700));
+    const cv = getEl("cv");
+    if (!cv || !cv.listeners.pointerdown || !cv.listeners.pointerdown.length) {
+      fail("graph: canvas pointer handlers not wired");
+    }
+    const side = getEl("side-body");
+    if (!side || !side._html) fail("graph: side panel did not render");
+    const status = getEl("status");
+    if (!status || !/nodes/.test(status._text || "")) fail("graph: load status not set: " + (status && status._text));
+    console.log("PASS graph: inline script executes, canvas wired, graph loaded");
+    process.exit(0);
+  }
+
+  if (MODE === "usability") {
+    const st = getEl("u-status");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 5000 && (!st._text || /^loading/.test(st._text))) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (!/task/.test(st._text || "")) fail("usability: task status not set: " + (st && st._text));
+    if (typeof getEl("u-start").onclick !== "function") fail("usability: start handler not wired");
+    const auto = getEl("auto-body");
+    if (!auto || !auto._html) fail("usability: automated evidence did not render");
+    console.log("PASS usability: script executes, tasks load, guided start is wired");
     process.exit(0);
   }
 

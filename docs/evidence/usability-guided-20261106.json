@@ -1,0 +1,56 @@
+{
+  "participant": "operator-2026-11-06",
+  "notes": "Chat-guided session on the MUI app (rev 56fd53d). Findings: the MUI view has no Project pulse card; /app/explore, /app/runbooks, /app/models and /app/docs returned not found; the graph task failed. These failures are the baseline for the fix and retest.",
+  "sus": null,
+  "tasks": [
+    {
+      "id": "pulse",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "Participant: 'user sees no Project pulse card' in the MUI app."
+    },
+    {
+      "id": "search",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "Participant pasted the MUI overview content and asked '?': the Search affordance from the task script was not found in /app/."
+    },
+    {
+      "id": "graph-select",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "Failed."
+    },
+    {
+      "id": "explore-signals",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "https://10.100.0.24:5099/app/explore -> not found."
+    },
+    {
+      "id": "runbooks-filter",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "https://10.100.0.24:5099/app/runbooks -> not found."
+    },
+    {
+      "id": "models",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "https://10.100.0.24:5099/app/models -> not found."
+    },
+    {
+      "id": "docs-rules",
+      "success": false,
+      "duration_s": null,
+      "difficulty": null,
+      "note": "https://10.100.0.24:5099/app/docs -> not found."
+    }
+  ]
+}

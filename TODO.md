@@ -8,6 +8,19 @@ Last updated: 2026-11-05
 
 ## Done (most recent first)
 
+- [x] **UX-8 — 2026-11-06.** Added `usability-suite.py` (ISO 9241-11
+      tasks, WCAG automated subset, CWV lab, target/keyboard/reflow/reduced
+      motion, optional axe/SUS), a 30-minute timer installer, a CI workflow,
+      and the `/usability` guided human runner (+ `usability-guided.py`).
+      Added `/app/#usability` + MUI pulse, `/app/<legacy>` redirects, guide,
+      and RULES #93 closeout gate (BLOCKED on the post-fix retest).
+
+- [x] **STATUS-1 — 2026-11-06.** Added `issue-benchmark.py` (real
+      security/stall/tunnel metrics → `issue_bench` + `benchmark.json`),
+      `choice-gate.py` (+ `choices.json`) for the human-only residuals,
+      `pulse.py` (one status screen), and the editable `/graph` page
+      (`graph_edit` persistence). Map: `docs/STATUS-AUTOMATION.md`.
+
 - [x] **DOCS-2 / SEC-4 — 2026-11-05.** Archived older HANDOFF PINs and TODO
       Done entries to restore tier-1 to **33,873 / 35,000**. Added a
       deterministic `permission` policy (deny secret/cert reads and

@@ -1,0 +1,67 @@
+{
+  "$comment": "Guided usability test script. Each task is a goal, not a click path: the facilitator reads the instruction, the participant uses the UI, and success is judged against the criterion. Shared by scripts/usability-guided.py and the /usability page.",
+  "version": 1,
+  "tasks": [
+    {
+      "id": "pulse",
+      "path": "/",
+      "title": "Read the project pulse",
+      "instruction": "Open the dashboard. Find the Project pulse card and read the headline, the three scores, and the number of pending decisions.",
+      "success": "You can state the headline and the security / stalls / tunnel scores."
+    },
+    {
+      "id": "search",
+      "path": "/",
+      "title": "Find a session",
+      "instruction": "In Search, type 'session' and open the first result (or read its title and cost).",
+      "success": "A search result appears and you can name the session you found."
+    },
+    {
+      "id": "graph-select",
+      "path": "/graph",
+      "title": "Select and inspect a graph node",
+      "instruction": "Open Graph. Select any node (click, or Tab to the canvas then press n) and read its side panel.",
+      "success": "The side panel shows the node id/type and at least one real field."
+    },
+    {
+      "id": "explore-signals",
+      "path": "/explore",
+      "title": "Open stall signals",
+      "instruction": "Open Explore, choose the signals tab, and find the session-health panel.",
+      "success": "The signals pane is visible and you can name a finding or say there are none."
+    },
+    {
+      "id": "runbooks-filter",
+      "path": "/runbooks",
+      "title": "Find a host-only procedure",
+      "instruction": "Open Runbooks, filter to host only, and open one procedure.",
+      "success": "A host procedure is visible and you can name it."
+    },
+    {
+      "id": "models",
+      "path": "/models",
+      "title": "Check the model policy",
+      "instruction": "Open Models and find the ALLOW / ASK / BLOCK verdict for the current model.",
+      "success": "You can name the current model and its verdict."
+    },
+    {
+      "id": "docs-rules",
+      "path": "/docs",
+      "title": "Read a rule",
+      "instruction": "Open Docs, select RULES.md, and find the substitution for the blacklist.",
+      "success": "The rule text is visible and you can name one substitution."
+    }
+  ],
+  "sus_items": [
+    "I think that I would like to use this system frequently.",
+    "I found the system unnecessarily complex.",
+    "I thought the system was easy to use.",
+    "I think that I would need the support of a technical person to be able to use this system.",
+    "I found the various functions in this system were well integrated.",
+    "I thought there was too much inconsistency in this system.",
+    "I would imagine that most people would learn to use this system very quickly.",
+    "I found the system very cumbersome to use.",
+    "I felt very confident using the system.",
+    "I needed to learn a lot of things before I could get going with this system."
+  ]
+}

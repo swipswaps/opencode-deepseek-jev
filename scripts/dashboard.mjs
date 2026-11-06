@@ -19,7 +19,7 @@ import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
@@ -93,8 +93,8 @@ const APP_MANIFEST = {
   categories: ["developer", "productivity"],
   icons: PWA_MANIFEST.icons
 };
-const SW_JS = `const CACHE="ocdash-v2";
-const SHELL=["/","/app/","/vendor/d3.min.js","/vendor/plot.umd.min.js","/icon-192.png","/icon-512.png"];
+const SW_JS = `const CACHE="ocdash-v3";
+const SHELL=["/","/graph","/app/","/vendor/d3.min.js","/vendor/plot.umd.min.js","/icon-192.png","/icon-512.png"];
 self.addEventListener("install",(e)=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then((c)=>Promise.all(SHELL.map((u)=>c.add(u).catch(()=>{})))));});
 self.addEventListener("activate",(e)=>{e.waitUntil(caches.keys().then((ks)=>Promise.all(ks.filter((k)=>k!==CACHE).map((k)=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener("fetch",(e)=>{const r=e.request;if(r.method!=="GET")return;const u=new URL(r.url);if(u.origin!==self.location.origin||u.pathname.startsWith("/api/"))return;
@@ -129,7 +129,7 @@ const CMDK_CSS =
   ".cmdk-item .muted{font-size:11px}" +
   ".cmdk-item.active{background:#1f6feb33}" +
   ".cmdk-empty{padding:12px 10px;color:#8b949e;font-size:13px}";
-const NAV_ITEMS = [["/", "dashboard"], ["/explore", "explore"], ["/app/", "app"], ["/models", "models"],
+const NAV_ITEMS = [["/", "dashboard"], ["/usability", "usability"], ["/graph", "graph"], ["/explore", "explore"], ["/app/", "app"], ["/models", "models"],
                    ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
                    ["/api/export", "csv"]];
 
@@ -214,7 +214,7 @@ function nav(active) {
 }
 
 // Docs reachable from the UI. Whitelisted — never read arbitrary paths.
-const DOC_FILES = ["HANDOFF.md", "RULES.md", "README.md", "scripts/README.txt", "HANDOFF-PROMPT.txt"];
+const DOC_FILES = ["HANDOFF.md", "RULES.md", "README.md", "scripts/README.txt", "HANDOFF-PROMPT.txt", "docs/USABILITY-TESTING.md", "docs/STATUS-AUTOMATION.md"];
 function apiDoc(name) {
   if (!DOC_FILES.includes(name)) return null;
   try {
@@ -258,6 +258,439 @@ function apiCode(limit) {
   } catch {
     return { available: false, files: [], flags: [] };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Project graph: real, selectable and editable. Nodes come from the repo's own
+// catalogs and stores (tools/runbooks JSON, code.db, observability tables,
+// benchmark/choices/pulse snapshots) - never synthetic data. Edits (position,
+// label, note, hide, add/remove edge) persist in observability.db.graph_edit.
+// ---------------------------------------------------------------------------
+function readJsonRel(rel) {
+  try {
+    return JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function graphEditRows() {
+  let db;
+  try {
+    db = new DatabaseSync(OBS_DB_PATH, { readOnly: true });
+    const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_edit'").get();
+    if (!has) { db.close(); return []; }
+    const rows = db.prepare("SELECT id, ts, action, node, source, target, payload FROM graph_edit ORDER BY id").all();
+    db.close();
+    return rows;
+  } catch {
+    try { if (db) db.close(); } catch { /* ignore */ }
+    return [];
+  }
+}
+
+function applyGraphEdits(nodes, links) {
+  const seen = new Set(links.map((l) => l.source + "|" + l.target + "|" + l.kind));
+  let applied = 0;
+  for (const row of graphEditRows()) {
+    let payload = {};
+    try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
+    const a = String(row.action || "");
+    if (a === "pos") {
+      const n = nodes.get(row.node);
+      if (n) {
+        n.x = Number(payload.x); n.y = Number(payload.y); n.z = Number(payload.z);
+        n.pinned = true; n.user = true; applied++;
+      }
+    } else if (a === "label") {
+      const n = nodes.get(row.node);
+      if (n && payload.label) { n.label = String(payload.label).slice(0, 120); n.user = true; applied++; }
+    } else if (a === "note") {
+      const n = nodes.get(row.node);
+      if (n) { n.note = String(payload.note || "").slice(0, 2000); n.user = true; applied++; }
+    } else if (a === "hidden") {
+      const n = nodes.get(row.node);
+      if (n) { n.hidden = !!payload.hidden; n.user = true; applied++; }
+    } else if (a === "edge_add") {
+      const s = nodes.get(row.source), t = nodes.get(row.target);
+      const k = row.source + "|" + row.target + "|user";
+      if (s && t && !seen.has(k)) { links.push({ source: row.source, target: row.target, kind: "user", w: 2 }); seen.add(k); applied++; }
+    } else if (a === "edge_del") {
+      for (let i = links.length - 1; i >= 0; i--) {
+        if (links[i].source === row.source && links[i].target === row.target) { links.splice(i, 1); applied++; }
+      }
+    }
+  }
+  return applied;
+}
+
+const GRAPH_AREAS = ["security", "stalls", "tunnel", "usability", "automation", "observability", "code"];
+const API_ROUTES = [
+  "/api/cost", "/api/balance", "/api/activity", "/api/todos", "/api/sessions", "/api/session",
+  "/api/parts", "/api/search", "/api/semantic", "/api/overview", "/api/trends", "/api/schema",
+  "/api/integrations", "/api/ab", "/api/ocr", "/api/duplicates", "/api/signals", "/api/guard",
+  "/api/health", "/api/ops", "/api/patterns", "/api/solutions", "/api/code", "/api/board",
+  "/api/models", "/api/tools", "/api/runbooks", "/api/providers", "/api/benchmark",
+  "/api/choices", "/api/pulse", "/api/graph",
+];
+const API_TABLE = {
+  "/api/sessions": "session", "/api/session": "session", "/api/cost": "session", "/api/overview": "session",
+  "/api/trends": "session", "/api/todos": "todo", "/api/board": "todo", "/api/health": "part",
+  "/api/signals": "part", "/api/patterns": "part", "/api/activity": "part", "/api/parts": "part",
+  "/api/search": "part", "/api/semantic": "part", "/api/integrations": "part", "/api/duplicates": "session",
+  "/api/benchmark": "issue_bench", "/api/graph": "graph_edit",
+};
+
+function apiGraph() {
+  const nodes = new Map();
+  const links = [];
+  const seen = new Set();
+  const add = (id, label, type, group, extra = {}) => {
+    if (!id || nodes.has(id)) return nodes.get(id);
+    const n = { id, label: String(label || id), type, group, ...extra };
+    nodes.set(id, n);
+    return n;
+  };
+  const link = (s, t, kind = "ref", w = 1) => {
+    if (!s || !t || s === t) return;
+    const k = s + "|" + t + "|" + kind;
+    if (seen.has(k)) return;
+    seen.add(k);
+    links.push({ source: s, target: t, kind, w });
+  };
+
+  for (const a of GRAPH_AREAS) add("area:" + a, a, "area", "control");
+
+  const b = readJsonRel("../data/observability/benchmark.json") || {};
+  for (const m of b.metrics || []) {
+    const area = String(m.area || "observability");
+    if (!GRAPH_AREAS.includes(area)) add("area:" + area, area, "area", "control");
+    const id = "metric:" + area + "/" + m.metric;
+    add(id, m.metric, "metric", "control", {
+      area, value: m.value, unit: m.unit, verdict: m.verdict, note: m.detail, scored: m.scored !== false,
+    });
+    link(id, "area:" + area, "measures");
+  }
+
+  const choicesCfg = readJsonRel("../scripts/choices.json");
+  const choicesState = readJsonRel("../data/observability/choices.json") || {};
+  const decided = choicesState.choices || {};
+  for (const c of (choicesCfg && choicesCfg.choices) || []) {
+    const id = "choice:" + c.id;
+    const area = /tunnel/.test(c.id) ? "tunnel" : "security";
+    const st = decided[c.id] || {};
+    add(id, c.id, "choice", "control", {
+      question: c.question, recommended: c.recommended, selected: st.selected || null,
+      status: st.status || "pending", note: c.why,
+    });
+    link(id, "area:" + area, "decides");
+  }
+
+  const usability = readJsonRel("../data/observability/usability.json") || {};
+  if (usability && usability.axes) {
+    const uid = "usability:last";
+    add(uid, "usability run", "metric", "control", {
+      verdict: usability.verdict || "SKIP", mode: usability.mode || "?",
+      value: usability.fail_count, unit: "failures", note: usability.caveat || "",
+    });
+    link(uid, "area:usability", "measures");
+    for (const axis of Object.keys(usability.axes)) {
+      const d = usability.axes[axis] || {};
+      const id = "usability:" + axis;
+      add(id, axis, "metric", "control", {
+        verdict: (d.fail ? "FAIL" : (d.pass ? "PASS" : "SKIP")),
+        value: d.score, unit: "score", note: "pass=" + d.pass + " fail=" + d.fail + " skip=" + d.skip,
+      });
+      link(id, "area:usability", "measures");
+    }
+  }
+
+  const pulse = readJsonRel("../data/observability/pulse.json") || {};
+  for (const e of pulse.external || []) {
+    const id = "issue:" + e.resource;
+    add(id, e.resource, "issue", "external", { state: e.state, note: "observed " + (e.ts || "") });
+    link(id, "area:tunnel", "watches");
+  }
+
+  for (const [list, kind] of [[RUNBOOKS, "runbook"], [TOOLS, "tool"]]) {
+    for (const r of list || []) {
+      if (!r || !r.id) continue;
+      const id = kind + ":" + r.id;
+      add(id, r.id, kind, "procedure", { where: r.where || "", note: r.purpose || "" });
+      link(id, kind === "tool" ? "area:automation" : "area:observability", "belongs");
+      const cmds = r.commands || [];
+      for (const cmd of cmds) {
+        const re = /scripts\/[A-Za-z0-9_./-]+\.(?:sh|py|mjs)/g;
+        let m;
+        while ((m = re.exec(String(cmd))) !== null) {
+          const p = m[0];
+          if (!existsSync(REPO_ROOT + p)) continue;
+          add("file:" + p, p.split("/").pop(), "file", "code", { path: p });
+          link(id, "file:" + p, "runs");
+        }
+      }
+    }
+  }
+
+  try {
+    const db = new DatabaseSync(CODE_DB_PATH, { readOnly: true });
+    const files = db.prepare("SELECT path, ext, bytes, lines, flags_n FROM code ORDER BY flags_n DESC, bytes DESC LIMIT 140").all();
+    const flags = db.prepare("SELECT name, COUNT(*) n FROM code_flag GROUP BY name ORDER BY n DESC").all();
+    db.close();
+    for (const f of files) {
+      const id = "file:" + f.path;
+      add(id, String(f.path).split("/").pop(), "file", "code", {
+        path: f.path, ext: f.ext, bytes: f.bytes, lines: f.lines, flags_n: f.flags_n,
+      });
+      if (Number(f.flags_n) > 0) link(id, "area:code", "flagged", 1);
+    }
+    for (const fl of flags) {
+      const id = "flag:" + fl.name;
+      add(id, fl.name, "flag", "code", { count: fl.n });
+    }
+    try {
+      const db2 = new DatabaseSync(CODE_DB_PATH, { readOnly: true });
+      const refs = db2.prepare("SELECT path, name FROM code_flag LIMIT 400").all();
+      db2.close();
+      for (const r of refs) {
+        if (nodes.has("file:" + r.path) && nodes.has("flag:" + r.name)) link("file:" + r.path, "flag:" + r.name, "contains");
+      }
+    } catch { /* flags are optional detail */ }
+  } catch {
+    add("store:code.db", "code.db", "store", "data", { note: "code index unavailable" });
+  }
+
+  for (const route of API_ROUTES) {
+    const id = "api:" + route;
+    add(id, route.replace("/api/", ""), "api", "surface", { route });
+    link(id, "area:observability", "serves");
+    const table = API_TABLE[route];
+    if (table) link(id, "store:observability." + table, "reads");
+  }
+
+  try {
+    const db = new DatabaseSync(OBS_DB_PATH, { readOnly: true });
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+    const small = new Set(["ledger", "ab_run", "ocr_run", "decision_route", "issue_bench", "graph_edit"]);
+    for (const t of tables) {
+      let rows = null;
+      if (small.has(t.name)) {
+        try { rows = db.prepare('SELECT COUNT(*) c FROM "' + t.name + '"').get().c; } catch { rows = null; }
+      }
+      const id = "store:observability." + t.name;
+      add(id, t.name, "store", "data", { rows, db: "observability.db", table: t.name });
+      link(id, "area:observability", "stored");
+    }
+    try {
+      const ev = db.prepare(
+        "SELECT type, COUNT(*) n FROM ledger WHERE ts >= datetime('now','-7 day') GROUP BY type ORDER BY n DESC LIMIT 14"
+      ).all();
+      for (const e of ev) {
+        const id = "event:" + e.type;
+        add(id, e.type, "event", "telemetry", { count: e.n });
+        link(id, "store:observability.ledger", "recorded");
+      }
+    } catch { /* ledger optional */ }
+    db.close();
+  } catch {
+    add("store:observability.db", "observability.db", "store", "data", { note: "unavailable" });
+  }
+
+  try {
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    add("store:opencode.db", "opencode.db", "store", "data", { db: "opencode.db", note: "session store (read-only)" });
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+    for (const t of tables) {
+      const id = "store:opencode." + t.name;
+      add(id, t.name, "store", "data", { db: "opencode.db", table: t.name });
+      link(id, "store:opencode.db", "part-of");
+    }
+    db.close();
+  } catch { /* the store may be absent in a fixture */ }
+
+  if (existsSync(UX_DB_PATH)) {
+    add("store:ux.db", "ux.db", "store", "data", { db: "ux.db", note: "UX trace corpus" });
+    link("store:ux.db", "area:observability", "stored");
+  }
+
+  const finalLinks = links.filter((l) => nodes.has(l.source) && nodes.has(l.target));
+  const applied = applyGraphEdits(nodes, finalLinks);
+  return {
+    ts: new Date().toISOString(),
+    rev: SERVED_REV,
+    nodes: [...nodes.values()],
+    links: finalLinks,
+    areas: GRAPH_AREAS,
+    edits_applied: applied,
+    sources: ["scripts/tools.json", "scripts/runbooks.json", "scripts/choices.json",
+              "data/observability/{benchmark,choices,pulse}.json", "code.db", "observability.db", "opencode.db"],
+    editable: ["pos", "label", "note", "hidden", "edge_add", "edge_del", "reset"],
+  };
+}
+
+function graphIdOk(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= 200 && /^[A-Za-z0-9_./:#-]+$/.test(v);
+}
+
+function apiGraphEdit(doc) {
+  const action = String((doc && doc.action) || "");
+  const allowed = new Set(["pos", "label", "note", "hidden", "edge_add", "edge_del", "reset"]);
+  if (!allowed.has(action)) return { ok: false, error: "unknown action" };
+  const node = String((doc && doc.node) || "");
+  const source = String((doc && doc.source) || "");
+  const target = String((doc && doc.target) || "");
+  if (action === "pos" || action === "label" || action === "note" || action === "hidden") {
+    if (!graphIdOk(node)) return { ok: false, error: "invalid node id" };
+  }
+  if (action === "edge_add" || action === "edge_del") {
+    if (!graphIdOk(source) || !graphIdOk(target)) return { ok: false, error: "invalid edge ids" };
+  }
+  let payload = {};
+  if (action === "pos") {
+    const clamp = (v) => Math.max(-10000, Math.min(10000, Number(v) || 0));
+    payload = { x: clamp(doc.x), y: clamp(doc.y), z: clamp(doc.z) };
+  } else if (action === "label") {
+    payload = { label: String(doc.label || "").slice(0, 120) };
+  } else if (action === "note") {
+    payload = { note: String(doc.note || "").slice(0, 2000) };
+  } else if (action === "hidden") {
+    payload = { hidden: !!doc.hidden };
+  }
+  let db;
+  try {
+    db = new DatabaseSync(OBS_DB_PATH);
+    db.exec("PRAGMA busy_timeout=3000");
+    db.exec("CREATE TABLE IF NOT EXISTS graph_edit(id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, action TEXT, node TEXT, source TEXT, target TEXT, payload TEXT)");
+    if (action === "reset") {
+      db.exec("DELETE FROM graph_edit");
+    } else {
+      db.prepare("INSERT INTO graph_edit(ts,action,node,source,target,payload) VALUES(?,?,?,?,?,?)")
+        .run(new Date().toISOString(), action, node, source, target, JSON.stringify(payload));
+    }
+    db.close();
+    return { ok: true, action, node: node || null, edits_applied: graphEditRows().length };
+  } catch (e) {
+    try { if (db) db.close(); } catch { /* ignore */ }
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// --- guided usability sessions (human data; never fabricated) --------------
+function apiUsabilityTasks() {
+  return readJsonRel("../scripts/usability-tasks.json") || { version: 0, tasks: [], sus_items: [] };
+}
+
+function susScore(answers) {
+  if (!Array.isArray(answers) || answers.length !== 10) return null;
+  let total = 0;
+  for (let i = 0; i < answers.length; i++) {
+    const v = Number(answers[i]);
+    if (!Number.isInteger(v) || v < 1 || v > 5) return null;
+    total += i % 2 === 0 ? v - 1 : 5 - v;
+  }
+  return Math.round(total * 2.5 * 10) / 10;
+}
+
+function guidedRows(limit = 20) {
+  let db;
+  try {
+    db = new DatabaseSync(OBS_DB_PATH, { readOnly: true });
+    const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='usability_guided'").get();
+    if (!has) { db.close(); return []; }
+    const rows = db.prepare(
+      "SELECT id,ts,rev,participant,mode,effectiveness,efficiency_s,satisfaction_sus,completed,total,notes,payload " +
+      "FROM usability_guided ORDER BY id DESC LIMIT ?").all(limit);
+    db.close();
+    return rows.map((r) => {
+      let payload = {};
+      try { payload = JSON.parse(r.payload || "{}"); } catch { payload = {}; }
+      return { ...r, tasks: payload.tasks || [], sus: payload.sus || null };
+    });
+  } catch {
+    try { if (db) db.close(); } catch { /* ignore */ }
+    return [];
+  }
+}
+
+function apiUsabilityGuidedSave(doc) {
+  const spec = apiUsabilityTasks();
+  const ids = new Set((spec.tasks || []).map((t) => t.id));
+  const input = (doc && doc.tasks) || [];
+  if (!Array.isArray(input) || !input.length) return { ok: false, error: "tasks[] required" };
+  const seen = new Set();
+  const tasks = [];
+  for (const r of input) {
+    if (!r || !ids.has(r.id)) return { ok: false, error: "unknown task id: " + (r && r.id) };
+    if (seen.has(r.id)) return { ok: false, error: "duplicate task id: " + r.id };
+    seen.add(r.id);
+    if (!(r.success === true || r.success === false || r.success === null || r.success === undefined)) {
+      return { ok: false, error: "success must be boolean or null" };
+    }
+    let dur = r.duration_s;
+    if (dur != null) {
+      dur = Number(dur);
+      if (!isFinite(dur) || dur < 0) return { ok: false, error: "duration_s invalid" };
+    } else dur = null;
+    let diff = r.difficulty == null ? null : Number(r.difficulty);
+    if (diff != null && (!Number.isInteger(diff) || diff < 1 || diff > 5)) {
+      return { ok: false, error: "difficulty must be 1..5" };
+    }
+    tasks.push({ id: r.id, success: r.success === undefined ? null : r.success,
+                 duration_s: dur, difficulty: diff, note: String(r.note || "").slice(0, 500) });
+  }
+  const sus = doc && doc.sus != null ? doc.sus : null;
+  if (sus != null && susScore(sus) == null) return { ok: false, error: "sus must be 10 integers 1..5" };
+  const done = tasks.filter((t) => t.success === true);
+  const times = done.map((t) => t.duration_s).filter((v) => typeof v === "number").sort((a, b) => a - b);
+  const median = times.length ? (times.length % 2 ? times[(times.length - 1) / 2]
+    : (times[times.length / 2 - 1] + times[times.length / 2]) / 2) : null;
+  const session = {
+    ts: new Date().toISOString(), rev: SERVED_REV,
+    participant: String((doc && doc.participant) || "anonymous").slice(0, 60),
+    mode: "human-guided", notes: String((doc && doc.notes) || "").slice(0, 1000),
+    completed: done.length, failed: tasks.filter((t) => t.success === false).length,
+    total: tasks.length,
+    effectiveness: Math.round((done.length / tasks.length) * 1000) / 1000,
+    efficiency_s: median == null ? null : Math.round(median * 1000) / 1000,
+    satisfaction_sus: sus == null ? null : susScore(sus), sus,
+    sus_threshold: 68, tasks,
+  };
+  if (doc && doc.dry_run) return { ok: true, dry_run: true, session };
+  let db;
+  try {
+    db = new DatabaseSync(OBS_DB_PATH);
+    db.exec("PRAGMA busy_timeout=3000");
+    db.exec("CREATE TABLE IF NOT EXISTS usability_guided(" +
+      "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, rev TEXT, participant TEXT, mode TEXT, " +
+      "effectiveness REAL, efficiency_s REAL, satisfaction_sus REAL, completed INTEGER, total INTEGER, " +
+      "notes TEXT, payload TEXT)");
+    const cur = db.prepare(
+      "INSERT INTO usability_guided(ts,rev,participant,mode,effectiveness,efficiency_s,satisfaction_sus," +
+      "completed,total,notes,payload) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(
+      session.ts, session.rev, session.participant, session.mode, session.effectiveness,
+      session.efficiency_s, session.satisfaction_sus, session.completed, session.total,
+      session.notes, JSON.stringify({ tasks, sus, participant: session.participant, notes: session.notes }));
+    session.id = Number(cur.lastInsertRowid);
+    db.close();
+    return { ok: true, session };
+  } catch (e) {
+    try { if (db) db.close(); } catch { /* ignore */ }
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+function readBody(req, limit = 65536) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > limit) { reject(new Error("body too large")); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
 }
 
 let revCache = { at: 0, data: null };
@@ -366,7 +799,8 @@ function apiOverview(limit, offset) {
   return ttlCached(key, CACHE_TTL_MS, () => apiOverviewFresh(limit, offset));
 }
 function apiOverviewFresh(limit, offset) {
-  return { budget: budgetUsd(), sessions: apiSessions(limit, offset) };
+  return { budget: budgetUsd(), limit: Number(limit) || 500, offset: Number(offset) || 0,
+           sessions: apiSessions(limit, offset) };
 }
 
 function apiSchema() {
@@ -981,6 +1415,8 @@ async function apiSemantic(q, limit) {
 // are a median over completed db cards — heuristic, flagged estimates.heuristic.
 const TODO_PATH = fileURLToPath(new URL("../TODO.md", import.meta.url));
 const OBS_DB_PATH = fileURLToPath(new URL("../data/observability/observability.db", import.meta.url));
+const CODE_DB_PATH = fileURLToPath(new URL("../data/observability/code.db", import.meta.url));
+const UX_DB_PATH = fileURLToPath(new URL("../data/observability/ux.db", import.meta.url));
 function apiBoardFresh() {
   let cards = [];
   try {
@@ -1243,6 +1679,7 @@ ${nav("dashboard")}
 <h1>opencode observability</h1>
 <div id="session" class="muted" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
 <div class="row" id="stats" aria-live="polite"><span class="muted" data-loading>loading...</span></div>
+<div class="card" id="pulse-card"><h2>Project pulse <span class="muted">(what is true · what needs you · next automatic)</span> <a href="/graph">open graph &gt;</a></h2><div id="pulse" aria-live="polite"><span class="muted" data-loading>loading...</span></div></div>
 <div class="card" id="activity-card"><h2>Activity timeline <span class="muted">(newest first · filter · expand · live)</span> <span class="muted" id="act-count"></span> <button class="copy" type="button" data-copy-target="timeline-data">copy JSON</button></h2>
 <div class="tl-controls" role="toolbar" aria-label="Activity filters">
  <button class="chip active" type="button" data-filter="all">All</button>
@@ -1404,6 +1841,33 @@ function renderCost(c){
   }else{failIfPristine('session','(status unavailable)');failIfPristine('stats','(cost unavailable)');failIfPristine('sessions','(sessions unavailable)');}
 }
 async function refreshCost(){ renderCost(await j('/api/cost')); }
+function renderPulse(p){
+  var el=document.getElementById('pulse');if(!el)return;
+  if(!p||!p.headline){failIfPristine('pulse','(pulse unavailable - run ./scripts/pulse.py)');return;}
+  var sc=p.scores||{},h='';
+  h+='<div style="font-size:14px;margin:2px 0 8px">'+esc(p.headline)+'</div>';
+  h+='<div class="row">';
+  var areas=['security','stalls','tunnel'];
+  for(var i=0;i<areas.length;i++){var a=areas[i],v=sc[a];var cls=v==null?'':(v>=90?'ok':v>=60?'warn':'ERR');
+    h+='<div class="stat"><b class="'+cls+'">'+(v==null?'n/a':v)+'</b><span>'+a+' score</span></div>';}
+  h+='<div class="stat"><b>'+(p.pending_choices||0)+'</b><span>decisions</span></div>';
+  var us=p.usability||{}; var uc=us.verdict==='PASS'?'ok':us.verdict==='FAIL'?'ERR':'';
+  h+='<div class="stat"><b class="'+uc+'">'+esc(us.verdict||'n/a')+'</b><span>usability</span></div>';
+  h+='</div>';
+  if(us.ts){h+='<div class="muted" style="margin-top:4px">usability '+esc(us.mode||'')+' · effectiveness '+esc(us.effectiveness==null?'n/a':us.effectiveness)+' · failures '+esc(us.fail_count||0)+' · <a href="/usability">guided test + method</a></div>';}
+  var gd=p.guided||{}; if(gd.id){h+='<div class="muted">guided session '+esc(gd.id)+' · effectiveness '+esc(gd.effectiveness==null?'n/a':gd.effectiveness)+' · SUS '+esc(gd.satisfaction_sus==null?'n/a':gd.satisfaction_sus)+'</div>';}
+  var att=(p.attention||[]).slice(0,4);
+  if(att.length){h+='<div style="margin-top:8px">';
+    for(var j=0;j<att.length;j++){var x=att[j];
+      if(x.kind==='choice'){h+='<div class="item">DECIDE <b>'+esc(x.id)+'</b> — '+esc(x.question||'');
+        h+=' <span class="muted">recommended '+esc(x.recommended||'')+'</span> <button class="copy" type="button" data-copy="'+esc(x.apply||'')+'">copy command</button></div>';}
+      else{h+='<div class="item"><span class="'+(x.level==='FAIL'?'ERR':'warn')+'">'+esc(x.level)+'</span> '+esc(x.id)+' = '+esc(x.value)+' <span class="muted">'+esc((x.detail||'').slice(0,120))+'</span></div>';}
+    }
+    h+='</div>';}
+  if(p.next){h+='<div class="muted" style="margin-top:8px">next unit: '+esc(p.next.slice(0,200))+'</div>';}
+  el.innerHTML=h;
+}
+async function refreshPulse(){ try{renderPulse(await j('/api/pulse'));}catch(e){failIfPristine('pulse','(pulse unavailable)');} }
 function renderDiagTimeline(a,shed){
   if(a)lastActivity=a;
   var el=document.getElementById('timeline');if(!el)return;
@@ -1658,6 +2122,7 @@ if(typeof EventSource!=='undefined'){
   poll(refreshCost,8000);
   poll(refreshActivity,8000);
   poll(refreshTodos,15000);
+  poll(refreshPulse,15000);
 }
 poll(refreshFlags,30000);
 poll(refreshBalance,60000);
@@ -2751,6 +3216,416 @@ function renderBoardTables(d){
 load();
 </script></body></html>`;
 
+const graphHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode graph</title>
+<style>
+ body{margin:0;padding:14px;background:#070b10;color:#e6edf3;font-family:system-ui,monospace}
+ h1{font-size:17px;margin:0 0 2px}.muted{color:#8b949e;font-size:12px}
+ .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+ .bar input{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:7px;padding:7px 9px;font-size:13px;min-width:220px}
+ .bar button{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer}
+ .bar button:hover{border-color:#58a6ff;color:#58a6ff}
+ .bar button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
+ .wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:10px;height:calc(100vh - 150px);min-height:420px}
+ #panel{position:relative;background:radial-gradient(1200px 700px at 50% 35%,#0d1a2b 0%,#070b10 68%);border:1px solid #1f2a37;border-radius:10px;overflow:hidden}
+ #cv{display:block;width:100%;height:100%;cursor:grab}
+ #cv.grabbing{cursor:grabbing}
+ #side{background:#0d1117;border:1px solid #1f2a37;border-radius:10px;padding:10px;overflow:auto;font-size:12px}
+ #side h2{font-size:12px;color:#8b949e;margin:0 0 6px}
+ #side label{display:block;color:#8b949e;margin:8px 0 3px;font-size:11px}
+ #side input,#side textarea{width:100%;box-sizing:border-box;background:#070b10;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:6px;font-size:12px}
+ #side textarea{min-height:64px;resize:vertical}
+ #side .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+ #side button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:6px 9px;font-size:11px;cursor:pointer}
+ #side button.ghost{background:#161b22;border:1px solid #30363d;color:#e6edf3}
+ #tip{position:fixed;pointer-events:none;background:#0d1117ee;border:1px solid #30363d;border-radius:7px;padding:7px 9px;font-size:11px;max-width:320px;opacity:0;z-index:40}
+ .key{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:#8b949e;margin-top:6px}
+ .key i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+ .pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10px;background:#21262d;color:#8b949e;margin-right:4px}
+ .ok{color:#7ee787}.warn{color:#d29922}.bad{color:#ff7b72}
+ #status{position:absolute;right:10px;bottom:8px;font-size:11px;color:#8b949e;background:#0d1117cc;padding:3px 8px;border-radius:6px}
+ @media(max-width:780px){.wrap{grid-template-columns:1fr;height:auto}#panel{height:62vh}#side{max-height:none}}
+ :focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
+</style></head>
+<body>
+${nav("graph")}
+<main id="main" tabindex="-1">
+<h1>Project graph <span class="muted">(real repo data · drag to orbit · click to select · double-click to connect)</span></h1>
+<div class="bar" role="toolbar" aria-label="Graph controls">
+ <input id="q" placeholder="search nodes..." aria-label="Search nodes">
+ <button id="fit" type="button">fit</button>
+ <button id="reheat" type="button">reheat</button>
+ <button id="export" type="button">export JSON</button>
+ <button id="reset" type="button">reset layout</button>
+ <span id="count" class="muted"></span>
+</div>
+<div class="wrap">
+ <div id="panel"><canvas id="cv" tabindex="0" role="img" aria-label="Editable 3D project graph. Use arrow keys to rotate, plus/minus to zoom, n/p to select a node, Enter to inspect it.">Graph visualization. Use the side panel and search box; arrow keys rotate, plus/minus zoom, n/p select nodes.</canvas><div id="status">loading graph...</div></div>
+ <aside id="side" aria-live="polite">
+   <h2 id="side-title">Select a node</h2>
+   <div id="side-body" class="muted">Click a node to inspect it. Your edits persist to observability.db.</div>
+ </aside>
+</div>
+<div class="key" id="legend"></div>
+<div id="tip" role="tooltip"></div>
+</main>
+<script>
+(function(){
+  var cv=document.getElementById('cv'), panel=document.getElementById('panel'), tip=document.getElementById('tip');
+  var statusEl=document.getElementById('status'), countEl=document.getElementById('count');
+  var q=document.getElementById('q');
+  var DATA=null, nodes=[], links=[], byId={}, sel=null, hover=null, dirty=true;
+  var rotY=0.45, rotX=-0.12, zoom=1, panX=0, panY=0;
+  var dragNode=null, orbit=null, moved=false;
+  var COLORS={area:'#f0f6fc',metric:'#79c0ff',choice:'#d2a8ff',tool:'#7ee787',runbook:'#56d364',
+    file:'#8b949e',flag:'#f0883e',api:'#58a6ff',store:'#ffa657',event:'#a5d6ff',issue:'#ff7b72'};
+  var TYPE_LABEL={area:'area',metric:'metric',choice:'decision',tool:'tool',runbook:'runbook',file:'file',
+    flag:'flag',api:'api',store:'store',event:'event',issue:'issue'};
+  var visible={area:1,metric:1,choice:1,tool:1,runbook:1,file:1,flag:1,api:1,store:1,event:1,issue:1};
+
+  function post(doc){return fetch('/api/graph/edit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(doc)}).then(function(r){return r.json();});}
+  function layer(group){return {control:0,procedure:-1,surface:1,data:2,code:3,telemetry:-2,external:-3}[group]||0;}
+  function seed(){
+    for(var i=0;i<nodes.length;i++){
+      var n=nodes[i];
+      if(typeof n.x!=='number'||isNaN(n.x)){
+        var a=i*2.399963, r=70+Math.sqrt(i)*34;
+        n.x=Math.cos(a)*r; n.y=Math.sin(a)*r*0.72; n.z=layer(n.group)*110+((i%9)-4)*7;
+      }
+      n.vx=0;n.vy=0;n.vz=0;
+    }
+    for(var k=0;k<160;k++) tick(true);
+    dirty=true;
+  }
+  function tick(force){
+    var n=nodes.length,i,j,a,b,dx,dy,dz,d2,f;
+    for(i=0;i<n;i++){a=nodes[i];if(a.pinned)continue;
+      for(j=i+1;j<n;j++){b=nodes[j];dx=a.x-b.x;dy=a.y-b.y;dz=a.z-b.z;d2=dx*dx+dy*dy+dz*dz;
+        if(d2<1)d2=1; if(d2<42000){f=2600/d2; a.vx+=dx*f;a.vy+=dy*f;a.vz+=dz*0.6*f; b.vx-=dx*f;b.vy-=dy*f;b.vz-=dz*0.6*f;}}
+    }
+    for(i=0;i<links.length;i++){var l=links[i],s=byId[l.source],t=byId[l.target];if(!s||!t)continue;
+      dx=t.x-s.x;dy=t.y-s.y;dz=t.z-s.z;var d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
+      var want=l.kind==='user'?70:95; f=(d-want)*0.0022;
+      if(!s.pinned){s.vx+=dx*f;s.vy+=dy*f;s.vz+=dz*0.4*f;}
+      if(!t.pinned){t.vx-=dx*f;t.vy-=dy*f;t.vz-=dz*0.4*f;}
+    }
+    for(i=0;i<n;i++){a=nodes[i];if(a.pinned)continue;
+      var lz=layer(a.group)*110;
+      a.vx-=a.x*0.0009; a.vy-=a.y*0.0009; a.vz+=(lz-a.z)*0.005;
+      a.vx*=0.86;a.vy*=0.86;a.vz*=0.86;
+      a.x+=a.vx;a.y+=a.vy;a.z+=a.vz;
+    }
+  }
+  function resize(){
+    var r=panel.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+    cv.width=Math.max(320,Math.round(r.width*dpr)); cv.height=Math.max(280,Math.round(r.height*dpr));
+    cv.__dpr=dpr; dirty=true;
+  }
+  function project(p){
+    var x=p.x*zoom+panX, y=p.y*zoom+panY, z=p.z*zoom;
+    var cy=Math.cos(rotY),sy=Math.sin(rotY),cx=Math.cos(rotX),sx=Math.sin(rotX);
+    var x1=x*cy-z*sy, z1=x*sy+z*cy;
+    var y1=y*cx-z1*sx, z2=y*sx+z1*cx;
+    var depth=z2+1500;
+    if(depth<80)depth=80;
+    var sc=900/depth;
+    return {x:cv.width/2+x1*sc, y:cv.height/2+y1*sc, z:depth, s:sc};
+  }
+  function radius(n){var deg=0;for(var i=0;i<links.length;i++){if(links[i].source===n.id||links[i].target===n.id)deg++;}
+    return (n.type==='area'?9:n.type==='metric'||n.type==='choice'?6:4)+Math.min(7,deg*0.35);}
+  function draw(){
+    var ctx=cv.getContext('2d'), W=cv.width, H=cv.height, dpr=cv.__dpr||1;
+    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#070b10'; ctx.fillRect(0,0,W,H);
+    var focus=sel||hover, near={};
+    if(focus){near[focus]=1;for(var i=0;i<links.length;i++){if(links[i].source===focus)near[links[i].target]=1;if(links[i].target===focus)near[links[i].source]=1;}}
+    var proj={}; for(var k=0;k<nodes.length;k++){var nd=nodes[k];if(!visible[nd.type]||nd.hidden)continue;proj[nd.id]=project(nd);}
+    ctx.lineWidth=Math.max(0.5,0.7*dpr);
+    for(var j=0;j<links.length;j++){
+      var l=links[j], ps=proj[l.source], pt=proj[l.target]; if(!ps||!pt)continue;
+      var act=focus&&(l.source===focus||l.target===focus);
+      if(focus&&!act&&!near[l.source]&&!near[l.target])continue;
+      ctx.strokeStyle=act?'#58a6ff':(l.kind==='user'?'#d2a8ff':l.kind==='measures'?'#79c0ff':l.kind==='runs'?'#7ee787':'#30363d');
+      ctx.globalAlpha=act?0.85:focus?0.22:0.34;
+      ctx.beginPath();ctx.moveTo(ps.x,ps.y);ctx.lineTo(pt.x,pt.y);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    var order=[]; for(var id in proj) order.push(id); order.sort(function(a,b){return proj[b].z-proj[a].z;});
+    for(var o=0;o<order.length;o++){
+      var nid=order[o], n2=byId[nid], p=proj[nid];
+      var isSel=sel===nid, isHov=hover===nid, dim=focus&&!isSel&&!isHov&&!near[nid];
+      var rr=radius(n2)*p.s*1.15; if(rr<1.4)rr=1.4;
+      var col=COLORS[n2.type]||'#8b949e';
+      if(isSel||isHov){ctx.shadowColor=col;ctx.shadowBlur=18*dpr;}else{ctx.shadowBlur=0;}
+      ctx.globalAlpha=dim?0.18:1;
+      ctx.fillStyle=col;ctx.beginPath();ctx.arc(p.x,p.y,rr,0,6.2832);ctx.fill();
+      if(n2.type==='area'){ctx.strokeStyle='#fff';ctx.lineWidth=1.5*dpr;ctx.stroke();}
+      ctx.shadowBlur=0;
+      if((isSel||isHov)||(n2.type==='area'&&p.s>0.55)){
+        ctx.fillStyle='#e6edf3';ctx.font=(10*dpr)+'px system-ui,monospace';
+        ctx.fillText(n2.label,p.x+rr+4,p.y+3);
+      }
+    }
+    ctx.globalAlpha=1;
+    var qv=(q.value||'').toLowerCase();
+    if(qv){ctx.fillStyle='#8b949e';ctx.font=(12*dpr)+'px system-ui,monospace';ctx.fillText('search: '+qv,12*dpr,18*dpr);}
+  }
+  function loop(){ if(dirty){draw();dirty=false;} requestAnimationFrame(loop); }
+  function findNear(mx,my){
+    var best=null,bd=1e9;
+    for(var i=0;i<nodes.length;i++){var n=nodes[i];if(n.hidden||!visible[n.type])continue;var p=project(n);
+      var rr=radius(n)*p.s*1.15+6;var dx=mx-p.x,dy=my-p.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<rr&&d<bd){bd=d;best=n;}}
+    return best;
+  }
+  function evPos(ev){var r=cv.getBoundingClientRect(),dpr=cv.__dpr||1;return {x:(ev.clientX-r.left)*dpr,y:(ev.clientY-r.top)*dpr};}
+  cv.addEventListener('pointerdown',function(ev){cv.setPointerCapture(ev.pointerId);var p=evPos(ev);var n=findNear(p.x,p.y);moved=false;
+    if(n){dragNode=n;}else{orbit={x:ev.clientX,y:ev.clientY,ry:rotY,rx:rotX};cv.classList.add('grabbing');}});
+  cv.addEventListener('pointermove',function(ev){var p=evPos(ev);
+    if(dragNode){moved=true;var pr=project(dragNode);dragNode.x+=(p.x-pr.x)/(pr.s*Math.max(0.2,zoom));dragNode.y+=(p.y-pr.y)/(pr.s*Math.max(0.2,zoom));dirty=true;}
+    else if(orbit){moved=true;rotY=orbit.ry+(ev.clientX-orbit.x)*0.008;rotX=Math.max(-1.3,Math.min(1.3,orbit.rx+(ev.clientY-orbit.y)*0.006));dirty=true;}
+    else{var h=findNear(p.x,p.y);if((h&&h.id)!==(hover&&hover.id)){hover=h;dirty=true;
+      if(h){tip.innerHTML='<b>'+esc(h.label)+'</b><br>'+TYPE_LABEL[h.type]+(h.verdict?' · '+h.verdict:'')+(h.value!==undefined?' · '+h.value+(h.unit||''):'');tip.style.opacity=1;tip.style.left=(ev.clientX+14)+'px';tip.style.top=(ev.clientY+14)+'px';}else{tip.style.opacity=0;}}}
+  });
+  cv.addEventListener('pointerup',function(ev){cv.classList.remove('grabbing');
+    if(dragNode&&moved){post({action:'pos',node:dragNode.id,x:dragNode.x,y:dragNode.y,z:dragNode.z}).then(function(){dragNode.pinned=true;statusEl.textContent='position saved';});}
+    else if(dragNode&&!moved){select(dragNode);}
+    dragNode=null;orbit=null;
+  });
+  cv.addEventListener('wheel',function(ev){ev.preventDefault();zoom*=Math.exp(-ev.deltaY*0.0012);zoom=Math.max(0.25,Math.min(4,zoom));dirty=true;},{passive:false});
+  cv.addEventListener('keydown',function(ev){
+    var order=Object.keys(byId);
+    if(ev.key==='ArrowLeft'){rotY-=0.12;dirty=true;ev.preventDefault();}
+    else if(ev.key==='ArrowRight'){rotY+=0.12;dirty=true;ev.preventDefault();}
+    else if(ev.key==='ArrowUp'){rotX=Math.max(-1.3,rotX-0.08);dirty=true;ev.preventDefault();}
+    else if(ev.key==='ArrowDown'){rotX=Math.min(1.3,rotX+0.08);dirty=true;ev.preventDefault();}
+    else if(ev.key==='+'||ev.key==='='){zoom=Math.min(4,zoom*1.1);dirty=true;ev.preventDefault();}
+    else if(ev.key==='-'){zoom=Math.max(0.25,zoom/1.1);dirty=true;ev.preventDefault();}
+    else if(ev.key==='n'||ev.key==='p'||ev.key==='Enter'){
+      if(!order.length)return;
+      var cur=sel?order.indexOf(sel):-1;
+      var next=ev.key==='p'?(cur<=0?order.length-1:cur-1):((cur+1)%order.length);
+      if(ev.key==='Enter'&&sel){renderSide();ev.preventDefault();return;}
+      select(byId[order[next]]);dirty=true;ev.preventDefault();
+    }
+  });
+  cv.addEventListener('dblclick',function(ev){var p=evPos(ev),n=findNear(p.x,p.y);if(n&&sel&&n.id!==sel){post({action:'edge_add',source:sel,target:n.id}).then(function(r){if(r.ok){statusEl.textContent='edge added';reload();}});}else if(n){select(n);}});
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+  function select(n){sel=n?n.id:null;dirty=true;renderSide();}
+  function kv(k,v){if(v===undefined||v===null||v==='')return '';return '<div><span class="muted">'+esc(k)+':</span> '+esc(v)+'</div>';}
+  function renderSide(){
+    var t=document.getElementById('side-title'), b=document.getElementById('side-body');
+    if(!sel){t.textContent='Select a node';b.innerHTML='<span class="muted">Click a node to inspect it. Double-click a second node to connect them. Edits persist to observability.db.</span>';return;}
+    var n=byId[sel];t.textContent=n.label;
+    var h='<div><span class="pill">'+TYPE_LABEL[n.type]+'</span>'+(n.group?'<span class="pill">'+esc(n.group)+'</span>':'')+(n.user?'<span class="pill">edited</span>':'')+'</div>';
+    h+=kv('id',n.id)+kv('verdict',n.verdict)+kv('value',n.value+(n.unit||''))+kv('rows',n.rows)+kv('status',n.status)+kv('recommended',n.recommended)+kv('path',n.path)+kv('route',n.route)+kv('state',n.state);
+    h+='<label for="ed-label">label</label><input id="ed-label" value="'+esc(n.label).replace(/"/g,'&quot;')+'">';
+    h+='<label for="ed-note">note</label><textarea id="ed-note">'+esc(n.note||'')+'</textarea>';
+    h+='<div class="row"><button id="ed-save" type="button">save</button><button id="ed-hide" class="ghost" type="button">'+(n.hidden?'unhide':'hide')+'</button></div>';
+    h+='<label for="ed-target">connect to node id</label><input id="ed-target" placeholder="file:scripts/pulse.py">';
+    h+='<div class="row"><button id="ed-link" class="ghost" type="button">add edge</button><button id="ed-unlink" class="ghost" type="button">remove edges</button></div>';
+    b.innerHTML=h;
+    document.getElementById('ed-save').onclick=function(){
+      var label=document.getElementById('ed-label').value, note=document.getElementById('ed-note').value;
+      post({action:'label',node:n.id,label:label}).then(function(){return post({action:'note',node:n.id,note:note});}).then(function(){n.label=label;n.note=note;n.user=true;statusEl.textContent='saved';dirty=true;renderSide();});
+    };
+    document.getElementById('ed-hide').onclick=function(){post({action:'hidden',node:n.id,hidden:!n.hidden}).then(function(){n.hidden=!n.hidden;statusEl.textContent='hidden: '+n.hidden;dirty=true;select(null);});};
+    document.getElementById('ed-link').onclick=function(){var tgt=document.getElementById('ed-target').value.trim();if(!tgt)return;post({action:'edge_add',source:n.id,target:tgt}).then(function(r){statusEl.textContent=r.ok?'edge added':'edge failed: '+r.error;if(r.ok)reload();});};
+    document.getElementById('ed-unlink').onclick=function(){post({action:'edge_del',source:n.id,target:n.id}).then(function(){statusEl.textContent='matching edges removed';reload();});};
+  }
+  function reload(){fetch('/api/graph').then(function(r){return r.json();}).then(load).catch(function(e){statusEl.textContent='graph unavailable: '+e;});}
+  function load(d){
+    DATA=d||{}; nodes=DATA.nodes||[]; links=DATA.links||[]; byId={};
+    for(var i=0;i<nodes.length;i++)byId[nodes[i].id]=nodes[i];
+    seed(); renderLegend(); renderSide(); resize(); dirty=true;
+    statusEl.textContent=nodes.length+' nodes · '+links.length+' links · '+(DATA.edits_applied||0)+' edits';
+    countEl.textContent=nodes.length+' / '+links.length;
+  }
+  function renderLegend(){
+    var el=document.getElementById('legend');var h='';
+    for(var t in TYPE_LABEL){if(!visible[t])continue;h+='<span><i style="background:'+COLORS[t]+'"></i>'+TYPE_LABEL[t]+'</span>';}
+    el.innerHTML=h;
+  }
+  q.addEventListener('input',function(){dirty=true;});
+  document.getElementById('fit').onclick=function(){zoom=1;panX=0;panY=0;rotY=0.45;rotX=-0.12;dirty=true;};
+  document.getElementById('reheat').onclick=function(){for(var i=0;i<nodes.length;i++){nodes[i].pinned=false;nodes[i].x=undefined;}seed();};
+  document.getElementById('export').onclick=function(){var blob=new Blob([JSON.stringify(DATA,null,1)],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='project-graph.json';a.click();};
+  document.getElementById('reset').onclick=function(){if(!confirm('Clear all saved graph edits?'))return;post({action:'reset'}).then(function(){statusEl.textContent='edits cleared';reload();});};
+  window.addEventListener('resize',resize);
+  // Test seam for scripts/usability-suite.py: read-only ids + select by id.
+  // It never writes; edits still go through POST /api/graph/edit.
+  window.__projectGraph={ids:function(){return Object.keys(byId);},count:function(){return nodes.length;},
+    select:function(id){if(!byId[id])return false;select(byId[id]);return true;}};
+  resize(); fetch('/api/graph').then(function(r){return r.json();}).then(load).catch(function(e){statusEl.textContent='graph unavailable: '+e;});
+  setInterval(function(){if(!dragNode&&!orbit){tick();dirty=true;}},80);
+  requestAnimationFrame(loop);
+})();
+</script></body></html>`;
+
+const usabilityHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode usability</title>
+<style>
+ body{margin:0;padding:16px;background:#0d1117;color:#e6edf3;font-family:system-ui,monospace}
+ h1{font-size:18px;margin:0 0 2px}.muted{color:#8b949e;font-size:12px}
+ .grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:12px;margin-top:10px}
+ .card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px;margin:8px 0}
+ h2{font-size:13px;color:#8b949e;margin:0 0 8px}h3{font-size:14px;margin:8px 0 4px}
+ .stat{display:inline-block;min-width:86px;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:8px;margin:4px 6px 4px 0}
+ .stat b{display:block;font-size:17px}.stat span{color:#8b949e;font-size:11px}
+ table{border-collapse:collapse;width:100%;font-size:12px}th,td{text-align:left;padding:4px 7px;border-bottom:1px solid #21262d}
+ th{color:#8b949e;font-weight:600}.num{text-align:right;font-variant-numeric:tabular-nums}
+ button{background:#1f6feb;color:#fff;border:0;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer;min-height:34px}
+ button.ghost{background:#161b22;border:1px solid #30363d;color:#e6edf3}button:disabled{opacity:.5;cursor:not-allowed}
+ input,select,textarea{background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:7px;padding:6px;font-size:12px}
+ input[type=text],textarea{width:100%;box-sizing:border-box}textarea{min-height:54px}
+ .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ .ok{color:#7ee787}.warn{color:#d29922}.bad{color:#ff7b72}
+ .item{padding:5px 0;border-bottom:1px solid #21262d;font-size:12px}
+ .pill{display:inline-block;padding:1px 7px;border-radius:999px;background:#21262d;color:#8b949e;font-size:10px;margin-right:5px}
+ #u-timer{font-size:24px;font-variant-numeric:tabular-nums;margin:8px 0}
+ #u-sus label{display:block;margin:6px 0;color:#c9d1d9;font-size:12px}
+ #u-sus select{min-width:60px}
+ .skip-link{position:absolute;left:-9999px;top:8px;background:#2ea043;color:#0d1117;padding:8px;border-radius:6px;z-index:99}
+ .skip-link:focus{left:8px}
+ :focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
+ @media(max-width:780px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body>
+${nav("usability")}
+<a class="skip-link" href="#main">Skip to main content</a>
+<main id="main" tabindex="-1">
+<h1>Usability <span class="muted">guided human test + cited automated screen</span></h1>
+<div class="muted" id="u-status" aria-live="polite">loading evidence...</div>
+<div class="grid">
+ <section class="card" id="auto-card">
+  <h2>Automated evidence <a href="/docs" class="muted">method</a></h2>
+  <div id="auto-body" aria-live="polite"><span class="muted">loading...</span></div>
+ </section>
+ <section class="card" id="guided-card">
+  <h2>Guided test <span class="muted">(one goal at a time; a human uses the app)</span></h2>
+  <div class="muted">The automated suite screens the build. This records a real session against the same task script.</div>
+  <div class="row" style="margin-top:8px">
+   <label class="muted" for="u-participant">participant</label>
+   <input id="u-participant" type="text" value="anonymous" aria-label="Participant label" style="max-width:180px">
+   <button id="u-start" type="button">Start guided test</button>
+  </div>
+  <div id="u-flow" hidden>
+   <div class="muted" id="u-progress"></div>
+   <h3 id="u-title"></h3>
+   <div id="u-goal"></div>
+   <div class="muted" id="u-success"></div>
+   <div class="row" style="margin-top:6px"><a id="u-link" href="/" target="_blank" rel="noopener">open the page</a><span class="muted" id="u-path"></span></div>
+   <div id="u-timer">0.0s</div>
+   <label class="muted" for="u-diff">difficulty</label>
+   <select id="u-diff"><option value="">n/a</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+   <label class="muted" for="u-note" style="margin-left:8px">note</label>
+   <input id="u-note" type="text" placeholder="what happened?" style="max-width:260px">
+   <div class="row" style="margin-top:8px">
+    <button id="u-done" type="button">Done</button>
+    <button id="u-fail" class="ghost" type="button">Failed</button>
+    <button id="u-skip" class="ghost" type="button">Skip</button>
+    <button id="u-next" class="ghost" type="button" hidden>Next</button>
+   </div>
+  </div>
+  <div id="u-sus" hidden>
+   <h3>SUS questionnaire <span class="muted">1 = strongly disagree, 5 = strongly agree</span></h3>
+   <div id="u-sus-items"></div>
+   <label class="muted" for="u-notes">session notes</label>
+   <textarea id="u-notes" placeholder="anything the numbers miss"></textarea>
+   <div class="row" style="margin-top:8px"><button id="u-submit" type="button">Submit session</button><span class="muted" id="u-save"></span></div>
+  </div>
+ </section>
+</div>
+<section class="card" id="history-card"><h2>Recent guided sessions</h2><div id="u-history" aria-live="polite"><span class="muted">loading...</span></div></section>
+</main>
+<script>
+(function(){
+ var SPEC={tasks:[],sus_items:[]}, AUTO=null, IDX=-1, RESULTS=[], T0=0, TIMER=null, BUSY=false;
+ var $=function(id){return document.getElementById(id);};
+ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+ function fmt(n){return n==null?'n/a':String(n);}
+ function renderAuto(d){
+  var el=$('auto-body'); if(!d||!d.verdict){el.innerHTML='<span class="muted">No automated run yet. Run ./scripts/usability-suite.py --static-only.</span>';return;}
+  var h='<div class="row"><div class="stat"><b class="'+(d.verdict==='PASS'?'ok':'bad')+'">'+esc(d.verdict)+'</b><span>verdict</span></div>';
+  h+='<div class="stat"><b>'+esc(fmt(d.effectiveness))+'</b><span>effectiveness</span></div>';
+  h+='<div class="stat"><b>'+esc(fmt(d.efficiency_s))+'</b><span>efficiency s</span></div>';
+  h+='<div class="stat"><b>'+esc(fmt(d.satisfaction_sus))+'</b><span>SUS</span></div>';
+  h+='<div class="stat"><b>'+esc(d.fail_count||0)+'</b><span>failures</span></div></div>';
+  var axes=d.axes||{}; h+='<table><tr><th>axis</th><th class="num">pass</th><th class="num">fail</th><th class="num">skip</th><th class="num">score</th></tr>';
+  for(var k in axes){var a=axes[k];h+='<tr><td>'+esc(k)+'</td><td class="num">'+esc(a.pass)+'</td><td class="num '+((a.fail?'bad':''))+'">'+esc(a.fail)+'</td><td class="num">'+esc(a.skip)+'</td><td class="num">'+esc(fmt(a.score))+'</td></tr>';}
+  h+='</table><div class="muted" style="margin-top:6px">mode '+esc(d.mode||'?')+' · '+esc(d.ts||'')+' · '+(d.caveat?esc(d.caveat):'')+'</div>';
+  var fs=(d.failures||[]); if(fs.length){h+='<div style="margin-top:8px">';for(var i=0;i<fs.length;i++){h+='<div class="item bad">FAIL '+esc(fs[i].axis)+'/'+esc(fs[i].metric)+' '+esc(fs[i].detail||'')+'</div>';}h+='</div>';}
+  el.innerHTML=h;
+ }
+ function renderHistory(rows){
+  var el=$('u-history');rows=rows||[];
+  if(!rows.length){el.innerHTML='<span class="muted">No human-guided sessions yet. Start one above.</span>';return;}
+  var h='<table><tr><th>when</th><th>participant</th><th class="num">eff</th><th class="num">time</th><th class="num">SUS</th><th class="num">tasks</th><th>mode</th></tr>';
+  for(var i=0;i<rows.length;i++){var r=rows[i];h+='<tr><td>'+esc(r.ts)+'</td><td>'+esc(r.participant)+'</td><td class="num">'+esc(fmt(r.effectiveness))+'</td><td class="num">'+esc(fmt(r.efficiency_s))+'</td><td class="num">'+esc(fmt(r.satisfaction_sus))+'</td><td class="num">'+esc(r.completed)+'/'+esc(r.total)+'</td><td>'+esc(r.mode)+'</td></tr>';}
+  el.innerHTML=h+'</table>';
+ }
+ function load(){
+  fetch('/api/usability').then(function(r){return r.json();}).then(function(d){AUTO=d;renderAuto(d);}).catch(function(){renderAuto(null);});
+  fetch('/api/usability/tasks').then(function(r){return r.json();}).then(function(d){SPEC=d||{};$('u-status').textContent=(SPEC.tasks||[]).length+' guided task(s) ready';}).catch(function(){$('u-status').textContent='task script unavailable';});
+  fetch('/api/usability/guided?limit=20').then(function(r){return r.json();}).then(function(d){renderHistory((d&&d.sessions)||[]);}).catch(function(){renderHistory([]);});
+ }
+ function showTask(){
+  var t=(SPEC.tasks||[])[IDX]; if(!t){showSus();return;}
+  $('u-flow').hidden=false; $('u-sus').hidden=true; $('u-next').hidden=true;
+  $('u-title').textContent=t.title; $('u-goal').textContent=t.instruction; $('u-success').textContent='Success: '+t.success;
+  $('u-link').href=t.path; $('u-path').textContent=t.path; $('u-progress').textContent='Task '+(IDX+1)+' of '+SPEC.tasks.length;
+  $('u-diff').value=''; $('u-note').value=''; $('u-done').disabled=false; $('u-fail').disabled=false; $('u-skip').disabled=false;
+  T0=Date.now(); $('u-timer').textContent='0.0s';
+  if(TIMER)clearInterval(TIMER);
+  TIMER=setInterval(function(){if(!BUSY)$('u-timer').textContent=((Date.now()-T0)/1000).toFixed(1)+'s';},200);
+  if(window.scrollTo)window.scrollTo(0,0);
+ }
+ function finishTask(success){
+  if(BUSY)return; BUSY=true;
+  var t=SPEC.tasks[IDX], dur=Math.round(((Date.now()-T0)/1000)*100)/100;
+  if(TIMER){clearInterval(TIMER);TIMER=null;}
+  var diff=$('u-diff').value; RESULTS.push({id:t.id,success:success,duration_s:dur,difficulty:diff?Number(diff):null,note:$('u-note').value||''});
+  $('u-done').disabled=true; $('u-fail').disabled=true; $('u-skip').disabled=true; $('u-next').hidden=false;
+  $('u-timer').textContent=dur.toFixed(1)+'s '+(success===true?'done':success===false?'failed':'skipped');
+  BUSY=false;
+ }
+ function showSus(){
+  $('u-flow').hidden=true; $('u-sus').hidden=false; $('u-save').textContent='';
+  var host=$('u-sus-items'); if(host.innerHTML)return;
+  var h='';
+  for(var i=0;i<(SPEC.sus_items||[]).length;i++){
+    h+='<label>'+esc(SPEC.sus_items[i])+' <select data-sus="'+i+'" aria-label="SUS item '+(i+1)+'">';
+    for(var v=1;v<=5;v++)h+='<option value="'+v+'">'+v+'</option>';
+    h+='</select></label>';
+  }
+  host.innerHTML=h;
+  $('u-status').textContent='All tasks recorded. Complete SUS and submit.';
+ }
+ function submit(){
+  var sus=[], sels=document.querySelectorAll('#u-sus-items select');
+  for(var i=0;i<sels.length;i++)sus.push(Number(sels[i].value));
+  if(sus.length!==10){$('u-save').textContent='SUS needs 10 answers';return;}
+  $('u-submit').disabled=true; $('u-save').textContent='saving...';
+  fetch('/api/usability/guided',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({participant:$('u-participant').value||'anonymous',notes:$('u-notes').value||'',tasks:RESULTS,sus:sus})})
+   .then(function(r){return r.json();}).then(function(d){
+     $('u-submit').disabled=false;
+     if(!d.ok){$('u-save').textContent='failed: '+(d.error||'unknown');return;}
+     var s=d.session; $('u-save').textContent='saved #'+s.id+' · effectiveness '+s.effectiveness+' · SUS '+fmt(s.satisfaction_sus);
+     $('u-sus').hidden=true; $('u-flow').hidden=true; $('u-status').textContent='Guided session saved.';
+     fetch('/api/usability/guided?limit=20').then(function(r){return r.json();}).then(function(x){renderHistory((x&&x.sessions)||[]);});
+   }).catch(function(e){$('u-submit').disabled=false;$('u-save').textContent='failed: '+e;});
+ }
+ $('u-start').onclick=function(){IDX=0;RESULTS=[];$('u-start').disabled=true;$('u-flow').hidden=false;showTask();};
+ $('u-done').onclick=function(){finishTask(true);};
+ $('u-fail').onclick=function(){finishTask(false);};
+ $('u-skip').onclick=function(){finishTask(null);};
+ $('u-next').onclick=function(){IDX++;showTask();};
+ $('u-submit').onclick=submit;
+ load();
+})();
+</script></body></html>`;
+
 const runbooksHtml = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode runbooks</title>
 <style>
@@ -2935,7 +3810,7 @@ ${nav("docs")}
 <pre id="docbody">loading...</pre>
 </main>
 <script>
-var DOCS=["HANDOFF.md","RULES.md","README.md","scripts/README.txt","HANDOFF-PROMPT.txt"];
+var DOCS=["HANDOFF.md","RULES.md","README.md","scripts/README.txt","HANDOFF-PROMPT.txt","docs/USABILITY-TESTING.md","docs/STATUS-AUTOMATION.md"];
 var sel=document.getElementById('docsel');
 for(var i=0;i<DOCS.length;i++){var o=document.createElement('option');o.value=DOCS[i];o.textContent=DOCS[i];sel.appendChild(o);}
 async function loadDoc(name){
@@ -3091,7 +3966,25 @@ const server = http.createServer(async (req, res) => {
     res.end();
     return;
   }
-  if (url === "/favicon.ico") {
+  if (req.method === "POST" && url === "/api/graph/edit") {
+    try {
+      const raw = await readBody(req);
+      const doc = JSON.parse(raw || "{}");
+      const result = apiGraphEdit(doc);
+      send(res, result.ok ? 200 : 400, JSON.stringify(result), "application/json");
+    } catch (e) {
+      send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
+    }
+  } else if (req.method === "POST" && url === "/api/usability/guided") {
+    try {
+      const raw = await readBody(req);
+      const doc = JSON.parse(raw || "{}");
+      const result = apiUsabilityGuidedSave(doc);
+      send(res, result.ok ? 200 : 400, JSON.stringify(result), "application/json");
+    } catch (e) {
+      send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
+    }
+  } else if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
     res.end();
   } else if (url === "/manifest.webmanifest") {
@@ -3127,6 +4020,12 @@ const server = http.createServer(async (req, res) => {
     } else {
       send(res, 404, "not found\n", "text/plain");
     }
+  } else if (url.startsWith("/app/") && !url.startsWith("/app/assets/")) {
+    // The MUI shell is a single hash-routed page. A legacy path typed under
+    // /app/ (e.g. /app/explore) used to 404; send it to the real page instead.
+    const rest = url.slice("/app".length) || "/";
+    res.writeHead(302, { "Location": rest, "Cache-Control": "no-store" });
+    res.end();
   } else if (url === "/sw.js") {
     res.writeHead(200, {
       "Content-Type": "application/javascript; charset=utf-8",
@@ -3163,6 +4062,10 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, html, "text/html; charset=utf-8");
   } else if (url === "/explore") {
     send(res, 200, exploreHtml, "text/html; charset=utf-8");
+  } else if (url === "/graph") {
+    send(res, 200, graphHtml, "text/html; charset=utf-8");
+  } else if (url === "/usability") {
+    send(res, 200, usabilityHtml, "text/html; charset=utf-8");
   } else if (url === "/viz") {
     res.writeHead(302, { "Location": "/explore", "Cache-Control": "no-store" });
     res.end();
@@ -3281,6 +4184,28 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify(await apiWords(Number(params.limit) || 80)), "application/json");
   } else if (url === "/api/board") {
     send(res, 200, JSON.stringify(await apiBoard()), "application/json");
+  } else if (url === "/api/graph") {
+    send(res, 200, JSON.stringify(apiGraph()), "application/json");
+  } else if (url === "/api/benchmark") {
+    send(res, 200, JSON.stringify(readJsonRel("../data/observability/benchmark.json") || { available: false, metrics: [] }), "application/json");
+  } else if (url === "/api/usability") {
+    send(res, 200, JSON.stringify(readJsonRel("../data/observability/usability.json") || { available: false }), "application/json");
+  } else if (url === "/api/usability/tasks") {
+    send(res, 200, JSON.stringify(apiUsabilityTasks()), "application/json");
+  } else if (url === "/api/usability/guided") {
+    send(res, 200, JSON.stringify({ sessions: guidedRows(Number(params.limit) || 20) }), "application/json");
+  } else if (url === "/api/pulse") {
+    send(res, 200, JSON.stringify(readJsonRel("../data/observability/pulse.json") || { available: false }), "application/json");
+  } else if (url === "/api/choices") {
+    const cfg = readJsonRel("../scripts/choices.json") || { choices: [] };
+    const st = readJsonRel("../data/observability/choices.json") || { choices: {} };
+    const done = st.choices || {};
+    const choices = (cfg.choices || []).map((c) => ({
+      id: c.id, question: c.question, why: c.why, recommended: c.recommended,
+      options: c.options || [], selected: (done[c.id] || {}).selected || null,
+      status: (done[c.id] || {}).status || "pending", at: (done[c.id] || {}).at || null,
+    }));
+    send(res, 200, JSON.stringify({ updated: st.updated || null, choices }), "application/json");
   } else if (url === "/api/export") {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=opencode-sessions.csv" });
     res.end(apiExport());

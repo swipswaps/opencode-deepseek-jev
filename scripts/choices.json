@@ -1,0 +1,133 @@
+{
+  "$comment": "Human decisions that used to block a turn. Each has a recommended option; script/auto options are executable by scripts/choice-gate.py, human options print the exact commands. This is the multiple-choice surface, not a hidden default.",
+  "version": 1,
+  "choices": [
+    {
+      "id": "console-credential",
+      "question": "Revoke the old OpenCode console credential now?",
+      "why": "Rotation already replaced the value; the old console token remains valid until revoked. No CLI exists for revocation, so this is a browser step.",
+      "recommended": "revoke-now",
+      "options": [
+        {
+          "id": "revoke-now",
+          "label": "Open the console, revoke the old token, then rotate",
+          "kind": "human",
+          "commands": [
+            "./scripts/open-rotation-pages.sh --open --only deepseek",
+            "./scripts/rotate-opencode-token.sh"
+          ]
+        },
+        {
+          "id": "defer",
+          "label": "Defer one sweep and keep the residual visible",
+          "kind": "defer"
+        },
+        {
+          "id": "accepted",
+          "label": "Accept the residual and record why",
+          "kind": "accept"
+        }
+      ]
+    },
+    {
+      "id": "browser-tabs",
+      "question": "Update the open browser tabs with the new Basic-auth password?",
+      "why": "Tabs hold the previous password in memory; they fail silently until reloaded. This is a local, reversible action.",
+      "recommended": "open-tabs",
+      "options": [
+        {
+          "id": "open-tabs",
+          "label": "Open the rotation pages and reload the auth tabs",
+          "kind": "script",
+          "auto": true,
+          "commands": ["./scripts/open-rotation-pages.sh --open --only litellm"]
+        },
+        {
+          "id": "manual",
+          "label": "Print the exact tab URLs for a manual reload",
+          "kind": "human",
+          "commands": ["./scripts/open-rotation-pages.sh --list"]
+        },
+        {
+          "id": "defer",
+          "label": "Defer and retry next sweep",
+          "kind": "defer"
+        }
+      ]
+    },
+    {
+      "id": "chat-db-residual",
+      "question": "What should happen to the historical secret rows in the chat DB?",
+      "why": "The session store is read-only by contract; editing it would break the audit trail. The safe move is to rotate values and keep the store as evidence.",
+      "recommended": "rescan",
+      "options": [
+        {
+          "id": "rescan",
+          "label": "Re-scan the chat DB and confirm only historical rows remain",
+          "kind": "script",
+          "auto": true,
+          "commands": ["./scripts/scan-chat-secrets.sh --limit 5000 --json"]
+        },
+        {
+          "id": "accepted",
+          "label": "Accept as a documented residual (read-only store)",
+          "kind": "accept"
+        },
+        {
+          "id": "defer",
+          "label": "Defer the review",
+          "kind": "defer"
+        }
+      ]
+    },
+    {
+      "id": "tunnel-reprobe",
+      "question": "Re-probe the Nebula tunnel link now, or keep watching the external issue?",
+      "why": "The last probe saw no churn and 0% overlay loss; the open unit is external (proxmox-dual-plane-mesh#5). Re-probe only when T8 trips or the issue changes.",
+      "recommended": "watch",
+      "options": [
+        {
+          "id": "probe",
+          "label": "Run the read-only tunnel probe now",
+          "kind": "human",
+          "commands": ["bash scripts/tunnel-link-probe.sh --sudo --watch 60"]
+        },
+        {
+          "id": "watch",
+          "label": "Keep the external issue open and let the daily sweep poll it",
+          "kind": "accept"
+        },
+        {
+          "id": "close",
+          "label": "Mark the external unit accepted and stop polling",
+          "kind": "accept"
+        }
+      ]
+    },
+    {
+      "id": "model-injection",
+      "question": "How should the model-level prompt-injection residual be handled?",
+      "why": "The blast radius is bounded by opencode.json (deny secret/cert reads, ask on task/webfetch). The remaining risk is model compliance, not filesystem reach.",
+      "recommended": "keep-policy",
+      "options": [
+        {
+          "id": "keep-policy",
+          "label": "Keep the current deny/ask policy and recheck after model changes",
+          "kind": "accept"
+        },
+        {
+          "id": "red-team",
+          "label": "Run the red-team tripwire now",
+          "kind": "human",
+          "commands": ["./scripts/red-team.sh"]
+        },
+        {
+          "id": "tighten",
+          "label": "Tighten the policy (deny task/webfetch) and re-run hygiene",
+          "kind": "human",
+          "commands": ["./scripts/test-hygiene.sh"]
+        }
+      ]
+    }
+  ]
+}

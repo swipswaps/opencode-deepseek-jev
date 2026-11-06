@@ -157,6 +157,58 @@ PY
         cat "$work/is_st.txt"
     fi
 
+    local bench_tool
+    for bench_tool in issue-benchmark choice-gate pulse; do
+        if python3 "$REPO/scripts/$bench_tool.py" --self-test > "$work/${bench_tool}_st.txt" 2>&1; then
+            ok "$bench_tool: self-test"
+        else
+            bad "$bench_tool: self-test"
+            cat "$work/${bench_tool}_st.txt"
+        fi
+    done
+
+    if python3 "$REPO/scripts/usability-suite.py" --self-test > "$work/usability_st.txt" 2>&1; then
+        ok 'usability-suite: self-test'
+    else
+        bad 'usability-suite: self-test'
+        cat "$work/usability_st.txt"
+    fi
+
+    if python3 "$REPO/scripts/usability-guided.py" --self-test > "$work/usability_guided_st.txt" 2>&1; then
+        ok 'usability-guided: self-test'
+    else
+        bad 'usability-guided: self-test'
+        cat "$work/usability_guided_st.txt"
+    fi
+
+    if bash "$REPO/scripts/usability-install.sh" --self-test > "$work/usability_inst.txt" 2>&1; then
+        ok 'usability-install: self-test'
+    else
+        bad 'usability-install: self-test'
+        cat "$work/usability_inst.txt"
+    fi
+
+    if bash "$REPO/scripts/usability-guide.sh" --self-test > "$work/usability_guide.txt" 2>&1; then
+        ok 'usability-guide: self-test'
+    else
+        bad 'usability-guide: self-test'
+        cat "$work/usability_guide.txt"
+    fi
+
+    if python3 "$REPO/scripts/closeout-gate.py" --self-test > "$work/closeout_st.txt" 2>&1; then
+        ok 'closeout-gate: self-test'
+    else
+        bad 'closeout-gate: self-test'
+        cat "$work/closeout_st.txt"
+    fi
+
+    if bash "$REPO/scripts/web-build-restart.sh" --self-test > "$work/wbr_st.txt" 2>&1; then
+        ok 'web-build-restart: self-test'
+    else
+        bad 'web-build-restart: self-test'
+        cat "$work/wbr_st.txt"
+    fi
+
     if have node && [ -f "$REPO/scripts/blacklist-guard-self-test.mjs" ]; then
         if node "$REPO/scripts/blacklist-guard-self-test.mjs" > "$work/bg_st.txt" 2>&1; then
             ok 'blacklist-guard: self-test'

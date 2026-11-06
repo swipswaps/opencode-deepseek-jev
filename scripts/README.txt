@@ -17,6 +17,10 @@ Quick index by job:
                   secret-leak-response.sh, rotate-*.sh, rotate-tls.sh,
                   scrub-secrets.sh, authorize-container-key.sh
   models/cost     models.sh, cost.sh, cost-bottlenecks.sh
+  status/decisions issue-benchmark.py, pulse.py, choice-gate.py
+  usability       usability-suite.py, usability-guided.py, usability-guide.sh,
+                  closeout-gate.py, web-build-restart.sh,
+                  usability-install.sh, ux-test.py, a11y-audit.mjs
   RAG             sibling production-local-rag/README.txt
 
 Conventions:
@@ -347,6 +351,89 @@ next-action.sh
     changed since the last gate. A fresh session starts here with no
     transcript replay. Read-only, no model call. --json; --self-test;
     NEXT_ACTION_REPO / LEDGER_DB seams.
+
+issue-benchmark.py
+    One repeatable measurement of the issues claimed fixed: security posture
+    (security-posture.sh --offline under --run), guard/injection counts, stall
+    signals (running tools, blank tails, over-budget/denied sessions) from
+    session-health or health-cache, and the newest tunnel probe. Writes an
+    issue_bench history row per metric to observability.db plus
+    data/observability/benchmark.json (served at /api/benchmark and drawn in
+    /graph). A source it cannot read is SKIP, never PASS; score is null when no
+    probe ran. --run/--json/--history N/--self-test; BENCH_ROOT seam.
+
+pulse.py
+    The abstraction over next-action + issue-benchmark + choice-gate: one
+    headline, security/stalls/tunnel scores, an attention list (every FAIL/WARN
+    metric and every undecided choice), and the next automatic command. Writes
+    data/observability/pulse.json, served at /api/pulse and rendered in the
+    dashboard's Project pulse card. --refresh runs the benchmark probes first;
+    --open opens /graph; --json/--self-test; PULSE_ROOT seam.
+
+choice-gate.py
+    Turns a blocking human item into an explicit decision. scripts/choices.json
+    is the single source: question, why, recommended option and options with
+    kind=script|human|accept|defer. --auto executes only safe script options;
+    a human option prints its exact commands and is never auto-run. The
+    selection is recorded in data/observability/choices.json and one DECISION
+    ledger row; /api/choices serves the same list. --apply ID=OPTION/--json/
+    --self-test.
+
+usability-suite.py
+    Cited usability screen. Static layer: HTTP reachability + a11y-audit.mjs
+    (WCAG 2.2 automated subset). Browser layer (Playwright): seven scripted
+    tasks with ISO 9241-11 effectiveness/efficiency, LCP/CLS lab probes,
+    24x24 target size (WCAG 2.5.8), keyboard skip-link/focus, reflow at
+    320px (WCAG 1.4.10), reduced motion, optional axe-core. SUS is recorded
+    only when supplied (--sus/--sus-file); SKIP is never PASS. Writes
+    usability_run/usability_result + data/observability/usability.json.
+    --static-only/--browser/--axe/--json/--check/--watch/--runs/--self-test.
+    Method and references: docs/USABILITY-TESTING.md.
+
+usability-guided.py
+    Facilitator-led human session against the shared
+    scripts/usability-tasks.json. --tasks prints the goal script; --interactive
+    times each task, records success/failure/skip + difficulty + note, then
+    the 10 SUS items; --import ingests the JSON submitted by /usability;
+    --list reads history. Persists usability_guided + usability-guided.json.
+    The in-app flow is /usability (guided runner + automated evidence + history).
+
+usability-guide.sh
+    Optional facilitator wrapper around usability-guided.py --guide: opens each
+    task URL with xdg-open, an already-open CDP browser, headed Playwright, or
+    Selenium (fallback: print), then records success/time/difficulty/note/SUS.
+    Runs on the host where the browser lives; the in-app /usability runner is
+    the zero-driver path. --opener/--base/--self-test.
+
+closeout-gate.py
+    RULES #93 completion gate. --check verifies the command root, web/dist
+    freshness after web/src changes, served==HEAD + /api/usability/tasks,
+    last-gate freshness, a NEW guided session after the UI change, git-tracked
+    tool/runbook scripts, and the citation log. --ask prompts the unresolved
+    questions; --answer id=defer --reason records an explicit deferral; exit 1
+    means do not declare done. --json/--self-test; CLOSEOUT_BASE/--base seam.
+
+web-build-restart.sh
+    Host command that removes the `cd web && ./scripts/web-restart.sh` path
+    error: builds in web/, runs scripts/web-restart.sh from the repo root, then
+    verifies /app/ 200, served==HEAD, /api/usability/tasks 200, and the served
+    asset hash == the built one. --dry-run/--self-test.
+
+usability-install.sh
+    Installs a user-level systemd timer (no sudo) that runs the static
+    usability screen every 30 minutes; --full bakes the Playwright layer
+    (falls back to static if Playwright is absent). The suite holds an
+    exclusive lock so runs never stack. --write-only/--uninstall/--self-test.
+    CI also runs it: .github/workflows/usability.yml (static on push/PR,
+    browser nightly).
+
+/graph (dashboard page)
+    Selectable, editable 3D force graph of real repo data: tools, runbooks,
+    scripts they invoke, code-index files/flags, API routes, stores, benchmark
+    metrics, decisions and external issues. GET /api/graph assembles it;
+    POST /api/graph/edit persists pos/label/note/hidden/edge_add/edge_del/reset
+    to observability.db.graph_edit. No synthetic nodes; changes never touch the
+    session store.
 
 progress-review.sh
     Sentinel sibling: supervisor of the DEV LOOP's progression. One sweep reads

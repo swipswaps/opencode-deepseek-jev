@@ -128,6 +128,9 @@ self_test() {
     # Offline: never touch docker. The T4 sweep still runs via SENTINEL_ACCESSLOG
     # (honored regardless of NODOCKER), so the fixture path is exercised.
     export SENTINEL_NODOCKER=1
+    # The self-test must not depend on (or pollute stdout with) a live webhook;
+    # an inherited NOTIFY_WEBHOOK made a red sink look like a JSON contract bug.
+    unset NOTIFY_WEBHOOK
     work=$(mktemp -d)
     mkdir -p "$work/state"
     export CONTEXT_BUDGET=1000

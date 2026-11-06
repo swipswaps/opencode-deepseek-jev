@@ -912,6 +912,51 @@ elevation on cards (rest on --e1, rise to --e2 on hover), 8px radius on
 surfaces and 999px pills. The tokens + overrides live in `THEME_CSS` in
 scripts/dashboard.mjs and are injected on every page.
 
+## Status, measurements, and decisions (2026-11-06)
+    ./scripts/pulse.py                 # truth, scores, attention, next action
+    ./scripts/issue-benchmark.py --run # prove security + stalls with numbers
+    ./scripts/choice-gate.py           # pending decisions as multiple choice
+    xdg-open http://127.0.0.1:5099/graph
+
+`pulse` composes `next-action`, the benchmark, and the choice gate into one
+screen (also the **Project pulse** card on `/` and `GET /api/pulse`). The
+benchmark records named metrics for security posture, guard/injection counts,
+running/blank tools, over-budget sessions, and the tunnel probe in
+`observability.issue_bench`; SKIP is never PASS. `choice-gate` makes the
+remaining human items explicit (`scripts/choices.json`), auto-runs only safe
+local options, and records the selection + ledger row. `/graph` is an
+editable 3D force graph of real repo data (tools, runbooks, files, APIs,
+stores, metrics, decisions, issues); edits persist in `graph_edit`.
+Full map: [`docs/STATUS-AUTOMATION.md`](docs/STATUS-AUTOMATION.md).
+
+## Usability testing (cited, reproducible, always-on)
+    ./scripts/usability-suite.py --self-test
+    ./scripts/usability-suite.py --static-only
+    ./scripts/usability-suite.py --browser --axe    # Playwright + axe-core
+    ./scripts/usability-install.sh                 # 30-minute static timer
+    xdg-open http://127.0.0.1:5099/usability       # guided human test + evidence
+
+The suite operationalises ISO 9241-11 effectiveness/efficiency, a WCAG 2.2
+A/AA automated subset, Core Web Vitals lab proxies, target size, keyboard
+navigation, reflow, and reduced motion. Every result row carries its threshold
+and citation; SKIP is never PASS. The static layer needs no browser, the
+timer keeps it running, and `.github/workflows/usability.yml` runs the browser
+layer nightly. The MUI app (`/app/`) now has a **Usability** view and a
+Project pulse card; `/usability` is the classic guided runner. Both store a
+human session separately from the automated screen. Method, validity threats,
+and verified references:
+[`docs/USABILITY-TESTING.md`](docs/USABILITY-TESTING.md).
+
+## Closeout before "done"
+    ./scripts/closeout-gate.py --check
+    ./scripts/web-build-restart.sh          # build + restart from the repo root
+
+RULES #93 makes completion a gate. It blocks on a stale build, stale server,
+stale gate, a UI change without a new guided session, untracked scripts, or a
+missing citation log. A deferral needs a reason and is recorded. The
+`web-build-restart.sh` wrapper exists because `cd web && ./scripts/web-restart.sh`
+fails: the second path is relative to `web/`.
+
 ## One command for the whole state
     ./scripts/harness.sh [--fast] [--export]
 

@@ -387,5 +387,83 @@
       "./scripts/logs.sh --source ledger | grep progress"
     ],
     "note": "Install once FROM THE HOST repo -- the timer must run where the repo + store live (this sandbox has no systemd). progress-review reads next-action (git rev, last-gate, next queue unit) and logs to the observability ledger with stable keys progress-advance-<rev>/progress-stall-<rev>, so a persisting stall is ONE row. NOTIFY_WEBHOOK (if set in .env.local) gets a push on a stall. Pair with the sentinel timer (health, 5 min) + this (progression, 15 min). Uninstall: bash scripts/progress-review-install.sh --uninstall."
+  },
+  {
+    "id": "triage-decisions",
+    "title": "Clear the pending decisions (multiple choice)",
+    "purpose": "Every pending human item has a recommended option and an exact command. Run --auto for the safe ones, then apply the browser-only choices explicitly.",
+    "where": "container",
+    "manual": false,
+    "commands": [
+      "./scripts/choice-gate.py",
+      "./scripts/choice-gate.py --auto",
+      "./scripts/choice-gate.py --apply console-credential=revoke-now"
+    ],
+    "note": "The selection is recorded in data/observability/choices.json and the ledger; --auto never runs a human/browser option."
+  },
+  {
+    "id": "benchmark-issues",
+    "title": "Prove security and stall handling with numbers",
+    "purpose": "Run the bounded probes, persist the history, and render the pulse so a regression is a metric that moved.",
+    "where": "container",
+    "manual": false,
+    "commands": [
+      "./scripts/issue-benchmark.py --run",
+      "./scripts/pulse.py --refresh",
+      "xdg-open http://127.0.0.1:5099/graph"
+    ],
+    "note": "Read-only probes; the only writes are the issue_bench history row and benchmark/pulse snapshots."
+  },
+  {
+    "id": "usability-screen",
+    "title": "Screen the served app for usability regressions",
+    "purpose": "Run the cited static layer now, or the full Playwright task/CWV layer, and read the per-axis evidence in usability.json / the usability_run table.",
+    "where": "host",
+    "manual": false,
+    "commands": [
+      "./scripts/usability-suite.py --static-only --base http://127.0.0.1:5099",
+      "./scripts/usability-suite.py --browser --axe",
+      "./scripts/usability-install.sh"
+    ],
+    "note": "The timer runs the static layer every 30 minutes. Automated checks screen for common issues; WCAG and user satisfaction still need manual/SUS evidence."
+  },
+  {
+    "id": "guided-usability",
+    "title": "Run a guided usability test with a person",
+    "purpose": "Use /usability for the in-app facilitator flow, or the terminal prompts; one goal at a time, success/time/difficulty/note, then SUS. The session is stored as human evidence, separate from the automated screen.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "xdg-open http://127.0.0.1:5099/usability",
+      "./scripts/usability-guided.py --interactive --participant p1",
+      "./scripts/usability-guided.py --list"
+    ],
+    "note": "A session with no responses is invalid. The automated suite (/api/usability) and this guided session are reported separately so a green screen is never mistaken for a human result."
+  },
+  {
+    "id": "guided-usability-guide",
+    "title": "Facilitate the guided test with page-opening automation",
+    "purpose": "Optional host helper: opens each task page with xdg-open/Playwright/Selenium/CDP and walks the facilitator through the timer and SUS. The in-app /usability runner remains the zero-driver path.",
+    "where": "host",
+    "manual": true,
+    "commands": [
+      "./scripts/usability-guide.sh --opener auto",
+      "./scripts/usability-guide.sh --opener playwright",
+      "./scripts/usability-guide.sh --self-test"
+    ],
+    "note": "Best on the host where the browser lives; the container has no display. --opener print is the safest fallback."
+  },
+  {
+    "id": "closeout",
+    "title": "Closeout: prove the build, restart, retest, and gates",
+    "purpose": "Run before declaring completion. The gate blocks on a stale build, stale server, stale gate, missing guided retest, untracked script, or missing citation log; a deferral must carry a reason.",
+    "where": "container",
+    "manual": false,
+    "commands": [
+      "./scripts/closeout-gate.py --check",
+      "./scripts/web-build-restart.sh",
+      "./scripts/harness.sh --fast"
+    ],
+    "note": "Use --base for the host URL. The host sync/restart question remains a WARN until confirmed there."
   }
 ]
