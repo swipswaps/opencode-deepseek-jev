@@ -241,10 +241,13 @@ self_test() {
     grep -q '"decision": "blocked-external"' "$work/t2.txt" || { printf 'FAIL external TTL still fresh\n'; fail=1; }
     grep -q '"decision": "external-stale"' "$work/t3.txt" || { printf 'FAIL external TTL decay\n'; fail=1; }
     grep -q 're-audit the attribution' "$work/t3.txt" || { printf 'FAIL external TTL detail\n'; fail=1; }
-    printf "  stage: cleanup\n"
-    rm -f "$work/repo/NEW" "$work/repo/TODO.md" "$work/repo/opencode.json" "$work/repo/docker/Dockerfile" "$work/repo/data/observability/last-gate.json" "$work/repo/data/observability/docs.json" "$work/state/p.json" "$S2" "$S3" "$S4" "$work/t3.txt" "$work/t1.txt" "$work/t2.txt" "$work/b1.txt" "$work/b2.txt" "$work/b3.txt" "$work/b4.txt" "$work/obs.db"
-    rm -r "$work/repo/.git"
-    rmdir "$work/repo/data/observability" "$work/repo/data" "$work/repo/docker" "$work/repo" "$work/state" "$work"
+    printf "  stage: cleanup-files\n"
+    timeout 10 rm -f "$work/repo/NEW" "$work/repo/TODO.md" "$work/repo/opencode.json" "$work/repo/docker/Dockerfile" "$work/repo/data/observability/last-gate.json" "$work/repo/data/observability/docs.json" "$work/state/p.json" "$S2" "$S3" "$S4" "$work/t3.txt" "$work/t1.txt" "$work/t2.txt" "$work/b1.txt" "$work/b2.txt" "$work/b3.txt" "$work/b4.txt" "$work/obs.db" || true
+    printf "  stage: cleanup-git\n"
+    timeout 10 rm -r "$work/repo/.git" || true
+    printf "  stage: cleanup-dirs\n"
+    rmdir "$work/repo/data/observability" "$work/repo/data" "$work/repo/docker" "$work/repo" "$work/state" "$work" || true
+    printf "  stage: done\n"
     if [ "$fail" -eq 0 ]; then printf 'progress-review: self-test PASS\n'; else printf 'progress-review: self-test FAIL\n'; fi
     return "$fail"
 }
