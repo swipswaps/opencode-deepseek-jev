@@ -455,6 +455,17 @@ PY
         bad 'ssh-x11-setup.sh present'
     fi
 
+    if [ -f "$REPO/scripts/client-setup.sh" ]; then
+        if bash "$REPO/scripts/client-setup.sh" --self-test > "$work/cs_st.txt" 2>&1; then
+            ok 'client-setup: self-test (discovery + config + units + heal + uninstall)'
+        else
+            bad 'client-setup: self-test (discovery + config + units + heal + uninstall)'
+            cat "$work/cs_st.txt"
+        fi
+    else
+        bad 'client-setup.sh present'
+    fi
+
     if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
         if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
             ok 'network-change-probe: self-test (matrix + peer + certs/bind seams)'

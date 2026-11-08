@@ -828,6 +828,20 @@ clipboard-preflight.sh
     at `ssh-x11-setup.sh` instead of asking for a one-off `ssh -Y`. Exit 0
     usable, 3 image flavour, 2 no backend. Gated in test-hygiene.sh.
 
+client-setup.sh
+    One-shot client bootstrap: `git clone`, run this, then `ssh opencode-jev`
+    works and keeps working. Discovers a reachable server (mesh -> Tailscale
+    -> LAN), writes the managed ~/.ssh/config block via ssh-x11-setup.sh (X11
+    forwarding, trust scoped to one Host, keepalives), checks the local X
+    server (XQuartz on macOS), and installs a self-heal timer (systemd user on
+    Linux, launchd on macOS) that re-discovers the server and repairs the block
+    after a network change. --check reports; --write-only writes config/units
+    without launching; --heal is the timer pass (keeps a custom alias/user);
+    --uninstall removes block + timer; --discover prints the chosen server;
+    --self-test offline. Dependency-free (no python3; macOS bash 3.2 safe).
+    --install-deps is best-effort (brew cask on macOS). Gated in
+    test-hygiene.sh.
+
 ssh-x11-setup.sh
     Codifies clipboard-over-SSH instead of typing `ssh -Y` after every roam.
     Emits/refreshes one managed Host block (stable Nebula 10.100.0.24, so the

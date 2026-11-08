@@ -1471,6 +1471,18 @@
     ]
   },
   {
+    "id": "client-setup",
+    "title": "One-shot client bootstrap (clipboard + network + self-heal)",
+    "where": "host",
+    "purpose": "git clone, run once, then `ssh opencode-jev` works and keeps working. Discovers a reachable server (mesh -> Tailscale -> LAN), writes the managed ~/.ssh/config block via ssh-x11-setup.sh, checks the local X server (XQuartz on macOS), and installs a self-heal timer (systemd user on Linux, launchd on macOS) that re-discovers and repairs the block after a network change. --check/--write-only/--heal/--uninstall/--discover/--self-test; dependency-free (no python3; macOS bash 3.2 safe).",
+    "commands": [
+      "./scripts/client-setup.sh",
+      "./scripts/client-setup.sh --check",
+      "./scripts/client-setup.sh --heal",
+      "./scripts/client-setup.sh --self-test"
+    ]
+  },
+  {
     "id": "ssh-x11-setup",
     "title": "Codify clipboard-over-SSH X11 forwarding",
     "where": "host",

@@ -8,6 +8,10 @@ Last updated: 2026-11-08
 
 ## Done (most recent first)
 
+- [x] **CLIENT-AUTO — 2026-11-08.** `client-setup.sh`: one-shot client
+      bootstrap (discover server, write ssh block, X server, self-heal timer
+      via systemd/launchd); `--heal` repairs after a roam. Self-tested.
+
 - [x] **PASTE-ROAM — 2026-11-08 (RULE #95).**
       `scripts/clipboard-preflight.sh` gates the paste path (Wayland vs X11 vs
       SSH-forwarded X11), reads TARGETS, and fails on an image flavour that
