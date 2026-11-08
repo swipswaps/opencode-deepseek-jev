@@ -433,6 +433,28 @@ PY
         bad 'web-install.sh present'
     fi
 
+    if [ -f "$REPO/scripts/clipboard-preflight.sh" ]; then
+        if bash "$REPO/scripts/clipboard-preflight.sh" --self-test > "$work/cp_st.txt" 2>&1; then
+            ok 'clipboard-preflight: self-test (backend + image/text gate)'
+        else
+            bad 'clipboard-preflight: self-test (backend + image/text gate)'
+            cat "$work/cp_st.txt"
+        fi
+    else
+        bad 'clipboard-preflight.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
+        if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
+            ok 'network-change-probe: self-test (matrix + certs/bind seams)'
+        else
+            bad 'network-change-probe: self-test (matrix + certs/bind seams)'
+            cat "$work/ncp_st.txt"
+        fi
+    else
+        bad 'network-change-probe.sh present'
+    fi
+
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
         if bash "$REPO/scripts/session-guard.sh" --self-test > "$work/sg_st.txt" 2>&1; then
             ok 'session-guard: self-test (fixture + guidance + ledger seam)'

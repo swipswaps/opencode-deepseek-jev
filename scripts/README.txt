@@ -816,6 +816,29 @@ recover-4096.sh
     --no-log, --db/--session/--rev, --self-test (incl. checkpoint/resume).
     Gated in test-hygiene.sh.
 
+clipboard-preflight.sh
+    The paste path as a gate, across Wayland/X11 and SSH. Detects the session
+    (Wayland preferred when present; else X11 xclip/xsel) and, for a display-
+    less local tty, falls back to the local X socket (DISPLAY=:0). Reads the
+    clipboard TARGETS and fails (exit 3) when an image flavour is advertised,
+    because opencode's paste probes hasClipboardImage and aborts the prompt on
+    ImageDecodeError. --set (stdin) copies text via the chosen backend;
+    --clear-text replaces an image selection with text; --targets lists raw
+    flavours; --json machine contract; --self-test offline. Over SSH it prints
+    the "reconnect with ssh -Y" hint when DISPLAY is server-local. Exit 0
+    usable, 3 image flavour, 2 no backend. Gated in test-hygiene.sh.
+
+network-change-probe.sh
+    Post-roam acceptance test: enumerates loopback + Nebula 10.x + Tailscale
+    100.x + default LAN, probes https :4096 (200/401 = PASS) and :5099 (200) on
+    each, checks the server cert SANs (certs-init --check) and that caddy's host
+    ports are wildcard (not pinned to a vanished IP). --watch records the
+    current IP set and re-runs the matrix whenever the interfaces change, so
+    you can start it before switching Wi-Fi/hotspot. --recover runs web-health
+    on FAIL; --json; --no-docker/--no-certs; --self-test offline. Writes one
+    report to logs/network-change-<utc>.log. Exit 0 all interfaces pass, 1 gap.
+    Gated in test-hygiene.sh.
+
 session-guard.sh
     The over-budget / denied-model guidance as code: reads session-health
     risks (over/warn sessions, deny-listed gateway-metered free tiers), prints

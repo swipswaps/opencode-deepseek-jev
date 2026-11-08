@@ -1,5 +1,15 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-08b (paste + roam gates — RULE #95):** new
+> `scripts/clipboard-preflight.sh` gates the paste path across Wayland/X11/SSH:
+> it detects the backend, reads the clipboard TARGETS, and exits 3 when an
+> **image** flavour is advertised (opencode's `hasClipboardImage` then logs
+> `ImageDecodeError` and aborts the prompt → "Failed to send prompt"); use
+> `--clear-text` or paste text. `scripts/network-change-probe.sh` is the
+> post-roam acceptance test (loopback + Nebula + Tailscale + LAN x :4096/:5099,
+> cert SANs, wildcard binds); `--watch` re-runs on an interface change.
+> Both self-tests are wired into `test-hygiene.sh`.
+
 > **PIN 2026-11-08 (access-plane reliability — RULE #94):** the live web plane
 > was healthy (`4096=401`, `5099=200` on loopback, Nebula `10.100.0.24`,
 > Tailscale `100.119.125.16`, LAN `192.168.4.24`; caddy logs show the macbook

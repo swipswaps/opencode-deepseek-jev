@@ -54,10 +54,16 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 clip_copy() {
     # clip_copy TEXT -> copy to the session clipboard, never print TEXT.
-    # Wayland first (wl-copy), then X11 (xclip). A tty/SSH shell inherits no
-    # DISPLAY, so fall back to the local X socket when one is present; that is
-    # the same fix a guarded ~/.bashrc applies to interactive shells.
+    # The backend (Wayland vs X11 vs SSH-forwarded X11) is chosen by the
+    # shared gate scripts/clipboard-preflight.sh; fall back to the inline
+    # attempt on an older checkout.
     local text="$1"
+    if [ -x "$REPO/scripts/clipboard-preflight.sh" ]; then
+        if printf '%s' "$text" | "$REPO/scripts/clipboard-preflight.sh" --set > /dev/null 2>&1; then
+            printf 'new password copied to the clipboard (clipboard-preflight)\n'
+            return 0
+        fi
+    fi
     if [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
         DISPLAY=:0
         export DISPLAY

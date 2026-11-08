@@ -8,6 +8,16 @@ Last updated: 2026-11-08
 
 ## Done (most recent first)
 
+- [x] **PASTE-ROAM — 2026-11-08 (RULE #95).**
+      `scripts/clipboard-preflight.sh` gates the paste path (Wayland vs X11 vs
+      SSH-forwarded X11), reads TARGETS, and fails on an image flavour that
+      makes opencode abort with "Failed to send prompt" (`--set`,
+      `--clear-text`, `--json`, `--self-test`).
+      `scripts/network-change-probe.sh` proves the plane after a network change
+      (interface x :4096/:5099 matrix, cert SANs, wildcard binds) with
+      `--watch` to re-run on an interface change. Both self-tests wired into
+      `test-hygiene.sh`.
+
 - [x] **WEB-REL — 2026-11-08 (RULE #94).** Hardened the access-plane watchdog:
       `web-health.sh` now takes one settle re-probe, requires a
       consecutive-failure threshold (`WEB_HEALTH_FAIL_THRESHOLD`, 2) and a
