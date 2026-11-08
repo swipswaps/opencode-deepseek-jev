@@ -878,6 +878,22 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
         bad 'ux-trace.py present'
     fi
 
+    # Every tracked top-level shell script must be executable in git: the docs
+    # tell people to run ./scripts/<tool>.sh, and a 100644 entry fails on a
+    # fresh clone with "Permission denied".
+    if command -v git > /dev/null && git -C "$REPO" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        local nonexec=""
+        nonexec="$(git -C "$REPO" ls-files -s scripts | awk '$1=="100644" && $4 ~ /^scripts\/[^\/]+\.sh$/ {print $4}')"
+        if [ -z "$nonexec" ]; then
+            ok 'script executable bits (top-level .sh are 100755)'
+        else
+            bad 'script executable bits (top-level .sh are 100755)'
+            printf '%s\n' "$nonexec" | head -8
+        fi
+    else
+        printf 'ts=%s level=WARN status=SKIP script executable bits (no git worktree)\n' "$(date -u +%H:%M:%S)"
+    fi
+
     # Script catalog completeness — scripts/README.txt claims "one entry per
     # script" and tools.json is the /manage catalog. Every tracked top-level
     # scripts/*.{sh,py,mjs} must appear in at least one, or the catalog silently
