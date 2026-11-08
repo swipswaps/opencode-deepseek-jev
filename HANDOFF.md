@@ -7,7 +7,9 @@
 > `ImageDecodeError` and aborts the prompt → "Failed to send prompt"); use
 > `--clear-text` or paste text. `scripts/network-change-probe.sh` is the
 > post-roam acceptance test (loopback + Nebula + Tailscale + LAN x :4096/:5099,
-> cert SANs, wildcard binds); `--watch` re-runs on an interface change.
+> cert SANs, wildcard binds); `--watch` re-runs on an interface change and
+> `--peer HOST` is the client-side half (same LAN vs different network).
+> `ssh-x11-setup.sh --print` codifies clipboard-over-SSH trust (one Host).
 > Both self-tests are wired into `test-hygiene.sh`.
 
 > **PIN 2026-11-08 (access-plane reliability — RULE #94):** the live web plane

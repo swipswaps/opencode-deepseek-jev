@@ -14,9 +14,10 @@ Last updated: 2026-11-08
       makes opencode abort with "Failed to send prompt" (`--set`,
       `--clear-text`, `--json`, `--self-test`).
       `scripts/network-change-probe.sh` proves the plane after a network change
-      (interface x :4096/:5099 matrix, cert SANs, wildcard binds) with
-      `--watch` to re-run on an interface change. Both self-tests wired into
-      `test-hygiene.sh`.
+      (interface x :4096/:5099 matrix, cert SANs, wildcard binds); `--watch`
+      re-runs on change and `--peer HOST` is the client-side half (LAN vs
+      overlay). `scripts/ssh-x11-setup.sh` codifies clipboard-over-SSH trust.
+      Self-tests wired into `test-hygiene.sh`.
 
 - [x] **WEB-REL — 2026-11-08 (RULE #94).** Hardened the access-plane watchdog:
       `web-health.sh` now takes one settle re-probe, requires a

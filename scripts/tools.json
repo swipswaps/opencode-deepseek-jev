@@ -1469,5 +1469,17 @@
       "./scripts/usability-autopilot.sh --dry-run",
       "./scripts/usability-autopilot.sh --self-test"
     ]
+  },
+  {
+    "id": "ssh-x11-setup",
+    "title": "Codify clipboard-over-SSH X11 forwarding",
+    "where": "host",
+    "purpose": "Encodes the trust decision instead of a one-off `ssh -Y`: ForwardX11 yes plus ForwardX11Trusted yes scoped to ONE managed Host block on the stable Nebula address, so the same alias works on the same LAN and across a network change. --print is safe on a client with no checkout; --check inspects sshd X11Forwarding and the current SSH/DISPLAY; --write edits ~/.ssh/config idempotently with a timestamped backup; --self-test offline (block shape + managed-region idempotency).",
+    "commands": [
+      "./scripts/ssh-x11-setup.sh --print",
+      "./scripts/ssh-x11-setup.sh --check",
+      "./scripts/ssh-x11-setup.sh --write",
+      "./scripts/ssh-x11-setup.sh --self-test"
+    ]
   }
 ]

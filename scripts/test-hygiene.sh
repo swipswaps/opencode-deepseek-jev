@@ -444,11 +444,22 @@ PY
         bad 'clipboard-preflight.sh present'
     fi
 
+    if [ -f "$REPO/scripts/ssh-x11-setup.sh" ]; then
+        if bash "$REPO/scripts/ssh-x11-setup.sh" --self-test > "$work/sx_st.txt" 2>&1; then
+            ok 'ssh-x11-setup: self-test (block shape + idempotent managed region)'
+        else
+            bad 'ssh-x11-setup: self-test (block shape + idempotent managed region)'
+            cat "$work/sx_st.txt"
+        fi
+    else
+        bad 'ssh-x11-setup.sh present'
+    fi
+
     if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
         if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
-            ok 'network-change-probe: self-test (matrix + certs/bind seams)'
+            ok 'network-change-probe: self-test (matrix + peer + certs/bind seams)'
         else
-            bad 'network-change-probe: self-test (matrix + certs/bind seams)'
+            bad 'network-change-probe: self-test (matrix + peer + certs/bind seams)'
             cat "$work/ncp_st.txt"
         fi
     else

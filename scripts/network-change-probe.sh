@@ -17,9 +17,17 @@
 #   ./scripts/network-change-probe.sh --json       # machine contract
 #   ./scripts/network-change-probe.sh --watch      # detect changes, re-probe
 #   ./scripts/network-change-probe.sh --recover    # run the watchdog on FAIL
+#   ./scripts/network-change-probe.sh --peer HOST  # client-side roam check
 #   ./scripts/network-change-probe.sh --self-test  # offline, no docker/net
 #
-# Flags: --no-docker, --no-certs, --json, --watch, --recover, --self-test.
+# --peer HOST is the other half of the roam test: run it ON THE CLIENT after a
+# network change. Point it at the LAN address to prove "both on the same
+# network", then at the Nebula address (10.100.0.24) to prove "different
+# networks". Both runs must PASS; peer mode skips the server-local cert/bind
+# checks because those are not visible from the client.
+#
+# Flags: --peer HOST, --no-docker, --no-certs, --json, --watch, --recover,
+# --self-test.
 # Seams: NETPROBE_FAKE_IPS, NETPROBE_FAKE_4096, NETPROBE_FAKE_5099,
 # NETPROBE_WATCH_SEC.
 #
@@ -48,6 +56,13 @@ resolve_repo() {
 }
 
 have() { command -v "$1" >/dev/null; }
+
+valid_host() {
+    case "$1" in
+        '' | *[!A-Za-z0-9.:-]*) return 1 ;;
+    esac
+    [ "${#1}" -le 253 ]
+}
 
 # ---- pure logic (unit-tested) --------------------------------------------
 
@@ -135,6 +150,30 @@ run_probe() {
     # run_probe -> prints the matrix, sets FAILS, returns 0/1.
     local ips ip c4 c5 v4 v5 certs bind line
     FAILS=0
+    if [ -n "${PEER:-}" ]; then
+        # Client-side mode: only the peer path exists here (no local caddy,
+        # no server certs), so probe exactly the two published ports.
+        if [ "$JSON" -eq 0 ]; then
+            printf '=== network-change-probe @ %s ===\n' "$ROAM_TS"
+            printf 'mode: peer %s (client-side roam check)\n' "$PEER"
+            printf '%-16s %-10s %-4s %-10s %-4s\n' TARGET :4096 CODE :5099 CODE
+        fi
+        : > "$TSV"
+        c4="$(probe_code "https://$PEER:4096/api/health" 4096)"
+        c5="$(probe_code "https://$PEER:5099/api/health" 5099)"
+        v4="$(classify_4096 "$c4")"
+        v5="$(classify_5099 "$c5")"
+        [ "$v4" = PASS ] || FAILS=$((FAILS + 1))
+        [ "$v5" = PASS ] || FAILS=$((FAILS + 1))
+        [ "$JSON" -eq 1 ] || printf '%-16s %-10s %-4s %-10s %-4s\n' "$PEER" "$c4" "$v4" "$c5" "$v5"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$PEER" "$c4" "$v4" "$c5" "$v5" >> "$TSV"
+        if [ "$FAILS" -eq 0 ]; then
+            [ "$JSON" -eq 1 ] || printf 'VERDICT: PASS (peer reachable over this path; roam-safe)\n'
+            return 0
+        fi
+        [ "$JSON" -eq 1 ] || printf 'VERDICT: FAIL (%s gap(s)); check Nebula/Tailscale, then web-health on the server\n' "$FAILS"
+        return 1
+    fi
     certs="$(certs_state)"
     bind="$(bind_state)"
     case "$certs" in covered:*) ;; skip) ;; *) FAILS=$((FAILS + 1)) ;; esac
@@ -200,7 +239,7 @@ watch_mode() {
 }
 
 usage() {
-    printf 'usage: %s [--json|--watch|--recover|--no-docker|--no-certs|--self-test|--help]\n' "$0"
+    printf 'usage: %s [--peer HOST|--json|--watch|--recover|--no-docker|--no-certs|--self-test|--help]\n' "$0"
 }
 
 self_test() {
@@ -228,15 +267,26 @@ self_test() {
     [ "$rc" -eq 1 ] || { printf 'FAIL offline matrix fail rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q '"passed": false' || { printf 'FAIL offline json fail\n'; fail=1; }
 
-    if [ "$fail" -eq 0 ]; then printf 'network-change-probe: self-test PASS (matrix + certs/bind seams)\n'; else printf 'network-change-probe: self-test FAIL\n'; fi
+    # Peer mode is the client side of the roam test: same-network and
+    # different-network runs differ only by HOST.
+    o=$(NETPROBE_NO_REPORT=1 NETPROBE_FAKE_4096=401 NETPROBE_FAKE_5099=200 \
+        bash "${BASH_SOURCE[0]}" --peer 10.100.0.24 --json --no-docker --no-certs 2>&1); rc=$?
+    [ "$rc" -eq 0 ] || { printf 'FAIL peer pass rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q '"passed": true' || { printf 'FAIL peer json pass\n'; fail=1; }
+    printf '%s' "$o" | grep -q '10.100.0.24' || { printf 'FAIL peer host in json\n'; fail=1; }
+    o=$(NETPROBE_NO_REPORT=1 NETPROBE_FAKE_4096=000 NETPROBE_FAKE_5099=000 \
+        bash "${BASH_SOURCE[0]}" --peer 192.168.4.24 --json --no-docker --no-certs 2>&1); rc=$?
+    [ "$rc" -eq 1 ] || { printf 'FAIL peer fail rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q '"passed": false' || { printf 'FAIL peer json fail\n'; fail=1; }
+
+    if [ "$fail" -eq 0 ]; then printf 'network-change-probe: self-test PASS (matrix + peer + certs/bind seams)\n'; else printf 'network-change-probe: self-test FAIL\n'; fi
     return "$fail"
 }
 
 main() {
     REPO=$(resolve_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")
     [ -z "$REPO" ] && REPO=$(resolve_repo "$PWD")
-    if [ -z "$REPO" ]; then printf 'GATE FAIL: cannot resolve repo root\n'; return 2; fi
-    JSON=0 NODOCKER=0 NOCERTS=0 RECOVER=0 WATCH=0 SELFTEST=0
+    JSON=0 NODOCKER=0 NOCERTS=0 RECOVER=0 WATCH=0 SELFTEST=0 PEER=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --json) JSON=1; shift ;;
@@ -244,12 +294,26 @@ main() {
             --no-certs) NOCERTS=1; shift ;;
             --recover) RECOVER=1; shift ;;
             --watch) WATCH=1; shift ;;
+            --peer)
+                [ $# -ge 2 ] || { printf 'FAIL: --peer needs HOST\n'; return 2; }
+                PEER="$2"
+                shift 2
+                ;;
             --self-test) SELFTEST=1; shift ;;
             -h | --help) usage; return 0 ;;
             *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
         esac
     done
+    if [ -z "$REPO" ]; then
+        if [ -n "$PEER" ]; then
+            REPO="$PWD"
+        else
+            printf 'GATE FAIL: cannot resolve repo root\n'
+            return 2
+        fi
+    fi
     if [ "$SELFTEST" -eq 1 ]; then self_test; return "$?"; fi
+    if [ -n "$PEER" ] && ! valid_host "$PEER"; then printf 'FAIL: bad peer %s\n' "$PEER"; return 2; fi
     if ! have curl; then printf 'GATE FAIL: curl required\n'; return 2; fi
     ROAM_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     mkdir -p "$REPO/logs" 2>&1 || true

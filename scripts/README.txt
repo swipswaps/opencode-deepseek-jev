@@ -824,9 +824,20 @@ clipboard-preflight.sh
     because opencode's paste probes hasClipboardImage and aborts the prompt on
     ImageDecodeError. --set (stdin) copies text via the chosen backend;
     --clear-text replaces an image selection with text; --targets lists raw
-    flavours; --json machine contract; --self-test offline. Over SSH it prints
-    the "reconnect with ssh -Y" hint when DISPLAY is server-local. Exit 0
+    flavours; --json machine contract; --self-test offline. Over SSH it points
+    at `ssh-x11-setup.sh` instead of asking for a one-off `ssh -Y`. Exit 0
     usable, 3 image flavour, 2 no backend. Gated in test-hygiene.sh.
+
+ssh-x11-setup.sh
+    Codifies clipboard-over-SSH instead of typing `ssh -Y` after every roam.
+    Emits/refreshes one managed Host block (stable Nebula 10.100.0.24, so the
+    same alias works on the same LAN and across a network change) with
+    ForwardX11 yes, ForwardX11Trusted yes (trust scoped to that Host, not
+    globally), ServerAliveInterval/CountMax and ConnectTimeout. --print is safe
+    everywhere (paste on a client with no checkout); --check inspects sshd
+    X11Forwarding + the current SSH/DISPLAY; --write [FILE] edits ~/.ssh/config
+    idempotently with a timestamped backup; --self-test offline (block shape +
+    managed-region idempotency). Gated in test-hygiene.sh.
 
 network-change-probe.sh
     Post-roam acceptance test: enumerates loopback + Nebula 10.x + Tailscale
@@ -834,10 +845,13 @@ network-change-probe.sh
     each, checks the server cert SANs (certs-init --check) and that caddy's host
     ports are wildcard (not pinned to a vanished IP). --watch records the
     current IP set and re-runs the matrix whenever the interfaces change, so
-    you can start it before switching Wi-Fi/hotspot. --recover runs web-health
-    on FAIL; --json; --no-docker/--no-certs; --self-test offline. Writes one
-    report to logs/network-change-<utc>.log. Exit 0 all interfaces pass, 1 gap.
-    Gated in test-hygiene.sh.
+    you can start it before switching Wi-Fi/hotspot. --peer HOST is the
+    client-side half: run it on the roaming box against the LAN address for
+    "same network", then the Nebula address for "different network"; peer mode
+    probes only those two ports and skips server-local cert/bind checks.
+    --recover runs web-health on FAIL; --json; --no-docker/--no-certs;
+    --self-test offline. Writes one report to logs/network-change-<utc>.log.
+    Exit 0 all interfaces pass, 1 gap. Gated in test-hygiene.sh.
 
 session-guard.sh
     The over-budget / denied-model guidance as code: reads session-health

@@ -115,12 +115,29 @@ clip_set() {
 }
 
 ssh_hint() {
-    if [ -n "${SSH_CONNECTION:-}" ] && [ "$BACKEND" = "xclip" ]; then
-        case "${DISPLAY:-}" in
-            localhost:* | 127.0.0.1:*) return 0 ;;
-        esac
-        printf 'NOTE: SSH session without X11 forwarding; %s is the server clipboard, not the client. Reconnect with: ssh -Y <host>\n' "$DISPLAY"
-    fi
+    # Over SSH the clipboard owner lives on the *client*; only X11 forwarding
+    # connects the two. Prefer untrusted (-X); escalate to trusted (-Y) only
+    # when the paste still fails, and codify it with ssh-x11-setup.sh.
+    [ -n "${SSH_CONNECTION:-}" ] || return 0
+    local setup
+    setup="$(dirname "$0")/ssh-x11-setup.sh"
+    case "${DISPLAY:-}" in
+        '')
+            printf 'NOTE: SSH with no DISPLAY: X11 forwarding is off, so xclip cannot reach the client clipboard.\n'
+            printf '      reconnect: ssh -X <host>   (still empty? ssh -Y)\n'
+            printf '      codify it once: %s --print\n' "$setup"
+            ;;
+        localhost:* | 127.0.0.1:*)
+            if [ "${BACKEND:-}" = "none" ]; then
+                printf 'NOTE: X11 forwarding is on but no clipboard backend was found; install xclip on the server.\n'
+            fi
+            ;;
+        *)
+            printf 'NOTE: SSH DISPLAY=%s is the SERVER clipboard, not the client.\n' "${DISPLAY:-}"
+            printf '      reconnect with X11 forwarding: ssh -X <host> (then -Y if the paste still fails)\n'
+            printf '      codify it once: %s --print\n' "$setup"
+            ;;
+    esac
     return 0
 }
 
@@ -160,6 +177,11 @@ image/png" bash "${BASH_SOURCE[0]}" --json 2>&1); rc=$?
     printf '%s' "$o" | grep -q '"image": true' || { printf 'FAIL image json\n'; fail=1; }
     o=$(CLIP_FORCE_BACKEND=none CLIP_FAKE_TARGETS="" bash "${BASH_SOURCE[0]}" --json 2>&1); rc=$?
     [ "$rc" -eq 2 ] || { printf 'FAIL no-backend rc=%s\n' "$rc"; fail=1; }
+
+    # Over SSH the hint must name the codified fix, not just "ssh -Y".
+    o=$(env -u DISPLAY SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" CLIP_FORCE_BACKEND=none \
+        bash "${BASH_SOURCE[0]}" 2>&1); rc=$?
+    printf '%s' "$o" | grep -q 'ssh-x11-setup.sh' || { printf 'FAIL ssh hint missing setup path\n'; fail=1; }
 
     if [ "$fail" -eq 0 ]; then printf 'clipboard-preflight: self-test PASS (backend + image/text gate)\n'; else printf 'clipboard-preflight: self-test FAIL\n'; fi
     return "$fail"
