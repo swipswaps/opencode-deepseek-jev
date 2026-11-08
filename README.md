@@ -66,6 +66,79 @@ Then open the agent at `https://10.100.0.24:4096` (Basic auth from
 once with `./scripts/trust-ca-client.sh --server https://10.100.0.24:5099` or
 download `/ca.crt`. `10.100.0.1` is the client PC, not the server.
 
+## Remote client: clipboard, network, self-heal (2026-11-08)
+
+### How we got here
+
+- **Symptom:** pasting into the agent failed from a terminal that reached the
+  server over SSH, while the browser worked. Two causes, both now gated:
+  1. a display-less SSH shell has no `DISPLAY`, so `xclip` can only see the
+     *server* clipboard, not the client's;
+  2. an advertised **image** flavour makes OpenCode's paste probe
+     (`hasClipboardImage`/`fromClipboard`) log `ImageDecodeError` and abort the
+     prompt ("Failed to send prompt").
+- **Fix path:** `scripts/clipboard-preflight.sh` (RULE #95) gates the paste
+  path and exits `3` on an image flavour (`--clear-text`); a guarded `~/.bashrc`
+  block plus `rotate-server-password.sh` recover `DISPLAY` for interactive
+  shells; `scripts/network-change-probe.sh` proves the access plane after a
+  roam (`--watch`, and `--peer HOST` for the client side).
+- **Trust decision:** `ssh -Y` each time is not reproducible. X11 trust is now
+  encoded once in a managed `~/.ssh/config` Host block by
+  `scripts/ssh-x11-setup.sh` (`ForwardX11 yes` plus `ForwardX11Trusted yes`,
+  scoped to that one Host; keepalives so a roam reconnects and is detected).
+- **One shot:** `scripts/client-setup.sh` composes those pieces so a fresh
+  client is configured with a single command and repairs itself afterwards.
+
+### Where we are
+
+- The server is `ws24` (`10.100.0.24` Nebula, `100.119.125.16` Tailscale,
+  `192.168.4.24` LAN). The client is `10.100.0.1`. `10.100.0.24` is stable
+  across the client's LAN changes, so it is the default target.
+- `scripts/client-setup.sh` discovers a reachable address (mesh → Tailscale →
+  LAN), writes the managed SSH block, checks the local X server (XQuartz on
+  macOS), and installs a **self-heal timer** (systemd user on Linux, launchd on
+  macOS) that re-discovers the server and refreshes the block after a network
+  change. It is dependency-free (pure-bash editor, no `python3`, macOS
+  `bash 3.2` safe) and keeps a custom alias/user/trust across heals.
+- The timers: `opencode-client-heal.timer` (Linux) /
+  `com.opencode.deepseek.jev.client-heal` (macOS), every 5 minutes.
+- Both self-heal and the server-side watchdog are self-tested: `harness.sh` is
+  **4/0** (lint, test-hygiene, test-patterns, test-dashboard).
+
+### How to use
+
+```bash
+# One-time, on the client (Linux or macOS):
+git clone https://github.com/swipswaps/opencode-deepseek-jev
+./opencode-deepseek-jev/scripts/client-setup.sh      # discover + configure + install timer
+
+# Daily use:
+ssh opencode-jev                                     # managed alias (X11 + keepalives)
+./scripts/client-setup.sh --check                    # platform, host, reachability, X server, timer
+./scripts/client-setup.sh --heal                     # one repair pass (the timer runs this)
+./scripts/client-setup.sh --discover                 # print the chosen server and exit
+./scripts/client-setup.sh --uninstall                # remove SSH block + timer
+```
+
+Options: `--server HOST` (skip discovery), `--candidates "a b c"`, `--alias
+NAME`, `--user USER`, `--interval SEC`, `--untrusted`, `--no-heal`, `--quiet`,
+`--install-deps` (best-effort; installs XQuartz via `brew` on macOS).
+
+Notes:
+
+- Clipboard still crosses the network only through X11 forwarding: the server's
+  `xclip` talks to the client's X server. On macOS install/run **XQuartz**; the
+  setup tries to start it. On Linux run this on the desktop session that owns
+  the clipboard.
+- Reachability comes from the mesh: the client needs Nebula (or Tailscale) up to
+  reach `10.100.0.24` when the two machines are on different networks. The
+  script falls back to the LAN address when they share one.
+- After a roam, `scripts/network-change-probe.sh --peer 10.100.0.24` is the
+  acceptance test; `--peer <LAN-IP>` proves the same-network path. Both must
+  print `VERDICT: PASS`.
+- Debug: `./scripts/client-setup.sh --check`, `./scripts/clipboard-preflight.sh`,
+  and the heal log at `~/.local/state/opencode-client-heal.log`.
+
 ## What runs where
 
 | Piece | Type | Where | Address | What it does |

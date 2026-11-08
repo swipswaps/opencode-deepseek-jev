@@ -836,11 +836,12 @@ client-setup.sh
     server (XQuartz on macOS), and installs a self-heal timer (systemd user on
     Linux, launchd on macOS) that re-discovers the server and repairs the block
     after a network change. --check reports; --write-only writes config/units
-    without launching; --heal is the timer pass (keeps a custom alias/user);
-    --uninstall removes block + timer; --discover prints the chosen server;
-    --self-test offline. Dependency-free (no python3; macOS bash 3.2 safe).
-    --install-deps is best-effort (brew cask on macOS). Gated in
-    test-hygiene.sh.
+    without launching; --heal is the timer pass and reuses the saved
+    candidates/alias/trust (`~/.local/state/opencode-client-setup.conf`), so a
+    custom --server survives healing; --uninstall removes block + timer;
+    --discover prints the chosen server; --self-test offline. Dependency-free
+    (no python3; macOS bash 3.2 safe). --install-deps is best-effort (brew cask
+    on macOS). Gated in test-hygiene.sh.
 
 ssh-x11-setup.sh
     Codifies clipboard-over-SSH instead of typing `ssh -Y` after every roam.

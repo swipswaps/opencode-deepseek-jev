@@ -25,8 +25,8 @@
 # --interval SEC, --untrusted, --no-heal, --quiet, --install-deps.
 #
 # Seams (for self-test/CI): CLIENT_PLATFORM=linux|darwin, CLIENT_SSH_CONFIG,
-# CLIENT_UNIT_DIR, CLIENT_LOG, CLIENT_FAKE_REACHABLE, CLIENT_FAKE_NET,
-# CLIENT_NO_LAUNCH, CLIENT_NO_LOG.
+# CLIENT_UNIT_DIR, CLIENT_LOG, CLIENT_STATE, CLIENT_FAKE_REACHABLE,
+# CLIENT_FAKE_NET, CLIENT_NO_LAUNCH, CLIENT_NO_LOG.
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No top-level exit.
 # No 2>/dev/null. No subprocess.run. No kill without signal.
@@ -63,6 +63,27 @@ unit_dir() {
 }
 
 log_path() { printf '%s' "${CLIENT_LOG:-$HOME/.local/state/opencode-client-heal.log}"; }
+
+state_path() { printf '%s' "${CLIENT_STATE:-$HOME/.local/state/opencode-client-setup.conf}"; }
+
+state_get() {
+    # state_get KEY FILE -> value after the first '=' (empty if absent)
+    local key="$1" f="$2" line
+    [ -f "$f" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "$key"=*) printf '%s' "${line#*=}"; return 0 ;;
+        esac
+    done < "$f"
+    return 1
+}
+
+save_state() {
+    local f="$1" cands="$2" alias="$3" trusted="$4" untrusted=0
+    [ "$trusted" = "1" ] || untrusted=1
+    mkdir -p "$(dirname "$f")" || return 0
+    printf 'CANDIDATES=%s\nALIAS=%s\nUNTRUSTED=%s\n' "$cands" "$alias" "$untrusted" > "$f"
+}
 
 log() {
     local msg="$1" f
@@ -132,11 +153,28 @@ x_server_state() {
         fi
         printf 'missing'; return 0
     fi
-    if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        printf 'running'; return 0
-    fi
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then printf 'running'; return 0; fi
+    case "${DISPLAY:-}" in
+        '') ;;
+        localhost:* | 127.0.0.1:*) printf 'forwarded'; return 0 ;;
+        *) printf 'running'; return 0 ;;
+    esac
     if [ -S /tmp/.X11-unix/X0 ]; then printf 'socket-present'; return 0; fi
     printf 'missing'
+}
+
+config_trust() {
+    local f="$1"
+    [ -f "$f" ] || { printf 'none'; return 0; }
+    if grep -q '^# >>> opencode-deepseek-jev x11 >>>$' "$f" 2>&1; then
+        if grep -q '^    ForwardX11Trusted yes$' "$f" 2>&1; then
+            printf 'trusted'
+        else
+            printf 'untrusted'
+        fi
+    else
+        printf 'none'
+    fi
 }
 
 start_x_server() {
@@ -208,7 +246,7 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash $SELF_DIR/client-setup.sh --heal --quiet
+ExecStart=/bin/bash "$SELF_DIR/client-setup.sh" --heal --quiet
 EOF
     cat > "$dir/opencode-client-heal.timer" <<EOF
 [Unit]
@@ -282,14 +320,17 @@ self_test() {
     export CLIENT_NO_LOG=1
     export CLIENT_SSH_CONFIG="$cfg"
     export CLIENT_UNIT_DIR="$units"
+    export CLIENT_STATE="$work/state"
 
-    CLIENT_PLATFORM=linux bash "$0" --write-only --alias testalias --user tester > "$work/setup.txt" 2>&1
+    CLIENT_PLATFORM=linux bash "$0" --write-only --alias testalias --user tester \
+        --candidates "10.100.0.24 192.168.4.24" > "$work/setup.txt" 2>&1
     [ "$?" -eq 0 ] || { printf 'FAIL linux write-only: %s\n' "$(cat "$work/setup.txt")"; fail=1; }
     grep -q '^Host testalias$' "$cfg" || { printf 'FAIL config alias\n'; fail=1; }
     grep -q '^    HostName 10.100.0.24$' "$cfg" || { printf 'FAIL discovery host\n'; fail=1; }
     grep -q '^    ForwardX11Trusted yes$' "$cfg" || { printf 'FAIL trusted line\n'; fail=1; }
+    grep -q '^CANDIDATES=10.100.0.24 192.168.4.24$' "$work/state" || { printf 'FAIL state saved\n'; fail=1; }
     [ -f "$units/opencode-client-heal.timer" ] || { printf 'FAIL timer unit\n'; fail=1; }
-    grep -q "ExecStart=/bin/bash $SELF_DIR/client-setup.sh --heal --quiet" "$units/opencode-client-heal.service" \
+    grep -q "ExecStart=/bin/bash \"$SELF_DIR/client-setup.sh\" --heal --quiet" "$units/opencode-client-heal.service" \
         || { printf 'FAIL service ExecStart\n'; fail=1; }
     grep -q '^OnUnitInactiveSec=300s$' "$units/opencode-client-heal.timer" || { printf 'FAIL timer interval\n'; fail=1; }
 
@@ -306,19 +347,24 @@ self_test() {
     out="$(CLIENT_FAKE_REACHABLE="" bash "$0" --discover 2>&1)"
     [ "$?" -eq 1 ] || { printf 'FAIL discover-unreachable rc\n'; fail=1; }
 
-    # Heal with a changed address must refresh HostName in place.
-    CLIENT_FAKE_REACHABLE="10.100.0.24" bash "$0" --write-only --alias testalias > /dev/null 2>&1
+    # Heal after a roam: saved candidates are reused, the reachable address
+    # changed, and the block is refreshed in place.
     CLIENT_FAKE_REACHABLE="192.168.4.24" bash "$0" --heal --quiet > /dev/null 2>&1
     grep -q '^    HostName 192.168.4.24$' "$cfg" || { printf 'FAIL heal did not refresh host\n'; fail=1; }
+
+    out="$(CLIENT_FAKE_REACHABLE="192.168.4.24" bash "$0" --check 2>&1)"
+    printf '%s' "$out" | grep -q 'VERDICT: READY' || { printf 'FAIL check ready\n'; fail=1; }
+    printf '%s' "$out" | grep -q 'Host testalias, trusted' || { printf 'FAIL check alias/trust\n'; fail=1; }
 
     CLIENT_PLATFORM=linux bash "$0" --uninstall > /dev/null 2>&1
     grep -q 'ForwardX11' "$cfg" && { printf 'FAIL uninstall left block\n'; fail=1; }
     [ -f "$units/opencode-client-heal.timer" ] && { printf 'FAIL uninstall left timer\n'; fail=1; }
+    [ -f "$work/state" ] && { printf 'FAIL uninstall left state\n'; fail=1; }
 
     bash "$0" --bogus > /dev/null 2>&1
     [ "$?" -eq 2 ] || { printf 'FAIL unknown arg rc\n'; fail=1; }
 
-    rm -f "$work/config" "$work/config".bak.* "$work/units"/* "$work/darwin"/* \
+    rm -f "$work/config" "$work/config".bak.* "$work/state" "$work/units"/* "$work/darwin"/* \
         "$work"/*.txt "$work"/*.log
     rmdir "$work/units" "$work/darwin" "$work" 2>&1 || true
 
@@ -339,7 +385,7 @@ usage() {
 main() {
     local mode="setup" server="" alias="$ALIAS_DEFAULT" user="${USER:-}" candidates="$DEFAULT_CANDIDATES"
     local interval="$INTERVAL_DEFAULT" trusted=1 no_heal=0 rc=0
-    local alias_set=0 user_set=0 trust_set=0
+    local alias_set=0 user_set=0 trust_set=0 candidates_set=0
     QUIET=0 INSTALL_DEPS=0
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -353,7 +399,7 @@ main() {
             --server) server="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
             --alias) alias="${2:-}"; alias_set=1; [ $# -ge 2 ] && shift; shift ;;
             --user) user="${2:-}"; user_set=1; [ $# -ge 2 ] && shift; shift ;;
-            --candidates) candidates="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
+            --candidates) candidates="${2:-}"; candidates_set=1; [ $# -ge 2 ] && shift; shift ;;
             --interval) interval="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
             --untrusted) trusted=0; trust_set=1; shift ;;
             --trusted) trusted=1; trust_set=1; shift ;;
@@ -372,6 +418,17 @@ main() {
         return 2
     fi
     if [ -n "$server" ]; then CANDIDATES="$server"; fi
+
+    local sp=""
+    sp="$(state_path)"
+    if [ -z "$server" ] && [ "$candidates_set" -eq 0 ] && [ -f "$sp" ]; then
+        local saved=""
+        saved="$(state_get CANDIDATES "$sp")"
+        if [ -n "$saved" ]; then
+            candidates="$saved"
+            CANDIDATES="$saved"
+        fi
+    fi
 
     local p cfg units
     p="$(platform)"
@@ -392,23 +449,25 @@ main() {
         uninstall)
             disable_units "$units" "$p"
             bash "$X11_SETUP" --remove "$cfg"
+            rm -f "$sp"
             say "uninstalled client self-heal and removed the SSH block"
             log "uninstall complete"
             return 0
             ;;
         check)
-            local ch reached xs
+            local ch reached xs ca
             ch="$(current_host "$cfg")"
+            ca="$(managed_field "$cfg" Host)"
             reached="$(discover)"
             xs="$(x_server_state "$p")"
             printf 'platform: %s\n' "$p"
             printf 'ssh config: %s\n' "$cfg"
-            printf 'configured host: %s\n' "${ch:-<none>}"
+            printf 'configured host: %s (Host %s, %s)\n' "${ch:-<none>}" "${ca:-<none>}" "$(config_trust "$cfg")"
             printf 'reachable now: %s\n' "${reached:-<none>}"
             printf 'x server: %s\n' "$xs"
             printf 'self-heal: %s (%s)\n' "$(heal_units_state "$units" "$p")" "$units"
             [ -n "$reached" ] || { printf 'VERDICT: FAIL (server unreachable)\n'; return 1; }
-            printf 'VERDICT: READY (ssh %s)\n' "$alias"
+            printf 'VERDICT: READY (ssh %s)\n' "${ca:-$alias}"
             return 0
             ;;
         heal)
@@ -427,6 +486,10 @@ main() {
                 trusted=1
             elif [ "$trust_set" -eq 0 ] && grep -q '^    ForwardX11 ' "$cfg" 2>&1; then
                 trusted=0
+            elif [ "$trust_set" -eq 0 ]; then
+                local su=""
+                su="$(state_get UNTRUSTED "$sp")"
+                [ "$su" = "1" ] && trusted=0
             fi
             ct="$(current_host "$cfg")"
             if [ "$ct" != "$target" ] || ! grep -q '^    ForwardX11 yes$' "$cfg" 2>&1; then
@@ -457,6 +520,7 @@ main() {
         fi
     fi
     write_config "$target" "$alias" "$user" "$trusted" "$cfg" || rc=$?
+    save_state "$sp" "$CANDIDATES" "$alias" "$trusted"
     if [ "$no_heal" -eq 0 ]; then
         write_units "$units" "$p" "$interval" || rc=$?
         if [ "$mode" = "setup" ]; then enable_units "$units" "$p"; fi
