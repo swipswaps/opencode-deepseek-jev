@@ -227,6 +227,20 @@ except Exception:
         esac
     fi
 
+    # Paste gate (RULE #95): an advertised image flavour makes opencode's
+    # hasClipboardImage path abort the prompt ("Failed to send prompt"). Warn
+    # only on a real problem; a headless box with no display stays silent.
+    if [ -x "$REPO/scripts/clipboard-preflight.sh" ]; then
+        local cpjson="" cpj=""
+        cpjson=$(bash "$REPO/scripts/clipboard-preflight.sh" --json 2>&1); cpj=$?
+        case "$cpj" in
+            3) warn "clipboard advertises an image flavour; opencode may abort the paste (run: ./scripts/clipboard-preflight.sh --clear-text)" ;;
+            2) if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then warn "no clipboard backend (install wl-clipboard/xclip; over SSH use ssh -Y)"; fi ;;
+            0) good "clipboard backend usable (text, no image flavour)" ;;
+            *) warn "clipboard preflight inconclusive: $cpjson" ;;
+        esac
+    fi
+
     local ready=1
     [ "$CRIT" -gt 0 ] && ready=0
 
