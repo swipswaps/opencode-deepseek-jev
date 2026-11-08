@@ -1,12 +1,11 @@
 [Unit]
 Description=opencode-web + caddy access plane (waits for tunnel bind IPs)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
-# A user manager has no cross-manager ordering with tailscaled.service, so
-# ordering is done in scripts/web.sh: wait_for_bind_ips() polls until every
-# IP declared in docker/docker-compose.yml exists before compose up. That is
-# what prevents the boot race where caddy exited 255 with EADDRNOTAVAIL.
-Wants=network-online.target
-After=network-online.target
+# A user manager has no cross-manager ordering with system units, so
+# `Wants=/After=network-online.target` would be a silent no-op here
+# (systemd/systemd#3312). Ordering is instead done in scripts/web.sh:
+# wait_for_bind_ips() polls until every pinned IP exists, and caddy publishes
+# on the wildcard address so a missing tunnel IP cannot abort the bind.
 
 [Service]
 Type=oneshot

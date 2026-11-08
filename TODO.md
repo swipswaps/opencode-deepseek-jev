@@ -4,9 +4,20 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-11-05
+Last updated: 2026-11-08
 
 ## Done (most recent first)
+
+- [x] **WEB-REL — 2026-11-08 (RULE #94).** Hardened the access-plane watchdog:
+      `web-health.sh` now takes one settle re-probe, requires a
+      consecutive-failure threshold (`WEB_HEALTH_FAIL_THRESHOLD`, 2) and a
+      recovery cooldown (`WEB_HEALTH_COOLDOWN_SEC`, 600) from a durable state
+      file, delegates recovery to the checkpointed `recover-4096.sh --recover`,
+      writes its log under `logs/`, and has a behavioral offline `--self-test`.
+      `docker-compose.yml` gates caddy on an `opencode-web` healthcheck
+      (`depends_on: condition: service_healthy`). User units dropped the no-op
+      `network-online.target` ordering; the timer switched to
+      `OnUnitInactiveSec`. Both self-tests wired into `test-hygiene.sh`.
 
 - [x] **UX-8 — 2026-11-06.** Added `usability-suite.py` (ISO 9241-11
       tasks, WCAG automated subset, CWV lab, target/keyboard/reflow/reduced

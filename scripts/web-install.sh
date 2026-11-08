@@ -42,10 +42,14 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null; }
 
 self_test() {
-    local fail=0 work="" real=""
+    local fail=0 work="" real="" out=""
     real=$(resolve_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)")
     work=$(mktemp -d)
-    REPO_OVERRIDE="$real" DEST_OVERRIDE="$work/unit" bash "${BASH_SOURCE[0]}" --write-only > /dev/null 2>&1
+    out=$(REPO_OVERRIDE="$real" DEST_OVERRIDE="$work/unit" bash "${BASH_SOURCE[0]}" --write-only 2>&1)
+    if [ "$?" -ne 0 ]; then
+        printf 'FAIL write-only: %s\n' "$out"
+        fail=1
+    fi
     grep -q "ExecStart=$real/scripts/web.sh" "$work/unit/opencode-web.service" \
         || { printf 'FAIL ExecStart baked\n'; fail=1; }
     grep -q "Restart=on-failure" "$work/unit/opencode-web.service" \
@@ -54,8 +58,12 @@ self_test() {
         || { printf 'FAIL unit type\n'; fail=1; }
     grep -q "ExecStart=$real/scripts/web-health.sh" "$work/unit/opencode-web-health.service" \
         || { printf 'FAIL health ExecStart baked\n'; fail=1; }
-    grep -q "OnUnitActiveSec=2min" "$work/unit/opencode-web-health.timer" \
+    grep -q "OnUnitInactiveSec=2min" "$work/unit/opencode-web-health.timer" \
         || { printf 'FAIL watchdog timer interval\n'; fail=1; }
+    if grep -qE '^(Wants|After)=network-online\.target' "$work/unit/opencode-web.service" "$work/unit/opencode-web-health.service"; then
+        printf 'FAIL user unit still orders on a system-only target\n'
+        fail=1
+    fi
     rm -f "$work/unit/opencode-web.service" "$work/unit/opencode-web-health.service" \
         "$work/unit/opencode-web-health.timer"
     rmdir "$work/unit" "$work"
@@ -105,6 +113,12 @@ main() {
             return 0
             ;;
         --uninstall)
+            # Disable first so the timers.target.wants symlinks go too; just
+            # removing the unit file leaves a dangling enablement behind.
+            if have systemctl; then
+                systemctl --user disable --now opencode-web-health.timer > /dev/null 2>&1 || true
+                systemctl --user disable --now opencode-web.service > /dev/null 2>&1 || true
+            fi
             rm -f "$DEST/opencode-web.service" "$DEST/opencode-web-health.service" \
                 "$DEST/opencode-web-health.timer"
             have systemctl && systemctl --user daemon-reload > /dev/null || true

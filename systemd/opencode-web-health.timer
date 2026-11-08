@@ -4,7 +4,11 @@ Documentation=https://github.com/swipswaps/opencode-deepseek-jev
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=2min
+# Measure the next tick from the previous FINISH, not the previous START:
+# a Type=oneshot service that runs a recovery can take longer than the
+# interval, and OnUnitActiveSec drifts/stacks while OnUnitInactiveSec does
+# not (systemd.timer(5); systemd/systemd#21600).
+OnUnitInactiveSec=2min
 Persistent=true
 RandomizedDelaySec=20
 Unit=opencode-web-health.service

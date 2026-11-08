@@ -1,5 +1,23 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-08 (access-plane reliability — RULE #94):** the live web plane
+> was healthy (`4096=401`, `5099=200` on loopback, Nebula `10.100.0.24`,
+> Tailscale `100.119.125.16`, LAN `192.168.4.24`; caddy logs show the macbook
+> `10.100.0.1` getting `200`s), so the "not running" claim was reachability,
+> not a process fault. The audit found the **2-minute watchdog could self-induce
+> a restart loop**: a probe taken during a caddy restart returned `000`, which
+> ran `web.sh` and restarted caddy again. `web-health.sh` now absorbs one sample
+> (settle), requires a **consecutive-failure threshold** and a **recovery
+> cooldown** held in `data/observability/web-health.state`, delegates the action
+> to the checkpointed `recover-4096.sh --recover`, and writes the recovery log
+> under `logs/` (not `/tmp`). Compose now gates caddy on an `opencode-web`
+> `healthcheck` via `depends_on: condition: service_healthy` (Docker: Compose
+> waits for *running*, not *ready*). User units dropped the no-op
+> `network-online.target` ordering (user managers cannot see system targets,
+> systemd/systemd#3312) and the timer uses `OnUnitInactiveSec` (from FINISH, no
+> drift). `test-hygiene.sh` now runs both self-tests. Live re-verify: web-health
+> rc=0 on all four paths.
+
 > **PIN 2026-11-06 (status automation):** added `issue-benchmark.py`
 > (security/stall/tunnel metrics -> `issue_bench` + `benchmark.json`),
 > `choice-gate.py` (+ `choices.json`) for the human-only residuals, `pulse.py`
@@ -647,80 +665,3 @@ detector, p≈0.94).
 > Next: TUNNEL-1's fix is external (#5, T8 watch live); local queue otherwise
 > exhausted — sections C/E remain. `gh` is absent in-container (E2).
 
-> **PIN 2026-10-18 (session `ses_eb04bf350f…` → fresh, E2):** closed the E2
-> **external-state bridge** — the hand-off loop had no read-back (an issue was a
-> manual body-file relay, so an external unit could not close). New
-> **`scripts/issue-bridge.py`**: `link` records a filed issue (repo#number) as
-> an OPEN external unit; `poll` reads its state — `gh issue view --json` on the
-> host (`--gh`) or a host-written JSON via `--in` (the host bridge when `gh` is
-> absent) — into the **same ledger** triage/`next-action` read, de-duped by
-> `(source,source_key)` so a re-poll is a no-op; `status [--json]` prints the
-> latest state. Wired: `nebula-systemd-override.sh --handoff` now prints the
-> link+poll read-back step; `next-action.sh` surfaces open external issues (text
-> `external:` + JSON `external`); `issue-bridge` self-test in `test-durable.sh`
-> (+1 → 8/0); catalogued in `tools.json` + `scripts/README.txt`. **Live:**
-> linked `swipswaps/proxmox-dual-plane-mesh#5` → `next-action` prints
-> `external: 1 open issue(s) — … #5 [OPEN]`. Gate: lint 266/0 · hygiene 60/0 ·
-> patterns 6/0 · durable 8/0 · dashboard 121/0 — all green (RULES #54 resolved
-> once `issue-bridge.py` was git-**tracked**).
-> Next: **E1** (claims → enforced gates), **E3** (concurrency lock/merge key),
-> **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).
-
-> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E1):** closed **E1**.
-> `scripts/capabilities.json` declared 15 capabilities but **9 of its own
-> `registration` markers had drifted** (`name.sh --self-test` vs the file's
-> `"$REPO/scripts/name.sh" --self-test`), so they read **DEGRADED** and no gate
-> said so — only the fixture `--self-test` ran, proving the *checker*, not the
-> *claims*. Fixed the markers (live registry **15/15 GREEN**) and made the
-> **live** registry **fail closed** on any DEGRADED/MISSING not listed in
-> `accepted_degraded` (id → reason; `UNACCEPTED:` + nonzero exit);
-> `test-hygiene.sh` runs it (+1 → **61/0**); 2 new self-test cases. New **RULE
-> #84** — same class as the 30-script catalog: promote each claim to a gate,
-> not a sentence. Next: **E3** (lock/merge key), **E4** (owned task identity);
-> TUNNEL-1's fix stays external (#5, T8 live).
-
-> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E3):** closed **E3
-> concurrency lock**. The loop's shared writers have no merge key, so two live
-> sessions could both own a segment. New **`scripts/loop-lock.sh`**: a TTL lease
-> (1800s, actor-tagged), `flock`-serialised, atomic write; acquire/refresh/
-> release/status/check; stale (TTL) + `--force` takeover, never silent.
-> `loop-state.sh --begin` requires it (**refuses a busy loop**, rc 3), `--end`
-> releases; `next-action.sh` prints `lock:` + a blocker when another live holder
-> owns it. Gated: `test-durable.sh` +2 (loop-lock + loop-state) → **10/0**; new
-> **RULE #85**. Moved the older `TODO.md` Done half to `docs/todo-archive-2026.md`
-> to hold the tier-1 budget (RULE #77).
-> Next: **E4** (owned task identity); TUNNEL-1's fix stays external (#5, T8 live).
-
-> **PIN 2026-10-18 (session `ses_eb04be01…` → fresh, E4 — E-gaps complete):**
-> closed **E4 owned task identity**. A unit had no stable ID and the DB `todo`
-> is session-local, so begin/close/hand-off could not name the same unit across
-> sessions. New **`scripts/task-id.py`**: `TASK`/`TASK_STATE` rows on the same
-> ledger — `new` mints (or returns, by title) a stable id (`T-<6hex>`, or an
-> explicit `--id` like `TUNNEL-1`) + owner; `close --id|--title`; `show`/`list
-> [--all]`; idempotent by `source_key`. Wired: `loop-state.sh --begin` registers
-> the unit, `--end` closes it; `next-action.sh` prints `tasks:` + JSON `tasks`.
-> Gated: `test-durable.sh` +1 → **11/0**; new **RULE #86**. **All four E-gaps
-> (E1–E4) closed.** Local queue is thin (E1 regression-eval deps stay
-> D-decisions); TUNNEL-1 external (#5, T8 live).
-
-> **PIN 2026-10-18 (session `ses_eb04be01…` → OVER BUDGET, hand off):** closed
-> the **auto-handoff action** (RULES #87): the #76 budget STOP no longer just
-> advises — `auto-handoff.sh` targets the latest over-budget session, runs the
-> brief chain, and prints the paste path, idempotently; `preflight.sh` invokes
-> it on the STOP (`JEV_AUTO_HANDOFF=0` disables). `test-durable.sh` +1 → **12/0**.
-> **This session then crossed the hard budget (STOP, 3.1× over)** and the new
-> action produced its own brief: `logs/brief-ses_eaf110b93ffeOLMmxLklc5zx7P.md`
-> — start a FRESH session and paste it; do NOT `--fork/--continue`. Remaining
-> local residual: G1 UX drill-down (telemetry (3)); TUNNEL-1 external (#5, T8).
-
-> **PIN 2026-10-19 (G1 drill-down, fresh session):** closed the last local
-> telemetry-console residual (3). **Health** findings + budget/deny risks drill
-> to session detail (`data-go`); **patterns** bigram bars now carry
-> `example_sid` from `apiPatternsFresh` (`MAX(session_id)`) and drill; **pivot**
-> cells get a Plot `href` to an example session and the click is intercepted for
-> in-page detail; **word-cloud** terms drill into ranked session search. Proven
-> structural + contract checks in `test-dashboard.sh` (api `/api/patterns` must
-> expose `example_sid`; the three delegated listeners must exist). Gate: lint
-> **271/0** · patterns **6/0** · dashboard **123/0**. **The ranked queue is now
-> external/host-only** (TUNNEL-1 #5 + T8 watch; G4 needs the proxy; G6/G7 need a
-> host) — the next local unit must come from a new audited gap, not this queue.

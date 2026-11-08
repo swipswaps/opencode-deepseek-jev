@@ -69,6 +69,17 @@ services:
     environment:
       OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
     restart: unless-stopped
+    # Release the caddy dependency only once the upstream actually answers.
+    # Compose otherwise waits for "created/running", not "ready"
+    # (https://docs.docker.com/compose/how-tos/startup-order/), which is how
+    # caddy used to start into a 502 window during a restart. :4096 returns
+    # 401 behind Basic auth, so the check accepts 200 OR 401 (RFC 7235 §4.1).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4096/api/health | grep -qE '^(200|401)$$'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -99,7 +110,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - opencode-web
+      opencode-web:
+        condition: service_healthy
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

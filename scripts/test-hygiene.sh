@@ -411,6 +411,28 @@ PY
         bad 'recover-4096.sh present'
     fi
 
+    if [ -f "$REPO/scripts/web-health.sh" ]; then
+        if bash "$REPO/scripts/web-health.sh" --self-test > "$work/wh_st.txt" 2>&1; then
+            ok 'web-health: self-test (settle + threshold + cooldown + clear)'
+        else
+            bad 'web-health: self-test (settle + threshold + cooldown + clear)'
+            cat "$work/wh_st.txt"
+        fi
+    else
+        bad 'web-health.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/web-install.sh" ]; then
+        if bash "$REPO/scripts/web-install.sh" --self-test > "$work/wi_st.txt" 2>&1; then
+            ok 'web-install: self-test (units baked + timer semantics)'
+        else
+            bad 'web-install: self-test (units baked + timer semantics)'
+            cat "$work/wi_st.txt"
+        fi
+    else
+        bad 'web-install.sh present'
+    fi
+
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
         if bash "$REPO/scripts/session-guard.sh" --self-test > "$work/sg_st.txt" 2>&1; then
             ok 'session-guard: self-test (fixture + guidance + ledger seam)'

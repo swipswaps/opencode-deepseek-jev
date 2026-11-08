@@ -757,17 +757,25 @@ web.sh
 web-install.sh
     Install and enable the user units from systemd/: opencode-web.service
     (Type=oneshot, RemainAfterExit=yes, Restart=on-failure) so web.sh runs at
-    boot/login, and opencode-web-health.timer (every 2 min) so web-health.sh
-    re-rotates TLS SANs and re-covers a down client path. Bakes the repo path;
-    enables linger best-effort so it starts before login. --no-linger,
-    --write-only, --uninstall, --self-test.
+    boot/login, and opencode-web-health.timer (every 2 min measured from the
+    previous FINISH via OnUnitInactiveSec, so a long recovery cannot stack)
+    so web-health.sh re-rotates TLS SANs and re-covers a down client path.
+    Bakes the repo path; enables linger best-effort so it starts before login;
+    --uninstall disables before removing so no dangling wants-symlink remains.
+    --no-linger, --write-only, --uninstall, --self-test.
 
 web-health.sh
     Redundant watchdog: runs certs-init (rotates the server cert when the
     network/LAN IP changes, then restarts caddy), probes :4096/:5099 on
-    loopback plus every present Nebula/Tailscale/LAN interface, and runs
-    web.sh once when a path is down. Usually read-only; repairs only on
-    failure. --quiet, --self-test. Exit 0 healthy/recovered, 2 still down.
+    loopback plus every present Nebula/Tailscale/LAN interface, and acts only
+    on a PERSISTING failure: one settle retry absorbs a caddy restart, then a
+    consecutive-failure threshold (WEB_HEALTH_FAIL_THRESHOLD, default 2) and
+    a recovery cooldown (WEB_HEALTH_COOLDOWN_SEC, default 600) gate the
+    action, so a 2-minute timer cannot self-induce a restart loop. The action
+    delegates to the checkpointed, ledger-logged scripts/recover-4096.sh
+    --recover (falling back to web.sh), keeping output in logs/. --quiet,
+    --self-test (offline seams: threshold + cooldown + clear). Exit 0
+    healthy/recovered, 2 still down. Deferred is still 2, never a fake PASS.
 
 diag-opencode-web.sh
     Read-only access-plane diagnosis: container state, upstream :4096/:5099

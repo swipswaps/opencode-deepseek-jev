@@ -1,8 +1,8 @@
 [Unit]
 Description=opencode-web access-plane watchdog (certs + probes + recover)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
-Wants=network-online.target
-After=network-online.target
+# No network-online ordering: system targets are invisible to the user
+# manager (systemd/systemd#3312); web-health.sh probes the interfaces itself.
 
 [Service]
 Type=oneshot
