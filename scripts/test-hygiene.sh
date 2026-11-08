@@ -466,6 +466,17 @@ PY
         bad 'client-setup.sh present'
     fi
 
+    if [ -f "$REPO/scripts/hotspot-test.sh" ]; then
+        if bash "$REPO/scripts/hotspot-test.sh" --self-test > "$work/ht_st.txt" 2>&1; then
+            ok 'hotspot-test: self-test (before/after + control + json)'
+        else
+            bad 'hotspot-test: self-test (before/after + control + json)'
+            cat "$work/ht_st.txt"
+        fi
+    else
+        bad 'hotspot-test.sh present'
+    fi
+
     if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
         if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
             ok 'network-change-probe: self-test (matrix + peer + certs/bind seams)'

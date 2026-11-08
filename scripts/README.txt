@@ -1358,9 +1358,16 @@ probe-diagnose.sh
     PASS, 2 FAIL.
 
 hotspot-test.sh
-    Roaming test from a hotspot-tethered client: proves the overlay URLs survive
-    a LAN switch that kills LAN-bound URLs. Run on the roaming box; read-only
-    except a fresh /tmp Chrome CDP profile. Exit 0 all-green, 2 otherwise.
+    Phased network-change test for a client that switches to a mobile hotspot
+    (the 10.100.0.1 -> phone case). Run ON THE CLIENT. --before records a
+    baseline (overlay :4096/:5099, LAN control, DNS, address signature);
+    --after re-probes and asserts the overlay still passes, the LAN control
+    dropped (or stayed reachable on the same network), DNS resolves, and runs
+    client-setup.sh --heal + --check; --auto runs before/prompt/after; --watch
+    re-runs on an address change; --json machine summary. Optional
+    ROAM_SSH_HOST proves SSH X11 forwarding still yields a DISPLAY.
+    --self-test offline (fake seams). Exit 0 PASS, 2 FAIL, 3 cannot run.
+    Gated in test-hygiene.sh.
 
 host-path-probe.sh
     Break down the :5099/:4096 hop (dns -> connect -> tls -> ttfb -> total)

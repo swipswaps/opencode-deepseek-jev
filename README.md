@@ -133,9 +133,14 @@ Notes:
 - Reachability comes from the mesh: the client needs Nebula (or Tailscale) up to
   reach `10.100.0.24` when the two machines are on different networks. The
   script falls back to the LAN address when they share one.
-- After a roam, `scripts/network-change-probe.sh --peer 10.100.0.24` is the
-  acceptance test; `--peer <LAN-IP>` proves the same-network path. Both must
-  print `VERDICT: PASS`.
+- Changing networks (for example the `10.100.0.1` laptop to a phone hotspot):
+  run `./scripts/hotspot-test.sh --before`, switch the laptop to the hotspot,
+  then `./scripts/hotspot-test.sh --after` (or `--auto` to be prompted). It
+  asserts the Nebula overlay still answers `:4096`/`:5099`, the LAN address is
+  the expected control, DNS resolves, and `client-setup.sh --heal` runs. The
+  server-side `./scripts/network-change-probe.sh --peer 10.100.0.24` is the same
+  acceptance test from the other side; `--peer <LAN-IP>` proves the
+  same-network path. Both must print `VERDICT: PASS`.
 - Debug: `./scripts/client-setup.sh --check`, `./scripts/clipboard-preflight.sh`,
   and the heal log at `~/.local/state/opencode-client-heal.log`.
 

@@ -1016,11 +1016,14 @@
   },
   {
     "id": "hotspot-test",
-    "title": "Roaming test from a hotspot-tethered client",
+    "title": "Phased hotspot / network-change test (client)",
     "where": "host",
-    "purpose": "Prove the overlay URLs survive a LAN switch that kills LAN-bound URLs. Run on the roaming box; read-only except a fresh /tmp Chrome CDP profile. Exit 0 all-green, 2 otherwise.",
+    "purpose": "Run on the client (10.100.0.1 -> phone hotspot). --before records overlay :4096/:5099, the LAN control and DNS; --after re-probes and asserts the overlay still passes after the switch, the LAN dropped (or stayed reachable on the same network), DNS resolves, and client-setup --heal/--check runs. --auto runs before/prompt/after; --watch re-runs on an address change; --json; --self-test offline. Optional ROAM_SSH_HOST proves SSH X11 still yields a DISPLAY. Exit 0 PASS, 2 FAIL, 3 cannot run.",
     "commands": [
-      "bash scripts/hotspot-test.sh"
+      "bash scripts/hotspot-test.sh --before",
+      "bash scripts/hotspot-test.sh --after",
+      "bash scripts/hotspot-test.sh --auto",
+      "bash scripts/hotspot-test.sh --self-test"
     ]
   },
   {
