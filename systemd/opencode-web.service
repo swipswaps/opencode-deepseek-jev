@@ -1,0 +1,26 @@
+[Unit]
+Description=opencode-web + caddy access plane (waits for tunnel bind IPs)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+# A user manager has no cross-manager ordering with tailscaled.service, so
+# ordering is done in scripts/web.sh: wait_for_bind_ips() polls until every
+# IP declared in docker/docker-compose.yml exists before compose up. That is
+# what prevents the boot race where caddy exited 255 with EADDRNOTAVAIL.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# REPO is baked in by scripts/web-install.sh (no sudo needed).
+EnvironmentFile=-__REPO__/.env.local
+ExecStart=__REPO__/scripts/web.sh
+# web.sh already waits up to 30s per bind IP; this retry covers a late
+# tailscale/nebula address or a docker daemon that was not ready yet.
+Restart=on-failure
+RestartSec=20
+TimeoutStartSec=300
+Nice=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

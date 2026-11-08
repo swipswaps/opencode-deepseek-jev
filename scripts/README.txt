@@ -749,7 +749,31 @@ capabilities.mjs
 
 web.sh
     Start the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD; refuses
-    to start an unauthenticated server unless --insecure.
+    to start an unauthenticated server unless --insecure. wait_for_bind_ips()
+    polls until every IP in docker-compose.yml exists before compose up, then
+    ensure_caddy() re-checks the proxy — the fix for caddy Exited (255) with
+    EADDRNOTAVAIL when a boot races tailscaled/nebula.
+
+web-install.sh
+    Install ~/.config/systemd/user/opencode-web.service (Type=oneshot,
+    RemainAfterExit=yes, Restart=on-failure) so web.sh runs at boot/login and
+    heals the bind-IP race. Bakes the repo path; enables linger best-effort so
+    the unit starts before login. --no-linger, --write-only, --uninstall,
+    --self-test.
+
+diag-opencode-web.sh
+    Read-only access-plane diagnosis: container state, upstream :4096/:5099
+    probes inside the container, caddy exit/error evidence, declared bind IPs
+    vs host addresses, published ports/listeners, adjacent failed units, and
+    chat-store telemetry. Verdict REACHABLE/UPSTREAM_DOWN/PROXY_DOWN; writes
+    one report to logs/diag-opencode-web-<utc>.log. Never starts or stops
+    anything. --help. Exit 0 reachable, 2 upstream down, 3 proxy down.
+
+diag-opencode-store.py
+    Read-only chat-store telemetry: SQLite mode=ro + query_only, per-query
+    deadline, size/WAL, core table counts, recent sessions, and stale
+    running/pending tool parts. --db, --json, --integrity (opt-in quick_check;
+    skipped under a live writer), --stuck-after.
 
 web-restart.sh
     Restart the observability dashboard so :5099 serves the current checkout.

@@ -14,6 +14,7 @@
 #   bash scripts/ux.sh cost              # cost accounting
 #   bash scripts/ux.sh review            # pre-push semantic review (SKIP if uninstalled)
 #   bash scripts/ux.sh net               # DNS recovery-loop check (never mutates)
+#   bash scripts/ux.sh webdiag           # read-only :4096/:5099 access-plane diagnosis
 # Exit 0 all-green, 2 otherwise.
 # Plain ASCII. No sed. No rm -rf. No set -e.
 set -uo pipefail
@@ -29,6 +30,7 @@ usage() {
     printf '  cost     cost accounting\n'
     printf '  review   pre-push semantic review (SKIP if reviewer absent)\n'
     printf '  net      DNS recovery-loop check (never mutates)\n'
+    printf '  webdiag  read-only :4096/:5099 access-plane diagnosis\n'
 }
 cmd="${1:-help}"
 case "$cmd" in
@@ -44,6 +46,7 @@ case "$cmd" in
     cost) bash scripts/cost.sh; exit "$?" ;;
     review) bash scripts/review-diff.sh; exit "$?" ;;
     net) bash scripts/dns-guard.sh; exit "$?" ;;
+    webdiag) bash scripts/diag-opencode-web.sh; exit "$?" ;;
     status)
         bash scripts/chrome-cdp-up.sh || exit 2
         bash scripts/probe-diagnose.sh || exit 2

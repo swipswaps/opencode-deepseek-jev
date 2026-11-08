@@ -21,6 +21,9 @@ steps:
   - name: net
     cmd: bash scripts/dns-guard.sh
     expect: "verdict: HEALTHY"
+  - name: webdiag
+    cmd: bash scripts/diag-opencode-web.sh
+    expect: "REACHABLE"
   - name: chrome
     cmd: bash scripts/chrome-cdp-up.sh
     expect: "CDP listening"
