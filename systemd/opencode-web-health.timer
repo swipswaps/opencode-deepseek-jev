@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the opencode-web watchdog every 2 minutes
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Persistent=true
+RandomizedDelaySec=20
+Unit=opencode-web-health.service
+
+[Install]
+WantedBy=timers.target

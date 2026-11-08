@@ -82,19 +82,17 @@ services:
     image: caddy:2-alpine
     container_name: opencode-caddy
     user: "1000:1000"
+    # Publish on the wildcard address (all interfaces). Docker binds 0.0.0.0,
+    # which always exists, so a roaming laptop whose LAN/tailscale/nebula IP is
+    # absent at start can never fail this container with EADDRNOTAVAIL. Every
+    # present interface (loopback, LAN, Nebula 10.100.0.24, Tailscale) reaches
+    # it; auth is enforced by web-entrypoint.sh and TLS by the Caddyfile.
+    # Do NOT pin individual host IPs here: one missing IP aborted the whole
+    # published port set and took the overlay clients down with it.
     ports:
-      - "127.0.0.1:4096:4096"
-      - "127.0.0.1:5099:5099"
-      - "127.0.0.1:443:443"
-      - "10.100.0.24:4096:4096"
-      - "10.100.0.24:5099:5099"
-      - "10.100.0.24:443:443"
-      - "192.168.4.24:4096:4096"
-      - "192.168.4.24:5099:5099"
-      - "192.168.4.24:443:443"
-      - "100.119.125.16:4096:4096"
-      - "100.119.125.16:5099:5099"
-      - "100.119.125.16:443:443"
+      - "4096:4096"
+      - "5099:5099"
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/certs:ro

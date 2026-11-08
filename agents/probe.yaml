@@ -15,8 +15,10 @@ description: HTTPS + auth + render evidence for opencode-web via caddy
 env_required:
   - OPENCODE_SERVER_PASSWORD
 defaults:
-  OPENCODE_API_URL: https://192.168.4.24:4096
-  DASH_URL: https://192.168.4.24:5099
+  # Stable Nebula address: survives a LAN/DHCP change (the server is the
+  # ThinkPad; clients such as the MacBook reach it at 10.100.0.24).
+  OPENCODE_API_URL: https://10.100.0.24:4096
+  DASH_URL: https://10.100.0.24:5099
 steps:
   - name: net
     cmd: bash scripts/dns-guard.sh

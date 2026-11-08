@@ -1,0 +1,14 @@
+[Unit]
+Description=opencode-web access-plane watchdog (certs + probes + recover)
+Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# REPO is baked in by scripts/web-install.sh (no sudo needed).
+EnvironmentFile=-__REPO__/.env.local
+ExecStart=__REPO__/scripts/web-health.sh --quiet
+Nice=10
+NoNewPrivileges=true
+TimeoutStartSec=300

@@ -749,23 +749,32 @@ capabilities.mjs
 
 web.sh
     Start the web UI on port 4096. Requires OPENCODE_SERVER_PASSWORD; refuses
-    to start an unauthenticated server unless --insecure. wait_for_bind_ips()
-    polls until every IP in docker-compose.yml exists before compose up, then
-    ensure_caddy() re-checks the proxy — the fix for caddy Exited (255) with
-    EADDRNOTAVAIL when a boot races tailscaled/nebula.
+    to start an unauthenticated server unless --insecure. Caddy publishes on
+    the wildcard address, so no DHCP/tunnel IP can abort the bind; if an
+    override still pins host IPs, wait_for_bind_ips() polls for them and
+    ensure_caddy() re-checks the proxy.
 
 web-install.sh
-    Install ~/.config/systemd/user/opencode-web.service (Type=oneshot,
-    RemainAfterExit=yes, Restart=on-failure) so web.sh runs at boot/login and
-    heals the bind-IP race. Bakes the repo path; enables linger best-effort so
-    the unit starts before login. --no-linger, --write-only, --uninstall,
-    --self-test.
+    Install and enable the user units from systemd/: opencode-web.service
+    (Type=oneshot, RemainAfterExit=yes, Restart=on-failure) so web.sh runs at
+    boot/login, and opencode-web-health.timer (every 2 min) so web-health.sh
+    re-rotates TLS SANs and re-covers a down client path. Bakes the repo path;
+    enables linger best-effort so it starts before login. --no-linger,
+    --write-only, --uninstall, --self-test.
+
+web-health.sh
+    Redundant watchdog: runs certs-init (rotates the server cert when the
+    network/LAN IP changes, then restarts caddy), probes :4096/:5099 on
+    loopback plus every present Nebula/Tailscale/LAN interface, and runs
+    web.sh once when a path is down. Usually read-only; repairs only on
+    failure. --quiet, --self-test. Exit 0 healthy/recovered, 2 still down.
 
 diag-opencode-web.sh
     Read-only access-plane diagnosis: container state, upstream :4096/:5099
     probes inside the container, caddy exit/error evidence, declared bind IPs
-    vs host addresses, published ports/listeners, adjacent failed units, and
-    chat-store telemetry. Verdict REACHABLE/UPSTREAM_DOWN/PROXY_DOWN; writes
+    (wildcard-aware) vs host addresses, client-path probes for
+    Nebula/Tailscale/LAN, published ports/listeners, adjacent failed units,
+    and chat-store telemetry. Verdict REACHABLE/UPSTREAM_DOWN/PROXY_DOWN; writes
     one report to logs/diag-opencode-web-<utc>.log. Never starts or stops
     anything. --help. Exit 0 reachable, 2 upstream down, 3 proxy down.
 

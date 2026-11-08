@@ -2,11 +2,15 @@
 #
 # web-install.sh - install the user-level opencode-web access-plane unit.
 #
-# Copies systemd/opencode-web.service into ~/.config/systemd/user/ with the
-# repo path baked into ExecStart, then enables it. The unit runs
-# scripts/web.sh, whose wait_for_bind_ips() makes the start durable: caddy is
-# only recreated after every bind IP declared in docker-compose.yml exists,
-# so a boot that races tailscaled/nebula cannot leave caddy Exited (255).
+# Copies the repo's user units into ~/.config/systemd/user/ with the repo path
+# baked in, then enables them:
+#   opencode-web.service        runs scripts/web.sh at boot/login.
+#   opencode-web-health.timer   runs scripts/web-health.sh every 2 minutes:
+#                               rotates TLS SANs on a network change, probes
+#                               loopback + Nebula/Tailscale/LAN, and re-runs
+#                               web.sh once when a client path is down.
+# Caddy publishes on the wildcard address, so a missing DHCP/tunnel IP can no
+# longer abort the port bind; the watchdog covers changes while running.
 #
 #   ./scripts/web-install.sh              # install + enable + linger
 #   ./scripts/web-install.sh --no-linger  # enable at login only
@@ -48,7 +52,12 @@ self_test() {
         || { printf 'FAIL restart policy\n'; fail=1; }
     grep -q "Type=oneshot" "$work/unit/opencode-web.service" \
         || { printf 'FAIL unit type\n'; fail=1; }
-    rm -f "$work/unit/opencode-web.service"
+    grep -q "ExecStart=$real/scripts/web-health.sh" "$work/unit/opencode-web-health.service" \
+        || { printf 'FAIL health ExecStart baked\n'; fail=1; }
+    grep -q "OnUnitActiveSec=2min" "$work/unit/opencode-web-health.timer" \
+        || { printf 'FAIL watchdog timer interval\n'; fail=1; }
+    rm -f "$work/unit/opencode-web.service" "$work/unit/opencode-web-health.service" \
+        "$work/unit/opencode-web-health.timer"
     rmdir "$work/unit" "$work"
     if [ "$fail" -eq 0 ]; then printf 'web-install: self-test PASS\n'; else printf 'web-install: self-test FAIL\n'; fi
     return "$fail"
@@ -57,18 +66,21 @@ self_test() {
 write_units() {
     local repo="$1"
     local dest="$2"
-    local src="$repo/systemd/opencode-web.service"
-    if [ ! -f "$src" ]; then
-        printf 'GATE FAIL: %s missing\n' "$src"
-        return 1
-    fi
+    local name src
     mkdir -p "$dest"
-    python3 - "$src" "$dest/opencode-web.service" "$repo" << 'PYEOF'
+    for name in opencode-web.service opencode-web-health.service opencode-web-health.timer; do
+        src="$repo/systemd/$name"
+        if [ ! -f "$src" ]; then
+            printf 'GATE FAIL: %s missing\n' "$src"
+            return 1
+        fi
+        python3 - "$src" "$dest/$name" "$repo" << 'PYEOF'
 import sys
 src, dst, repo = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(src).read().replace("__REPO__", repo)
 open(dst, "w").write(text)
 PYEOF
+    done
 }
 
 main() {
@@ -80,6 +92,8 @@ main() {
         return 2
     fi
     if [ -n "${REPO_OVERRIDE:-}" ]; then REPO="$REPO_OVERRIDE"; fi
+    # systemd ExecStart requires the execute bit; keep the checkout honest.
+    chmod +x "$REPO/scripts/web.sh" "$REPO/scripts/web-health.sh" 2>&1 || true
     local DEST="${DEST_OVERRIDE:-$HOME/.config/systemd/user}"
     local linger=1 arg="${1:-}"
     case "$arg" in
@@ -91,9 +105,10 @@ main() {
             return 0
             ;;
         --uninstall)
-            rm -f "$DEST/opencode-web.service"
+            rm -f "$DEST/opencode-web.service" "$DEST/opencode-web-health.service" \
+                "$DEST/opencode-web-health.timer"
             have systemctl && systemctl --user daemon-reload > /dev/null || true
-            printf 'opencode-web unit uninstalled (containers left running)\n'
+            printf 'opencode-web units uninstalled (containers left running)\n'
             return 0
             ;;
         --self-test) self_test; return "$?" ;;
@@ -114,6 +129,17 @@ main() {
         printf 'FAIL: enable --now opencode-web.service failed\n'
         return 1
     fi
+    if ! systemctl --user enable --now opencode-web-health.timer; then
+        printf 'FAIL: enable --now opencode-web-health.timer failed\n'
+        return 1
+    fi
+    # A oneshot with RemainAfterExit=yes stays "active (exited)" across an
+    # upgrade, so enable --now alone would not re-run web.sh with the new
+    # compose/ports. Restart it to apply the checkout now.
+    if ! systemctl --user restart opencode-web.service; then
+        printf 'FAIL: restart opencode-web.service failed\n'
+        return 1
+    fi
     if [ "$linger" -eq 1 ] && have loginctl; then
         if loginctl enable-linger "$USER"; then
             printf 'linger enabled for %s (unit starts at boot)\n' "$USER"
@@ -121,8 +147,10 @@ main() {
             printf 'WARN: loginctl enable-linger failed; unit starts at first login\n'
         fi
     fi
-    systemctl --user --no-pager status opencode-web.service | head -n 12
+    systemctl --user --no-pager status opencode-web.service | head -n 8
+    systemctl --user list-timers opencode-web-health.timer --no-pager | head -n 3
     printf 'verify: bash scripts/diag-opencode-web.sh\n'
+    printf 'watchdog: bash scripts/web-health.sh\n'
     return 0
 }
 

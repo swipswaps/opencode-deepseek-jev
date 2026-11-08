@@ -52,9 +52,9 @@ have() { command -v "$1" >/dev/null; }
 http_code() {
     # http_code URL [insecure] -> status code or 000
     if [ "${2:-}" = "insecure" ]; then
-        curl -sk -m 5 -o /dev/null -w '%{http_code}' "$1" 2>&1
+        curl -sk -m 10 -o /dev/null -w '%{http_code}' "$1" 2>&1
     else
-        curl -s -m 5 -o /dev/null -w '%{http_code}' "$1" 2>&1
+        curl -s -m 10 -o /dev/null -w '%{http_code}' "$1" 2>&1
     fi
 }
 
@@ -166,20 +166,29 @@ try:
     d=json.load(sys.stdin)
 except Exception:
     sys.exit(0)
-ips=sorted({b.get("HostIp","") for v in (d or {}).values() for b in (v or []) if b.get("HostIp")})
+# Empty HostIp means Docker published on the wildcard address.
+ips=sorted({(b.get("HostIp") or "0.0.0.0") for v in (d or {}).values() for b in (v or [])})
 print("\n".join(ips))
 ' 2>&1)"
     if [ -z "$distinct_ips" ]; then
         warn "could not read caddy PortBindings (container may be absent)"
     else
         for ip in $distinct_ips; do
-            if ip -o addr show | grep -qF " $ip/"; then present=1; else present=0; missing=$((missing + 1)); fi
-            info "$ip -> $([ "$present" = 1 ] && printf PRESENT || printf MISSING)"
+            if [ "$ip" = "0.0.0.0" ]; then
+                info "0.0.0.0 -> WILDCARD (binds every present interface; roam-safe)"
+                present=1
+            elif ip -o addr show | grep -qF " $ip/"; then
+                present=1
+            else
+                present=0
+                missing=$((missing + 1))
+            fi
+            [ "$ip" = "0.0.0.0" ] || info "$ip -> $([ "$present" = 1 ] && printf PRESENT || printf MISSING)"
         done
         if [ "$missing" -gt 0 ]; then
             bad "$missing declared bind IP(s) absent: Docker cannot publish those ports (EADDRNOTAVAIL)"
         else
-            ok "every declared bind IP is present now; a caddy restart would likely succeed"
+            ok "wildcard publish or every declared bind IP present; a caddy restart would succeed"
         fi
     fi
 
@@ -201,6 +210,25 @@ print("\n".join(ips))
         ok "opencode-web is reachable from the host"
     else
         bad "opencode-web is NOT reachable from the host"
+    fi
+
+    # Client-path probes: the interfaces a laptop actually uses (Nebula,
+    # Tailscale, default LAN). Wildcard publish must answer on each present one.
+    local client_ok=0 probe_ip c4 c5 default_if
+    default_if="$(ip route show default 2>&1 | awk '{print $5; exit}')"
+    for probe_ip in $( { ip -brief -4 addr show nebula0; \
+                         ip -brief -4 addr show tailscale0; \
+                         [ -n "$default_if" ] && ip -brief -4 addr show "$default_if"; } 2>&1 \
+        | awk '{for (i=3; i<=NF; i++) {split($i,a,"/"); if (a[1] ~ /^[0-9]+\./) print a[1]}}' | sort -u); do
+        c4="$(http_code "https://$probe_ip:4096/api/health" insecure)"
+        c5="$(http_code "https://$probe_ip:5099/api/health" insecure)"
+        info "client path https://$probe_ip:4096 -> $c4 ; :5099 -> $c5"
+        case "$c4" in 200|401) client_ok=$((client_ok + 1)) ;; esac
+    done
+    if [ "$client_ok" -gt 0 ]; then
+        ok "$client_ok client-facing interface(s) answer (overlay/LAN path)"
+    else
+        warn "no non-loopback interface answered; overlay clients may not reach this host"
     fi
 
     section "6. adjacent startup failures (system and user units)"
@@ -248,9 +276,9 @@ print("\n".join(ips))
         "  ( cd \"$REPO/docker\" && docker compose up -d caddy )" \
         "  # b) verify:" \
         "  curl -sk https://127.0.0.1:4096/api/health" \
-        "  # c) prevent recurrence: make caddy start after the tunnel IP exists" \
-        "  #    (systemd After/Requires=tailscaled.service) or stop publishing the" \
-        "  #    volatile Tailscale IP in docker-compose.yml and reach it via the tunnel." \
+        "  # c) prevention is already in the repo: caddy publishes on the wildcard" \
+        "  #    address (ports '- 4096:4096'), so no per-IP bind can be missing," \
+        "  #    and opencode-web-health.timer re-probes/re-covers every 2 minutes." \
         "  # d) fix the harness loop:" \
         "  #    replace '--no-window' with '--no-open' in" \
         "  #    ~/.config/systemd/user/deepseek-harness.service" \

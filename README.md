@@ -124,8 +124,9 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - `preflight.sh` prints **STOP** for a missing key, a red last gate, low
   balance, an off-policy model, or an over-budget session. Fix the named cause;
   do not bypass it.
-- Caddy exits `255` at boot when its bind IPs are not up yet. `web.sh` waits and
-  recreates it; override with `WEB_BIND_IPS` if the host IP changes.
+- Caddy publishes on the wildcard address (`ports: - "4096:4096"`), so a missing
+  DHCP/tunnel IP cannot abort the bind. `web-health.timer` re-probes every 2 min
+  and re-runs `web.sh` on failure; `WEB_BIND_IPS` still overrides the legacy wait list.
 - The LiteLLM admin UI is DB-backed: `./scripts/litellm-db.sh --apply` starts
   the private `litellm-db`, writes `LITELLM_DATABASE_URL`, and proves
   `admin` + `LITELLM_MASTER_KEY` login. If the UI says **"Not connected to
@@ -226,12 +227,15 @@ out at its first prose use where the abbreviation could be ambiguous):
   **399 MHz** with `scaling_max_freq=2000 MHz` and governor `performance`. An
   EC reset (power off, unplug AC, pinhole/power hold, boot) restored
   **3.2–4.2 GHz**. The runbook records the baseline and compares after reboot.
-- Caddy exited **255** at Docker start because it binds specific host addresses
-  (`192.168.4.24:4096`, `10.100.0.24:4096`, `127.0.0.1:4096`) before those
-  addresses are assigned. `scripts/web.sh` now waits for the bind addresses and
-  re-creates caddy if it is `restarting`/`exited`. `WEB_BIND_IPS` overrides the
-  derived list; `docker compose up -d opencode-web caddy` remains the manual
-  recovery.
+- Caddy once exited **255** at Docker start because it bound specific host
+  addresses (`192.168.4.24:4096`, `10.100.0.24:4096`, `127.0.0.1:4096`) before
+  those addresses were assigned. It now publishes on the wildcard address, so
+  every present interface (loopback, LAN, Nebula `10.100.0.24`, Tailscale)
+  reaches it and a missing one cannot abort the set. `scripts/web-health.sh`
+  runs from a 2-minute timer: it rotates TLS SANs on a network change and
+  re-runs `web.sh` when a client path is down. `WEB_BIND_IPS` overrides the
+  legacy per-IP wait list; `docker compose up -d opencode-web caddy` is still
+  the manual recovery.
 - Dashboard commit `65b8d41` adds `GET /api/resources` (cgroup, PSI, RSS, SSE
   clients), a nav badge (`cpu <psi>% rss <MB> live <n>`), and segment controls:
   `DASH_SEGMENTS`, `DASH_SSE_MS`, `DASH_AUTO_SHED` (drop activity when CPU
@@ -258,7 +262,7 @@ out at its first prose use where the abbreviation could be ambiguous):
 
 ```
 cd ~/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo
-./scripts/web.sh            # start/ensure web + caddy (bind-IP preflight + retry)
+./scripts/web.sh            # start/ensure web + caddy (wildcard bind + retry)
 ./scripts/web-restart.sh    # restart
 ./scripts/web-logs.sh       # logs
 ./scripts/web-stop.sh       # stop
@@ -280,8 +284,9 @@ cd ~/Documents/2282af3557819803/repo/production-local-rag
 
 - Desktop: `~/.local/share/applications/opencode-web.desktop` and
   `~/Desktop/opencode-web.desktop` run `~/.local/bin/opencode-web-launch.sh`.
-- If the host IP changes: update `docker/docker-compose.yml` or set
-  `WEB_BIND_IPS`, then `./scripts/web.sh`.
+- If the host IP changes, nothing to edit: the wildcard bind follows the
+  interface and `web-health.sh` rotates the cert SANs. `WEB_BIND_IPS` remains an
+  override for a legacy per-IP compose.
 - The 2026-10-16 status below is historical.
 
 ## Status — 2026-10-16 (historical)

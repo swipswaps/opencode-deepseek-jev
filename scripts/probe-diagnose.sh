@@ -14,8 +14,8 @@ if [ -f .env.local ]; then
     . ./.env.local
     set +a
 fi
-export OPENCODE_API_URL="${OPENCODE_API_URL:-https://192.168.4.24:4096}"
-export DASH_URL="${DASH_URL:-https://192.168.4.24:5099}"
+export OPENCODE_API_URL="${OPENCODE_API_URL:-https://10.100.0.24:4096}"
+export DASH_URL="${DASH_URL:-https://10.100.0.24:5099}"
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
     printf 'GATE FAIL: OPENCODE_SERVER_PASSWORD not set (sourced .env.local, still empty)\n'
