@@ -18,6 +18,10 @@ Last updated: 2026-11-08
       (`depends_on: condition: service_healthy`). User units dropped the no-op
       `network-online.target` ordering; the timer switched to
       `OnUnitInactiveSec`. Both self-tests wired into `test-hygiene.sh`.
+      Also fixed clipboard delivery: `rotate-server-password.sh` now
+      auto-detects `DISPLAY`/`WAYLAND_DISPLAY` (tty/SSH fallback to the local
+      X socket) and backgrounds `xclip`; a guarded `~/.bashrc` block does the
+      same for interactive shells (backup kept).
 
 - [x] **UX-8 — 2026-11-06.** Added `usability-suite.py` (ISO 9241-11
       tasks, WCAG automated subset, CWV lab, target/keyboard/reflow/reduced

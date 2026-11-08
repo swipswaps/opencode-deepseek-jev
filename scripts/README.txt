@@ -1031,7 +1031,10 @@ rotate-server-password.sh
     old=401. Neither value is ever printed. Interactive "write" gate; prints
     rollback on mismatch. Checkpointed (backup -> rewrite -> recreate ->
     verify): --fresh (default) resets, --resume skips done steps after a crash.
-    --env, --self-test (incl. checkpoint/resume).
+    ROTPW_CLIPBOARD=1 copies the new value (never printed): wl-copy on Wayland,
+    else xclip, with a tty/SSH fallback to the local X socket (DISPLAY=:0) so a
+    display-less shell still has a usable clipboard. --env, --self-test
+    (incl. checkpoint/resume).
 
 rotate-provider-keys.sh
     Rotate the remaining exposed credentials (SUBQ_API_KEY, ANTHROPIC_API_KEY,

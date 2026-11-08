@@ -29,7 +29,8 @@
 #
 # Env seams: ROTPW_ENV (default .env.local), ROTPW_NOCONTAINER=1 (skip R4/R5),
 # ROTPW_CONFIRM=write (skip the prompt), ROTPW_CLIPBOARD=1 (copy the new
-# password to wl-copy/xclip; it is never printed).
+# password to wl-copy/xclip; it is never printed). On a tty/SSH shell with no
+# DISPLAY the copy falls back to the local X socket (DISPLAY=:0) when present.
 # Exit 0 rotated+verified, 1 on any failure (rollback printed, not run).
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
@@ -50,6 +51,31 @@ resolve_repo() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+clip_copy() {
+    # clip_copy TEXT -> copy to the session clipboard, never print TEXT.
+    # Wayland first (wl-copy), then X11 (xclip). A tty/SSH shell inherits no
+    # DISPLAY, so fall back to the local X socket when one is present; that is
+    # the same fix a guarded ~/.bashrc applies to interactive shells.
+    local text="$1"
+    if [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+        DISPLAY=:0
+        export DISPLAY
+    fi
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && have wl-copy; then
+        if printf '%s' "$text" | wl-copy; then
+            printf 'new password copied to the clipboard (wl-copy)\n'
+            return 0
+        fi
+    fi
+    if have xclip && [ -n "${DISPLAY:-}" ]; then
+        # Background: xclip must stay alive as the selection owner.
+        printf '%s' "$text" | xclip -selection clipboard > /dev/null 2>&1 &
+        printf 'new password copied to the clipboard (xclip, DISPLAY=%s)\n' "$DISPLAY"
+        return 0
+    fi
+    return 1
+}
 
 mask() {
     local s="$1"
@@ -205,12 +231,8 @@ step_verify() {
         # Delivery: the value is never printed. ROTPW_CLIPBOARD=1 copies it to
         # the session clipboard so the operator can store it without a raw read.
         if [ "${ROTPW_CLIPBOARD:-0}" -eq 1 ]; then
-            if have wl-copy; then
-                printf '%s' "$newpw" | wl-copy && printf 'new password copied to the clipboard (wl-copy)\n'
-            elif have xclip; then
-                printf '%s' "$newpw" | xclip -selection clipboard && printf 'new password copied to the clipboard (xclip)\n'
-            else
-                printf 'WARN: neither wl-copy nor xclip is installed; install one and re-copy\n'
+            if ! clip_copy "$newpw"; then
+                printf 'WARN: no usable clipboard (wl-copy needs Wayland; xclip needs DISPLAY; on SSH run export DISPLAY=:0)\n'
             fi
         fi
         printf 'tell every tab/client the new password; update any stored copy\n'
