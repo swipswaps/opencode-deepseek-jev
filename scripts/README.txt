@@ -855,6 +855,18 @@ ssh-x11-setup.sh
     idempotently with a timestamped backup; --self-test offline (block shape +
     managed-region idempotency). Gated in test-hygiene.sh.
 
+overlay-status.sh
+    Read-only audit of BOTH mesh planes from either box. Audits this machine
+    locally, then SSHes to the peer (auto: .24 <-> .1) and audits it too, so
+    one command answers "is .24 healthy, is .1 healthy, can they see each
+    other?". Per host: nebula0 address, nebula service, route to the peer, ping,
+    tailscale0 + tailscaled, web :5099 on the server, sshd X11Forwarding on the
+    server, xclip. Role is inferred from the local nebula IPv4; --peer
+    user@host overrides, --local-only skips the peer, --self-test offline.
+    Surfaces ssh stderr (e.g. a host-cert principal warning) as WARN. Exit 0
+    all core PASS (warnings allowed), 2 any FAIL, 3 cannot run. Read-only: no
+    restarts, no writes. Gated in test-hygiene.sh.
+
 network-change-probe.sh
     Post-roam acceptance test: enumerates loopback + Nebula 10.x + Tailscale
     100.x + default LAN, probes https :4096 (200/401 = PASS) and :5099 (200) on

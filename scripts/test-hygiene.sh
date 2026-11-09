@@ -477,6 +477,17 @@ PY
         bad 'hotspot-test.sh present'
     fi
 
+    if [ -f "$REPO/scripts/overlay-status.sh" ]; then
+        if bash "$REPO/scripts/overlay-status.sh" --self-test > "$work/os_st.txt" 2>&1; then
+            ok 'overlay-status: self-test (parse + audit + role/peer)'
+        else
+            bad 'overlay-status: self-test (parse + audit + role/peer)'
+            cat "$work/os_st.txt"
+        fi
+    else
+        bad 'overlay-status.sh present'
+    fi
+
     if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
         if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
             ok 'network-change-probe: self-test (matrix + peer + certs/bind seams)'

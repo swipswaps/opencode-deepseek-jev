@@ -118,6 +118,7 @@ ssh opencode-jev                                     # managed alias (X11 + keep
 ./scripts/client-setup.sh --heal                     # one repair pass (the timer runs this)
 ./scripts/client-setup.sh --discover                 # print the chosen server and exit
 ./scripts/client-setup.sh --uninstall                # remove SSH block + timer
+./scripts/overlay-status.sh                          # read-only audit of BOTH .24 and .1
 ```
 
 Options: `--server HOST` (skip discovery), `--candidates "a b c"`,
