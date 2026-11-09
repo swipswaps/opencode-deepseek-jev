@@ -896,6 +896,18 @@ node-fix.sh
     (config lives in the mesh repo) and the verify commands. --only
     getty|mesh|dns|units; --no-peer; --self-test offline.
 
+credential-fix.sh
+    Turns "AI_APICallError: Invalid credential" into numbered fixes, informed
+    by the last real log line (providerID/modelID) and `opencode auth list`.
+    Default runs `--diagnose` and prints: failing provider/model, project
+    model, authenticated providers, and the menu 1) opencode auth login,
+    2) switch the project model to deepseek/deepseek-flash (backup + JSON
+    validate), 3) opencode auth logout anthropic (stale after cancelling
+    Claude), 4) reload (web container / CLI). The web UI denies the native
+    question tool, so these are text choices. --apply N executes 2, prints 1/3/4;
+    --self-test offline (parse + menu + model switch). Run this first on any
+    "Invalid credential"; never guess the provider.
+
 nebula-ipv4-only.sh
     Stops the "Listener is IPv4, but writing to IPv6 remote" error (and its
     IPv6-preference side effects) on an IPv4-only Nebula listener

@@ -1561,6 +1561,17 @@
     ]
   },
   {
+    "id": "credential-fix",
+    "title": "Diagnose Invalid credential and offer numbered fixes",
+    "where": "repo",
+    "purpose": "Reads the last real 'AI_APICallError: Invalid credential' log line for providerID/modelID, lists authenticated providers, and prints fixes: 1 opencode auth login, 2 switch project model to deepseek/deepseek-flash (backup + JSON validate), 3 opencode auth logout anthropic (stale after cancelling Claude), 4 reload web/CLI. The web UI denies the native question tool, so choices are text. --apply N / --self-test. Run first on any Invalid credential; never guess the provider.",
+    "commands": [
+      "./scripts/credential-fix.sh",
+      "./scripts/credential-fix.sh --apply 2",
+      "./scripts/credential-fix.sh --self-test"
+    ]
+  },
+  {
     "id": "nebula-ipv4-only",
     "title": "Stop Nebula IPv4-listener/IPv6-remote errors",
     "where": "host",

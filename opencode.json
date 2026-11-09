@@ -126,7 +126,8 @@
     },
     "task": "ask",
     "webfetch": "ask",
-    "doom_loop": "ask"
+    "doom_loop": "ask",
+    "question": "allow"
   },
   "model": "opencode-go/deepseek-v4.1-flash",
   "compaction": {

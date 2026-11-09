@@ -554,6 +554,17 @@ PY
         bad 'nebula-ipv4-only.sh present'
     fi
 
+    if [ -f "$REPO/scripts/credential-fix.sh" ]; then
+        if bash "$REPO/scripts/credential-fix.sh" --self-test > "$work/cf_st.txt" 2>&1; then
+            ok 'credential-fix: self-test (parse + menu + model switch)'
+        else
+            bad 'credential-fix: self-test (parse + menu + model switch)'
+            cat "$work/cf_st.txt"
+        fi
+    else
+        bad 'credential-fix.sh present'
+    fi
+
     if [ -f "$REPO/scripts/overlay-status.sh" ]; then
         if bash "$REPO/scripts/overlay-status.sh" --self-test > "$work/os_st.txt" 2>&1; then
             ok 'overlay-status: self-test (parse + audit + role/peer)'
