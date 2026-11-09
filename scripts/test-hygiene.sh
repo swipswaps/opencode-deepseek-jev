@@ -512,13 +512,24 @@ PY
 
     if [ -f "$REPO/scripts/hotspot-reconnect.sh" ]; then
         if bash "$REPO/scripts/hotspot-reconnect.sh" --self-test > "$work/hr_st.txt" 2>&1; then
-            ok 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json)'
+            ok 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json + inhibit)'
         else
-            bad 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json)'
+            bad 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json + inhibit)'
             cat "$work/hr_st.txt"
         fi
     else
         bad 'hotspot-reconnect.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/recovery-status.sh" ]; then
+        if bash "$REPO/scripts/recovery-status.sh" --self-test > "$work/rs_st.txt" 2>&1; then
+            ok 'recovery-status: self-test (healthy + expected-roam + degraded)'
+        else
+            bad 'recovery-status: self-test (healthy + expected-roam + degraded)'
+            cat "$work/rs_st.txt"
+        fi
+    else
+        bad 'recovery-status.sh present'
     fi
 
     if [ -f "$REPO/scripts/terminal-reset.sh" ]; then

@@ -67,6 +67,8 @@ SSID="${HOTSPOT_SSID:-}"
 IFACE="${HOTSPOT_IFACE:-en0}"
 JSON="${HOTSPOT_JSON:-0}"
 ALERTS_N="${HOTSPOT_ALERTS_N:-20}"
+INHIBIT_FILE="${HOTSPOT_INHIBIT:-$HOME/.local/state/hotspot-inhibit.until}"
+INHIBIT_TTL="${HOTSPOT_INHIBIT_TTL:-900}"
 QUIET="${HOTSPOT_QUIET:-0}"
 SILENCE_SEC="${HOTSPOT_SILENCE_SEC:-3600}"
 ALERT_COOLDOWN="${HOTSPOT_ALERT_COOLDOWN:-120}"
@@ -336,6 +338,39 @@ do_silence() {
     mkdir -p "$(dirname "$QUIET_UNTIL")" || return 0
     printf '%s\n' "$(( $(date +%s) + SILENCE_SEC ))" > "$QUIET_UNTIL"
     printf 'notifications silenced for %ss (delete %s to re-enable)\n' "$SILENCE_SEC" "$QUIET_UNTIL"
+}
+
+inhibit_active() {
+    [ -f "$INHIBIT_FILE" ] || return 1
+    local until=""
+    until="$(cat "$INHIBIT_FILE" 2>&1)"
+    case "$until" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$(date +%s)" -lt "$until" ]
+}
+
+set_inhibit() {
+    local sec="${1:-$INHIBIT_TTL}" reason="${2:-operator}"
+    case "$sec" in '' | *[!0-9]*) sec="$INHIBIT_TTL" ;; esac
+    mkdir -p "$(dirname "$INHIBIT_FILE")" || return 0
+    printf '%s\n' "$(( $(date +%s) + sec ))" > "$INHIBIT_FILE"
+    printf '%s\n' "$reason" > "$INHIBIT_FILE.reason"
+    printf 'inhibition set for %ss (%s); peer-down alerts suppressed until then\n' "$sec" "$reason"
+}
+
+clear_inhibit() {
+    rm -f "$INHIBIT_FILE" "$INHIBIT_FILE.reason"
+}
+
+inhibit_server() {
+    # The cause-aware side (client) tells the symptom-aware side (server) that
+    # the overlay is expected down (a roam), so the server stops paging for it.
+    local reason="${1:-off-network}" sec="${2:-$INHIBIT_TTL}"
+    case "$reason" in *[!A-Za-z0-9._-]*) reason="off-network" ;; esac
+    [ -n "$SERVER_SSH" ] || return 0
+    server_reachable || return 0
+    printf 'inform %s: overlay expected down (%s), inhibit %ss\n' "$SERVER_SSH" "$reason" "$sec"
+    ssh -o BatchMode=yes -o ConnectTimeout=4 "$SERVER_SSH" \
+        "mkdir -p \"\$HOME/.local/state\" && printf '%s\n' \"\$(( \$(date +%s) + $sec ))\" > \"\$HOME/.local/state/hotspot-inhibit.until\" && printf '%s\n' '$reason' > \"\$HOME/.local/state/hotspot-inhibit.until.reason\"" 2>&1 || true
 }
 
 alert_budget() {
@@ -693,6 +728,7 @@ client_tick() {
         if [ "$PREV" != "$STATE_NOW" ]; then
             case "$STATE_NOW" in
                 off-network)
+                    inhibit_server off-network "$INHIBIT_TTL"
                     note_local "off-network: overlay expected down (alerts inhibited); $(down_message)"
                     ;;
                 *)
@@ -738,16 +774,25 @@ probe_client() {
 }
 
 server_tick() {
-    local client="" prev=""
+    local client="" prev="" reason=""
     client="$(probe_client)"
     prev="$(state_get PREV)"
     if [ "$client" = "up" ]; then
         if [ -n "$prev" ] && [ "$prev" != "up" ]; then
             alert_local OK "client $CLIENT_MESH is reachable again"
         fi
+        if inhibit_active; then clear_inhibit; fi
         save_state up 0
         printf 'client %s: up\n' "$CLIENT_MESH"
         return 0
+    fi
+    # Shared inhibition: the client (which knows it roamed) sets this TTL on the
+    # server; a client that is expected to be away must not page the server.
+    if inhibit_active; then
+        reason="$(cat "$INHIBIT_FILE.reason" 2>&1 || true)"
+        printf 'client %s: down (inhibited: %s; expected, no alert)\n' "$CLIENT_MESH" "${reason:-inhibit}"
+        save_state down 0
+        return 2
     fi
     if [ "$prev" != "down" ]; then
         alert_local ALERT "client $CLIENT_MESH disappeared (hotspot/overlay lost?)"
@@ -791,6 +836,7 @@ self_test() {
     export HOTSPOT_FAKE_BELL=1
     export HOTSPOT_NO_HEAL=1
     export HOTSPOT_ALERT_STATE="$work/alerts.state"
+    export HOTSPOT_INHIBIT="$work/inhibit.until"
     export HOTSPOT_QUIET_UNTIL="$work/quiet.until"
     export HOTSPOT_FIX_REQUEST="$work/fix.request"
     export HOTSPOT_ACTION_OUT="$work/action.out"
@@ -833,6 +879,24 @@ self_test() {
         bash "$0" --server --tick 2>&1); rc=$?
     [ "$rc" -eq 2 ] || { printf 'FAIL server-tick-down rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q 'disappeared' || { printf 'FAIL server alert text\n'; fail=1; }
+
+    # shared inhibition: a future TTL suppresses the peer-down alert; an expired
+    # one lets it fire again.
+    : > "$work/state"
+    printf '%s\n' "$(( $(date +%s) + 600 ))" > "$work/inhibit.until"
+    o=$(HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
+        HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=ggg \
+        bash "$0" --server --tick 2>&1); rc=$?
+    [ "$rc" -eq 2 ] || { printf 'FAIL inhibited rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q 'inhibited' || { printf 'FAIL inhibit text\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'disappeared' && { printf 'FAIL inhibited alert fired\n'; fail=1; }
+    : > "$work/state"
+    printf '%s\n' "$(( $(date +%s) - 5 ))" > "$work/inhibit.until"
+    o=$(HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
+        HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=hhh \
+        bash "$0" --server --tick 2>&1); rc=$?
+    printf '%s' "$o" | grep -q 'disappeared' || { printf 'FAIL expired inhibit still suppressed\n'; fail=1; }
+    rm -f "$work/inhibit.until" "$work/inhibit.until.reason"
 
     : > "$work/state"
     o=$(HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
@@ -906,7 +970,7 @@ self_test() {
     rm -f "$work/alerts.state" "$work/quiet.until" "$work/fix.request" "$work/action.out" "$work/notify.log" "$work/state.good"
     rmdir "$work" 2>&1 || true
     if [ "$fail" -eq 0 ]; then
-        printf 'hotspot-reconnect: self-test PASS (check + lost + overlay-down + alert + server + reconnect + plan + json + cooldown + quiet + silence + fix)\n'
+        printf 'hotspot-reconnect: self-test PASS (check + lost + overlay-down + alert + server + reconnect + plan + json + cooldown + quiet + silence + fix + inhibit)\n'
     else
         printf 'hotspot-reconnect: self-test FAIL\n'
     fi
@@ -914,7 +978,7 @@ self_test() {
 }
 
 usage() {
-    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--server|--self-test] [--reconnect] [--yes] [--json] [--quiet]\n' "$0"
+    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--inhibit [sec]|--clear-inhibit|--server|--self-test] [--reconnect] [--yes] [--json] [--quiet]\n' "$0"
     printf 'client env: HOTSPOT_SSID, HOTSPOT_PROFILE, HOTSPOT_SERVER_SSH, ROAM_MESH_IP, ROAM_LAN_IP\n'
     printf 'server env: CLIENT_MESH_IP, CLIENT_TAILSCALE_IP\n'
     printf 'alerts: normal urgency + 8s expiry, coalesced, one per HOTSPOT_ALERT_COOLDOWN (120s),\n'
@@ -945,6 +1009,15 @@ main() {
                 esac
                 MODE="alerts"
                 ;;
+            --inhibit)
+                shift
+                case "${1:-}" in
+                    '' | *[!0-9]*) ;;
+                    *) INHIBIT_TTL="$1"; shift ;;
+                esac
+                MODE="inhibit"
+                ;;
+            --clear-inhibit) MODE="clear-inhibit"; shift ;;
             --quiet) QUIET=1; shift ;;
             --silence)
                 shift
@@ -971,6 +1044,8 @@ main() {
         plan) plan_actions; return 0 ;;
         fix) do_fix; return "$?" ;;
         alerts) show_alerts "${ALERTS_N:-20}"; return "$?" ;;
+        inhibit) set_inhibit "$INHIBIT_TTL" "operator" ; return "$?" ;;
+        clear-inhibit) clear_inhibit; printf 'inhibition cleared\n' ; return 0 ;;
         silence) do_silence; return "$?" ;;
         tick)
             if [ "$ROLE" = "server" ]; then server_tick; return "$?"; fi

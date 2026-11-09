@@ -129,7 +129,7 @@ const CMDK_CSS =
   ".cmdk-item .muted{font-size:11px}" +
   ".cmdk-item.active{background:#1f6feb33}" +
   ".cmdk-empty{padding:12px 10px;color:#8b949e;font-size:13px}";
-const NAV_ITEMS = [["/", "dashboard"], ["/usability", "usability"], ["/graph", "graph"], ["/explore", "explore"], ["/app/", "app"], ["/models", "models"],
+const NAV_ITEMS = [["/", "dashboard"], ["/recovery", "recovery"], ["/usability", "usability"], ["/graph", "graph"], ["/explore", "explore"], ["/app/", "app"], ["/models", "models"],
                    ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
                    ["/api/export", "csv"]];
 
@@ -331,7 +331,7 @@ const API_ROUTES = [
   "/api/integrations", "/api/ab", "/api/ocr", "/api/duplicates", "/api/signals", "/api/guard",
   "/api/health", "/api/ops", "/api/patterns", "/api/solutions", "/api/code", "/api/board",
   "/api/models", "/api/tools", "/api/runbooks", "/api/providers", "/api/benchmark",
-  "/api/choices", "/api/pulse", "/api/graph",
+  "/api/choices", "/api/pulse", "/api/recovery", "/api/graph",
 ];
 const API_TABLE = {
   "/api/sessions": "session", "/api/session": "session", "/api/cost": "session", "/api/overview": "session",
@@ -3953,6 +3953,29 @@ async function ssePayload(segments = SEGMENTS) {
   ]);
   return { cost, activity, todos: want("todos") ? apiTodos() : [], shed };
 }
+function recoveryPage() {
+  const e = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const d = readJsonRel("../data/observability/recovery.json");
+  let body = "";
+  if (!d || !d.subsystems) {
+    body = "<h1>Recovery</h1><p class=\"muted\">No recovery snapshot yet. On the host run:</p><pre>./scripts/recovery-status.sh --write</pre>";
+  } else {
+    body = "<h1>Recovery</h1><p class=\"muted\">overall <b>" + e(d.overall || "unknown") + "</b> &middot; " + e(d.ts || "?") + "</p>";
+    body += "<table><thead><tr><th>subsystem</th><th>state</th><th>detail</th></tr></thead><tbody>";
+    for (const s of (d.subsystems || [])) {
+      body += "<tr><td>" + e(s.name) + "</td><td>" + e(s.state) + "</td><td>" + e(s.detail) + "</td></tr>";
+    }
+    body += "</tbody></table>";
+    const acts = d.actions || [];
+    if (acts.length) {
+      body += "<h2>Next</h2><ul>";
+      for (const a of acts) body += "<li><code>" + e(a) + "</code></li>";
+      body += "</ul>";
+    }
+  }
+  return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>recovery</title></head><body>" + nav("recovery") + "<main id=\"main\">" + body + "</main></body></html>";
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
@@ -4064,6 +4087,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, exploreHtml, "text/html; charset=utf-8");
   } else if (url === "/graph") {
     send(res, 200, graphHtml, "text/html; charset=utf-8");
+  } else if (url === "/recovery") {
+    send(res, 200, recoveryPage(), "text/html; charset=utf-8");
   } else if (url === "/usability") {
     send(res, 200, usabilityHtml, "text/html; charset=utf-8");
   } else if (url === "/viz") {
@@ -4196,6 +4221,8 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, JSON.stringify({ sessions: guidedRows(Number(params.limit) || 20) }), "application/json");
   } else if (url === "/api/pulse") {
     send(res, 200, JSON.stringify(readJsonRel("../data/observability/pulse.json") || { available: false }), "application/json");
+  } else if (url === "/api/recovery") {
+    send(res, 200, JSON.stringify(readJsonRel("../data/observability/recovery.json") || { available: false }), "application/json");
   } else if (url === "/api/choices") {
     const cfg = readJsonRel("../scripts/choices.json") || { choices: [] };
     const st = readJsonRel("../data/observability/choices.json") || { choices: {} };
