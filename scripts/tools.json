@@ -1487,6 +1487,18 @@
     ]
   },
   {
+    "id": "guard-evasion-scan",
+    "title": "Detect stderr-hiding evasions (RULE #8)",
+    "where": "repo",
+    "purpose": "Finds the re-spellings of `2>/dev/null` that hide stderr: `>/dev/null 2>&1`, `&>/dev/null`, `exec 2>/dev/null`. --command (about to run), --file/--repo (scripts), --log (past tool calls in data/observability/guard.log). Read-only; --self-test. The live block is in .opencode/plugins/blacklist-guard.js (loaded at process start; restart to pick up new rules); historical tool calls are scanned by audit-tool-calls.py.",
+    "commands": [
+      "./scripts/guard-evasion-scan.py --command 'ls >/dev/null 2>&1'",
+      "./scripts/guard-evasion-scan.py --repo",
+      "./scripts/guard-evasion-scan.py --log",
+      "./scripts/guard-evasion-scan.py --self-test"
+    ]
+  },
+  {
     "id": "node-diag",
     "title": "Verbatim-evidence diagnostic for the MacBook (.1)",
     "where": "host",

@@ -855,6 +855,15 @@ ssh-x11-setup.sh
     idempotently with a timestamped backup; --self-test offline (block shape +
     managed-region idempotency). Gated in test-hygiene.sh.
 
+guard-evasion-scan.py
+    Detects the RULE #8 evasion family that re-spells `2>/dev/null` to hide
+    stderr: `>/dev/null 2>&1`, `&>/dev/null`, `exec 2>/dev/null`. Modes:
+    --command CMD (a command about to run), --file PATH / --repo (scripts),
+    --log (past tool calls recorded in data/observability/guard.log).
+    Read-only; --self-test (command + file + quoted/comment). Companion to the
+    live block in .opencode/plugins/blacklist-guard.js (new rules are read at
+    process start) and the historical audit in audit-tool-calls.py.
+
 node-diag.sh
     READ-ONLY, verbatim-evidence diagnostic for the MacBook (.1). Sections:
     identity (addrs/routes/rules/wifi), unreachable (network-is-unreachable,

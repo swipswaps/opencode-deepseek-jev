@@ -90,6 +90,14 @@ const RULES = [
     fix: "download and inspect the script before running it (no curl|sh, no base64|sh)", rule: "security" },
   { name: "2>/dev/null", pattern: "2>\\s*/dev/null", sev: "fix",
     fix: "redirect removed so stderr (the proof) reaches the tool result", rule: "#8" },
+  // #8 evasion family: `2>/dev/null` is auto-removed above, but these spell the
+  // same "hide stderr" intent so the remover misses them. Block outright.
+  { name: "&>/dev/null", pattern: "&>>?\\s*/dev/null", sev: "block",
+    fix: "&> discards stdout AND stderr; redirect only stdout with >/dev/null and let stderr flow", rule: "#8" },
+  { name: ">/dev/null 2>&1", pattern: "(?:^|[^0-9])1?>>?\\s*/dev/null\\s+2\\s*>&\\s*1", sev: "block",
+    fix: "stdout->/dev/null then 2>&1 sends stderr there too; never hide stderr (the proof) — keep it visible or capture it and print it", rule: "#8" },
+  { name: "exec 2>/dev/null", pattern: "\\bexec\\s+2\\s*>>?\\s*/dev/null", sev: "block",
+    fix: "do not permanently discard stderr; capture it into a variable you print", rule: "#8" },
   { name: "echo", pattern: "(?:^|[;&|()]\\s*)echo\\s", sev: "warn",
     fix: "printf '%s\\n'", rule: "#38" },
 ];

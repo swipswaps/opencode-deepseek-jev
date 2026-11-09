@@ -223,6 +223,17 @@ PY
         cat "$work/autopilot_st.txt"
     fi
 
+    if [ -f "$REPO/scripts/guard-evasion-scan.py" ]; then
+        if python3 "$REPO/scripts/guard-evasion-scan.py" --self-test > "$work/ges_st.txt" 2>&1; then
+            ok 'guard-evasion-scan: self-test (command + file + quoted/comment)'
+        else
+            bad 'guard-evasion-scan: self-test (command + file + quoted/comment)'
+            cat "$work/ges_st.txt"
+        fi
+    else
+        bad 'guard-evasion-scan.py present'
+    fi
+
     if have node && [ -f "$REPO/scripts/blacklist-guard-self-test.mjs" ]; then
         if node "$REPO/scripts/blacklist-guard-self-test.mjs" > "$work/bg_st.txt" 2>&1; then
             ok 'blacklist-guard: self-test'

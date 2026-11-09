@@ -47,6 +47,13 @@ BLACKLIST: list[tuple[str, re.Pattern[str], str, str]] = [
      "awk / grep / python3", "#7"),
     ("2>/dev/null", re.compile(r"2>/dev/null"),
      "let stderr flow; branch on the failure", "#8"),
+    # #8 evasion family: same intent, spelled so the 2>/dev/null matcher misses it.
+    ("&>/dev/null", re.compile(r"&>>?\s*/dev/null"),
+     "redirect only stdout; keep stderr visible", "#8"),
+    (">/dev/null 2>&1", re.compile(r"(?:^|[^0-9])1?>>?\s*/dev/null\s+2\s*>&\s*1"),
+     "never hide stderr (the proof); capture it and print it", "#8"),
+    ("exec 2>/dev/null", re.compile(r"\bexec\s+2\s*>>?\s*/dev/null"),
+     "capture stderr into a variable you print", "#8"),
     ("subprocess.run", re.compile(r"\bsubprocess\.run\s*\("),
      "subprocess.Popen(..., stdout=PIPE, stderr=PIPE) + read()", "convention"),
     ("rm -rf", re.compile(_BOUNDARY + r"rm\s+-rf\b"),
