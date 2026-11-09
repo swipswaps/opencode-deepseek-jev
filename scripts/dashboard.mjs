@@ -3874,6 +3874,19 @@ const CORS_HEADERS = {
   "Vary": "Origin",
 };
 
+// Mutations must be same-origin. The GitHub Pages origin is allowed to READ
+// (CORS) but a public site must never be able to POST into the private store.
+function sameOriginMutation(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // non-browser client (curl/CLI) on the private net
+  try {
+    const u = new URL(origin);
+    return u.host === (req.headers.host || "");
+  } catch {
+    return false;
+  }
+}
+
 function send(res, code, body, type) {
   res.writeHead(code, {
     ...CORS_HEADERS,
@@ -3982,7 +3995,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       ...CORS_HEADERS,
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Methods": "GET,OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "600",
     });
@@ -3990,6 +4003,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === "POST" && url === "/api/graph/edit") {
+    if (!sameOriginMutation(req)) {
+      send(res, 403, JSON.stringify({ ok: false, error: "cross-origin mutation blocked" }), "application/json");
+      return;
+    }
     try {
       const raw = await readBody(req);
       const doc = JSON.parse(raw || "{}");
@@ -3999,6 +4016,10 @@ const server = http.createServer(async (req, res) => {
       send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
     }
   } else if (req.method === "POST" && url === "/api/usability/guided") {
+    if (!sameOriginMutation(req)) {
+      send(res, 403, JSON.stringify({ ok: false, error: "cross-origin mutation blocked" }), "application/json");
+      return;
+    }
     try {
       const raw = await readBody(req);
       const doc = JSON.parse(raw || "{}");
