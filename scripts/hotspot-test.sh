@@ -40,7 +40,11 @@
 #
 set -uo pipefail
 
-SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+else
+    SELF_DIR="$PWD"
+fi
 MESH="${ROAM_MESH_IP:-10.100.0.24}"
 TAILSCALE="${ROAM_TAILSCALE_IP:-100.119.125.16}"
 LAN="${ROAM_LAN_IP:-192.168.4.24}"

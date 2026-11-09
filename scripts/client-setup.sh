@@ -34,7 +34,11 @@
 #
 set -uo pipefail
 
-SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+else
+    SELF_DIR="$PWD"
+fi
 X11_SETUP="$SELF_DIR/ssh-x11-setup.sh"
 DEFAULT_CANDIDATES="10.100.0.24 100.119.125.16 192.168.4.24"
 ALIAS_DEFAULT="opencode-jev"
@@ -340,7 +344,7 @@ self_test() {
     CLIENT_PLATFORM=linux bash "$0" --write-only --alias testalias --user tester \
         --candidates "10.100.0.24 192.168.4.24" > "$work/setup.txt" 2>&1
     [ "$?" -eq 0 ] || { printf 'FAIL linux write-only: %s\n' "$(cat "$work/setup.txt")"; fail=1; }
-    grep -q '^Host testalias$' "$cfg" || { printf 'FAIL config alias\n'; fail=1; }
+    grep -q '^Host testalias 10.100.0.24$' "$cfg" || { printf 'FAIL config alias\n'; fail=1; }
     grep -q '^    HostName 10.100.0.24$' "$cfg" || { printf 'FAIL discovery host\n'; fail=1; }
     grep -q '^    ForwardX11Trusted yes$' "$cfg" || { printf 'FAIL trusted line\n'; fail=1; }
     grep -q '^CANDIDATES=10.100.0.24 192.168.4.24$' "$work/state" || { printf 'FAIL state saved\n'; fail=1; }

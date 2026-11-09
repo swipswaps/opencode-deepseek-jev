@@ -48,9 +48,12 @@ valid_value() {
 
 block_text() {
     # block_text ALIAS HOST USER TRUSTED
-    local alias="$1" host="$2" user="$3" trusted="${4:-1}"
+    # Match BOTH the alias and the literal host, so `ssh 10.100.0.24` gets the
+    # trusted forwarding too (not just `ssh opencode-jev`).
+    local alias="$1" host="$2" user="$3" trusted="${4:-1}" match="$1"
+    if [ "$host" != "$alias" ]; then match="$alias $host"; fi
     printf '%s\n' "$BEGIN_MARK"
-    printf 'Host %s\n' "$alias"
+    printf 'Host %s\n' "$match"
     printf '    HostName %s\n' "$host"
     if [ -n "$user" ]; then
         printf '    User %s\n' "$user"
@@ -173,7 +176,7 @@ check_server() {
 self_test() {
     local fail=0 b="" tmp="" first="" second="" out="" n=0
     b="$(block_text myalias 10.100.0.24 alice 1)"
-    printf '%s' "$b" | grep -q '^Host myalias$' || { printf 'FAIL alias\n'; fail=1; }
+    printf '%s' "$b" | grep -q '^Host myalias 10.100.0.24$' || { printf 'FAIL alias\n'; fail=1; }
     printf '%s' "$b" | grep -q '^    ForwardX11 yes$' || { printf 'FAIL ForwardX11\n'; fail=1; }
     printf '%s' "$b" | grep -q '^    ForwardX11Trusted yes$' || { printf 'FAIL trusted\n'; fail=1; }
     printf '%s' "$b" | grep -q '^    HostName 10.100.0.24$' || { printf 'FAIL hostname\n'; fail=1; }
@@ -192,7 +195,7 @@ self_test() {
     n="$(printf '%s\n' "$second" | grep -c '^# >>> opencode-deepseek-jev x11 >>>$')"
     [ "$n" -eq 1 ] || { printf 'FAIL begin markers=%s\n' "$n"; fail=1; }
     printf '%s' "$second" | grep -q '^Host keepme$' || { printf 'FAIL clobbered existing host\n'; fail=1; }
-    printf '%s' "$second" | grep -q '^Host myalias$' || { printf 'FAIL appended block\n'; fail=1; }
+    printf '%s' "$second" | grep -q '^Host myalias 10.100.0.24$' || { printf 'FAIL appended block\n'; fail=1; }
     remove_block "$tmp" >/dev/null
     out="$(cat "$tmp")"
     printf '%s' "$out" | grep -q 'ForwardX11' && { printf 'FAIL remove left block\n'; fail=1; }
@@ -224,14 +227,22 @@ main() {
             --check) mode="check"; shift ;;
             --write)
                 mode="write"
-                file="${2:-$HOME/.ssh/config}"
-                [ $# -ge 2 ] && shift
+                if [ $# -ge 2 ] && [ "${2#-}" = "$2" ]; then
+                    file="$2"
+                    shift
+                else
+                    file="$HOME/.ssh/config"
+                fi
                 shift
                 ;;
             --remove)
                 mode="remove"
-                file="${2:-$HOME/.ssh/config}"
-                [ $# -ge 2 ] && shift
+                if [ $# -ge 2 ] && [ "${2#-}" = "$2" ]; then
+                    file="$2"
+                    shift
+                else
+                    file="$HOME/.ssh/config"
+                fi
                 shift
                 ;;
             --alias) alias="${2:-}"; [ $# -ge 2 ] && shift; shift ;;

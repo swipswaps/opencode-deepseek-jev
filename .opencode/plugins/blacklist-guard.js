@@ -84,6 +84,13 @@ const RULES = [
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",
     fix: "rm -f on named paths", rule: "convention" },
+  // The rest of the RULES.md blacklist that the guard used to omit.
+  { name: "set -e", pattern: "(?:^|[;&|()]\\s*)set\\s+-[A-Za-z]*e[A-Za-z]*\\b", sev: "block",
+    fix: "set -o pipefail + explicit per-step handling", rule: "#5" },
+  { name: "exit 1", pattern: "(?:^|[;&|()]\\s*)exit\\s+1(?![0-9])", sev: "block",
+    fix: "main() wrapper returning a code; final line main \"$@\"", rule: "convention" },
+  { name: "kill N", pattern: "(?:^|[^0-9])kill\\s+[1-9][0-9]*(?![0-9])", sev: "block",
+    fix: "signal explicitly: kill -TERM / -INT / -KILL", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",
     fix: "subprocess.Popen(..., stdout=PIPE, stderr=PIPE) + communicate()", rule: "convention" },
   { name: "pipe-to-shell", pattern: "(?:curl|wget|base64)[^|\\n]*\\|\\s*(?:ba|z|k|da)?sh\\b", sev: "block",
