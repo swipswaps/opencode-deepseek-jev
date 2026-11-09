@@ -1042,6 +1042,18 @@
     ]
   },
   {
+    "id": "recovery-status",
+    "title": "One-screen recovery state: broken / still working / what is next",
+    "where": "host",
+    "purpose": "Read-only merge of last-gate, pulse, the ADVISORY/FAIL ledger, and the hotspot state/inhibit/silence files into one state (healthy|degraded|unknown). unknown is first-class: missing or stale evidence never renders healthy. --write caches data/observability/recovery.json for the dashboard's /recovery page and /api/recovery; the sentinel refreshes it each sweep. --self-test is offline.",
+    "commands": [
+      "./scripts/recovery-status.sh",
+      "./scripts/recovery-status.sh --json",
+      "./scripts/recovery-status.sh --write",
+      "./scripts/recovery-status.sh --self-test"
+    ]
+  },
+  {
     "id": "host-path-probe",
     "title": "Localize long delays on the :5099/:4096 hop",
     "where": "host",

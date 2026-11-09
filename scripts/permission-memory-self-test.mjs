@@ -1,7 +1,8 @@
 // permission-memory-self-test.mjs — prove the repeat-memory rules without the
 // plugin loader: same command+session is allowed after execution, deny is
 // preserved, different command/session stays ask, and the telemetry line lands.
-import { PermissionMemory, normalizeCommand, memoryKey } from "../.opencode/plugins/permission-memory.js";
+import { PermissionMemory } from "../.opencode/plugins/permission-memory.js";
+import { normalizeCommand, memoryKey } from "./permission-memory-lib.mjs";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

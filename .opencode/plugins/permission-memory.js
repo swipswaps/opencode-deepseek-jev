@@ -20,23 +20,10 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeCommand, memoryKey } from "../../scripts/permission-memory-lib.mjs";
 
 const OFF = String(process.env.PERMISSION_MEMORY ?? "").toLowerCase() === "off";
 const seen = new Map();
-
-// NOTE: names must NOT be exported. OpenCode's plugin loader treats every
-// named export as a plugin factory; memoryKey() returns null for a non-command
-// input, which made the loader dereference null (.config/.dispose) and abort
-// every headless `opencode run` with a generic UnknownError.
-function normalizeCommand(cmd) {
-    return String(cmd ?? "").replace(/\s+/g, " ").trim();
-}
-
-function memoryKey(sessionID, type, metadata) {
-    const cmd = normalizeCommand(metadata?.command ?? "");
-    if (!cmd) return null;
-    return [sessionID ?? "-", String(type ?? "-").toLowerCase(), cmd].join("|");
-}
 
 function log(rec) {
     try {
