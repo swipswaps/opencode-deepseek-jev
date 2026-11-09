@@ -1561,6 +1561,16 @@
     ]
   },
   {
+    "id": "permission-memory",
+    "title": "Session-scoped repeat approval memory",
+    "where": "repo",
+    "purpose": ".opencode/plugins/permission-memory.js: after a bash command executed once in a session, the exact normalized command is auto-allowed on repeat (only downgrades ask->allow; never touches deny; no broad-pattern keys). Session-scoped, cleared on restart; PERMISSION_MEMORY=off disables. Repeat-allows are logged to data/observability/guard.log. Self-test: scripts/permission-memory-self-test.mjs.",
+    "commands": [
+      "node scripts/permission-memory-self-test.mjs",
+      "PERMISSION_MEMORY=off ./scripts/client-setup.sh --check"
+    ]
+  },
+  {
     "id": "credential-fix",
     "title": "Diagnose Invalid credential and offer numbered fixes",
     "where": "repo",

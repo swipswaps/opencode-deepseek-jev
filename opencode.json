@@ -122,7 +122,8 @@
       "*git push*": "ask",
       "*mv * /etc/*": "ask",
       "*install * /etc/*": "ask",
-      "*--apply*": "ask"
+      "*--apply*": "ask",
+      "*ssh *": "ask"
     },
     "task": "ask",
     "webfetch": "ask",

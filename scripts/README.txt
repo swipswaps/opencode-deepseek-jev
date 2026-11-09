@@ -896,6 +896,13 @@ node-fix.sh
     (config lives in the mesh repo) and the verify commands. --only
     getty|mesh|dns|units; --no-peer; --self-test offline.
 
+permission-memory-self-test.mjs
+    Self-test for .opencode/plugins/permission-memory.js: a bash command that
+    executed once in a session is auto-allowed on an exact repeat; a deny is
+    preserved; a different command or session stays ask; the repeat-allow is
+    logged to guard.log. Also tests normalizeCommand/memoryKey. The plugin is
+    auto-discovered; disable with PERMISSION_MEMORY=off. Node, offline.
+
 credential-fix.sh
     Turns "AI_APICallError: Invalid credential" into numbered fixes, informed
     by the last real log line (providerID/modelID) and `opencode auth list`.

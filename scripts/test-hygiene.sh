@@ -234,6 +234,17 @@ PY
         bad 'guard-evasion-scan.py present'
     fi
 
+    if have node && [ -f "$REPO/scripts/permission-memory-self-test.mjs" ]; then
+        if node "$REPO/scripts/permission-memory-self-test.mjs" > "$work/pm_st.txt" 2>&1; then
+            ok 'permission-memory: self-test (repeat allow + deny preserved)'
+        else
+            bad 'permission-memory: self-test (repeat allow + deny preserved)'
+            cat "$work/pm_st.txt"
+        fi
+    else
+        bad 'permission-memory-self-test.mjs present + node'
+    fi
+
     if have node && [ -f "$REPO/scripts/blacklist-guard-self-test.mjs" ]; then
         if node "$REPO/scripts/blacklist-guard-self-test.mjs" > "$work/bg_st.txt" 2>&1; then
             ok 'blacklist-guard: self-test'
