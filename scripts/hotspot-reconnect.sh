@@ -66,6 +66,18 @@ PROFILE="${HOTSPOT_PROFILE:-}"
 SSID="${HOTSPOT_SSID:-}"
 IFACE="${HOTSPOT_IFACE:-en0}"
 JSON="${HOTSPOT_JSON:-0}"
+ALERTS_N="${HOTSPOT_ALERTS_N:-20}"
+QUIET="${HOTSPOT_QUIET:-0}"
+SILENCE_SEC="${HOTSPOT_SILENCE_SEC:-3600}"
+ALERT_COOLDOWN="${HOTSPOT_ALERT_COOLDOWN:-120}"
+ALERT_MAX="${HOTSPOT_ALERT_MAX:-4}"
+CRITICAL_AFTER="${HOTSPOT_CRITICAL_AFTER:-3}"
+ALERT_STATE="${HOTSPOT_ALERT_STATE:-$STATE.alerts}"
+QUIET_UNTIL="${HOTSPOT_QUIET_UNTIL:-$HOME/.local/state/hotspot-quiet.until}"
+FIX_REQUEST="${HOTSPOT_FIX_REQUEST:-$HOME/.local/state/hotspot-fix.request}"
+ACTION_OUT="${HOTSPOT_ACTION_OUT:-$HOME/.local/state/hotspot-action.out}"
+NOTIFY_BIN="${HOTSPOT_NOTIFY_BIN:-notify-send}"
+ALERT_N=0
 MODE=""
 ROLE="client"
 RECONNECT=0
@@ -87,6 +99,36 @@ have() {
         networksetup) [ "${HOTSPOT_FAKE_HAVE_NETWORKSETUP:-0}" = "1" ] && return 0 ;;
     esac
     command -v "$1" > /dev/null
+}
+
+have_notify() {
+    if [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ]; then return 0; fi
+    command -v "$NOTIFY_BIN" > /dev/null
+}
+
+notify_send() {
+    if [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ]; then
+        printf '%s\n' "$*" >> "${HOTSPOT_NOTIFY_LOG:-/tmp/hotspot-notify.log}"
+        printf '%s' "${HOTSPOT_FAKE_NOTIFY_ACTION:-}"
+        return 0
+    fi
+    "$NOTIFY_BIN" "$@"
+}
+
+notify_has_actions() {
+    [ "${HOTSPOT_FAKE_NOTIFY_ACTIONS:-0}" = "1" ] && return 0
+    [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ] && return 1
+    "$NOTIFY_BIN" --help 2>&1 | grep -q -e '--action'
+}
+
+open_url() {
+    if have xdg-open; then
+        xdg-open "$1" 2>&1 || true
+    elif have open; then
+        open "$1" 2>&1 || true
+    else
+        printf 'open %s\n' "$1"
+    fi
 }
 
 ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -218,7 +260,15 @@ assess() {
     if overlay_ok; then
         STATE_NOW="up"
     elif [ "$(default_route)" = "up" ] && [ "$DNS" = "up" ]; then
-        STATE_NOW="overlay-down"
+        # Context-aware inhibition: an underlay that is up+DNS but has a
+        # DIFFERENT address signature than the last healthy one means the box
+        # roamed to another network. The overlay is expected to be down there,
+        # so this is "off-network", not an incident; it does not page.
+        if [ -n "$(good_sig)" ] && [ "$(signature)" != "$(good_sig)" ]; then
+            STATE_NOW="off-network"
+        else
+            STATE_NOW="overlay-down"
+        fi
     else
         STATE_NOW="hotspot-lost"
     fi
@@ -255,19 +305,136 @@ save_state() {
     printf 'PREV=%s\nFAILS=%s\nSIG=%s\n' "$1" "$2" "$(signature)" > "$STATE"
 }
 
+save_good_sig() {
+    mkdir -p "$(dirname "$STATE")" || return 0
+    printf '%s\n' "$(signature)" > "$STATE.good"
+}
+
+good_sig() {
+    if [ -f "$STATE.good" ]; then
+        cat "$STATE.good"
+    fi
+}
+
 log_line() {
     mkdir -p "$(dirname "$LOG")" || return 0
     printf '%s\n' "$*" >> "$LOG"
 }
 
+quiet_now() {
+    [ "$QUIET" = "1" ] && return 0
+    [ -f "$QUIET_UNTIL" ] || return 1
+    local until=""
+    until="$(cat "$QUIET_UNTIL" 2>&1)"
+    case "$until" in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+    [ "$(date +%s)" -lt "$until" ]
+}
+
+do_silence() {
+    mkdir -p "$(dirname "$QUIET_UNTIL")" || return 0
+    printf '%s\n' "$(( $(date +%s) + SILENCE_SEC ))" > "$QUIET_UNTIL"
+    printf 'notifications silenced for %ss (delete %s to re-enable)\n' "$SILENCE_SEC" "$QUIET_UNTIL"
+}
+
+alert_budget() {
+    local level="$1" now=0 last=0 n=0
+    now="$(date +%s)"
+    if [ -f "$ALERT_STATE" ]; then
+        last="$(awk -F= '/^TS=/{print $2}' "$ALERT_STATE")"
+        n="$(awk -F= '/^N=/{print $2}' "$ALERT_STATE")"
+    fi
+    case "$last" in '' | *[!0-9]*) last=0 ;; esac
+    case "$n" in '' | *[!0-9]*) n=0 ;; esac
+    if [ "$level" = "OK" ]; then
+        n=0
+    else
+        if [ "$last" -gt 0 ] && [ $((now - last)) -lt "$ALERT_COOLDOWN" ]; then
+            ALERT_N="$n"
+            return 1
+        fi
+        n=$((n + 1))
+        if [ "$n" -gt "$ALERT_MAX" ]; then
+            ALERT_N="$n"
+            return 1
+        fi
+    fi
+    mkdir -p "$(dirname "$ALERT_STATE")" || return 0
+    printf 'TS=%s\nN=%s\n' "$now" "$n" > "$ALERT_STATE"
+    ALERT_N="$n"
+    return 0
+}
+
+alert_urgency() {
+    if [ "${ALERT_N:-1}" -ge "$CRITICAL_AFTER" ]; then
+        printf 'critical'
+    else
+        printf 'normal'
+    fi
+}
+
+notify_user() {
+    local level="$1" msg="$2" urgency="$3" timeout="$4" body=""
+    local -a actions=()
+    body="$level: $msg"
+    if [ "$level" != "OK" ]; then
+        body="$body
+fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
+    fi
+    if notify_has_actions; then
+        if [ "$ROLE" = "server" ]; then
+            actions=(-A "open=Open dashboard" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+        else
+            actions=(-A "fix=Reconnect" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+        fi
+        (
+            notify_send -u "$urgency" -t "$timeout" -w "${actions[@]}" \
+                --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                "opencode hotspot" "$body" > "$ACTION_OUT" 2>&1
+            case "$(cat "$ACTION_OUT" 2>&1)" in
+                fix)
+                    mkdir -p "$(dirname "$FIX_REQUEST")"
+                    printf '%s\n' "$(ts)" > "$FIX_REQUEST"
+                    ;;
+                open) open_url "https://$MESH:5099" ;;
+                silence) do_silence ;;
+            esac
+        ) &
+    else
+        notify_send -u "$urgency" -t "$timeout" \
+            --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+            "opencode hotspot" "$body" 2>&1 || true
+    fi
+}
+
+note_local() {
+    bell
+    printf '\n==== INFO [%s] %s ====\n' "$(ts)" "$*"
+    log_line "$(ts) INFO $*"
+}
+
 alert_local() {
-    local level="$1" msg="$2"
+    local level="$1" msg="$2" urgency="" timeout=""
     bell
     printf '\n==== %s [%s] %s ====\n' "$level" "$(ts)" "$msg"
     log_line "$(ts) $level $msg"
-    if have notify-send; then
-        notify-send -u critical "opencode hotspot" "$level: $msg" 2>&1 || true
+    if quiet_now; then
+        printf '(notifications silenced; still logged)\n'
+        return 0
     fi
+    if ! have_notify; then
+        printf '(no %s; banner only — fix with: bash %s/hotspot-reconnect.sh --fix)\n' \
+            "$NOTIFY_BIN" "$SELF_DIR"
+        return 0
+    fi
+    if ! alert_budget "$level"; then
+        printf '(notification throttled; still logged)\n'
+        return 0
+    fi
+    urgency="$(alert_urgency)"
+    if [ "$urgency" = "critical" ]; then timeout=0; else timeout=8000; fi
+    notify_user "$level" "$msg" "$urgency" "$timeout"
     if [ "$ROLE" = "server" ] && have wall; then
         printf '%s\n' "opencode hotspot: $level: $msg" | wall 2>&1 || true
     fi
@@ -457,6 +624,7 @@ after_up() {
 
 down_message() {
     case "$STATE_NOW" in
+        off-network) printf 'on a different network than the last healthy one; the overlay is expected down there' ;;
         overlay-down) printf 'underlay is up but the overlay (nebula/tailscale) is down' ;;
         *) printf 'hotspot/underlay appears lost (no route and no DNS)' ;;
     esac
@@ -468,6 +636,35 @@ emit_json() {
         "$STATE_NOW" "$(via)" "$M4" "$M5" "$T4" "$T5" "$L4" "$DNS" "${SSID_NOW:-}" "$FAILS"
 }
 
+consume_fix_request() {
+    [ -f "$FIX_REQUEST" ] || return 0
+    rm -f "$FIX_REQUEST"
+    printf '\n== fix requested from the notification ==\n'
+    if [ "${STATE_NOW:-}" = "up" ]; then
+        printf 'connection is already up; nothing to do\n'
+        return 0
+    fi
+    interactive_reconnect
+}
+
+show_alerts() {
+    local n="${1:-20}"
+    [ -f "$LOG" ] || { printf 'no alert log at %s\n' "$LOG"; return 0; }
+    printf 'alert log: %s (%s line(s))\n' "$LOG" "$(wc -l < "$LOG")"
+    printf 'ALERT=%s OK=%s\n' "$(grep -c ' ALERT ' "$LOG" || true)" "$(grep -c ' OK ' "$LOG" || true)"
+    tail -n "$n" "$LOG"
+}
+
+do_fix() {
+    assess
+    report
+    if [ "$STATE_NOW" = "up" ]; then
+        printf 'connection is up; nothing to do\n'
+        return 0
+    fi
+    interactive_reconnect
+}
+
 client_tick() {
     local prev_saved=""
     prev_saved="$(state_get PREV)"
@@ -477,6 +674,7 @@ client_tick() {
     esac
     [ -n "$prev_saved" ] && PREV="$prev_saved"
     assess
+    consume_fix_request || true
     if [ "$STATE_NOW" = "up" ]; then
         if [ -n "$PREV" ] && [ "$PREV" != "up" ]; then
             alert_local OK "connection restored via $(via)"
@@ -484,6 +682,7 @@ client_tick() {
         fi
         FAILS=0
         PREV="up"
+        save_good_sig
         save_state up 0
         report
         emit_json
@@ -492,8 +691,15 @@ client_tick() {
     FAILS=$((FAILS + 1))
     if [ "$FAILS" -ge "$FAIL_THRESHOLD" ]; then
         if [ "$PREV" != "$STATE_NOW" ]; then
-            alert_local ALERT "connection lost: $(down_message)"
-            alert_server ALERT "client connection lost: $(down_message)"
+            case "$STATE_NOW" in
+                off-network)
+                    note_local "off-network: overlay expected down (alerts inhibited); $(down_message)"
+                    ;;
+                *)
+                    alert_local ALERT "connection lost: $(down_message)"
+                    alert_server ALERT "client connection lost: $(down_message)"
+                    ;;
+            esac
         else
             printf 'still down (%s misses): %s\n' "$FAILS" "$(down_message)"
         fi
@@ -584,6 +790,12 @@ self_test() {
     export HOTSPOT_FAIL_THRESHOLD=1
     export HOTSPOT_FAKE_BELL=1
     export HOTSPOT_NO_HEAL=1
+    export HOTSPOT_ALERT_STATE="$work/alerts.state"
+    export HOTSPOT_QUIET_UNTIL="$work/quiet.until"
+    export HOTSPOT_FIX_REQUEST="$work/fix.request"
+    export HOTSPOT_ACTION_OUT="$work/action.out"
+    export HOTSPOT_ALERT_COOLDOWN=999
+    export HOTSPOT_ALERT_MAX=4
 
     o=$(HOTSPOT_FAKE_OVERLAY=up HOTSPOT_FAKE_LINK=up HOTSPOT_FAKE_DNS=1 HOTSPOT_FAKE_SIG=aaa \
         bash "$0" --check 2>&1); rc=$?
@@ -644,10 +856,57 @@ self_test() {
     o=$(bash "$0" --bogus 2>&1); rc=$?
     [ "$rc" -eq 3 ] || { printf 'FAIL unknown arg rc\n'; fail=1; }
 
+    : > "$work/state"
+    o=$(HOTSPOT_FAKE_OVERLAY=up HOTSPOT_FAKE_LINK=up HOTSPOT_FAKE_DNS=1 HOTSPOT_FAKE_SIG=good1 \
+        bash "$0" --tick 2>&1); rc=$?
+    : > "$work/state"
+    o=$(HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=up HOTSPOT_FAKE_DNS=1 HOTSPOT_FAKE_SIG=other2 \
+        bash "$0" --tick 2>&1); rc=$?
+    [ "$rc" -eq 2 ] || { printf 'FAIL off-network rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q 'off-network' || { printf 'FAIL off-network state\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'overlay expected down' || { printf 'FAIL off-network inhibition\n'; fail=1; }
+    rm -f "$work/state.good"
+
+    local nf="$work/notify.log" n=0
+    : > "$nf"
+    export HOTSPOT_FAKE_NOTIFY=1 HOTSPOT_NOTIFY_LOG="$nf"
+    : > "$work/state"
+    HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 HOTSPOT_FAKE_SERVER=down HOTSPOT_FAKE_SIG=iii \
+        bash "$0" --tick > /dev/null
+    : > "$work/state"
+    HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 HOTSPOT_FAKE_SERVER=down HOTSPOT_FAKE_SIG=jjj \
+        bash "$0" --tick > /dev/null
+    n="$(grep -c 'opencode hotspot' "$nf")"
+    [ "$n" -eq 1 ] || { printf 'FAIL alert cooldown (notify lines=%s)\n' "$n"; fail=1; }
+
+    : > "$nf"
+    : > "$work/state"
+    : > "$work/alerts.state"
+    HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 HOTSPOT_FAKE_SERVER=down HOTSPOT_QUIET=1 \
+        bash "$0" --tick > /dev/null
+    [ ! -s "$nf" ] || { printf 'FAIL quiet mode notified\n'; fail=1; }
+
+    o=$(bash "$0" --silence 60 2>&1); rc=$?
+    [ "$rc" -eq 0 ] || { printf 'FAIL silence rc=%s\n' "$rc"; fail=1; }
+    [ -s "$work/quiet.until" ] || { printf 'FAIL silence file\n'; fail=1; }
+
+    : > "$work/state"
+    printf 'x\n' > "$work/fix.request"
+    HOTSPOT_FAKE_OVERLAY=up HOTSPOT_FAKE_LINK=up HOTSPOT_FAKE_DNS=1 HOTSPOT_FAKE_SIG=kkk \
+        bash "$0" --tick > /dev/null
+    [ ! -f "$work/fix.request" ] || { printf 'FAIL fix request not consumed\n'; fail=1; }
+    unset HOTSPOT_FAKE_NOTIFY HOTSPOT_NOTIFY_LOG
+
+    o=$(bash "$0" --alerts 5 2>&1); rc=$?
+    [ "$rc" -eq 0 ] || { printf 'FAIL alerts rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q 'alert log:' || { printf 'FAIL alerts header\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'ALERT=' || { printf 'FAIL alerts counts\n'; fail=1; }
+
     rm -f "$work/state" "$work/alerts.log" "$work/pending"
+    rm -f "$work/alerts.state" "$work/quiet.until" "$work/fix.request" "$work/action.out" "$work/notify.log" "$work/state.good"
     rmdir "$work" 2>&1 || true
     if [ "$fail" -eq 0 ]; then
-        printf 'hotspot-reconnect: self-test PASS (check + lost + overlay-down + alert + server + reconnect + plan + json)\n'
+        printf 'hotspot-reconnect: self-test PASS (check + lost + overlay-down + alert + server + reconnect + plan + json + cooldown + quiet + silence + fix)\n'
     else
         printf 'hotspot-reconnect: self-test FAIL\n'
     fi
@@ -655,9 +914,12 @@ self_test() {
 }
 
 usage() {
-    printf 'usage: %s [--check|--watch|--tick|--plan|--server|--self-test] [--reconnect] [--yes] [--json]\n' "$0"
+    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--server|--self-test] [--reconnect] [--yes] [--json] [--quiet]\n' "$0"
     printf 'client env: HOTSPOT_SSID, HOTSPOT_PROFILE, HOTSPOT_SERVER_SSH, ROAM_MESH_IP, ROAM_LAN_IP\n'
     printf 'server env: CLIENT_MESH_IP, CLIENT_TAILSCALE_IP\n'
+    printf 'alerts: normal urgency + 8s expiry, coalesced, one per HOTSPOT_ALERT_COOLDOWN (120s),\n'
+    printf '        capped at HOTSPOT_ALERT_MAX (4), critical only after HOTSPOT_CRITICAL_AFTER (3).\n'
+    printf 'buttons: Reconnect (client) / Open dashboard (server) + Silence 1h + Dismiss.\n'
     printf 'run --watch on the client; --server --watch on the server\n'
 }
 
@@ -674,6 +936,24 @@ main() {
             --reconnect) RECONNECT=1; shift ;;
             --yes) ASSUME_YES=1; shift ;;
             --json) JSON=1; shift ;;
+            --fix) MODE="fix"; shift ;;
+            --alerts)
+                shift
+                case "${1:-}" in
+                    '' | *[!0-9]*) ;;
+                    *) ALERTS_N="$1"; shift ;;
+                esac
+                MODE="alerts"
+                ;;
+            --quiet) QUIET=1; shift ;;
+            --silence)
+                shift
+                case "${1:-}" in
+                    '' | *[!0-9]*) ;;
+                    *) SILENCE_SEC="$1"; shift ;;
+                esac
+                MODE="silence"
+                ;;
             --settle) SETTLE_SEC="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
             --self-test) self_test; return "$?" ;;
             -h | --help) usage; return 0 ;;
@@ -689,6 +969,9 @@ main() {
     case "$MODE" in
         check) do_check; return "$?" ;;
         plan) plan_actions; return 0 ;;
+        fix) do_fix; return "$?" ;;
+        alerts) show_alerts "${ALERTS_N:-20}"; return "$?" ;;
+        silence) do_silence; return "$?" ;;
         tick)
             if [ "$ROLE" = "server" ]; then server_tick; return "$?"; fi
             client_tick; return "$?" ;;
