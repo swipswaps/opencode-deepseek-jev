@@ -24,11 +24,15 @@ import { fileURLToPath } from "node:url";
 const OFF = String(process.env.PERMISSION_MEMORY ?? "").toLowerCase() === "off";
 const seen = new Map();
 
-export function normalizeCommand(cmd) {
+// NOTE: names must NOT be exported. OpenCode's plugin loader treats every
+// named export as a plugin factory; memoryKey() returns null for a non-command
+// input, which made the loader dereference null (.config/.dispose) and abort
+// every headless `opencode run` with a generic UnknownError.
+function normalizeCommand(cmd) {
     return String(cmd ?? "").replace(/\s+/g, " ").trim();
 }
 
-export function memoryKey(sessionID, type, metadata) {
+function memoryKey(sessionID, type, metadata) {
     const cmd = normalizeCommand(metadata?.command ?? "");
     if (!cmd) return null;
     return [sessionID ?? "-", String(type ?? "-").toLowerCase(), cmd].join("|");
@@ -68,3 +72,5 @@ export const PermissionMemory = async () => {
         },
     };
 };
+
+export default PermissionMemory;
