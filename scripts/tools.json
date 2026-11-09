@@ -1475,6 +1475,17 @@
     ]
   },
   {
+    "id": "display-env",
+    "title": "Expose DISPLAY/XAUTHORITY to client TTY shells",
+    "where": "host",
+    "purpose": "ssh only requests X11 forwarding when the client has DISPLAY set; a TTY login on the MacBook has none even though the XFCE session does. --print shows the detected values; --install adds a guarded, idempotent ~/.bashrc block (interactive shells only, fills unset values); --self-test offline. client-setup runs --install in setup mode. macOS skipped (XQuartz).",
+    "commands": [
+      "./scripts/display-env.sh --print",
+      "./scripts/display-env.sh --install",
+      "./scripts/display-env.sh --self-test"
+    ]
+  },
+  {
     "id": "client-setup",
     "title": "One-shot client bootstrap (clipboard + network + self-heal)",
     "where": "host",

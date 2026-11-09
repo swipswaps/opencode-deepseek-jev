@@ -828,6 +828,16 @@ clipboard-preflight.sh
     at `ssh-x11-setup.sh` instead of asking for a one-off `ssh -Y`. Exit 0
     usable, 3 image flavour, 2 no backend. Gated in test-hygiene.sh.
 
+display-env.sh
+    Client-side DISPLAY fix for TTY/login shells. ssh only requests X11
+    forwarding when the CLIENT has DISPLAY set; a TTY login on the MacBook has
+    none even though the XFCE session does. --print shows the detected
+    DISPLAY/XAUTHORITY; --install adds a guarded, idempotent block to ~/.bashrc
+    that fills them only for interactive shells (never overrides a graphical
+    terminal); --self-test offline. macOS is skipped (XQuartz). client-setup.sh
+    runs --install in setup mode so new clients get it; gated in
+    test-hygiene.sh.
+
 client-setup.sh
     One-shot client bootstrap: `git clone`, run this, then `ssh opencode-jev`
     works and keeps working. Discovers a reachable server (mesh -> Tailscale

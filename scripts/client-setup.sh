@@ -200,7 +200,7 @@ start_x_server() {
     case "$(x_server_state "$p")" in
         installed-not-running)
             if have open; then
-                open -a XQuartz > /dev/null 2>&1 || true
+                open -a XQuartz || true
                 log "started XQuartz"
             fi
             ;;
@@ -208,6 +208,18 @@ start_x_server() {
             log "XQuartz missing; clipboard needs an X server on the client"
             ;;
     esac
+    return 0
+}
+
+install_display_env() {
+    # Linux clients: give interactive TTY shells a DISPLAY/XAUTHORITY so ssh -Y
+    # can forward the clipboard. macOS uses XQuartz and is skipped.
+    [ "$(uname -s)" = "Darwin" ] && return 0
+    [ -f "$SELF_DIR/display-env.sh" ] || return 0
+    bash "$SELF_DIR/display-env.sh" --install || {
+        printf 'WARN: display-env --install failed\n'
+        return 0
+    }
     return 0
 }
 
@@ -565,7 +577,10 @@ main() {
         write_units "$units" "$p" "$interval" || rc=$?
         if [ "$mode" = "setup" ]; then enable_units "$units" "$p"; fi
     fi
-    if [ "$mode" = "setup" ]; then start_x_server "$p"; fi
+    if [ "$mode" = "setup" ]; then
+        start_x_server "$p"
+        install_display_env
+    fi
     log "setup: alias=$alias server=$target config=$cfg units=$units"
     say "server:   $target"
     say "ssh block: $cfg (Host $alias, X11 trusted)"

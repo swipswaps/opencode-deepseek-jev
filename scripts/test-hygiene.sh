@@ -477,6 +477,17 @@ PY
         bad 'client-setup.sh present'
     fi
 
+    if [ -f "$REPO/scripts/display-env.sh" ]; then
+        if bash "$REPO/scripts/display-env.sh" --self-test > "$work/de_st.txt" 2>&1; then
+            ok 'display-env: self-test (install + idempotent + print)'
+        else
+            bad 'display-env: self-test (install + idempotent + print)'
+            cat "$work/de_st.txt"
+        fi
+    else
+        bad 'display-env.sh present'
+    fi
+
     if [ -f "$REPO/scripts/hotspot-test.sh" ]; then
         if bash "$REPO/scripts/hotspot-test.sh" --self-test > "$work/ht_st.txt" 2>&1; then
             ok 'hotspot-test: self-test (before/after + fallback + lighthouse + json)'
