@@ -1,6 +1,8 @@
 [Unit]
 Description=opencode notify sink (local webhook receiver for sentinel alerts)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+StartLimitIntervalSec=60
+StartLimitBurst=5
 After=network.target
 
 [Service]

@@ -1,6 +1,8 @@
 [Unit]
 Description=opencode-web + caddy access plane (waits for tunnel bind IPs)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+StartLimitIntervalSec=60
+StartLimitBurst=5
 # A user manager has no cross-manager ordering with system units, so
 # `Wants=/After=network-online.target` would be a silent no-op here
 # (systemd/systemd#3312). Ordering is instead done in scripts/web.sh:

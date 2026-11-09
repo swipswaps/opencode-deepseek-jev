@@ -35,6 +35,8 @@ BACKUP_DIR="${ROOT}/root/node-fix-${TS}"
 DISPATCH="${ROOT}/etc/NetworkManager/dispatcher.d/50-mesh-recover"
 MESH_SCRIPT="${MESH_RECOVER:-/home/owner/Documents/d565411ff353dd7f/repo/proxmox-dual-plane-mesh/scripts/mesh-recover.sh}"
 SERVICE="serial-getty@ttyS0"
+ATTEMPTS="${NODE_FIX_ATTEMPTS:-2}"
+FAILED=0
 
 hr() { printf '\n===== %s =====\n' "$1"; }
 have() { command -v "$1" >/dev/null; }
@@ -61,6 +63,125 @@ move_to_backup() {
     else
         sudo mkdir -p "$dst" && sudo mv "$src" "$dst/$name"
     fi
+}
+
+restore_from_backup() {
+    local name="$1" dst="$2"
+    if [ ! -e "$BACKUP_DIR/$name" ] && [ ! -L "$BACKUP_DIR/$name" ]; then
+        printf 'rollback: no backup %s/%s\n' "$BACKUP_DIR" "$name"
+        return 0
+    fi
+    if [ -n "$ROOT" ]; then
+        mv "$BACKUP_DIR/$name" "$dst"
+    else
+        sudo mv "$BACKUP_DIR/$name" "$dst"
+    fi
+}
+
+verify_group() {
+    local g="$1" en=""
+    if [ "${NODE_FIX_FAKE_VERIFY_FAIL:-0}" = "1" ]; then return 1; fi
+    if [ "$APPLY" -ne 1 ]; then return 0; fi
+    # Self-test seam: no systemd; verify the file mutations only.
+    if [ "$FIX_SYSTEM" = "1" ]; then
+        case "$g" in
+            mesh)
+                [ ! -f "$DISPATCH" ] || return 1
+                if [ -f "$MESH_SCRIPT" ] && grep -qE '10\.100\.0\.1\) PEER_OVL=10\.100\.0\.2([^0-9]|$)' "$MESH_SCRIPT" 2>&1; then
+                    return 1
+                fi
+                ;;
+        esac
+        return 0
+    fi
+    case "$g" in
+        getty)
+            en="$(systemctl is-enabled "$SERVICE" 2>&1)"
+            case "$en" in
+                masked | masked-runtime) ;;
+                *) return 1 ;;
+            esac
+            if systemctl is-active --quiet "$SERVICE" 2>&1; then return 1; fi
+            ;;
+        mesh)
+            [ ! -f "$DISPATCH" ] || return 1
+            if systemctl --user is-enabled mesh-recover.timer > /dev/null; then return 1; fi
+            if [ -f "$MESH_SCRIPT" ] && grep -qE '10\.100\.0\.1\) PEER_OVL=10\.100\.0\.2([^0-9]|$)' "$MESH_SCRIPT" 2>&1; then
+                return 1
+            fi
+            ;;
+        dns)
+            case "$DNS_MODE" in
+                systemd)
+                    if [ -L /etc/resolv.conf ] && readlink /etc/resolv.conf 2>&1 | grep -q 'stub-resolv.conf'; then :; else return 1; fi
+                    ;;
+            esac
+            ;;
+        units)
+            if systemctl is-failed --quiet accounts-daemon.service 2>&1; then return 1; fi
+            ;;
+    esac
+    return 0
+}
+
+rollback_group() {
+    local g="$1"
+    [ "$APPLY" -eq 1 ] || { printf 'PLAN  rollback %s\n' "$g"; return 0; }
+    printf 'ROLLBACK %s\n' "$g"
+    case "$g" in
+        getty)
+            sudo_run systemctl unmask "$SERVICE"
+            sudo_run systemctl enable --now "$SERVICE"
+            ;;
+        mesh)
+            run systemctl --user enable --now mesh-recover.timer
+            if [ -e "$BACKUP_DIR/50-mesh-recover" ] || [ -L "$BACKUP_DIR/50-mesh-recover" ]; then
+                restore_from_backup 50-mesh-recover "$DISPATCH"
+            fi
+            if [ -f "$MESH_SCRIPT.bak.$TS" ]; then
+                if [ -n "$ROOT" ]; then
+                    cp "$MESH_SCRIPT.bak.$TS" "$MESH_SCRIPT"
+                else
+                    sudo cp "$MESH_SCRIPT.bak.$TS" "$MESH_SCRIPT"
+                fi
+            fi
+            ;;
+        dns)
+            case "$DNS_MODE" in
+                systemd)
+                    if [ -e "$BACKUP_DIR/resolv.conf" ] || [ -L "$BACKUP_DIR/resolv.conf" ]; then
+                        if [ -n "$ROOT" ]; then
+                            unlink /etc/resolv.conf 2>&1 || true
+                        else
+                            sudo unlink /etc/resolv.conf 2>&1 || true
+                        fi
+                        restore_from_backup resolv.conf /etc/resolv.conf
+                    fi
+                    sudo_run systemctl restart systemd-resolved
+                    ;;
+            esac
+            ;;
+        units) : ;;
+    esac
+}
+
+apply_checked() {
+    local g="$1" fn="$2" attempt=0
+    while [ "$attempt" -lt "$ATTEMPTS" ]; do
+        attempt=$((attempt + 1))
+        "$fn"
+        if verify_group "$g"; then
+            [ "$attempt" -gt 1 ] && printf 'OK   %s verified on attempt %s\n' "$g" "$attempt"
+            return 0
+        fi
+        if [ "$APPLY" -ne 1 ]; then return 0; fi
+        printf 'WARN %s post-check failed (attempt %s/%s)\n' "$g" "$attempt" "$ATTEMPTS"
+        [ "$attempt" -lt "$ATTEMPTS" ] && sleep $((attempt * 2))
+    done
+    printf 'FAIL %s did not converge after %s attempt(s); rolling back\n' "$g" "$ATTEMPTS"
+    rollback_group "$g"
+    FAILED=$((FAILED + 1))
+    return 1
 }
 
 fix_getty() {
@@ -180,13 +301,25 @@ self_test() {
     n="$(grep -c 'PEER_OVL=10.100.0.24' "$w/mesh-recover.sh")"
     [ "$n" -eq 1 ] || { printf 'FAIL not idempotent (%s)\n' "$n"; fail=1; }
 
+    # bounded retry + rollback: force the post-check to fail; the hook and peer
+    # map must be restored and the run must exit non-zero.
+    printf '#!/bin/bash\n' > "$w/etc/NetworkManager/dispatcher.d/50-mesh-recover"
+    printf '%s\n' '  10.100.0.1) PEER_OVL=10.100.0.2; PEER_LAN_HINT=192.168.4.24 ;;' > "$w/mesh-recover.sh"
+    NODE_FIX_FAKE_VERIFY_FAIL=1 NODE_FIX_ATTEMPTS=1 FIX_ROOT="$w" FIX_DRY_SYSTEM=1 MESH_RECOVER="$w/mesh-recover.sh" \
+        bash "$0" --apply --only mesh > /dev/null
+    rc=$?
+    [ "$rc" -ne 0 ] || { printf 'FAIL rollback rc\n'; fail=1; }
+    [ -f "$w/etc/NetworkManager/dispatcher.d/50-mesh-recover" ] || { printf 'FAIL rollback hook\n'; fail=1; }
+    grep -q '10.100.0.1) PEER_OVL=10.100.0.2' "$w/mesh-recover.sh" || { printf 'FAIL rollback peer\n'; fail=1; }
+
     bash "$0" --bogus > /dev/null 2>&1
     [ "$?" -eq 2 ] || { printf 'FAIL unknown arg\n'; fail=1; }
 
     rm -f "$w/mesh-recover.sh" "$w"/mesh-recover.sh.bak.*
+    rm -f "$w/etc/NetworkManager/dispatcher.d/50-mesh-recover"
     rm -f "$w"/root/node-fix-*/* 2>&1
     rmdir "$w"/root/node-fix-* "$w"/root "$w"/etc/NetworkManager/dispatcher.d "$w"/etc/NetworkManager "$w"/etc "$w" 2>&1 || true
-    if [ "$fail" -eq 0 ]; then printf 'node-fix: self-test PASS (dry-run + apply + backup + idempotent)\n'; else printf 'node-fix: self-test FAIL\n'; fi
+    if [ "$fail" -eq 0 ]; then printf 'node-fix: self-test PASS (dry-run + apply + backup + idempotent + post-check + rollback)\n'; else printf 'node-fix: self-test FAIL\n'; fi
     return "$fail"
 }
 
@@ -210,14 +343,18 @@ main() {
     case "$DNS_MODE" in tailscale | systemd | none) ;; *) printf 'FAIL: --dns must be tailscale|systemd|none\n'; return 2 ;; esac
 
     printf '=== node-fix @ %s  mode=%s ===\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([ "$APPLY" -eq 1 ] && printf apply || printf dry-run)"
-    want getty && fix_getty
-    want mesh && fix_mesh
-    want dns && fix_dns
-    want units && fix_units
+    want getty && apply_checked getty fix_getty
+    want mesh && apply_checked mesh fix_mesh
+    want dns && apply_checked dns fix_dns
+    want units && apply_checked units fix_units
     info_nebula
     verify
     if [ "$APPLY" -ne 1 ]; then
         printf '\nNo changes made. Re-run with --apply to execute the PLAN lines.\n'
+    fi
+    if [ "$FAILED" -gt 0 ]; then
+        printf '\nFAIL: %s group(s) rolled back after the bounded retry budget.\n' "$FAILED"
+        return 1
     fi
     return 0
 }

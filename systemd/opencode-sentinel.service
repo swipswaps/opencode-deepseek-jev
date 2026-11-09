@@ -1,6 +1,8 @@
 [Unit]
 Description=opencode session/model health sentinel (one sweep, ledger-logged)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Wants=network-online.target
 After=network-online.target
 

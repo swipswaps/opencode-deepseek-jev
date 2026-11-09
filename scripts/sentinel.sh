@@ -77,23 +77,29 @@ resolve_repo() {
     return 1
 }
 
-have() { command -v "$1" >/dev/null 2>&1; }
+have() { command -v "$1" > /dev/null; }
+
+LOG_OK=1
 
 log_advisory() {
-    # log_advisory VERDICT RESOURCE DETAIL [KEY] — guarded, never fails the run.
+    # log_advisory VERDICT RESOURCE DETAIL [KEY] — never fails the run, but it
+    # records LOG_OK=0 if the row could not be written so the sweep's cursors
+    # are held and the same window is retried instead of silently dropped.
     # KEY defaults to a fresh per-run key. Pass a STABLE per-incident key so a
     # recurring condition collapses to ONE ledger row via UNIQUE(source,key)
     # instead of one ADVISORY per sweep (the 589-row slow-/provider cry-wolf,
     # which desensitizes the watchdog).
     [ "$DOLOG" -eq 1 ] || return 0
-    have python3 || return 0
+    if ! have python3; then LOG_OK=0; return 0; fi
     SEQ=$((SEQ + 1))
     local key="${4:-sentinel-$RUN_TS-$SEQ}"
-    python3 "$REPO/scripts/ledger.py" record --type ADVISORY \
+    if ! python3 "$REPO/scripts/ledger.py" record --type ADVISORY \
         --actor sentinel --tool sentinel --resource "$2" \
         --verdict "$1" --detail "$3" --rev "$REV" \
         --source sentinel --key "$key" \
-        > /dev/null 2>&1 || true
+        > /dev/null; then
+        LOG_OK=0
+    fi
     return 0
 }
 
@@ -102,6 +108,29 @@ trip() {
     TRIPMSG="$TRIPMSG$1
 "
     log_advisory "FAIL" "$2" "$3" "$4"
+}
+
+defer_cursor() {
+    # Defer a cursor write to the end of the sweep. commit_cursors writes it
+    # only if every advisory in this sweep was recorded, so a failed ledger
+    # write (or a crash) re-reads the same window next sweep (at-least-once)
+    # instead of dropping an alert.
+    [ -n "${CUR_PENDING:-}" ] || return 0
+    printf '%s|%s\n' "$1" "$2" >> "$CUR_PENDING"
+}
+
+commit_cursors() {
+    [ -s "${CUR_PENDING:-}" ] || return 0
+    if [ "${LOG_OK:-1}" -ne 1 ]; then
+        printf 'WARN: advisory write failed; cursors held so the next sweep retries\n'
+        rm -f "$CUR_PENDING"
+        return 0
+    fi
+    local f v
+    while IFS='|' read -r f v; do
+        [ -n "$f" ] && printf '%s' "$v" > "$f"
+    done < "$CUR_PENDING"
+    rm -f "$CUR_PENDING"
 }
 
 emit_digest() {
@@ -271,6 +300,9 @@ main() {
     NTRIP=0
     TRIPMSG=""
     mkdir -p "$STATE"
+    CUR_PENDING="$STATE/sentinel.cursors.pending"
+    LOG_OK=1
+    [ -f "$CUR_PENDING" ] && : > "$CUR_PENDING"
     local health=""
     health=$(node --experimental-sqlite "$REPO/scripts/session-health.mjs" "$DB" --json 2>&1 || true)
     local summary=""
@@ -333,7 +365,7 @@ PYEOF
             gwcount=$(printf '%s' "$newseg" | grep -c . 2>&1 || true)
             case "$gwcount" in ''|*[!0-9]*) gwcount=0 ;; esac
         fi
-        printf '%s' "$total" > "$STATE/sentinel.cursor"
+        defer_cursor "$STATE/sentinel.cursor" "$total"
     fi
     export GWCOUNT="$gwcount"
     local t1 tk=""
@@ -458,7 +490,7 @@ PYEOF
             slow_attr=$(printf '%s' "$slow_out" | cut -d'|' -f4-)
             case "$slow_n" in ''|*[!0-9]*) slow_n=0 ;; esac
         fi
-        printf '%s' "$(date +%s)" > "$acc_cur"
+        defer_cursor "$acc_cur" "$(date +%s)"
         if [ "$slow_n" -gt 0 ]; then
             local slow_why=""
             [ -n "$slow_attr" ] && slow_why=" — overlaps tool $slow_attr"
@@ -535,7 +567,7 @@ PYEOF
             esac
         done <<< "$t5_hits"
     fi
-    printf '%s' "$(date +%s)" > "$t5_cur"
+    defer_cursor "$t5_cur" "$(date +%s)"
     # T8: a neighbour tunnel flapping since the last sweep (NEBULA-1). The
     # nebula PROCESS is healthy (systemd NRestarts=0) — the recurring event is
     # a peer tunnel teardown/re-handshake (lighthouse-01 / vpnIp 10.100.0.1),
@@ -586,7 +618,7 @@ PYEOF
             tun_peer=$(printf '%s' "$tun_out" | cut -d'|' -f2-)
             case "$tun_n" in ''|*[!0-9]*) tun_n=0 ;; esac
         fi
-        printf '%s' "$(date +%s)" > "$tun_cur"
+        defer_cursor "$tun_cur" "$(date +%s)"
         if [ "$tun_n" -ge "$TUN_MIN" ]; then
             trip "TRIP T8 tunnel-flap: $tun_n flap event(s) to ${tun_peer:-peer} since last sweep" "nebula/tunnel/${tun_peer:-peer}" "tunnel flap: $tun_n teardown/re-handshake event(s); nebula process healthy (not a restart) — fix the peer/lighthouse link, not systemd (./scripts/nebula-systemd-override.sh --diagnose)" "sentinel-t8-${tun_peer:-peer}"
         fi
@@ -607,6 +639,7 @@ PYEOF
             printf 'clean: no actionable trips (history reported above)\n'
         fi
     fi
+    commit_cursors
     # Alerting sink: on a trip, push the FAIL flags to $NOTIFY_WEBHOOK if set.
     # notify.sh builds the payload from the ledger; a no-op without the webhook.
     if [ "$NTRIP" -gt 0 ] && [ -n "${NOTIFY_WEBHOOK:-}" ] && [ -x "$REPO/scripts/notify.sh" ]; then

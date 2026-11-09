@@ -1,6 +1,8 @@
 [Unit]
 Description=opencode dev-loop progress review (one sweep, ledger-logged)
 Documentation=https://github.com/swipswaps/opencode-deepseek-jev
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Wants=network-online.target
 After=network-online.target
 

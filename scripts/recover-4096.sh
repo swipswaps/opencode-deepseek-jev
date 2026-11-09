@@ -441,6 +441,9 @@ main() {
     TARGET_OF_session="$DB"
     TARGET_OF_edge_retry="https://127.0.0.1:4096/ (post-retry)"
     TARGET_OF_dns_retry="caddy->opencode-web (post-retry)"
+    TARGET_OF_dashboard_retry="https://127.0.0.1:5099/api/rev (post-retry)"
+    TARGET_OF_data_auth_retry="https://127.0.0.1:4096/global/health (post-retry)"
+    TARGET_OF_session_retry="$DB (post-retry)"
     TARGET_OF_recover="compose:opencode-web+caddy"
     TARGET_OF_forensics="caddy tail-50"
     if [ "$JSON" -eq 0 ]; then
@@ -468,8 +471,11 @@ main() {
         else
             if [ "$JSON" -eq 0 ]; then printf 'forensics: dry (no docker contact)\n'; fi
         fi
-        # The restart is the external effect: checkpoint it so a resume does not
-        # restart twice; the probes below still run on every attempt.
+        # A single bounded restart (durable-run checkpoints it). The post-check
+        # now covers every stratum, not just edge+dns: a restart that leaves
+        # the dashboard/auth/session broken must not be reported as recovered.
+        local edge_pre=""
+        edge_pre=$(awk -F'\t' '$1=="edge"{print $2; exit}' "$WORK_TSV" 2>&1 || true)
         if REPO="$REPO" RECOVER_DRY="${RECOVER_DRY:-0}" bash "$du" --job "$job" --step restart -- bash -c '
             if [ "${RECOVER_DRY:-0}" -eq 1 ]; then printf "dry: would compose up opencode-web caddy\n"; exit 0; fi
             docker compose --project-directory "$REPO/docker" up -d opencode-web caddy
@@ -477,6 +483,14 @@ main() {
             if [ "${RECOVER_DRY:-0}" -eq 0 ]; then sleep 3; fi
             run_check edge_retry c_edge
             run_check dns_retry c_dns
+            run_check dashboard_retry c_dashboard
+            run_check data_auth_retry c_auth
+            run_check session_retry c_session
+            local edge_post=""
+            edge_post=$(awk -F'\t' '$1=="edge_retry"{print $2; exit}' "$WORK_TSV" 2>&1 || true)
+            if [ "$edge_pre" = "PASS" ] && [ "$edge_post" = "FAIL" ]; then
+                printf 'WARN: the restart regressed the edge (was PASS, now FAIL); no compose rollback is possible, stopping here\n'
+            fi
         else
             add_check recover "FAIL" "compose up failed" 0
         fi
