@@ -624,11 +624,45 @@ PYEOF
         fi
         [ -n "$tun_tmp" ] && rm -f "$tun_tmp"
     fi
-    export T5_N="$t5_n" T6_N="$t6_n" T7_N="$t7_n"
+    # T9: cache-hit SLO. DeepSeek prefix caching is the cost lever; a ratio
+    # below SENTINEL_CACHE_HIT_MIN means the prompt prefix is churning (tool
+    # schemas/state/compaction) and spend is rising. Bounded to the newest 500
+    # sessions so a large store never turns this into a full scan.
+    local CACHE_MIN="${SENTINEL_CACHE_HIT_MIN:-0.5}"
+    local cache_n=0 cache_trip=0 cache_hit="-1"
+    if have python3; then
+        local cout=""
+        cout=$(python3 - "$DB" << 'PYEOF'
+import sqlite3, sys, time
+db = sys.argv[1]
+try:
+    con = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
+    cutoff = int((time.time() - 86400) * 1000)
+    rows = con.execute("SELECT tokens_input, tokens_cache_read, time_updated FROM session ORDER BY rowid DESC LIMIT 500").fetchall()
+    rows = [r for r in rows if int(r[2] or 0) >= cutoff]
+except Exception:
+    print("0 -1")
+    raise SystemExit
+tin = sum(int(r[0] or 0) for r in rows)
+tcr = sum(int(r[1] or 0) for r in rows)
+ratio = (tcr / float(tin + tcr)) if (tin + tcr) > 0 else -1.0
+print("%d %s" % (len(rows), ("%.4f" % ratio)))
+PYEOF
+)
+        cache_n="${cout%% *}"
+        cache_hit="${cout#* }"
+    fi
+    case "$cache_n" in '' | *[!0-9]*) cache_n=0 ;; esac
+    case "$cache_hit" in '' | *[!0-9.-]*) cache_hit="-1" ;; esac
+    if [ "$cache_n" -gt 0 ] && [ "$cache_hit" != "-1" ] && awk -v r="$cache_hit" -v s="$CACHE_MIN" 'BEGIN { exit !(r < s) }'; then
+        cache_trip=1
+        trip "TRIP T9 cache: ${cache_hit} hit over ${cache_n} session(s) below SLO ${CACHE_MIN}" "store/session" "prefix cache churn: keep tool schemas/state stable and prune stale tool output before compaction" "sentinel-t9-cache"
+    fi
+    export T5_N="$t5_n" T6_N="$t6_n" T7_N="$t7_n" CACHE_N="$cache_n" CACHE_HIT="$cache_hit" CACHE_TRIP="$cache_trip"
     export SLOW_N="$slow_n" SLOW_MAX="$slow_max"
     export TUN_N="$tun_n" TUN_MIN="$TUN_MIN" TUN_PEER="$tun_peer"
     if [ "$JSON" -eq 1 ]; then
-        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0 or int(os.environ.get("T7_N","0"))>0 or int(os.environ.get("TUN_N","0"))>=int(os.environ.get("TUN_MIN","4")), "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "stall_active": int(os.environ.get("T7_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}, "tunnel": {"threshold": int(os.environ.get("TUN_MIN","4")), "n": int(os.environ.get("TUN_N","0")), "peers": os.environ.get("TUN_PEER","")}}))'
+        printf '%s' "$trips_json" | python3 -c 'import json,sys,os; d=json.load(sys.stdin); print(json.dumps({"ts": os.environ.get("RUN_TS",""), "rev": os.environ.get("REV",""), "tripped": bool(d.get("trips")) or int(os.environ.get("SLOW_N","0"))>0 or int(os.environ.get("T5_N","0"))>0 or int(os.environ.get("T6_N","0"))>0 or int(os.environ.get("T7_N","0"))>0 or int(os.environ.get("TUN_N","0"))>=int(os.environ.get("TUN_MIN","4")) or int(os.environ.get("CACHE_TRIP","0"))>0, "trips": d.get("trips"), "counts": d.get("counts"), "latest": d.get("latest"), "gw_new": int(os.environ.get("GWCOUNT","0")), "denied_active": int(os.environ.get("T5_N","0")), "over_active": int(os.environ.get("T6_N","0")), "stall_active": int(os.environ.get("T7_N","0")), "slow": {"threshold_s": float(os.environ.get("SLOW_SEC","10")), "n": int(os.environ.get("SLOW_N","0")), "slowest_s": float(os.environ.get("SLOW_MAX","0") or 0)}, "tunnel": {"threshold": int(os.environ.get("TUN_MIN","4")), "n": int(os.environ.get("TUN_N","0")), "peers": os.environ.get("TUN_PEER","")}}))'
     else
         printf '=== sentinel @ %s ===\n' "$RUN_TS"
         printf '%s' "$trips_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("counts",{}); l=d.get("latest",{}); print("latest: %s [%s] · over=%s warn=%s denied=%s" % (l.get("session"), l.get("level"), c.get("over"), c.get("warn"), c.get("denied")))'

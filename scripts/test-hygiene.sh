@@ -150,6 +150,13 @@ PY
         cat "$work/pl_st.txt"
     fi
 
+    if python3 "$REPO/scripts/acronym-lint.py" --self-test > "$work/al_st.txt" 2>&1; then
+        ok 'acronym-lint: self-test (expand + undefined + allowlist + strict + glossary)'
+    else
+        bad 'acronym-lint: self-test (expand + undefined + allowlist + strict + glossary)'
+        cat "$work/al_st.txt"
+    fi
+
     if python3 "$REPO/scripts/issue-solutions.py" --self-test > "$work/is_st.txt" 2>&1; then
         ok 'issue-solutions: self-test'
     else
@@ -924,19 +931,26 @@ assert b.get("opencode debug config*")=="deny" and b.get("rm -rf *")=="deny", "b
         bad 'permission policy denies secrets + config dump; asks on task/webfetch/doom_loop'
     fi
 
-    if [ -f "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
-        if python3 -c '
+    if [ -d "$REPO/.opencode/skills" ]; then
+        local bad_skill="" skill_md=""
+        for skill_md in "$REPO"/.opencode/skills/*/SKILL.md; do
+            [ -f "$skill_md" ] || continue
+            if ! python3 -c '
 import sys, re
 h = open(sys.argv[1]).read()
 m = re.match(r"^---\n(.*?)\n---", h, re.S)
 sys.exit(0 if (m and "name:" in m.group(1) and "description:" in m.group(1)) else 1)
-' "$REPO/.opencode/skills/jev-harness/SKILL.md"; then
-            ok 'project skill frontmatter valid'
+' "$skill_md"; then
+                bad_skill="$bad_skill $(basename "$(dirname "$skill_md")")"
+            fi
+        done
+        if [ -z "$bad_skill" ]; then
+            ok 'project skill frontmatter valid (all skills)'
         else
-            bad 'project skill frontmatter valid'
+            bad "project skill frontmatter invalid:$bad_skill"
         fi
     else
-        bad 'project skill present (.opencode/skills/jev-harness/SKILL.md)'
+        bad 'project skills present (.opencode/skills/*/SKILL.md)'
     fi
 
     if [ -f "$REPO/.opencode/command/status.md" ]; then

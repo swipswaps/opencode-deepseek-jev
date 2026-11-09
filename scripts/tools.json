@@ -1045,12 +1045,24 @@
     "id": "recovery-status",
     "title": "One-screen recovery state: broken / still working / what is next",
     "where": "host",
-    "purpose": "Read-only merge of last-gate, pulse, the ADVISORY/FAIL ledger, and the hotspot state/inhibit/silence files into one state (healthy|degraded|unknown). unknown is first-class: missing or stale evidence never renders healthy. --write caches data/observability/recovery.json for the dashboard's /recovery page and /api/recovery; the sentinel refreshes it each sweep. --self-test is offline.",
+    "purpose": "Read-only merge of last-gate, pulse, the ADVISORY/FAIL ledger, the cache-hit Service Level Objective (SLO), and the hotspot state/inhibit/silence files into one state (healthy|degraded|unknown). unknown is first-class: missing or stale evidence never renders healthy. --write caches data/observability/recovery.json for the dashboard's /recovery page and /api/recovery; the sentinel refreshes it each sweep. --self-test is offline.",
     "commands": [
       "./scripts/recovery-status.sh",
       "./scripts/recovery-status.sh --json",
       "./scripts/recovery-status.sh --write",
       "./scripts/recovery-status.sh --self-test"
+    ]
+  },
+  {
+    "id": "acronym-lint",
+    "title": "Flag acronyms used before they are expanded",
+    "where": "host",
+    "purpose": "Scans a file or stdin for all-caps tokens (2-6 chars) whose FIRST mention is not expanded (\"Term (ABC)\" or \"ABC (Term)\") and not in the common allowlist. Enforces RULES #96 / the explain-first skill: define every acronym and abbreviation on first mention. --strict disables the allowlist; --json is for machines; --self-test is offline.",
+    "commands": [
+      "./scripts/acronym-lint.py notes.md",
+      "printf '%s\\n' 'The SLO is high.' | ./scripts/acronym-lint.py",
+      "./scripts/acronym-lint.py --strict --json README.md",
+      "./scripts/acronym-lint.py --self-test"
     ]
   },
   {

@@ -155,6 +155,48 @@ if os.path.isfile(db):
 subs.append({"name": "ledger", "state": "attention" if fail_n > 0 else "ok",
              "detail": "%s FAIL advisory row(s) in 24h%s" % (fail_n, (", latest " + str(last_ts)) if last_ts else "")})
 
+# Cache-hit SLO: DeepSeek prefix caching is the biggest cost lever. The ratio is
+# cache_read / (cache_read + input) over recent sessions; below the SLO means the
+# prompt prefix is churning (unstable tools/state/compaction) and cost is rising.
+def find_ocdb(root_dir, home_dir):
+    for p in (os.environ.get("OPENCODE_DB"),
+              os.path.join(root_dir, "data", "opencode", "opencode.db"),
+              os.path.join(home_dir, ".local", "share", "opencode", "opencode.db")):
+        if p and os.path.isfile(p):
+            return p
+    return ""
+
+try:
+    slo = float(os.environ.get("RECOVERY_CACHE_HIT_SLO", "0.5") or 0.5)
+except ValueError:
+    slo = 0.5
+ocdb = find_ocdb(root, home)
+cache_ratio = None
+cache_n = 0
+if ocdb:
+    try:
+        con2 = sqlite3.connect("file:" + ocdb + "?mode=ro", uri=True)
+        cutoff_ms = int((time.time() - 86400) * 1000)
+        rows = con2.execute(
+            "SELECT tokens_input, tokens_cache_read, time_updated FROM session "
+            "ORDER BY rowid DESC LIMIT 500").fetchall()
+        rows = [r for r in rows if int(r[2] or 0) >= cutoff_ms]
+        tin = sum(int(r[0] or 0) for r in rows)
+        tcr = sum(int(r[1] or 0) for r in rows)
+        cache_n = len(rows)
+        if tin + tcr > 0:
+            cache_ratio = tcr / float(tin + tcr)
+    except Exception:
+        pass
+if cache_ratio is None:
+    subs.append({"name": "cache", "state": "unknown", "detail": "no cache data (store missing or empty)"})
+else:
+    cst = "ok" if cache_ratio >= slo else "attention"
+    subs.append({"name": "cache", "state": cst,
+                 "detail": "%.1f%% cache hit over %s session(s) in 24h (SLO %.0f%%)" % (cache_ratio * 100, cache_n, slo * 100)})
+    if cst == "attention":
+        actions.append("cache-hit below SLO: keep the prompt prefix stable and prune stale tool output before compaction")
+
 states = [s["state"] for s in subs]
 if "fail" in states or "attention" in states:
     overall = "degraded"
@@ -213,10 +255,32 @@ self_test() {
     printf '%s' "$out" | grep -q '"overall": "degraded"' || { printf 'FAIL degraded\n'; fail=1; }
     printf '%s' "$out" | grep -q 'harness.sh' || { printf 'FAIL gate action\n'; fail=1; }
 
+    # cache-hit SLO: high cache_read/input is ok; a churning prefix is attention
+    python3 - "$w/opencode.db" << 'PY'
+import sqlite3, sys, time
+c = sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE session(id TEXT PRIMARY KEY, tokens_input INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER, time_updated INTEGER)")
+c.execute("INSERT INTO session VALUES('s1', 100, 900, 0, ?)", (int(time.time() * 1000),))
+c.commit()
+PY
+    out=$(OPENCODE_DB="$w/opencode.db" HOTSPOT_STATE="$w/hotspot.state" build "$w")
+    printf '%s' "$out" | grep -A2 '"name": "cache"' | grep -q '"state": "ok"' \
+        || { printf 'FAIL cache ok\n'; fail=1; }
+    python3 - "$w/opencode.db" << 'PY'
+import sqlite3, sys, time
+c = sqlite3.connect(sys.argv[1])
+c.execute("INSERT INTO session VALUES('s2', 9000, 100, 0, ?)", (int(time.time() * 1000),))
+c.commit()
+PY
+    out=$(OPENCODE_DB="$w/opencode.db" HOTSPOT_STATE="$w/hotspot.state" build "$w")
+    printf '%s' "$out" | grep -A2 '"name": "cache"' | grep -q '"state": "attention"' \
+        || { printf 'FAIL cache attention\n'; fail=1; }
+    rm -f "$w/opencode.db"
+
     rm -f "$w/data/observability/last-gate.json" "$w/data/observability/pulse.json" "$w/hotspot.state"
     rmdir "$w/data/observability" "$w/data" "$w" 2>&1 || true
     if [ "$fail" -eq 0 ]; then
-        printf 'recovery-status: self-test PASS (healthy + expected-roam + degraded)\n'
+        printf 'recovery-status: self-test PASS (healthy + expected-roam + degraded + cache-slo)\n'
     else
         printf 'recovery-status: self-test FAIL\n'
     fi
