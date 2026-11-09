@@ -435,9 +435,9 @@ PY
 
     if [ -f "$REPO/scripts/web-health.sh" ]; then
         if bash "$REPO/scripts/web-health.sh" --self-test > "$work/wh_st.txt" 2>&1; then
-            ok 'web-health: self-test (settle + threshold + cooldown + clear)'
+            ok 'web-health: self-test (settle + threshold + cooldown + clear + dashboard-only)'
         else
-            bad 'web-health: self-test (settle + threshold + cooldown + clear)'
+            bad 'web-health: self-test (settle + threshold + cooldown + clear + dashboard-only)'
             cat "$work/wh_st.txt"
         fi
     else

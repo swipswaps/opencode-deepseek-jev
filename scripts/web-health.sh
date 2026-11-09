@@ -58,8 +58,13 @@ resolve_repo() {
 have() { command -v "$1" >/dev/null; }
 
 http_code() {
-    # http_code URL -> status code or 000. WEB_HEALTH_HTTP_CODE is a test seam
-    # (offline self-test forces a code without touching the network).
+    # http_code URL -> status code or 000. WEB_HEALTH_HTTP_CODE is a generic
+    # test seam; WEB_HEALTH_EDGE_CODE / WEB_HEALTH_DASH_CODE override per
+    # stratum so the dashboard-only path can be exercised offline.
+    case "$1" in
+        *:4096*) [ -n "${WEB_HEALTH_EDGE_CODE:-}" ] && { printf '%s' "$WEB_HEALTH_EDGE_CODE"; return 0; } ;;
+        *:5099*) [ -n "${WEB_HEALTH_DASH_CODE:-}" ] && { printf '%s' "$WEB_HEALTH_DASH_CODE"; return 0; } ;;
+    esac
     if [ -n "${WEB_HEALTH_HTTP_CODE:-}" ]; then
         printf '%s' "$WEB_HEALTH_HTTP_CODE"
         return 0
@@ -168,10 +173,20 @@ self_test() {
     grep -q '^count=0$' "$WEB_HEALTH_STATE" \
         || { printf 'FAIL failure counter not cleared on health\n'; fail=1; }
 
+    # dashboard-only: edge healthy, :5099 upstream down -> relaunch (dry here)
+    unset WEB_HEALTH_HTTP_CODE
+    export WEB_HEALTH_EDGE_CODE=401 WEB_HEALTH_DASH_CODE=000
+    o=$(bash "${BASH_SOURCE[0]}" 2>&1)
+    printf '%s' "$o" | grep -q 'edge up but dashboard down' \
+        || { printf 'FAIL dashboard-only detection\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'dry: would relaunch the dashboard' \
+        || { printf 'FAIL dashboard-only dry\n'; fail=1; }
+    unset WEB_HEALTH_EDGE_CODE WEB_HEALTH_DASH_CODE
+
     rm -f "$WEB_HEALTH_STATE"
     rmdir "$work"
     if [ "$fail" -eq 0 ]; then
-        printf 'web-health: self-test PASS (threshold + cooldown + clear)\n'
+        printf 'web-health: self-test PASS (threshold + cooldown + clear + dashboard-only)\n'
     else
         printf 'web-health: self-test FAIL\n'
     fi
@@ -195,6 +210,28 @@ attempt_recovery() {
     rc=$?
     printf 'web-health: recovery rc=%s (log %s)\n' "$rc" "$log"
     return "$rc"
+}
+
+relaunch_dashboard() {
+    # The dashboard is a background child of PID 1 with no supervisor. Replace
+    # just that process when only :5099 is down; a full container restart would
+    # also drop the opencode session.
+    local container="${WEB_HEALTH_CONTAINER:-opencode-deepseek-web}"
+    have docker || return 1
+    docker exec "$container" sh -c 'for d in /proc/[0-9]*; do c=$(cat "$d/comm" 2>&1) || continue; [ "$c" = node ] || continue; tr "\000" " " < "$d/cmdline" 2>&1 | grep -q dashboard.mjs && kill -TERM "${d#/proc/}"; done' 2>&1 || true
+    sleep 1
+    docker exec -d "$container" sh -c 'node --no-warnings --experimental-sqlite /workspace/scripts/dashboard.mjs /home/node/.local/share/opencode/opencode.db 5099 0.0.0.0 /workspace/scripts/audit-config.sh >>/tmp/dashboard.log 2>&1' 2>&1 || return 1
+    sleep 4
+    return 0
+}
+
+print_recovery_cmds() {
+    printf 'recovery commands:\n'
+    printf '  ./scripts/recovery-status.sh                 # one-screen: broken / still working / next\n'
+    printf '  ./scripts/recover-4096.sh --recover          # bounded recovery (writes logs/)\n'
+    printf '  ./scripts/web.sh                             # rebuild/start the opencode-web access plane\n'
+    printf '  docker compose -f docker/docker-compose.yml logs --tail=40 opencode-web caddy\n'
+    printf '  ./scripts/web-health.sh                      # re-probe after the fix\n'
 }
 
 probe_all() {
@@ -281,6 +318,34 @@ main() {
         return 0
     fi
 
+    # Dashboard-only: the edge answers but the :5099 upstream does not. Replace
+    # just the unsupervised dashboard child instead of restarting the plane.
+    if [ -n "$DOWN_IPS" ]; then
+        local e_code="" d_code=""
+        e_code="$(http_code "https://127.0.0.1:4096/api/health")"
+        d_code="$(http_code "https://127.0.0.1:5099/api/health")"
+        if { [ "$e_code" = "200" ] || [ "$e_code" = "401" ]; } && [ "$d_code" != "200" ]; then
+            if [ "${WEB_HEALTH_DRY:-0}" = "1" ]; then
+                log "web-health: edge up but dashboard down ($d_code); dry: would relaunch the dashboard"
+            else
+                log "web-health: edge up but dashboard down ($d_code); relaunching the dashboard (no container restart)"
+                if relaunch_dashboard; then
+                    sleep 2
+                    probe_all "$ips"
+                    if [ -z "$DOWN_IPS" ]; then
+                        log "web-health: RECOVERED (dashboard relaunched)"
+                        read_state
+                        ST_COUNT=0
+                        write_state
+                        return 0
+                    fi
+                else
+                    log "web-health: dashboard relaunch failed; falling back to $RECOVER_CMD"
+                fi
+            fi
+        fi
+    fi
+
     # A caddy restart turns both probes into 000 for a moment. One settle
     # retry absorbs that instead of triggering a recovery from one sample.
     if [ "$SETTLE" -gt 0 ]; then
@@ -325,6 +390,7 @@ main() {
     fi
     write_state
     printf 'web-health: STILL DOWN on:%s\n' "$DOWN_IPS"
+    print_recovery_cmds
     return 2
 }
 

@@ -94,6 +94,7 @@ fi
 if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] && [ "${OPENCODE_ALLOW_INSECURE:-0}" != "1" ]; then
     printf '[web-entrypoint] OPENCODE_SERVER_PASSWORD is not set; refusing to start unsecured.\n' >&2
     printf '[web-entrypoint] set OPENCODE_SERVER_PASSWORD in .env.local, or set OPENCODE_ALLOW_INSECURE=1 to bypass.\n' >&2
+    printf '[web-entrypoint] recover: ./scripts/recovery-status.sh; ./scripts/web.sh\n' >&2
     exit 1
 fi
 
@@ -107,6 +108,12 @@ if [ -f "$DASH_MJS" ]; then
     printf '[web-entrypoint] dashboard listening on :5099 (log /tmp/dashboard.log)\n' >&2
 else
     printf '[web-entrypoint] dashboard.mjs not found; skipping dashboard\n' >&2
+fi
+
+if ! command -v opencode > /dev/null; then
+    printf '[web-entrypoint] opencode binary missing from PATH\n' >&2
+    printf '[web-entrypoint] recover: ./scripts/recovery-status.sh; docker compose -f docker/docker-compose.yml logs opencode-web\n' >&2
+    exit 127
 fi
 
 exec opencode web --hostname 0.0.0.0 --port 4096

@@ -903,6 +903,11 @@ permission-memory-self-test.mjs
     logged to guard.log. Also tests normalizeCommand/memoryKey. The plugin is
     auto-discovered; disable with PERMISSION_MEMORY=off. Node, offline.
 
+permission-memory-lib.mjs
+    Pure helpers (normalizeCommand/memoryKey) shared by the plugin and its
+    self-test. Kept outside .opencode/plugins/ because the loader treats every
+    named export in a plugin file as a plugin factory.
+
 credential-fix.sh
     Turns "AI_APICallError: Invalid credential" into numbered fixes, informed
     by the last real log line (providerID/modelID) and `opencode auth list`.

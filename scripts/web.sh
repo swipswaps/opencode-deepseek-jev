@@ -44,6 +44,15 @@ fi
 ENV_FILE="$REPO_DIR/.env.local"
 COMPOSE_DIR="$REPO_DIR/docker"
 
+print_recovery_cmds() {
+    printf '\nrecovery commands:\n'
+    printf '  ./scripts/recovery-status.sh                 # one-screen: broken / still working / next\n'
+    printf '  ./scripts/recover-4096.sh --recover          # bounded recovery (writes logs/)\n'
+    printf '  ./scripts/web.sh                             # rebuild/start the opencode-web access plane\n'
+    printf '  docker compose -f docker/docker-compose.yml logs --tail=40 opencode-web caddy\n'
+    printf '  ./scripts/web-health.sh                      # re-probe after the fix\n'
+}
+
 BIND_IPS="${WEB_BIND_IPS:-}"
 if [ -z "$BIND_IPS" ] && [ -f "$COMPOSE_DIR/docker-compose.yml" ]; then
     BIND_IPS=$(grep -E '^[[:space:]]*- "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:(4096|5099|443):' "$COMPOSE_DIR/docker-compose.yml" \
@@ -206,6 +215,7 @@ main() {
     local rc=$?
     if [ "$rc" -ne 0 ]; then
         printf 'FAIL: docker compose up returned %d\n' "$rc"
+        print_recovery_cmds
         return 1
     fi
     ensure_caddy
@@ -240,6 +250,7 @@ main() {
         printf 'last 40 lines of container log:\n'
         docker compose logs --tail=40 opencode-web
         docker compose logs --tail=40 caddy
+        print_recovery_cmds
         return 1
     fi
 
