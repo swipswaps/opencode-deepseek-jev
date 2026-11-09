@@ -640,6 +640,11 @@ PYEOF
         fi
     fi
     commit_cursors
+    # Keep the recovery console's snapshot fresh from the host that can see the
+    # hotspot state. Guarded: a failure here must never fail the sweep.
+    if [ "$DOLOG" -eq 1 ] && [ -x "$REPO/scripts/recovery-status.sh" ]; then
+        "$REPO/scripts/recovery-status.sh" --write > /dev/null || printf 'WARN: recovery-status write failed\n'
+    fi
     # Alerting sink: on a trip, push the FAIL flags to $NOTIFY_WEBHOOK if set.
     # notify.sh builds the payload from the ledger; a no-op without the webhook.
     if [ "$NTRIP" -gt 0 ] && [ -n "${NOTIFY_WEBHOOK:-}" ] && [ -x "$REPO/scripts/notify.sh" ]; then
