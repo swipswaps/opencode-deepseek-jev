@@ -1487,6 +1487,30 @@
     ]
   },
   {
+    "id": "node-diag",
+    "title": "Verbatim-evidence diagnostic for the MacBook (.1)",
+    "where": "host",
+    "purpose": "READ-ONLY. Prints raw error/event/system lines per failure class: identity (routes/wifi), unreachable (network-is-unreachable/RTNETLINK/deauth), nebula (Caught signal churn, level=error, IPv4-listener-vs-IPv6-remote), mesh (mesh-recover timer + NM dispatcher hook + peer map + recover.log), dns (tailscale dns status, resolv.conf, SERVFAIL), getty (serial-getty@ttyS0 storm), units (failed + priority err), coredumps. --since/--until/--boot for the incident boot; --self-test offline. Safe over SSH via `bash -s`.",
+    "commands": [
+      "./scripts/node-diag.sh",
+      "./scripts/node-diag.sh --section mesh --section nebula",
+      "./scripts/node-diag.sh --boot -1 --since '2026-11-08 18:30:00' --until '2026-11-08 20:10:00'",
+      "./scripts/node-diag.sh --self-test"
+    ]
+  },
+  {
+    "id": "node-fix",
+    "title": "Dry-run fixes for the non-repo issues on .1",
+    "where": "host",
+    "purpose": "DRY-RUN by default; --apply executes. getty: disable+mask serial-getty@ttyS0. mesh: disable mesh-recover.timer, back up + remove the /etc/NetworkManager/dispatcher.d/50-mesh-recover hook, and patch the stale .1 peer map 10.100.0.2 -> 10.100.0.24 (backed up). dns: --dns tailscale|systemd|none. units: reset-failed + restart accounts-daemon. Prints manual nebula IPv4/IPv6 guidance and verify commands. --only/--no-peer/--self-test.",
+    "commands": [
+      "./scripts/node-fix.sh",
+      "./scripts/node-fix.sh --apply",
+      "./scripts/node-fix.sh --only mesh --apply",
+      "./scripts/node-fix.sh --self-test"
+    ]
+  },
+  {
     "id": "overlay-status",
     "title": "Audit both mesh planes (.24 and .1) from either box",
     "where": "host",

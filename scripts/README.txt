@@ -855,6 +855,28 @@ ssh-x11-setup.sh
     idempotently with a timestamped backup; --self-test offline (block shape +
     managed-region idempotency). Gated in test-hygiene.sh.
 
+node-diag.sh
+    READ-ONLY, verbatim-evidence diagnostic for the MacBook (.1). Sections:
+    identity (addrs/routes/rules/wifi), unreachable (network-is-unreachable,
+    RTNETLINK, deauth), nebula (restart churn + errors + IPv4-listener-vs-
+    IPv6-remote count), mesh (mesh-recover timer + NM dispatcher hook + peer
+    map + recover.log), dns (tailscale dns status, resolv.conf, SERVFAIL lines),
+    getty (serial-getty@ttyS0 storm), units (failed + priority err), coredumps.
+    --since/--until/--boot for the previous-boot incident window;
+    NODE_DIAG_SOURCE or --self-test for offline fixtures. Safe over SSH:
+    `ssh owner@10.100.0.1 'bash -s -- --section mesh' < scripts/node-diag.sh`.
+
+node-fix.sh
+    Fixes for the non-opencode-deepseek-jev issues on .1; DRY-RUN by default,
+    --apply to execute. getty: disable+mask serial-getty@ttyS0. mesh: disable
+    the user mesh-recover.timer, move the NM dispatcher hook to a backup, and
+    patch the stale .1 peer map 10.100.0.2 -> 10.100.0.24 (backed up). dns:
+    --dns tailscale (accept-dns=true) or systemd (restore resolved stub) or
+    none. units: reset-failed accounts-daemon/audit-rules/tor + restart
+    accounts-daemon. Prints manual guidance for the nebula IPv4/IPv6 mismatch
+    (config lives in the mesh repo) and the verify commands. --only
+    getty|mesh|dns|units; --no-peer; --self-test offline.
+
 overlay-status.sh
     Read-only audit of BOTH mesh planes from either box. Audits this machine
     locally, then SSHes to the peer (auto: .24 <-> .1) and audits it too, so

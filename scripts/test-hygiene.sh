@@ -477,6 +477,28 @@ PY
         bad 'hotspot-test.sh present'
     fi
 
+    if [ -f "$REPO/scripts/node-diag.sh" ]; then
+        if bash "$REPO/scripts/node-diag.sh" --self-test > "$work/nd_st.txt" 2>&1; then
+            ok 'node-diag: self-test (fixture routing + list + args)'
+        else
+            bad 'node-diag: self-test (fixture routing + list + args)'
+            cat "$work/nd_st.txt"
+        fi
+    else
+        bad 'node-diag.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/node-fix.sh" ]; then
+        if bash "$REPO/scripts/node-fix.sh" --self-test > "$work/nf_st.txt" 2>&1; then
+            ok 'node-fix: self-test (dry-run + apply + backup + idempotent)'
+        else
+            bad 'node-fix: self-test (dry-run + apply + backup + idempotent)'
+            cat "$work/nf_st.txt"
+        fi
+    else
+        bad 'node-fix.sh present'
+    fi
+
     if [ -f "$REPO/scripts/overlay-status.sh" ]; then
         if bash "$REPO/scripts/overlay-status.sh" --self-test > "$work/os_st.txt" 2>&1; then
             ok 'overlay-status: self-test (parse + audit + role/peer)'
