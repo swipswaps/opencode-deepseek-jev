@@ -468,9 +468,9 @@ PY
 
     if [ -f "$REPO/scripts/hotspot-test.sh" ]; then
         if bash "$REPO/scripts/hotspot-test.sh" --self-test > "$work/ht_st.txt" 2>&1; then
-            ok 'hotspot-test: self-test (before/after + control + json)'
+            ok 'hotspot-test: self-test (before/after + fallback + lighthouse + json)'
         else
-            bad 'hotspot-test: self-test (before/after + control + json)'
+            bad 'hotspot-test: self-test (before/after + fallback + lighthouse + json)'
             cat "$work/ht_st.txt"
         fi
     else

@@ -22,7 +22,8 @@
 #   ./scripts/client-setup.sh --self-test      # offline, temp dirs only
 #
 # Flags: --server HOST, --alias NAME, --user USER, --candidates "a b c",
-# --interval SEC, --untrusted, --no-heal, --quiet, --install-deps.
+# --prefer mesh|tailscale|lan, --interval SEC, --untrusted, --no-heal, --quiet,
+# --install-deps.
 #
 # Seams (for self-test/CI): CLIENT_PLATFORM=linux|darwin, CLIENT_SSH_CONFIG,
 # CLIENT_UNIT_DIR, CLIENT_LOG, CLIENT_STATE, CLIENT_FAKE_REACHABLE,
@@ -39,7 +40,6 @@ DEFAULT_CANDIDATES="10.100.0.24 100.119.125.16 192.168.4.24"
 ALIAS_DEFAULT="opencode-jev"
 INTERVAL_DEFAULT=300
 LABEL="com.opencode.deepseek.jev.client-heal"
-
 have() { command -v "$1" >/dev/null; }
 
 platform() {
@@ -129,6 +129,19 @@ discover() {
         if probe_host "$h"; then printf '%s' "$h"; return 0; fi
     done
     return 1
+}
+
+prefer_first() {
+    # prefer_first NEEDLE "a b c" -> items containing NEEDLE first, order kept
+    local needle="$1" list="$2" first="" rest="" h
+    for h in $list; do
+        case "$h" in
+            *"$needle"*) first="$first $h" ;;
+            *) rest="$rest $h" ;;
+        esac
+    done
+    set -- $first $rest
+    printf '%s' "$*"
 }
 
 current_host() {
@@ -314,6 +327,8 @@ self_test() {
     work="$(mktemp -d)"
     cfg="$work/config"
     units="$work/units"
+    [ "$(prefer_first 192.168.4.24 "10.100.0.24 100.119.125.16 192.168.4.24")" = "192.168.4.24 10.100.0.24 100.119.125.16" ] \
+        || { printf 'FAIL prefer_first\n'; fail=1; }
     export CLIENT_FAKE_REACHABLE="10.100.0.24 192.168.4.24"
     export CLIENT_FAKE_NET=1
     export CLIENT_NO_LAUNCH=1
@@ -338,6 +353,12 @@ self_test() {
     [ "$?" -eq 0 ] || { printf 'FAIL darwin write-only\n'; fail=1; }
     grep -q '<key>StartInterval</key><integer>300</integer>' "$work/darwin/$LABEL.plist" \
         || { printf 'FAIL launchd interval\n'; fail=1; }
+
+    CLIENT_FAKE_REACHABLE="10.100.0.24 100.119.125.16 192.168.4.24" \
+        CLIENT_SSH_CONFIG="$work/config2" CLIENT_STATE="$work/state2" \
+        bash "$0" --write-only --prefer tailscale --alias testalias > /dev/null 2>&1
+    grep -q '^    HostName 100.119.125.16$' "$work/config2" \
+        || { printf 'FAIL prefer tailscale\n'; fail=1; }
 
     out="$(CLIENT_FAKE_REACHABLE="192.168.4.24" bash "$0" --discover 2>&1)"
     rc=$?
@@ -364,7 +385,8 @@ self_test() {
     bash "$0" --bogus > /dev/null 2>&1
     [ "$?" -eq 2 ] || { printf 'FAIL unknown arg rc\n'; fail=1; }
 
-    rm -f "$work/config" "$work/config".bak.* "$work/state" "$work/units"/* "$work/darwin"/* \
+    rm -f "$work/config" "$work/config".bak.* "$work/config2" "$work/config2".bak.* \
+        "$work/state" "$work/state2" "$work/units"/* "$work/darwin"/* \
         "$work"/*.txt "$work"/*.log
     rmdir "$work/units" "$work/darwin" "$work" 2>&1 || true
 
@@ -379,13 +401,14 @@ self_test() {
 usage() {
     printf 'usage: %s [--check|--write-only|--heal|--uninstall|--discover|--self-test]\n' "$0"
     printf 'flags: --server HOST --alias NAME --user USER --candidates "a b c"\n'
-    printf '       --interval SEC --untrusted --no-heal --quiet --install-deps\n'
+    printf '       --prefer mesh|tailscale|lan --interval SEC --untrusted --no-heal\n'
+    printf '       --quiet --install-deps\n'
 }
 
 main() {
     local mode="setup" server="" alias="$ALIAS_DEFAULT" user="${USER:-}" candidates="$DEFAULT_CANDIDATES"
     local interval="$INTERVAL_DEFAULT" trusted=1 no_heal=0 rc=0
-    local alias_set=0 user_set=0 trust_set=0 candidates_set=0
+    local alias_set=0 user_set=0 trust_set=0 candidates_set=0 prefer="mesh"
     QUIET=0 INSTALL_DEPS=0
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -400,6 +423,7 @@ main() {
             --alias) alias="${2:-}"; alias_set=1; [ $# -ge 2 ] && shift; shift ;;
             --user) user="${2:-}"; user_set=1; [ $# -ge 2 ] && shift; shift ;;
             --candidates) candidates="${2:-}"; candidates_set=1; [ $# -ge 2 ] && shift; shift ;;
+            --prefer) prefer="${2:-mesh}"; [ $# -ge 2 ] && shift; shift ;;
             --interval) interval="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
             --untrusted) trusted=0; trust_set=1; shift ;;
             --trusted) trusted=1; trust_set=1; shift ;;
@@ -428,6 +452,18 @@ main() {
             candidates="$saved"
             CANDIDATES="$saved"
         fi
+    fi
+
+    case "$prefer" in
+        mesh | tailscale | lan) ;;
+        *) printf 'FAIL: --prefer must be mesh|tailscale|lan\n'; return 2 ;;
+    esac
+    if [ -z "$server" ] && [ "$prefer" != "mesh" ]; then
+        case "$prefer" in
+            tailscale) candidates="$(prefer_first 100.119.125.16 "$CANDIDATES")" ;;
+            lan) candidates="$(prefer_first 192.168.4.24 "$CANDIDATES")" ;;
+        esac
+        CANDIDATES="$candidates"
     fi
 
     local p cfg units

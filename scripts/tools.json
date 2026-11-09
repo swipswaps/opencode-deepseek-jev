@@ -1018,10 +1018,11 @@
     "id": "hotspot-test",
     "title": "Phased hotspot / network-change test (client)",
     "where": "host",
-    "purpose": "Run on the client (10.100.0.1 -> phone hotspot). --before records overlay :4096/:5099, the LAN control and DNS; --after re-probes and asserts the overlay still passes after the switch, the LAN dropped (or stayed reachable on the same network), DNS resolves, and client-setup --heal/--check runs. --auto runs before/prompt/after; --watch re-runs on an address change; --json; --self-test offline. Optional ROAM_SSH_HOST proves SSH X11 still yields a DISPLAY. Exit 0 PASS, 2 FAIL, 3 cannot run.",
+    "purpose": "Run on the client (10.100.0.1 -> phone hotspot). --before records the overlay, LAN control and DNS; --after settles up to 20s for a re-handshake, then asserts a required overlay is reachable (default Nebula OR Tailscale; --require mesh|tailscale pins it), the LAN dropped (or stayed reachable on the same network), DNS resolves, and client-setup --heal/--check runs. If this box is the Nebula lighthouse (10.100.0.1) and Nebula dies, it explains the CGNAT/inbound-UDP cause (TUNNEL-1); Tailscale is the fallback. --auto, --watch, --json, --self-test; optional ROAM_SSH_HOST proves SSH X11. Exit 0 PASS, 2 FAIL, 3 cannot run.",
     "commands": [
       "bash scripts/hotspot-test.sh --before",
       "bash scripts/hotspot-test.sh --after",
+      "bash scripts/hotspot-test.sh --after --require mesh",
       "bash scripts/hotspot-test.sh --auto",
       "bash scripts/hotspot-test.sh --self-test"
     ]
@@ -1477,7 +1478,7 @@
     "id": "client-setup",
     "title": "One-shot client bootstrap (clipboard + network + self-heal)",
     "where": "host",
-    "purpose": "git clone, run once, then `ssh opencode-jev` works and keeps working. Discovers a reachable server (mesh -> Tailscale -> LAN), writes the managed ~/.ssh/config block via ssh-x11-setup.sh, checks the local X server (XQuartz on macOS), and installs a self-heal timer (systemd user on Linux, launchd on macOS) that re-discovers and repairs the block after a network change. --check/--write-only/--heal/--uninstall/--discover/--self-test; dependency-free (no python3; macOS bash 3.2 safe).",
+    "purpose": "git clone, run once, then `ssh opencode-jev` works and keeps working. Discovers a reachable server (mesh -> Tailscale -> LAN; --prefer mesh|tailscale|lan for a roaming Nebula lighthouse), writes the managed ~/.ssh/config block via ssh-x11-setup.sh, checks the local X server (XQuartz on macOS), and installs a self-heal timer (systemd user on Linux, launchd on macOS) that re-discovers and repairs the block after a network change. --check/--write-only/--heal/--uninstall/--discover/--self-test; dependency-free (no python3; macOS bash 3.2 safe).",
     "commands": [
       "./scripts/client-setup.sh",
       "./scripts/client-setup.sh --check",

@@ -831,7 +831,8 @@ clipboard-preflight.sh
 client-setup.sh
     One-shot client bootstrap: `git clone`, run this, then `ssh opencode-jev`
     works and keeps working. Discovers a reachable server (mesh -> Tailscale
-    -> LAN), writes the managed ~/.ssh/config block via ssh-x11-setup.sh (X11
+    -> LAN; --prefer mesh|tailscale|lan reorders when the Nebula lighthouse
+    roams), writes the managed ~/.ssh/config block via ssh-x11-setup.sh (X11
     forwarding, trust scoped to one Host, keepalives), checks the local X
     server (XQuartz on macOS), and installs a self-heal timer (systemd user on
     Linux, launchd on macOS) that re-discovers the server and repairs the block
@@ -1360,14 +1361,17 @@ probe-diagnose.sh
 hotspot-test.sh
     Phased network-change test for a client that switches to a mobile hotspot
     (the 10.100.0.1 -> phone case). Run ON THE CLIENT. --before records a
-    baseline (overlay :4096/:5099, LAN control, DNS, address signature);
-    --after re-probes and asserts the overlay still passes, the LAN control
-    dropped (or stayed reachable on the same network), DNS resolves, and runs
-    client-setup.sh --heal + --check; --auto runs before/prompt/after; --watch
-    re-runs on an address change; --json machine summary. Optional
-    ROAM_SSH_HOST proves SSH X11 forwarding still yields a DISPLAY.
-    --self-test offline (fake seams). Exit 0 PASS, 2 FAIL, 3 cannot run.
-    Gated in test-hygiene.sh.
+    baseline (overlay, LAN control, DNS, address signature); --after settles up
+    to 20s for a re-handshake, then asserts a required overlay is reachable
+    (default: Nebula OR Tailscale; --require mesh|tailscale pins it), the LAN
+    control dropped (or stayed reachable on the same network), DNS resolves, and
+    runs client-setup.sh --heal + --check; --auto runs before/prompt/after;
+    --watch re-runs on an address change; --json machine summary. When this box
+    is the Nebula lighthouse (10.100.0.1) and Nebula dies, it explains that
+    moving the lighthouse behind CGNAT removes the inbound UDP anchor
+    (TUNNEL-1), so Tailscale is the fallback. Optional ROAM_SSH_HOST proves SSH
+    X11 forwarding still yields a DISPLAY. --self-test offline (fake seams).
+    Exit 0 PASS, 2 FAIL, 3 cannot run. Gated in test-hygiene.sh.
 
 host-path-probe.sh
     Break down the :5099/:4096 hop (dns -> connect -> tls -> ttfb -> total)

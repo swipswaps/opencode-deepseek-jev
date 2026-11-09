@@ -120,9 +120,10 @@ ssh opencode-jev                                     # managed alias (X11 + keep
 ./scripts/client-setup.sh --uninstall                # remove SSH block + timer
 ```
 
-Options: `--server HOST` (skip discovery), `--candidates "a b c"`, `--alias
-NAME`, `--user USER`, `--interval SEC`, `--untrusted`, `--no-heal`, `--quiet`,
-`--install-deps` (best-effort; installs XQuartz via `brew` on macOS).
+Options: `--server HOST` (skip discovery), `--candidates "a b c"`,
+`--prefer mesh|tailscale|lan`, `--alias NAME`, `--user USER`,
+`--interval SEC`, `--untrusted`, `--no-heal`, `--quiet`, `--install-deps`
+(best-effort; installs XQuartz via `brew` on macOS).
 
 Notes:
 
@@ -136,10 +137,17 @@ Notes:
 - Changing networks (for example the `10.100.0.1` laptop to a phone hotspot):
   run `./scripts/hotspot-test.sh --before`, switch the laptop to the hotspot,
   then `./scripts/hotspot-test.sh --after` (or `--auto` to be prompted). It
-  asserts the Nebula overlay still answers `:4096`/`:5099`, the LAN address is
-  the expected control, DNS resolves, and `client-setup.sh --heal` runs. The
-  server-side `./scripts/network-change-probe.sh --peer 10.100.0.24` is the same
-  acceptance test from the other side; `--peer <LAN-IP>` proves the
+  settles up to 20s for a re-handshake, then requires **either** overlay
+  (Nebula `10.100.0.24` **or** Tailscale `100.119.125.16`) to answer
+  `:4096`/`:5099`; `--require mesh|tailscale` pins one. It also checks the LAN
+  address as the control, DNS, and runs `client-setup.sh --heal`.
+- `192.168.4.45` (`10.100.0.1`) is the **Nebula lighthouse**. Moving a
+  lighthouse behind a phone hotspot/CGNAT removes the inbound UDP anchor peers
+  need to re-handshake, so Nebula can fail while Tailscale survives (this is
+  TUNNEL-1, `proxmox-dual-plane-mesh#5`). For that box, pin the reachable path:
+  `./scripts/client-setup.sh --prefer tailscale`, or keep the lighthouse wired.
+- The server-side `./scripts/network-change-probe.sh --peer 10.100.0.24` is the
+  same acceptance test from the other side; `--peer <LAN-IP>` proves the
   same-network path. Both must print `VERDICT: PASS`.
 - Debug: `./scripts/client-setup.sh --check`, `./scripts/clipboard-preflight.sh`,
   and the heal log at `~/.local/state/opencode-client-heal.log`.

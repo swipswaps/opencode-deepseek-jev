@@ -14,18 +14,24 @@
 #   ./scripts/hotspot-test.sh --self-test # offline, fake seams
 #
 # What it proves:
-#   - overlay (Nebula 10.100.0.24) :4096 (200/401) and :5099 (200) PASS in BOTH
-#     phases, so the same-network and different-network paths both work;
+#   - an overlay path (Nebula 10.100.0.24 or Tailscale 100.119.125.16) answers
+#     :4096 (200/401) and :5099 (200) after the switch; --require mesh|tailscale
+#     pins it, the default "any" accepts a working fallback;
+#   - a settle window (default 20s for --after) lets the overlay re-handshake;
 #   - the LAN address (192.168.4.24) is a control: reachable before, dropping
 #     after a hotspot switch is expected; staying reachable is also fine;
 #   - DNS still resolves during the switch;
 #   - when client-setup.sh is present, --heal runs and --check reports the path;
-#   - when ROAM_SSH_HOST is set, SSH X11 forwarding still yields a DISPLAY.
+#   - when ROAM_SSH_HOST is set, SSH X11 forwarding still yields a DISPLAY;
+#   - if this box is the Nebula lighthouse (10.100.0.1) and Nebula dies, it
+#     explains that CGNAT removed the inbound UDP anchor (TUNNEL-1).
 #
 # Env: ROAM_MESH_IP, ROAM_TAILSCALE_IP, ROAM_LAN_IP, ROAM_STATE, ROAM_SSH_HOST,
-#      ROAM_SSH_PORT, ROAM_WATCH_SEC, ROAM_REQUIRE_TAILSCALE, ROAM_NO_HEAL.
+#      ROAM_SSH_PORT, ROAM_WATCH_SEC, ROAM_REQUIRE, ROAM_SETTLE_SEC,
+#      ROAM_LIGHTHOUSE_IP, ROAM_NO_HEAL.
 # Seams (self-test): ROAM_FAKE_MESH_4096, ROAM_FAKE_MESH_5099,
-#      ROAM_FAKE_TAILSCALE_5099, ROAM_FAKE_LAN_4096, ROAM_FAKE_DNS, ROAM_FAKE_SIG.
+#      ROAM_FAKE_TAILSCALE_4096, ROAM_FAKE_TAILSCALE_5099, ROAM_FAKE_LAN_4096,
+#      ROAM_FAKE_DNS, ROAM_FAKE_SIG, ROAM_FAKE_LOCAL_NEBULA.
 #
 # Exit: 0 PASS, 2 FAIL, 3 cannot run.
 #
@@ -40,6 +46,8 @@ TAILSCALE="${ROAM_TAILSCALE_IP:-100.119.125.16}"
 LAN="${ROAM_LAN_IP:-192.168.4.24}"
 STATE="${ROAM_STATE:-$HOME/.local/state/roam-test.state}"
 WATCH_SEC="${ROAM_WATCH_SEC:-10}"
+REQUIRE="${ROAM_REQUIRE:-any}"
+LIGHTHOUSE="${ROAM_LIGHTHOUSE_IP:-10.100.0.1}"
 JSON="${ROAM_JSON:-0}"
 PASS=0
 FAIL=0
@@ -70,6 +78,10 @@ mesh_5099() {
 tailscale_5099() {
     if [ -n "${ROAM_FAKE_TAILSCALE_5099:-}" ]; then printf '%s' "$ROAM_FAKE_TAILSCALE_5099"; return 0; fi
     fetch "https://$TAILSCALE:5099/api/health"
+}
+tailscale_4096() {
+    if [ -n "${ROAM_FAKE_TAILSCALE_4096:-}" ]; then printf '%s' "$ROAM_FAKE_TAILSCALE_4096"; return 0; fi
+    fetch "https://$TAILSCALE:4096/session"
 }
 lan_4096() {
     if [ -n "${ROAM_FAKE_LAN_4096:-}" ]; then printf '%s' "$ROAM_FAKE_LAN_4096"; return 0; fi
@@ -134,32 +146,83 @@ save_state() {
 }
 
 probe_report() {
-    # probe_report PHASE -> sets M4 M5 T5 L4 and prints the table, counts
-    M4="$(mesh_4096)"
-    M5="$(mesh_5099)"
-    T5="$(tailscale_5099)"
-    L4="$(lan_4096)"
-    local vm4 vm5 vt5 vl4
+    # probe_report PHASE -> prints the table; M4 M5 T4 T5 L4 already loaded
+    local vm4 vm5 vt4 vt5 vl4 via="none"
     vm4="$(classify_4096 "$M4")"
     vm5="$(classify_5099 "$M5")"
+    vt4="$(classify_4096 "$T4")"
     vt5="$(classify_5099 "$T5")"
     vl4="$(classify_4096 "$L4")"
     printf '\n== %s (%s) ==\n' "$1" "$(signature)"
-    printf '%-22s %-6s %s\n' TARGET CODE VERDICT
-    printf '%-22s %-6s %s\n' "mesh:$MESH:4096" "$M4" "$vm4"
-    printf '%-22s %-6s %s\n' "mesh:$MESH:5099" "$M5" "$vm5"
-    printf '%-22s %-6s %s\n' "tailscale:$TAILSCALE:5099" "$T5" "$vt5"
-    printf '%-22s %-6s %s\n' "lan:$LAN:4096 (control)" "$L4" "$vl4"
+    printf '%-32s %-6s %s\n' TARGET CODE VERDICT
+    printf '%-32s %-6s %s\n' "nebula:$MESH:4096" "$M4" "$vm4"
+    printf '%-32s %-6s %s\n' "nebula:$MESH:5099" "$M5" "$vm5"
+    printf '%-32s %-6s %s\n' "tailscale:$TAILSCALE:4096" "$T4" "$vt4"
+    printf '%-32s %-6s %s\n' "tailscale:$TAILSCALE:5099" "$T5" "$vt5"
+    printf '%-32s %-6s %s\n' "lan:$LAN:4096 (control)" "$L4" "$vl4"
     printf 'dns: %s\n' "$(dns_ok && printf PASS || printf FAIL)"
-    [ "$vm4" = PASS ] || no "overlay :4096" "got $M4"
-    [ "$vm5" = PASS ] || no "overlay :5099" "got $M5"
-    dns_ok || no "dns" "example.com did not resolve"
-    if [ "${ROAM_REQUIRE_TAILSCALE:-0}" = "1" ]; then
-        [ "$vt5" = PASS ] || no "tailscale :5099" "got $T5"
+    if mesh_ok; then via="nebula"; elif ts_ok; then via="tailscale"; fi
+    printf 'overlay path: %s (require=%s)\n' "$via" "$REQUIRE"
+    if overlay_ok; then
+        ok "overlay reachable via $via"
+    else
+        case "$REQUIRE" in
+            mesh) no "overlay (mesh)" "nebula :4096=$M4 :5099=$M5" ;;
+            tailscale) no "overlay (tailscale)" "tailscale :4096=$T4 :5099=$T5" ;;
+            *) no "overlay (any)" "nebula :4096=$M4 :5099=$M5; tailscale :4096=$T4 :5099=$T5" ;;
+        esac
     fi
-    [ "$vm4" = PASS ] && [ "$vm5" = PASS ] && ok "overlay reachable in this phase"
+    dns_ok || no "dns" "example.com did not resolve"
     return 0
 }
+
+probe_codes() {
+    M4="$(mesh_4096)"
+    M5="$(mesh_5099)"
+    T4="$(tailscale_4096)"
+    T5="$(tailscale_5099)"
+    L4="$(lan_4096)"
+}
+
+mesh_ok() { [ "$(classify_4096 "$M4")" = PASS ] && [ "$(classify_5099 "$M5")" = PASS ]; }
+ts_ok() { [ "$(classify_4096 "$T4")" = PASS ] && [ "$(classify_5099 "$T5")" = PASS ]; }
+
+overlay_ok() {
+    case "$REQUIRE" in
+        mesh) mesh_ok ;;
+        tailscale) ts_ok ;;
+        *) mesh_ok || ts_ok ;;
+    esac
+}
+
+wait_overlay() {
+    # wait_overlay SEC -> retry until the required overlay passes or the
+    # deadline; a roam re-handshakes, so an instant probe is too strict.
+    local sec="$1" deadline
+    if [ "$sec" -le 0 ]; then
+        probe_codes
+        return 0
+    fi
+    deadline=$(( $(date +%s) + sec ))
+    while :; do
+        probe_codes
+        overlay_ok && return 0
+        [ "$(date +%s)" -ge "$deadline" ] && return 1
+        sleep 3
+    done
+}
+
+local_nebula_ip() {
+    if [ -n "${ROAM_FAKE_LOCAL_NEBULA:-}" ]; then printf '%s' "$ROAM_FAKE_LOCAL_NEBULA"; return 0; fi
+    if have ip; then
+        ip -brief -4 addr show nebula0 2>&1 \
+            | awk '{for (i = 3; i <= NF; i++) {split($i, a, "/"); if (a[1] ~ /^[0-9]+\./) {print a[1]; exit}}}'
+    elif have ifconfig; then
+        ifconfig nebula0 2>&1 | awk '$1 == "inet" {print $2; exit}'
+    fi
+}
+
+is_lighthouse() { [ "$(local_nebula_ip)" = "$LIGHTHOUSE" ]; }
 
 heal_and_check() {
     [ "${ROAM_NO_HEAL:-0}" = "1" ] && return 0
@@ -186,12 +249,13 @@ ssh_x11_probe() {
 
 emit_json() {
     [ "$JSON" = "1" ] || return 0
-    printf '{"phase": "%s", "mesh_4096": "%s", "mesh_5099": "%s", "tailscale_5099": "%s", "lan_4096": "%s", "pass": %s, "fail": %s}\n' \
-        "$1" "$M4" "$M5" "$T5" "$L4" "$PASS" "$FAIL"
+    printf '{"phase": "%s", "mesh_4096": "%s", "mesh_5099": "%s", "tailscale_4096": "%s", "tailscale_5099": "%s", "lan_4096": "%s", "require": "%s", "pass": %s, "fail": %s}\n' \
+        "$1" "$M4" "$M5" "$T4" "$T5" "$L4" "$REQUIRE" "$PASS" "$FAIL"
 }
 
 do_before() {
     PASS=0 FAIL=0
+    wait_overlay "${ROAM_SETTLE_SEC:-0}" > /dev/null 2>&1 || true
     probe_report before
     save_state "$(signature)" before "$M4" "$M5" "$L4"
     printf 'baseline saved: %s\n' "$(state_path)"
@@ -201,9 +265,12 @@ do_before() {
 
 do_after() {
     PASS=0 FAIL=0
-    local prev_lan="" sig=""
+    local prev_lan="" sig="" settle=""
+    settle="${ROAM_SETTLE_SEC:-20}"
     prev_lan="$(state_get LAN4096 "$(state_path)")"
     sig="$(signature)"
+    printf 'settling up to %ss for the overlay to re-handshake...\n' "$settle"
+    wait_overlay "$settle" > /dev/null 2>&1 || true
     probe_report after
     if [ -n "$prev_lan" ] && [ "$prev_lan" != "000" ]; then
         if [ "$L4" = "000" ]; then
@@ -214,11 +281,16 @@ do_after() {
     else
         printf 'note  no usable baseline; run --before first for the LAN control\n'
     fi
+    if ! mesh_ok && is_lighthouse; then
+        printf 'note  this box is the nebula lighthouse (%s). Behind a hotspot/CGNAT its\n' "$LIGHTHOUSE"
+        printf '      inbound UDP anchor is gone, so peers cannot re-handshake. Use Tailscale\n'
+        printf '      (client-setup --candidates) or keep the lighthouse on a wired LAN.\n'
+    fi
     heal_and_check
     ssh_x11_probe
     emit_json after
     if [ "$FAIL" -eq 0 ]; then
-        printf '\nVERDICT: PASS (roam-safe: overlay reachable after the change)\n'
+        printf '\nVERDICT: PASS (roam-safe: a required overlay is reachable after the change)\n'
         return 0
     fi
     printf '\nVERDICT: FAIL (%s gap(s)). Check the mesh VPN and the server watchdog.\n' "$FAIL"
@@ -246,39 +318,61 @@ self_test() {
     work="$(mktemp -d)"
     export ROAM_STATE="$work/state"
     export ROAM_NO_HEAL=1
+    export ROAM_SETTLE_SEC=0
+    export ROAM_FAKE_LOCAL_NEBULA=10.100.0.1
 
     o=$(ROAM_FAKE_SIG="aaa" ROAM_FAKE_MESH_4096=401 ROAM_FAKE_MESH_5099=200 \
-        ROAM_FAKE_TAILSCALE_5099=200 ROAM_FAKE_LAN_4096=401 ROAM_FAKE_DNS=1 \
+        ROAM_FAKE_TAILSCALE_4096=401 ROAM_FAKE_TAILSCALE_5099=200 \
+        ROAM_FAKE_LAN_4096=401 ROAM_FAKE_DNS=1 \
         bash "$0" --before 2>&1); rc=$?
     [ "$rc" -eq 0 ] || { printf 'FAIL before-pass rc=%s\n' "$rc"; fail=1; }
     grep -q '^SIG=aaa$' "$work/state" || { printf 'FAIL state sig\n'; fail=1; }
     grep -q '^LAN4096=401$' "$work/state" || { printf 'FAIL state lan\n'; fail=1; }
 
     o=$(ROAM_FAKE_SIG="bbb" ROAM_FAKE_MESH_4096=401 ROAM_FAKE_MESH_5099=200 \
-        ROAM_FAKE_TAILSCALE_5099=200 ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=1 \
+        ROAM_FAKE_TAILSCALE_4096=401 ROAM_FAKE_TAILSCALE_5099=200 \
+        ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=1 \
         bash "$0" --after 2>&1); rc=$?
     [ "$rc" -eq 0 ] || { printf 'FAIL after-pass rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q 'LAN control dropped as expected' || { printf 'FAIL lan control note\n'; fail=1; }
 
+    # Lighthouse on a hotspot: nebula dies, tailscale carries the path.
     o=$(ROAM_FAKE_SIG="ccc" ROAM_FAKE_MESH_4096=000 ROAM_FAKE_MESH_5099=000 \
-        ROAM_FAKE_TAILSCALE_5099=000 ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=0 \
+        ROAM_FAKE_TAILSCALE_4096=401 ROAM_FAKE_TAILSCALE_5099=200 \
+        ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=1 \
+        bash "$0" --after 2>&1); rc=$?
+    [ "$rc" -eq 0 ] || { printf 'FAIL tailscale-fallback rc=%s\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q 'overlay reachable via tailscale' || { printf 'FAIL fallback path\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'nebula lighthouse' || { printf 'FAIL lighthouse note\n'; fail=1; }
+
+    o=$(ROAM_FAKE_SIG="ccc" ROAM_FAKE_MESH_4096=000 ROAM_FAKE_MESH_5099=000 \
+        ROAM_FAKE_TAILSCALE_4096=401 ROAM_FAKE_TAILSCALE_5099=200 \
+        ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=1 \
+        bash "$0" --after --require mesh 2>&1); rc=$?
+    [ "$rc" -eq 2 ] || { printf 'FAIL require-mesh rc=%s\n' "$rc"; fail=1; }
+
+    o=$(ROAM_FAKE_SIG="ddd" ROAM_FAKE_MESH_4096=000 ROAM_FAKE_MESH_5099=000 \
+        ROAM_FAKE_TAILSCALE_4096=000 ROAM_FAKE_TAILSCALE_5099=000 \
+        ROAM_FAKE_LAN_4096=000 ROAM_FAKE_DNS=0 \
         bash "$0" --after 2>&1); rc=$?
     [ "$rc" -eq 2 ] || { printf 'FAIL after-down rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q 'VERDICT: FAIL' || { printf 'FAIL after-down verdict\n'; fail=1; }
 
-    o=$(ROAM_FAKE_MESH_4096=200 ROAM_FAKE_MESH_5099=200 ROAM_FAKE_TAILSCALE_5099=200 \
-        ROAM_FAKE_LAN_4096=401 ROAM_FAKE_DNS=1 ROAM_FAKE_SIG="ddd" \
-        bash "$0" --after --json 2>&1); rc=$?
+    o=$(ROAM_FAKE_MESH_4096=200 ROAM_FAKE_MESH_5099=200 ROAM_FAKE_TAILSCALE_4096=401 \
+        ROAM_FAKE_TAILSCALE_5099=200 ROAM_FAKE_LAN_4096=401 ROAM_FAKE_DNS=1 \
+        ROAM_FAKE_SIG="eee" bash "$0" --after --json 2>&1); rc=$?
     [ "$rc" -eq 0 ] || { printf 'FAIL json rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q '"phase": "after"' || { printf 'FAIL json phase\n'; fail=1; }
 
     bash "$0" --bogus > /dev/null 2>&1
     [ "$?" -eq 3 ] || { printf 'FAIL unknown arg rc\n'; fail=1; }
+    bash "$0" --require nope > /dev/null 2>&1
+    [ "$?" -eq 3 ] || { printf 'FAIL bad require rc\n'; fail=1; }
 
     rm -f "$work/state" "$work"/out.txt
     rmdir "$work" 2>&1 || true
     if [ "$fail" -eq 0 ]; then
-        printf 'hotspot-test: self-test PASS (before/after + control + json)\n'
+        printf 'hotspot-test: self-test PASS (before/after + fallback + lighthouse + json)\n'
     else
         printf 'hotspot-test: self-test FAIL\n'
     fi
@@ -287,23 +381,35 @@ self_test() {
 
 usage() {
     printf 'usage: %s [--before|--after|--auto|--watch|--json|--self-test]\n' "$0"
+    printf 'flags: --settle SEC --require any|mesh|tailscale --lighthouse-ip IP\n'
     printf 'run on the client; env ROAM_MESH_IP, ROAM_LAN_IP, ROAM_SSH_HOST, ROAM_STATE\n'
 }
 
 main() {
     local mode="" arg=""
-    for arg in "$@"; do
+    while [ $# -gt 0 ]; do
+        arg="$1"
         case "$arg" in
-            --before) mode="before" ;;
-            --after) mode="after" ;;
-            --auto) mode="auto" ;;
-            --watch) mode="watch" ;;
-            --json) JSON=1 ;;
+            --before) mode="before"; shift ;;
+            --after) mode="after"; shift ;;
+            --auto) mode="auto"; shift ;;
+            --watch) mode="watch"; shift ;;
+            --json) JSON=1; shift ;;
+            --settle) ROAM_SETTLE_SEC="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
+            --require) REQUIRE="${2:-any}"; [ $# -ge 2 ] && shift; shift ;;
+            --lighthouse-ip) LIGHTHOUSE="${2:-}"; [ $# -ge 2 ] && shift; shift ;;
             --self-test) self_test; return "$?" ;;
             -h | --help) usage; return 0 ;;
             *) printf 'unknown arg: %s\n' "$arg"; usage >&2; return 3 ;;
         esac
     done
+    case "$REQUIRE" in
+        any | mesh | tailscale) ;;
+        *) printf 'FAIL: --require must be any|mesh|tailscale\n'; return 3 ;;
+    esac
+    case "${ROAM_SETTLE_SEC:-}" in
+        '' | *[!0-9]*) ROAM_SETTLE_SEC="" ;;
+    esac
     case "$mode" in
         before) do_before; return "$?" ;;
         after) do_after; return "$?" ;;
