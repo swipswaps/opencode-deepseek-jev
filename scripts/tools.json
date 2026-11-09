@@ -1028,6 +1028,20 @@
     ]
   },
   {
+    "id": "hotspot-reconnect",
+    "title": "Hotspot loss: detect + client/server alert + interactive reconnect",
+    "where": "host",
+    "purpose": "Run --watch on the client (the roaming box): it debounces a lost underlay/overlay, alerts locally (bell + notify-send + banner), and alerts the server (append to the server log + wall) or queues the line when the server is unreachable, flushing it on reconnect. --watch --reconnect guides an interactive nmcli/networksetup rejoin in order, settles, then runs client-setup --heal and prints an ssh -t hint. --check/--plan/--json/--self-test. Run --server --watch on the server to alert its console when the client overlay (CLIENT_MESH_IP) disappears/returns. Distinct from hotspot-test (that proves a switch after the fact; this watches live). Exit 0 up, 2 down/failed, 3 cannot run/unsafe input.",
+    "commands": [
+      "bash scripts/hotspot-reconnect.sh --check",
+      "bash scripts/hotspot-reconnect.sh --watch",
+      "bash scripts/hotspot-reconnect.sh --watch --reconnect",
+      "bash scripts/hotspot-reconnect.sh --plan",
+      "bash scripts/hotspot-reconnect.sh --server --watch",
+      "bash scripts/hotspot-reconnect.sh --self-test"
+    ]
+  },
+  {
     "id": "host-path-probe",
     "title": "Localize long delays on the :5099/:4096 hop",
     "where": "host",
@@ -1486,6 +1500,19 @@
     ]
   },
   {
+    "id": "terminal-reset",
+    "title": "Clear leaked TUI mouse reports + install a safe ~/.bashrc hook",
+    "where": "host",
+    "purpose": "A crashed or aborted full-screen TUI can leave SGR mouse tracking on, so the terminal echoes `35;55;16M...` (the ESC[<b;x;yM tail). Default: mouse-off + stty sane + reset. --soft emits only the invisible mouse/alt/cursor sequences; --install writes an idempotent guarded ~/.bashrc block (interactive shells only) so the next shell self-heals; --uninstall removes it; --print emits the shell printf command; --self-test offline. client-setup runs --install in setup mode. Exit 0 ok, 2 usage.",
+    "commands": [
+      "./scripts/terminal-reset.sh",
+      "./scripts/terminal-reset.sh --soft",
+      "./scripts/terminal-reset.sh --install",
+      "./scripts/terminal-reset.sh --print",
+      "./scripts/terminal-reset.sh --self-test"
+    ]
+  },
+  {
     "id": "client-setup",
     "title": "One-shot client bootstrap (clipboard + network + self-heal)",
     "where": "host",
@@ -1531,6 +1558,17 @@
       "./scripts/node-fix.sh --apply",
       "./scripts/node-fix.sh --only mesh --apply",
       "./scripts/node-fix.sh --self-test"
+    ]
+  },
+  {
+    "id": "nebula-ipv4-only",
+    "title": "Stop Nebula IPv4-listener/IPv6-remote errors",
+    "where": "host",
+    "purpose": "IPv4-only Nebula listeners try IPv6 peers and log 'Listener is IPv4, but writing to IPv6 remote' (slackhq/nebula#1227). --check shows listen.host, allow lists, error count, ping; --apply (root) adds lighthouse.local_allow_list and remote_allow_list '0.0.0.0/0': true, validates with nebula -test, backs up, installs, restarts; --dual-stack sets listen.host '::'; --self-test offline. Restart peers too.",
+    "commands": [
+      "sudo ./scripts/nebula-ipv4-only.sh --check",
+      "sudo ./scripts/nebula-ipv4-only.sh --apply",
+      "./scripts/nebula-ipv4-only.sh --self-test"
     ]
   },
   {

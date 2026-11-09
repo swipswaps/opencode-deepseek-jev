@@ -1,5 +1,8 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-09:** `hotspot-reconnect.sh` + `terminal-reset.sh` (mouse-spam
+> reset); self-tests green; live roam proof open (`docs/HANDOFF-2026-11-09-hotspot.md`).
+
 > **PIN 2026-11-08b (paste + roam — RULE #95):** `clipboard-preflight.sh`
 > gates the paste path and exits 3 on an image flavour (opencode aborts with
 > `ImageDecodeError`); `--clear-text` fixes it. `network-change-probe.sh` is

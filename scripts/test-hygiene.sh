@@ -499,6 +499,28 @@ PY
         bad 'hotspot-test.sh present'
     fi
 
+    if [ -f "$REPO/scripts/hotspot-reconnect.sh" ]; then
+        if bash "$REPO/scripts/hotspot-reconnect.sh" --self-test > "$work/hr_st.txt" 2>&1; then
+            ok 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json)'
+        else
+            bad 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json)'
+            cat "$work/hr_st.txt"
+        fi
+    else
+        bad 'hotspot-reconnect.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/terminal-reset.sh" ]; then
+        if bash "$REPO/scripts/terminal-reset.sh" --self-test > "$work/tr_st.txt" 2>&1; then
+            ok 'terminal-reset: self-test (install + idempotent + soft + print + uninstall)'
+        else
+            bad 'terminal-reset: self-test (install + idempotent + soft + print + uninstall)'
+            cat "$work/tr_st.txt"
+        fi
+    else
+        bad 'terminal-reset.sh present'
+    fi
+
     if [ -f "$REPO/scripts/node-diag.sh" ]; then
         if bash "$REPO/scripts/node-diag.sh" --self-test > "$work/nd_st.txt" 2>&1; then
             ok 'node-diag: self-test (fixture routing + list + args)'
@@ -519,6 +541,17 @@ PY
         fi
     else
         bad 'node-fix.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/nebula-ipv4-only.sh" ]; then
+        if bash "$REPO/scripts/nebula-ipv4-only.sh" --self-test > "$work/nip_st.txt" 2>&1; then
+            ok 'nebula-ipv4-only: self-test (insert allow lists, idempotent)'
+        else
+            bad 'nebula-ipv4-only: self-test (insert allow lists, idempotent)'
+            cat "$work/nip_st.txt"
+        fi
+    else
+        bad 'nebula-ipv4-only.sh present'
     fi
 
     if [ -f "$REPO/scripts/overlay-status.sh" ]; then

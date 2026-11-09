@@ -4,7 +4,7 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ## Done (most recent first)
 
@@ -260,6 +260,8 @@ Last updated: 2026-11-08
 
 ## Queue (ranked, top first)
 
+- [~] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests
+      green; live roam proof open.
 - [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
       restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
       parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the

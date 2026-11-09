@@ -1,0 +1,68 @@
+Handoff prompt — hotspot loss / reconnect (2026-11-09)
+=====================================================
+
+Open a fresh session on the ROAMING NODE (the client), then paste everything
+between the two RULE markers below. Read docs/HANDOFF-2026-11-09-hotspot.md,
+RULES.md, and scripts/hotspot-reconnect.sh first; do not re-derive them.
+
+RULE-OUTER-BEGIN
+--------------------------------------------------------------------------------
+Objective
+  Prove scripts/hotspot-reconnect.sh on the real roaming node and fix anything
+  the live network exposes. Falsifiable outcome: during --watch --reconnect a
+  hotspot drop produces a client alert, a server alert (queued, then flushed),
+  and a successful rejoin that ends with client-setup --heal + an ssh -t hint.
+
+Context (read first)
+  docs/HANDOFF-2026-11-09-hotspot.md  - state, evidence, open risks
+  scripts/hotspot-reconnect.sh        - the tool, modes and seams
+  scripts/hotspot-test.sh             - the after-the-fact switch proof
+  scripts/network-change-probe.sh     - interface x port matrix
+  scripts/client-setup.sh             - --heal / --check; runs the hook install
+  scripts/terminal-reset.sh           - mouse-report reset + ~/.bashrc hook
+  RULES.md                            - #7/#8/#38 + blacklist substitutions
+
+Constraints (non-negotiable)
+  - No sed, no 2>/dev/null, printf not echo, main() wrapper, no set -e.
+  - Never write data/opencode/opencode.db; it is read-only.
+  - Typed YES before any command that changes the network (the script does this).
+  - Behavioral proof runs on the roaming node, not the bench or the container.
+  - Do not commit or push.
+
+Deliverable
+  1. Run the client live proof with a real hotspot drop (not a fake seam).
+  2. Run --server --watch on the server against 10.100.0.1 and confirm its
+     console alert.
+  3. Fix any seam/logic gap the live run exposes; keep --self-test green.
+  4. Prove the terminal-reset hook: reproduce the `...M` spam, then confirm a new
+     interactive shell clears it (and `~/.bashrc` has exactly one managed block).
+  5. Record the measured evidence in docs/HANDOFF-2026-11-09-hotspot.md.
+
+Acceptance (each independently checkable)
+  - [ ] bash scripts/hotspot-reconnect.sh --check            -> 0, "state: up"
+  - [ ] bash scripts/hotspot-reconnect.sh --self-test        -> PASS
+  - [ ] drop the hotspot during --watch -> bell/banner + "connection lost"
+  - [ ] reconnect -> "reconnected via ..." + client-setup --heal + ssh -t line
+  - [ ] server ~/.local/state/hotspot-alerts.log has the client line
+  - [ ] bash scripts/terminal-reset.sh --self-test           -> PASS
+  - [ ] grep -n 'opencode-deepseek-jev terminal-reset' ~/.bashrc -> one block
+  - [ ] after a crashed TUI, a new interactive shell shows no `...M` spam
+  - [ ] bash scripts/test-hygiene.sh exits 0 on the host
+
+Evidence (paste back)
+  The --check table, both --self-test lines, the alert-log tail on BOTH nodes,
+  the reconnect transcript (each command + its rc), and the ~/.bashrc block grep.
+
+Out of scope
+  Rewriting hotspot-test.sh; changing the tunnel/lighthouse; editing the
+  read-only chat store; adding new runtime dependencies.
+
+Reference
+  Reconnect order: HOTSPOT_PROFILE -> HOTSPOT_SSID -> nmcli radio/networking,
+  or macOS networksetup. The server alert path is ssh + wall; when ssh is down
+  the line is queued in HOTSPOT_PENDING and flushed on the next success.
+  Prefer ssh -t (not -Y) for the TUI; -Y only for the clipboard/X11 path.
+  The `35;55;16M` spam is an SGR mouse-report tail (ESC[<b;x;yM);
+  terminal-reset.sh clears it and installs the guarded ~/.bashrc hook.
+--------------------------------------------------------------------------------
+RULE-OUTER-END

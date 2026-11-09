@@ -223,6 +223,17 @@ install_display_env() {
     return 0
 }
 
+install_terminal_reset() {
+    # Interactive shells clear leaked SGR mouse reports (ESC[<b;x;yM spam) and
+    # a leftover alt-screen from a crashed/aborted TUI. Silent escape codes only.
+    [ -f "$SELF_DIR/terminal-reset.sh" ] || return 0
+    bash "$SELF_DIR/terminal-reset.sh" --install || {
+        printf 'WARN: terminal-reset --install failed\n'
+        return 0
+    }
+    return 0
+}
+
 ensure_prereqs() {
     local p="$1" rc=0
     have ssh || { printf 'FAIL: ssh missing; install OpenSSH client\n'; rc=1; }
@@ -501,6 +512,7 @@ main() {
         uninstall)
             disable_units "$units" "$p"
             bash "$X11_SETUP" --remove "$cfg"
+            [ -f "$SELF_DIR/terminal-reset.sh" ] && bash "$SELF_DIR/terminal-reset.sh" --uninstall
             rm -f "$sp"
             say "uninstalled client self-heal and removed the SSH block"
             log "uninstall complete"
@@ -580,6 +592,7 @@ main() {
     if [ "$mode" = "setup" ]; then
         start_x_server "$p"
         install_display_env
+        install_terminal_reset
     fi
     log "setup: alias=$alias server=$target config=$cfg units=$units"
     say "server:   $target"

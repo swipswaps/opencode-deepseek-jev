@@ -896,6 +896,17 @@ node-fix.sh
     (config lives in the mesh repo) and the verify commands. --only
     getty|mesh|dns|units; --no-peer; --self-test offline.
 
+nebula-ipv4-only.sh
+    Stops the "Listener is IPv4, but writing to IPv6 remote" error (and its
+    IPv6-preference side effects) on an IPv4-only Nebula listener
+    (slackhq/nebula#1227). --check shows listen.host, the allow lists, the
+    recent error count and ping to 10.100.0.24; --apply (root) inserts
+    lighthouse.local_allow_list/remote_allow_list "0.0.0.0/0": true, backs up
+    config.yml, validates with `nebula -config ... -test`, installs, restarts
+    nebula, then re-checks; --dual-stack sets listen.host "::" instead;
+    --self-test offline (fixture). Restart the other nodes too so their caches
+    drop IPv6. Gated in test-hygiene.sh.
+
 overlay-status.sh
     Read-only audit of BOTH mesh planes from either box. Audits this machine
     locally, then SSHes to the peer (auto: .24 <-> .1) and audits it too, so
@@ -1425,6 +1436,29 @@ hotspot-test.sh
     (TUNNEL-1), so Tailscale is the fallback. Optional ROAM_SSH_HOST proves SSH
     X11 forwarding still yields a DISPLAY. --self-test offline (fake seams).
     Exit 0 PASS, 2 FAIL, 3 cannot run. Gated in test-hygiene.sh.
+
+hotspot-reconnect.sh
+    Detect a lost hotspot/underlay, alert BOTH ends, and guide an interactive
+    reconnect. Client: --check (one probe; 0 up, 2 down), --watch (debounced
+    detect + bell/banner/notify + guidance), --watch --reconnect (try the saved
+    profile/SSID in order, settle, then client-setup --heal and print `ssh -t`),
+    --plan, --json, --self-test. HOTSPOT_SERVER_SSH also appends to the server
+    alert log (+ wall); when the server is unreachable the line is queued and
+    flushed on reconnect so both logs agree. Server: --server --watch alerts the
+    server console when the client overlay (CLIENT_MESH_IP) disappears/returns.
+    Distinct from hotspot-test.sh: that proves a switch after the fact; this one
+    watches live, alerts, and reconnects. Exit 0 up, 2 down/failed, 3 cannot
+    run / unsafe input. Gated in test-hygiene.sh.
+
+terminal-reset.sh
+    Clear leaked SGR mouse reports (the ESC[<b;x;yM tail shows as
+    `35;55;16M35;55;16M...`) and a leftover alt-screen after a crashed or
+    aborted TUI. Default: mouse-off + `stty sane` + `reset`. --soft emits only
+    the invisible mouse/alt/cursor sequences; --install writes an idempotent,
+    guarded ~/.bashrc block (interactive shells only) so the next shell
+    self-heals; --uninstall removes it; --print emits the shell printf command;
+    --self-test offline. client-setup runs --install in setup mode. Exit 0 ok,
+    2 usage. Gated in test-hygiene.sh.
 
 host-path-probe.sh
     Break down the :5099/:4096 hop (dns -> connect -> tls -> ttfb -> total)
