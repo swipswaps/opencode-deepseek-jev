@@ -77,6 +77,22 @@ earlier disconnect flag was real but intermittent — not powersave.
 
 ---
 
+### 2026-11-10 wl attempt — timeline and recovery
+
+- **First apply:** the `kmod-wl` transaction failed after ~12 min (mirror 404s),
+  so `akmod-wl` built the module on boot. The build finished at 15:35:41, but
+  the guard had waited 240 s and rolled back at 15:33:43.
+- **Second apply:** `WIFIDF_SKIP_KMOD=1` used the built module, but the next
+  boot still loaded `b43`; `wl` never bound. The guard waited 600 s on `b43`
+  and would have rolled back again.
+- **Recovery:** `wifi-durable-fix.sh --recover-now` stopped/disabled the guard,
+  restored `connection.zone=default`, removed the b43 boot config, rebuilt the
+  initramfs, reloaded `b43`, restarted NetworkManager, set `phase=rolled-back`,
+  and did **not** reboot. The client is stable on `b43`.
+- **Prevention:** hard-block `b43` (`install b43 /bin/false`), force `wl` and
+  omit the conflicting drivers in the initramfs, add a `modules-load.d` entry
+  for `wl`, and require Layer 3 before the guard declares success.
+
 ## 1. Status matrix
 
 ### Fixed in this session (code + test)
@@ -90,7 +106,8 @@ earlier disconnect flag was real but intermittent — not powersave.
 | NET-5 | Activity showed a false “0 of 0 / No matches” after working a moment earlier | 12 s `fetchJSON` timeout aborted a cold worker and was caught as an empty result. `ActivityTimeline` now uses a 45 s budget, falls back to `/api/semantic` (FTS), and shows “Search timed out” instead of “No matches” |
 | NET-6 | Hotspot watcher flooded the terminal, beeped with no desktop popup, and its buttons did nothing | `--watch` is terminal-quiet by default (`--verbose` for ticks), resolves `DBUS_SESSION_BUS_ADDRESS` from `/run/user/$UID/bus`, sets `DISPLAY=:0` on an X11 seat, reports a broken channel once, and adds `--no-bell`/`--quiet-terminal`/`--notify-check`. `--notify-remote USER@HOST` sends the popup over SSH into the **client's** own X11 session. Buttons now act: `open` opens the dashboard, `check` runs `peer-health.sh` and reports the verdict, `silence` sets 1 h, `dismiss` suppresses for `HOTSPOT_DISMISS_SEC` (cleared on recovery), and `fix` queues + confirms the reconnect. `--notify-test` shows the popup with live buttons; `--clear-notify` withdraws a stale one |
 | NET-7 | Server alert said “client disappeared” while `.1` was connected and running opencode over SSH | `probe_client` now treats a successful **SSH** (`HOTSPOT_CLIENT_SSH`, default `owner@CLIENT_MESH_IP`) or a Tailscale `pong` as connected before declaring the peer down on the optional `:5099` dashboard port. A one-shot `--server --tick` now reports `client 10.100.0.1: up` |
-| NET-8 | Durable Wi-Fi fix was missing (only the diagnosis existed) | `scripts/wifi-durable-fix.sh`: install `akmod-wl`/`kmod-wl`, blacklist `b43`/`bcma`/`ssb`, rebuild initramfs, install + enable `wifi-durable-guard.service`, reboot. `--rollback` restores `b43`; the boot guard auto-rolls back and reboots if `wl` is not loaded and no Wi-Fi is connected within `WIFIDF_GUARD_WAIT`. The hotspot popup’s **Fix Wi-Fi (wl)** button opens an Apply/Cancel confirmation; Apply runs it detached. Client check: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes` |
+| NET-8 | Durable Wi-Fi fix was missing (only the diagnosis existed) | `scripts/wifi-durable-fix.sh`: install `akmod-wl`/`kmod-wl`, hard-block `b43` (`install b43 /bin/false`), force `wl` and omit `b43`/`bcma`/`ssb`/`brcmsmac` in the initramfs, add `modules-load.d/wifi-durable-wl.conf`, rebuild initramfs, install + enable `wifi-durable-guard.service`, reboot. `--rollback` restores `b43`; `--recover-now` stops/disables the guard and restores `b43` **without a reboot**. The guard waits 600 s and requires Layer 3 (gateway ping); it also sets the NM connection zone and adds the live interface to it. The 2026-11-10 attempt rolled back twice: the first `akmods` build took ~6 min (>240 s guard), and the second boot still loaded `b43` despite `blacklist b43`. The hotspot popup’s **Fix Wi-Fi (wl)** button opens an Apply/Cancel confirmation; Apply runs it detached. Client check: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes` |
+| NET-9 | `wall` broadcast overlapped the opencode TUI; a notification body click closed the buttons; `[Image 1]` replaced pasted text | `hotspot-reconnect.sh` now uses `logger`/notification by default (`HOTSPOT_WALL=1` opts into wall), adds a **Keep open** default action with a bounded re-show loop, and a persistent `--offer-durable` confirmation (`-t 0`; body click re-shows, Cancel ends). Clipboard: the screenshot path/image caused opencode’s image paste; clear it (`printf '' | xclip -selection clipboard`) and use Ctrl-Shift-V for text |
 | SEC-1 | Global blacklist guard was a dangling symlink, so no guard loaded on the host | `scripts/install-global-guard.sh` (new) + resolved link in `docker/web-entrypoint.sh` + `test-hygiene.sh` |
 | SEC-2 | Guard matcher bypasses (separators, paths, prefixes, quoting, backslashes, `rm -fr`, pipe-to-interpreter, `source <(curl)`, config dump, host/env reads, `set -o errexit`, `subprocess` imports) | `.opencode/plugins/blacklist-guard.js` + `scripts/blacklist-guard-self-test.mjs` |
 | SEC-3 | Every shell command was uploaded to `api.subq.ai` | Semantic layer is now **opt-in** (`OPENCODE_SEMANTIC_GUARD=on`); `scripts/guard-classify.py` redacts secret shapes before upload and in JSON output |

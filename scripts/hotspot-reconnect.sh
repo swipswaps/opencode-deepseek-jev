@@ -14,7 +14,7 @@
 #
 # Server half - run ON THE SERVER (ws24):
 #   ./scripts/hotspot-reconnect.sh --server --watch
-#   -> writes wall + the local alert log. Desktop popups belong on the CLIENT:
+#   -> writes the local alert log (wall is opt-in: HOTSPOT_WALL=1). Desktop popups belong on the CLIENT:
 #      the server's notification daemon is a different desktop/session.
 #
 # 2026-11-10 UX: `--watch` hides the per-tick table by default (use --verbose
@@ -25,7 +25,7 @@
 #
 # Two-sided alerting, honestly:
 #   - client --watch alerts the local terminal/bell/notify and, when the server
-#     is reachable, appends to the server alert log (+ wall). When it is NOT
+#     is reachable, appends to the server alert log (logger; wall opt-in). When it is NOT
 #     reachable (the usual case) the line is QUEUED and flushed on the next
 #     successful contact, so both logs agree afterward.
 #   - server --server --watch is the timely server-side half: it watches the
@@ -88,6 +88,9 @@ QUIET="${HOTSPOT_QUIET:-0}"
 BELL="${HOTSPOT_BELL:-1}"
 TERM_QUIET="${HOTSPOT_TERM_QUIET:-0}"
 WATCH_VERBOSE="${HOTSPOT_WATCH_VERBOSE:-0}"
+# wall() writes into every TTY, which corrupts a full-screen TUI (opencode).
+# Default OFF: log via logger + desktop notification. Opt in with HOTSPOT_WALL=1.
+WALL="${HOTSPOT_WALL:-0}"
 NOTIFY_OK=1
 NOTIFY_ERR=""
 NOTIFY_FAIL="${HOTSPOT_NOTIFY_FAIL:-$HOME/.local/state/hotspot-notify.fail}"
@@ -105,8 +108,8 @@ ALERT_STATE="${HOTSPOT_ALERT_STATE:-$STATE.alerts}"
 # it by id, and always clear it when the peer recovers. The server watch also
 # requires SERVER_FAIL_THRESHOLD consecutive misses before it pages, so one
 # beacon-loss gap does not become a permanent "disconnected" banner.
-NOTIFY_TIMEOUT="${HOTSPOT_NOTIFY_TIMEOUT:-8000}"
-CRITICAL_TIMEOUT="${HOTSPOT_CRITICAL_TIMEOUT:-45000}"
+NOTIFY_TIMEOUT="${HOTSPOT_NOTIFY_TIMEOUT:-30000}"
+CRITICAL_TIMEOUT="${HOTSPOT_CRITICAL_TIMEOUT:-300000}"
 SERVER_FAIL_THRESHOLD="${HOTSPOT_SERVER_FAIL_THRESHOLD:-3}"
 NOTIFY_ID="${HOTSPOT_NOTIFY_ID:-7331}"
 PEER_HEALTH_JSON="${HOTSPOT_PEER_HEALTH_JSON:-$SELF_DIR/../data/observability/peer-health.json}"
@@ -275,6 +278,13 @@ ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 say() { printf '%s\n' "$*"; }
 # Terminal-only echo: suppressed by --quiet-terminal / HOTSPOT_TERM_QUIET=1.
 tlog() { [ "$TERM_QUIET" = "1" ] || printf '%s\n' "$*"; }
+wall_notify() {
+    local line="$1"
+    if have logger; then logger -t opencode-hotspot "$line" 2>&1 || true; fi
+    if [ "$WALL" = "1" ] && have wall; then
+        printf '%s\n' "$line" | wall 2>&1 || true
+    fi
+}
 bell() {
     [ "${HOTSPOT_FAKE_BELL:-0}" = "1" ] && return 0
     [ "$BELL" = "0" ] && return 0
@@ -618,29 +628,41 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
     fi
     if notify_has_actions; then
         if [ "$ROLE" = "server" ]; then
-            actions=(-A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+            actions=(-A "default=Keep open" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         else
-            actions=(-A "fix=Reconnect" -A "durable=Fix Wi-Fi (wl)" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+            actions=(-A "default=Keep open" -A "fix=Reconnect" -A "durable=Fix Wi-Fi (wl)" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         fi
         (
-            notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" -w "${actions[@]}" \
-                --hint=string:x-canonical-private-synchronous:opencode-hotspot \
-                "opencode hotspot" "$body" > "$ACTION_OUT" 2>&1
-            case "$(cat "$ACTION_OUT" 2>&1)" in
-                fix)
-                    mkdir -p "$(dirname "$FIX_REQUEST")"
-                    printf '%s\n' "$(ts)" > "$FIX_REQUEST"
-                    # Do not wait for the next watcher tick to at least
-                    # acknowledge the click.
-                    notify_send -u low -t 4000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
-                        "opencode hotspot" "reconnect requested; the watcher will try within ${WATCH_SEC}s" 2>&1 || true
-                    ;;
-                durable) durable_confirm ;;
-                open) open_url "https://$MESH:5099" ;;
-                check) do_check_notify ;;
-                silence) do_silence ;;
-                dismiss) do_dismiss ;;
-            esac
+            local act="" tries=0
+            while :; do
+                notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" -w "${actions[@]}" \
+                    --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                    "opencode hotspot" "$body" > "$ACTION_OUT" 2>&1
+                act="$(cat "$ACTION_OUT" 2>&1)"
+                case "$act" in
+                    default|'')
+                        # A body click (or a daemon close) must not throw the
+                        # buttons away. Re-show up to twice, then respect an
+                        # intentional close.
+                        tries=$((tries + 1))
+                        [ "$tries" -ge 3 ] && break
+                        sleep 1
+                        ;;
+                    fix)
+                        mkdir -p "$(dirname "$FIX_REQUEST")"
+                        printf '%s\n' "$(ts)" > "$FIX_REQUEST"
+                        notify_send -u low -t 4000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                            "opencode hotspot" "reconnect requested; the watcher will try within ${WATCH_SEC}s" 2>&1 || true
+                        break
+                        ;;
+                    durable) durable_confirm; break ;;
+                    open) open_url "https://$MESH:5099"; break ;;
+                    check) do_check_notify; break ;;
+                    silence) do_silence; break ;;
+                    dismiss) do_dismiss; break ;;
+                    *) break ;;
+                esac
+            done
         ) &
     else
         notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" \
@@ -666,8 +688,8 @@ alert_local() {
     if [ "$level" = "OK" ]; then
         rm -f "$DISMISS_UNTIL"
         notify_clear "$msg"
-        if [ "$ROLE" = "server" ] && have wall; then
-            printf '%s\n' "opencode hotspot: OK: $msg" | wall 2>&1 || true
+        if [ "$ROLE" = "server" ]; then
+            wall_notify "opencode hotspot: OK: $msg"
         fi
         return 0
     fi
@@ -690,8 +712,8 @@ alert_local() {
     urgency="$(alert_urgency)"
     if [ "$urgency" = "critical" ]; then timeout="$CRITICAL_TIMEOUT"; else timeout="$NOTIFY_TIMEOUT"; fi
     notify_user "$level" "$msg" "$urgency" "$timeout"
-    if [ "$ROLE" = "server" ] && have wall; then
-        printf '%s\n' "opencode hotspot: $level: $msg" | wall 2>&1 || true
+    if [ "$ROLE" = "server" ]; then
+        wall_notify "opencode hotspot: $level: $msg"
     fi
 }
 
@@ -728,7 +750,7 @@ alert_server() {
     if server_reachable; then
         printf 'server alert sent (log + wall)\n'
         ssh -o BatchMode=yes -o ConnectTimeout=4 "$SERVER_SSH" \
-            "printf '%s\n' '$line' >> \$HOME/.local/state/hotspot-alerts.log; command -v wall > /dev/null && printf '%s\n' '$line' | wall" 2>&1 || true
+            "printf '%s\n' '$line' >> \$HOME/.local/state/hotspot-alerts.log; command -v logger > /dev/null && logger -t opencode-hotspot '$line'" 2>&1 || true
         return 0
     fi
     printf 'server unreachable; queued: %s\n' "$line"
@@ -1058,7 +1080,7 @@ watch_mode() {
     [ "$WATCH_VERBOSE" = "1" ] || TERM_QUIET=1
     if [ "$ROLE" = "server" ]; then
         printf 'server watch: client=%s every %ss (Ctrl-C to stop)\n' "$CLIENT_MESH" "$WATCH_SEC"
-        printf 'terminal ticker is quiet; alerts use wall + the local log (use --verbose to watch ticks)\n'
+        printf 'terminal ticker is quiet; alerts use the log + notification (wall only with HOTSPOT_WALL=1; --verbose for ticks)\n'
         trap 'printf "interrupted\n"' INT
         while :; do server_tick || true; sleep "$WATCH_SEC"; done
     fi
@@ -1255,7 +1277,7 @@ self_test() {
 }
 
 usage() {
-    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--inhibit [sec]|--clear-inhibit|--server|--notify-check|--notify-test|--clear-notify|--self-test] [--reconnect] [--yes] [--json] [--quiet] [--no-bell] [--quiet-terminal] [--verbose] [--notify-remote USER@HOST] [--remote-display :0]\n' "$0"
+    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--inhibit [sec]|--clear-inhibit|--server|--notify-check|--notify-test|--offer-durable|--clear-notify|--self-test] [--reconnect] [--yes] [--json] [--quiet] [--no-bell] [--quiet-terminal] [--verbose] [--notify-remote USER@HOST] [--remote-display :0]\n' "$0"
     printf 'client env: HOTSPOT_SSID, HOTSPOT_PROFILE, HOTSPOT_SERVER_SSH, ROAM_MESH_IP, ROAM_LAN_IP\n'
     printf 'server env: CLIENT_MESH_IP, CLIENT_TAILSCALE_IP\n'
     printf 'alerts: normal urgency + 8s expiry, coalesced, one per HOTSPOT_ALERT_COOLDOWN (120s),\n'
@@ -1265,7 +1287,7 @@ usage() {
 }
 
 notify_test() {
-    notify_user INFO "notification test: click a button (open / check / silence / dismiss / reconnect)" normal 60000
+    notify_user INFO "notification test: a body click keeps this open; use a button (open / check / silence / dismiss / reconnect)" normal 300000
     printf 'test notification sent; click a button (actions are handled in the background)\n'
 }
 
@@ -1315,23 +1337,32 @@ run_durable_fix() {
 }
 
 durable_confirm() {
-    local script="$SELF_DIR/wifi-durable-fix.sh" summary="" body="" out=""
+    local script="$SELF_DIR/wifi-durable-fix.sh" summary="" body="" out="" tries=0
     if [ ! -f "$script" ]; then
         notify_send -u normal -t 15000 "opencode hotspot" \
             "durable fix unavailable: $script missing" 2>&1 || true
         return 1
     fi
     summary="$(durable_summary)"
-    body="Fix Wi-Fi durably: install akmod-wl/kmod-wl, blacklist b43, rebuild initramfs, reboot. Auto-rollback to b43 if Wi-Fi does not return. This disconnects the current session. Current: $summary"
+    body="Fix Wi-Fi durably: hard-block b43, force/load wl, rebuild initramfs, reboot. Auto-rollback if wl or Layer 3 fails. This disconnects the current session. Current: $summary. Body click keeps this open; Cancel closes."
     if notify_has_actions; then
-        out="$(notify_send -u normal -t 60000 -w -A "apply=Install wl (reversible)" -A "cancel=Cancel" \
-            --hint=string:x-canonical-private-synchronous:opencode-hotspot \
-            "opencode hotspot" "$body" 2>&1)"
-        case "$out" in
-            apply) run_durable_fix ;;
-            cancel) notify_clear "durable fix cancelled" ;;
-            *) : ;;
-        esac
+        while :; do
+            out="$(notify_send -u normal -t 0 -w \
+                -A "default=Keep open" -A "apply=Install wl (reversible)" -A "cancel=Cancel" \
+                --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                "opencode hotspot" "$body" 2>&1)"
+            case "$out" in
+                apply) run_durable_fix; return 0 ;;
+                cancel) notify_clear "durable fix cancelled"; return 0 ;;
+                default) sleep 1; continue ;;
+                '')
+                    tries=$((tries + 1))
+                    [ "$tries" -ge 3 ] && return 0
+                    sleep 1
+                    ;;
+                *) return 0 ;;
+            esac
+        done
     else
         notify_send -u normal -t 20000 "opencode hotspot" "$body
 run: bash $script --apply --yes" 2>&1 || true
@@ -1394,6 +1425,7 @@ main() {
             --quiet-terminal) TERM_QUIET=1; shift ;;
             --verbose) WATCH_VERBOSE=1; shift ;;
             --notify-check) MODE="notify-check"; shift ;;
+            --offer-durable) MODE="offer-durable"; shift ;;
             --notify-test) MODE="notify-test"; shift ;;
             --clear-notify) MODE="clear-notify"; shift ;;
             --notify-remote) NOTIFY_REMOTE="${2:-}"; shift 2 ;;
@@ -1427,6 +1459,7 @@ main() {
         clear-inhibit) clear_inhibit; printf 'inhibition cleared\n' ; return 0 ;;
         silence) do_silence; return "$?" ;;
         notify-check) notify_check; return "$?" ;;
+        offer-durable) durable_confirm; return "$?" ;;
         notify-test) notify_test; return "$?" ;;
         clear-notify) clear_notify; return "$?" ;;
         tick)

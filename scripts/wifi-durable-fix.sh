@@ -44,10 +44,14 @@ STATE_DIR="${WIFIDF_STATE_DIR:-$ROOT/var/lib/wifi-durable}"
 STATE="$STATE_DIR/state"
 LOG="${WIFIDF_LOG:-$ROOT/var/log/wifi-durable.log}"
 BLACKLIST="${WIFIDF_BLACKLIST:-$ROOT/etc/modprobe.d/99-wifi-durable-b43.conf}"
+MODLOAD="${WIFIDF_MODLOAD:-$ROOT/etc/modules-load.d/wifi-durable-wl.conf}"
+DRACUT_CONF="${WIFIDF_DRACUT_CONF:-$ROOT/etc/dracut.conf.d/99-wifi-durable.conf}"
 GUARD_BIN="${WIFIDF_GUARD_BIN:-$ROOT/usr/local/sbin/wifi-durable-fix.sh}"
 UNIT="${WIFIDF_UNIT:-$ROOT/etc/systemd/system/wifi-durable-guard.service}"
 REBOOT_DELAY="${WIFIDF_REBOOT_DELAY:-20}"
-GUARD_WAIT="${WIFIDF_GUARD_WAIT:-240}"
+GUARD_WAIT="${WIFIDF_GUARD_WAIT:-600}"
+NM_CONNECTION="${WIFIDF_NM_CONNECTION:-belkin2}"
+NM_ZONE="${WIFIDF_NM_ZONE:-trusted}"
 NO_REBOOT="${WIFIDF_NO_REBOOT:-0}"
 PURGE=0
 JSON=0
@@ -59,6 +63,7 @@ usage() {
     printf '          [--json] [--yes] [--no-reboot] [--purge] [--reboot]\n'
     printf '  --apply     install akmod-wl/kmod-wl + blacklist b43 + arm auto-rollback\n'
     printf '  --rollback  restore b43 (idempotent; --purge also removes the packages)\n'
+    printf '  --recover-now stop/disable the boot guard, restore b43, no reboot\n'
     printf '  --check     read-only: distro, kernel, driver, RPMFusion, wl availability\n'
 }
 
@@ -181,6 +186,66 @@ cmd() {
     "$@"
 }
 
+active_wifi_iface() {
+    case "${WIFIDF_FAKE_IFACE:-}" in
+        '' ) : ;;
+        * ) printf '%s' "$WIFIDF_FAKE_IFACE"; return 0 ;;
+    esac
+    have nmcli || return 1
+    nmcli -t -f DEVICE,TYPE,STATE device 2>&1 | awk -F: '$2 == "wifi" && $3 == "connected" { print $1; exit }'
+}
+
+# The wl driver creates a NEW interface name. firewalld zone bindings are
+# per-interface, so the old zone does not follow it; everything (SSH, ICMP,
+# Tailscale, Nebula) can be dropped while ARP still works. Set the NM
+# connection zone (applies to the new interface) and add the live interface.
+prepare_zone() {
+    local prev="default"
+    if [ "$SELFTEST" != "1" ] && have nmcli; then
+        prev="$(nmcli -g connection.zone connection show "$NM_CONNECTION" 2>&1)"
+        case "$prev" in ''|*'not found'*|*'Error'*) prev="default" ;; esac
+    fi
+    state_set prev_zone "$prev"
+    state_set nm_connection "$NM_CONNECTION"
+    state_set nm_zone "$NM_ZONE"
+    log "setting $NM_CONNECTION connection.zone=$NM_ZONE (was $prev)"
+    cmd as_root nmcli connection modify "$NM_CONNECTION" connection.zone "$NM_ZONE" 2>&1 || true
+}
+
+restore_zone() {
+    local pz=""
+    pz="$(state_get prev_zone)"
+    [ -n "$pz" ] || return 0
+    log "restoring $NM_CONNECTION connection.zone=$pz"
+    cmd as_root nmcli connection modify "$NM_CONNECTION" connection.zone "$pz" 2>&1 || true
+}
+
+ensure_zone_runtime() {
+    local iface=""
+    iface="$(active_wifi_iface)"
+    [ -n "$iface" ] || return 0
+    if have firewall-cmd; then
+        cmd as_root firewall-cmd --zone="$NM_ZONE" --change-interface="$iface" 2>&1 || true
+        cmd as_root firewall-cmd --permanent --zone="$NM_ZONE" --add-interface="$iface" 2>&1 || true
+        cmd as_root firewall-cmd --reload 2>&1 || true
+    fi
+}
+
+guard_l3_ok() {
+    case "${WIFIDF_FAKE_L3:-}" in
+        ok) return 0 ;;
+        fail) return 1 ;;
+    esac
+    local target=""
+    target="${WIFIDF_GUARD_PING:-}"
+    if [ -z "$target" ] && have ip; then
+        target="$(ip route show default 2>&1 | awk '/default via/{print $3; exit}')"
+    fi
+    [ -n "$target" ] || return 1
+    have ping || return 1
+    ping -c 1 -W 2 "$target" 2>&1 | grep -q 'bytes from'
+}
+
 install_rpmfusion() {
     local rel=""
     rel="$(rpm -E %fedora 2>&1)"
@@ -193,6 +258,11 @@ install_rpmfusion() {
 }
 
 install_wl() {
+    if [ "${WIFIDF_SKIP_KMOD:-0}" = "1" ]; then
+        log "WIFIDF_SKIP_KMOD=1: using the already-built akmod-wl module (no kmod-wl transaction)"
+        cmd as_root dnf -y install akmod-wl
+        return $?
+    fi
     log "installing akmod-wl + kmod-wl (kmod may be unavailable for this kernel)"
     if cmd as_root dnf -y install akmod-wl kmod-wl; then return 0; fi
     log "kmod-wl unavailable; installing akmod-wl only (builds on next boot)"
@@ -208,8 +278,32 @@ write_blacklist() {
         printf '%s\n' 'blacklist bcma'
         printf '%s\n' 'blacklist ssb'
         printf '%s\n' 'blacklist brcmsmac'
+        printf '%s\n' 'install b43 /bin/false'
+        printf '%s\n' 'install b43legacy /bin/false'
+        printf '%s\n' 'install bcma /bin/false'
+        printf '%s\n' 'install ssb /bin/false'
+        printf '%s\n' 'install brcmsmac /bin/false'
     } > "$BLACKLIST"
-    log "wrote $BLACKLIST"
+    log "wrote $BLACKLIST (blacklist + hard install block)"
+}
+
+# The 2026-11-10 failure: b43 still loaded even with `blacklist b43`, so wl
+# never bound. Force wl into the initramfs and omit the conflicting drivers.
+write_boot_config() {
+    mkdir -p "$(dirname "$MODLOAD")" "$(dirname "$DRACUT_CONF")" 2>&1 || return 1
+    printf '%s\n' 'wl' > "$MODLOAD"
+    {
+        printf '%s\n' 'force_drivers+=" wl "'
+        printf '%s\n' 'omit_drivers+=" b43 b43legacy bcma ssb brcmsmac "'
+    } > "$DRACUT_CONF"
+    log "wrote $MODLOAD and $DRACUT_CONF"
+}
+
+remove_boot_config() {
+    local f=""
+    for f in "$BLACKLIST" "$MODLOAD" "$DRACUT_CONF"; do
+        if [ -f "$f" ]; then rm -f "$f"; log "removed $f"; fi
+    done
 }
 
 remove_blacklist() {
@@ -225,13 +319,16 @@ run_dracut() {
 }
 
 install_guard() {
-    mkdir -p "$(dirname "$GUARD_BIN")" "$(dirname "$UNIT")" 2>&1 || return 1
+    local tmp=""
     if [ "$SELFTEST" != "1" ]; then
-        install -m 0755 "$0" "$GUARD_BIN" || return 1
+        cmd as_root mkdir -p "$(dirname "$GUARD_BIN")" "$(dirname "$UNIT")" 2>&1 || return 1
+        cmd as_root install -m 0755 "$0" "$GUARD_BIN" || return 1
     else
+        mkdir -p "$(dirname "$GUARD_BIN")" "$(dirname "$UNIT")" 2>&1 || return 1
         printf 'selftest guard\n' > "$GUARD_BIN"
         chmod 0755 "$GUARD_BIN" 2>&1 || true
     fi
+    tmp="$(mktemp)"
     {
         printf '%s\n' '[Unit]'
         printf '%s\n' 'Description=Wi-Fi durable-fix rollback guard (b43 -> wl)'
@@ -244,11 +341,17 @@ install_guard() {
         printf '%s\n' ''
         printf '%s\n' '[Install]'
         printf '%s\n' 'WantedBy=multi-user.target'
-    } > "$UNIT"
+    } > "$tmp"
+    if [ "$SELFTEST" != "1" ]; then
+        cmd as_root install -m 0644 "$tmp" "$UNIT" || { rm -f "$tmp"; return 1; }
+    else
+        cp "$tmp" "$UNIT"
+    fi
+    rm -f "$tmp"
     log "wrote $UNIT"
     if [ "$SELFTEST" != "1" ]; then
-        as_root systemctl daemon-reload || return 1
-        as_root systemctl enable wifi-durable-guard.service || return 1
+        cmd as_root systemctl daemon-reload || return 1
+        cmd as_root systemctl enable wifi-durable-guard.service || return 1
     fi
     return 0
 }
@@ -320,7 +423,7 @@ do_plan() {
     printf '  5. dracut -f\n'
     printf '  6. install + enable %s\n' "$UNIT"
     printf '  7. reboot in %ss (WIFIDF_REBOOT_DELAY)\n' "$REBOOT_DELAY"
-    printf '  8. on boot: guard waits up to %ss for the akmod build + wl; wl+connected => ok, else --rollback + reboot\n' "$GUARD_WAIT"
+    printf '  8. on boot: guard waits up to %ss for the akmod build + wl + Layer 3; else --rollback + reboot\n' "$GUARD_WAIT"
     printf 'rollback now : %s --rollback --yes\n' "$0"
 }
 
@@ -328,7 +431,13 @@ do_apply() {
     if [ "$SELFTEST" != "1" ] && ! is_root; then
         if have sudo && sudo -n true 2>&1; then
             log "re-executing with sudo -n"
-            exec sudo -n "$0" --apply --yes
+            exec sudo -n env \
+                WIFIDF_SKIP_KMOD="${WIFIDF_SKIP_KMOD:-0}" \
+                WIFIDF_REBOOT_DELAY="$REBOOT_DELAY" \
+                WIFIDF_GUARD_WAIT="$GUARD_WAIT" \
+                WIFIDF_NM_CONNECTION="$NM_CONNECTION" \
+                WIFIDF_NM_ZONE="$NM_ZONE" \
+                "$0" --apply --yes
         fi
         die "root is required (run with sudo or configure passwordless sudo)"
         return 2
@@ -355,8 +464,14 @@ do_apply() {
         do_rollback --auto >> "$LOG" 2>&1
         return 2
     fi
+    prepare_zone || log "WARN: could not set the NM connection zone"
     if ! write_blacklist; then
         log "blacklist write failed; rolling back"
+        do_rollback --auto >> "$LOG" 2>&1
+        return 2
+    fi
+    if ! write_boot_config; then
+        log "boot config write failed; rolling back"
         do_rollback --auto >> "$LOG" 2>&1
         return 2
     fi
@@ -384,7 +499,8 @@ do_rollback() {
         return 2
     fi
     log "rollback: restoring b43${auto:+ ($auto)}"
-    remove_blacklist
+    restore_zone
+    remove_boot_config
     if have modprobe; then
         cmd as_root modprobe -r wl 2>&1 || true
         cmd as_root modprobe b43 2>&1 || true
@@ -405,6 +521,20 @@ do_rollback() {
     return 0
 }
 
+do_recover() {
+    if [ "$SELFTEST" != "1" ] && ! is_root; then
+        if have sudo && sudo -n true 2>&1; then
+            exec sudo -n "$0" --recover-now
+        fi
+        die "root is required for --recover-now"
+        return 2
+    fi
+    log "recover-now: stopping/disabling the guard, then restoring b43 (no reboot)"
+    cmd as_root systemctl stop wifi-durable-guard.service 2>&1 || true
+    cmd as_root systemctl disable wifi-durable-guard.service 2>&1 || true
+    do_rollback
+}
+
 do_guard_check() {
     local phase="" i=0
     phase="$(state_get phase)"
@@ -413,13 +543,25 @@ do_guard_check() {
         return 0
     fi
     log "guard: awaiting Wi-Fi on wl; waiting up to ${GUARD_WAIT}s"
+    local zone_fixed=0 wl_tried=0
     while :; do
+        if ! wl_loaded && [ "$wl_tried" = "0" ]; then
+            cmd as_root modprobe wl 2>&1 || true
+            wl_tried=1
+        fi
         if wl_loaded && nm_wifi_connected; then
-            state_set phase ok
+            if [ "$zone_fixed" = "0" ]; then
+                ensure_zone_runtime
+                zone_fixed=1
+            fi
+            if guard_l3_ok; then
+                state_set phase ok
             state_set ok_at "$(date +%s)"
-            log "guard: wl loaded and Wi-Fi connected; durable fix succeeded"
-            notify "Wi-Fi durable fix succeeded: vendor wl driver is connected."
-            return 0
+                log "guard: wl loaded, Wi-Fi connected, and Layer 3 reachable; durable fix succeeded"
+                notify "Wi-Fi durable fix succeeded: vendor wl driver is connected and routing traffic."
+                return 0
+            fi
+            log "guard: wl+NM connected but Layer 3 is not reachable yet; waiting"
         fi
         [ "$i" -ge "$GUARD_WAIT" ] && break
         i=$((i + 5))
@@ -451,12 +593,15 @@ self_test() {
     STATE="$STATE_DIR/state"
     LOG="$tmp/var/log/wifi-durable.log"
     BLACKLIST="$tmp/etc/modprobe.d/99-wifi-durable-b43.conf"
+    MODLOAD="$tmp/etc/modules-load.d/wifi-durable-wl.conf"
+    DRACUT_CONF="$tmp/etc/dracut.conf.d/99-wifi-durable.conf"
     GUARD_BIN="$tmp/usr/local/sbin/wifi-durable-fix.sh"
     UNIT="$tmp/etc/systemd/system/wifi-durable-guard.service"
     SELFTEST=1
     NO_REBOOT=1
     export WIFIDF_FAKE_ROOT=1 WIFIDF_FAKE_DRIVER=b43 WIFIDF_FAKE_RPMFUSION=yes
     export WIFIDF_FAKE_WL_AVAILABLE=yes WIFIDF_FAKE_DISTRO=fedora WIFIDF_FAKE_KERNEL=test
+    export WIFIDF_FAKE_IFACE=wlp2s0 WIFIDF_FAKE_L3=fail
 
     state_set phase pending
     [ "$(state_get phase)" = "pending" ] || { printf 'FAIL state round-trip\n'; fail=1; }
@@ -465,13 +610,15 @@ self_test() {
     [ -f "$BLACKLIST" ] || { printf 'FAIL blacklist missing\n'; fail=1; }
     [ "$(state_get phase)" = "awaiting-reboot" ] || { printf 'FAIL apply phase=%s\n' "$(state_get phase)"; fail=1; }
     [ -f "$UNIT" ] || { printf 'FAIL guard unit missing\n'; fail=1; }
+    [ -f "$MODLOAD" ] || { printf 'FAIL modules-load missing\n'; fail=1; }
+    [ -f "$DRACUT_CONF" ] || { printf 'FAIL dracut conf missing\n'; fail=1; }
 
     export WIFIDF_FAKE_LSMOD=b43 WIFIDF_FAKE_NM=disconnected
     GUARD_WAIT=0 do_guard_check > "$STEPLOG" 2>&1
     [ "$(state_get phase)" = "rolled-back" ] || { printf 'FAIL auto-rollback phase=%s\n' "$(state_get phase)"; fail=1; }
     [ ! -f "$BLACKLIST" ] || { printf 'FAIL rollback left blacklist\n'; fail=1; }
 
-    export WIFIDF_FAKE_LSMOD=wl WIFIDF_FAKE_NM=connected
+    export WIFIDF_FAKE_LSMOD=wl WIFIDF_FAKE_NM=connected WIFIDF_FAKE_L3=ok
     do_apply --yes > "$STEPLOG" 2>&1
     GUARD_WAIT=0 do_guard_check > "$STEPLOG" 2>&1
     [ "$(state_get phase)" = "ok" ] || { printf 'FAIL guard success phase=%s\n' "$(state_get phase)"; fail=1; }
@@ -479,9 +626,10 @@ self_test() {
     PURGE=0 do_rollback > "$STEPLOG" 2>&1
     [ "$(state_get phase)" = "rolled-back" ] || { printf 'FAIL manual rollback\n'; fail=1; }
 
-    rm -f "$STATE" "$LOG" "$BLACKLIST" "$UNIT" "$GUARD_BIN" "$STEPLOG"
+    rm -f "$STATE" "$LOG" "$BLACKLIST" "$MODLOAD" "$DRACUT_CONF" "$UNIT" "$GUARD_BIN" "$STEPLOG"
     for d in "$STATE_DIR" "$tmp/var/lib" "$tmp/var/log" "$tmp/var" \
-        "$tmp/etc/modprobe.d" "$tmp/etc/systemd/system" "$tmp/etc/systemd" "$tmp/etc" \
+        "$tmp/etc/modprobe.d" "$tmp/etc/modules-load.d" "$tmp/etc/dracut.conf.d" \
+        "$tmp/etc/systemd/system" "$tmp/etc/systemd" "$tmp/etc" \
         "$tmp/usr/local/sbin" "$tmp/usr/local" "$tmp/usr" "$tmp"; do
         [ -d "$d" ] && rmdir "$d" 2>&1
     done
@@ -505,6 +653,7 @@ main() {
             --status) action="status"; shift ;;
             --install-guard) action="install-guard"; shift ;;
             --guard-check) action="guard-check"; shift ;;
+            --recover-now) action="recover-now"; shift ;;
             --self-test) self_test; return "$?" ;;
             --json) JSON=1; shift ;;
             --yes) ASSUME_YES=1; shift ;;
@@ -523,6 +672,7 @@ main() {
         status) do_status; return 0 ;;
         install-guard) install_guard; return "$?" ;;
         guard-check) do_guard_check; return "$?" ;;
+        recover-now) do_recover; return "$?" ;;
     esac
     usage >&2
     return 3

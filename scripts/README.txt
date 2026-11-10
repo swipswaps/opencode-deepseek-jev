@@ -1504,11 +1504,20 @@ wifi-durable-fix.sh
     distro/kernel/driver/RPMFusion/wl availability; --json), --plan, --apply
     (RPMFusion if missing, install, blacklist b43/bcma/ssb, dracut -f, install
     and enable wifi-durable-guard.service, reboot in WIFIDF_REBOOT_DELAY),
-    --rollback (remove blacklist, modprobe b43, restart NetworkManager,
-    optional --purge), --status, --guard-check, --self-test (offline temp root
-    with fakes). Auto-recovery: the guard unit runs at boot while phase is
+    --rollback (remove boot config, modprobe b43, restart NetworkManager,
+    optional --purge), --recover-now (stop/disable the guard, restore b43, no
+    reboot), --status, --guard-check, --self-test (offline temp root with
+    fakes). Auto-recovery: the guard unit runs at boot while phase is
     awaiting-reboot; if wl is not loaded and no Wi-Fi is connected within
-    WIFIDF_GUARD_WAIT, it runs --rollback and reboots, restoring b43. The
+    WIFIDF_GUARD_WAIT (600 s), it runs --rollback and reboots, restoring b43.
+    The apply writes a hard boot config (`install b43 /bin/false`,
+    `force_drivers+=" wl "`, omit b43/bcma/ssb/brcmsmac, modules-load wl)
+    because `blacklist b43` alone did not stop b43 from binding on 2026-11-10.
+    The apply also
+    sets the NM connection zone (WIFIDF_NM_ZONE=trusted) and the guard adds the
+    live wl interface to that zone, because the driver renames the interface and
+    firewalld zone bindings are per-interface; success requires Layer 3 (a ping
+    to the default gateway), not just wl+NM state. The
     hotspot notification's "Fix Wi-Fi (wl)" button opens an Apply/Cancel
     confirmation; Apply runs this detached. Gated in test-hygiene.sh.
 

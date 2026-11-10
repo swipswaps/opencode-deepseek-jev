@@ -78,12 +78,20 @@ New/updated:
   recovery), reconnect (queues + confirms), and **Fix Wi-Fi (wl)** (opens the
   reversible Apply/Cancel durable-driver confirmation).
 - **Durable Wi-Fi fix** — `scripts/wifi-durable-fix.sh` replaces `b43` with the
-  vendor Broadcom `wl` driver (`akmod-wl`/`kmod-wl`), blacklists the conflicting
-  in-kernel drivers, rebuilds the initramfs, and arms a boot guard. `--rollback`
-  restores `b43`; the guard auto-rolls back and reboots if `wl` does not bring
-  Wi-Fi back within `WIFIDF_GUARD_WAIT`. The client popup's **Fix Wi-Fi (wl)**
-  button opens an Apply/Cancel confirmation and runs it detached. Live check on
-  `.1`: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes`.
+  vendor Broadcom `wl` driver (`akmod-wl`/`kmod-wl`), hard-blocks the
+  conflicting in-kernel drivers (`install b43 /bin/false`), forces `wl` and
+  omits `b43`/`bcma`/`ssb`/`brcmsmac` in the initramfs, adds a `modules-load.d`
+  entry for `wl`, rebuilds the initramfs, and arms a boot guard. `--rollback`
+  restores `b43`; `--recover-now` stops/disables the guard and restores `b43`
+  **without a reboot**. The guard waits `WIFIDF_GUARD_WAIT` (600 s) and requires
+  Layer 3 (a gateway ping), not just `wl`+NM state. Because the driver renames
+  the interface, the apply sets the NM connection zone
+  (`WIFIDF_NM_ZONE=trusted`) and the guard adds the live interface to it. The
+  client popup's **Fix Wi-Fi (wl)** button opens an Apply/Cancel confirmation
+  and runs it detached. The 2026-11-10 attempt rolled back twice: the first
+  `akmods` build took ~6 min (longer than the original 240 s), and the second
+  boot still loaded `b43` despite `blacklist b43`; both are now addressed. Live
+  check on `.1`: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes`.
 - **Activity search** — typing a query now searches `/api/search` across **all
   sessions**, not the 12-session live window; “Show all” expands the real hit
   set. `full=1` returns the whole part (20k-char cap), so **Expand shows the
@@ -292,6 +300,16 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 | use the RAG engine | `cd ../2282af3557819803/repo/production-local-rag && ./scripts/04-retrieval-only.sh --query "..."` |
 
 ## If something is wrong
+
+- **opencode TUI overlap or `[Image 1]` instead of pasted text:** a server
+  `wall` broadcast writes into the full-screen TUI. `hotspot-reconnect.sh` now
+  logs via `logger` and sends a notification; `HOTSPOT_WALL=1` opts back in.
+  For paste, the clipboard holds an image or an image path (e.g. the screenshot
+  path), so opencode's paste handler inserts `[Image 1]`. Clear it with
+  `printf '' | xclip -selection clipboard`, copy the text lines, and paste with
+  **Ctrl-Shift-V** (or Shift-Insert); `Ctrl-V` can be the TUI's image paste.
+  The durable offer is persistent: a body click keeps it open; **Cancel** ends
+  it. Re-open it with `bash scripts/hotspot-reconnect.sh --offer-durable`.
 
 - `preflight.sh` prints **STOP** for a missing key, a red last gate, low
   balance, an off-policy model, or an over-budget session. Fix the named cause;
