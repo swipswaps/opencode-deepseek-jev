@@ -39,8 +39,10 @@ authorize-container-key.sh
     RUN ON THE HOST. Append the web container's current public key
     (<repo>/container-key.pub) to ~/.ssh/authorized_keys (0600), print only the
     fingerprint, then remove the public-key file. Needed after a web recreate:
-    /home/node is container-local and its key is regenerated. RESTRICT=1
-    prefixes `restrict` (no pty/forwarding) for the durable key.
+    /home/node is container-local and its key is regenerated. `restrict` (no
+    pty/agent/X11/port forwarding, no user rc) is the DEFAULT since 2026-11-10;
+    `RESTRICT=0` is the explicit opt-out. It guarantees a newline boundary before
+    appending, so an unterminated existing line cannot swallow the new key.
 
 https-selfheal.sh
     Host-side HTTPS/CA self-heal + monitor. Verifies cert SANs, 443/5099 on

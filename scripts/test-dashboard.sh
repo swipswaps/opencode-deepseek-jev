@@ -108,13 +108,30 @@ main() {
     done
     [ "$code" = "200" ] && ok 'server ready (200 on /)' || bad 'server ready (200 on /)'
 
-    curl -s "http://$HOST:$PORT/" > "$work/home.html"
+    curl -s -D "$work/headers.txt" "http://$HOST:$PORT/" -o "$work/home.html"
     has 'href="/runbooks"' "$work/home.html" && ok 'home nav runbooks' || bad 'home nav runbooks'
     has 'href="/explore"' "$work/home.html" && ok 'home nav explore' || bad 'home nav explore'
     has 'href="/docs"' "$work/home.html" && ok 'home nav docs' || bad 'home nav docs'
     has 'name="viewport"' "$work/home.html" && ok 'responsive viewport meta' || bad 'responsive viewport meta'
-    curl -s -D - -o /dev/null "http://$HOST:$PORT/" > "$work/headers.txt"
     has 'Content-Security-Policy' "$work/headers.txt" && ok 'CSP header present' || bad 'CSP header present'
+    if has "script-src 'self' 'unsafe-inline'" "$work/headers.txt"; then
+        bad 'CSP has no unsafe-inline scripts'
+    else
+        ok 'CSP has no unsafe-inline scripts'
+    fi
+    if python3 - "$work/headers.txt" "$work/home.html" <<'PY'
+import re, sys
+h = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+b = open(sys.argv[2], encoding="utf-8", errors="replace").read()
+m = re.search(r"script-src 'self' 'nonce-([^']+)'", h)
+n = re.search(r'<script nonce="([^"]+)"', b)
+sys.exit(0 if m and n and m.group(1) == n.group(1) else 1)
+PY
+    then
+        ok 'CSP nonce matches the inline scripts'
+    else
+        bad 'CSP nonce matches the inline scripts'
+    fi
     has 'X-Content-Type-Options' "$work/headers.txt" && ok 'nosniff header present' || bad 'nosniff header present'
     has 'id="rev"' "$work/home.html" && ok 'served-rev indicator' || bad 'served-rev indicator'
     curl -s "http://$HOST:$PORT/api/rev" > "$work/rev.json"

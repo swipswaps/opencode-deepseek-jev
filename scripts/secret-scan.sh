@@ -136,7 +136,9 @@ open(d + "/clean.log", "w").write(
     "all good, no keys here\n# Password: regenerate ONLY on missing or --rotate.\n"
     "rotate-server-password: self-test PASS\n"
     "api_key: os.environ/DEEPSEEK_API_KEY\n"
-    "api_key: ${DEEPSEEK_API_KEY}\n")
+    "api_key: ${DEEPSEEK_API_KEY}\n"
+    'const DASH_PASSWORD = process.env.OPENCODE_SERVER_PASSWORD || "";\n'
+    'SERVER_PASSWORD = os.environ.get("X")\n')
 PYEOF
     out=$(bash "${BASH_SOURCE[0]}" --paths "$work" --json 2>&1)
     printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["count"] >= 3, "count"; assert all(set(("file","line","kind")) == set(f) for f in d["findings"]), "shape"' \

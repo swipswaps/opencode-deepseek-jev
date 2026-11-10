@@ -110,7 +110,9 @@ async function main() {
     const r = await fetch(new URL(icon, BASE));
     if (!r.ok || !String(r.headers.get("content-type") || "").startsWith("image/png")) fail("icon " + icon + ": bad response");
   }
-  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)]
+    .filter((m) => !/\bsrc\s*=/.test(m[1]))
+    .map((m) => m[2]);
   if (!scripts.length) fail("no inline <script> in " + PATH);
   const code = scripts.join("\n;\n");
   validIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((x) => x[1]));

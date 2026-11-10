@@ -16,7 +16,7 @@
 // Usage: node --experimental-sqlite dashboard.mjs <db-path> [port] [host]
 
 import http from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
@@ -3919,15 +3919,26 @@ function sameOriginMutation(req) {
 }
 
 function send(res, code, body, type) {
+  const isHtml = String(type || "").startsWith("text/html");
+  // Per-response nonce: the dashboard is built from inline <script> blocks, so
+  // `script-src 'self'` alone would break it. A nonce lets us drop
+  // 'unsafe-inline' without restructuring every page. Non-HTML responses get
+  // the strictest policy because they never need scripts.
+  const nonce = isHtml ? randomBytes(16).toString("base64") : "";
+  const payload = isHtml
+    ? String(body).replace(/<script\b/g, `<script nonce="${nonce}"`)
+    : body;
   res.writeHead(code, {
     ...CORS_HEADERS,
     "Content-Type": type,
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+    "Content-Security-Policy": isHtml
+      ? `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'`
+      : "default-src 'none'",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
   });
-  res.end(body);
+  res.end(payload);
 }
 
 const SSE_CLIENTS = new Set();

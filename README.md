@@ -31,9 +31,12 @@ plane.
   `admin` + `LITELLM_MASTER_KEY` (HTTP 200); `/v1/models` is 200.
 - Provider keys were rotated. The guard allows benign reads and denies
   destructive, exfiltration, and quote/substitution-obfuscated calls.
-- Security posture remains **16 of 19** pending the staged SEC-3 recreate
-  (repo-mounted secrets; expect 19/0 after).
-- Verified gates: lint **335/0**, README audit **8/0**, panels **12/12**,
+- Security posture (2026-11-10): `security-posture.sh --offline` reports
+  **22 pass / 1 fail**; the one fail is a pre-existing `secret-scan` finding in
+  the host `../notes/` artifacts (outside this repo). The staged SEC-3 recreate
+  still needs a restart to apply the repo-mounted-secret binds.
+- Verified gates (2026-11-10): lint **403/0**, test-hygiene **99/0**,
+  test-patterns **6/0**, test-dashboard **158/0**, panels **12/12**,
   inline UI/PWA test PASS, `certs-verify` ALL PASS, `https-selfheal --check`
   ALL PASS, PC strict TLS 200/verify=0 on 5099 + 443 + LAN.
 
@@ -72,11 +75,15 @@ New/updated:
   `opencode debug config`, `base64`/`cp`/`cut` host reads, `set -o errexit`, and
   `subprocess` import forms are covered by regression rows.
 - **Security defaults** — dashboard Basic auth (when
-  `OPENCODE_SERVER_PASSWORD` is set) + opt-in CORS; the semantic classifier is
-  opt-in and redacts secrets before upload; X11 defaults to untrusted; the
-  `auth.json` writer forces `0600` and the rotation tool no longer prints key
-  bytes; `harvest.py` blocks `file://` and private/loopback/metadata targets by
-  default. `security-posture.sh --offline` now checks all of these invariants.
+  `OPENCODE_SERVER_PASSWORD` is set) + opt-in CORS + a per-response CSP nonce
+  (no `unsafe-inline` scripts); the semantic classifier is opt-in and redacts
+  secrets before upload; X11 defaults to untrusted; the `auth.json` writer
+  forces `0600` and the rotation tool no longer prints key bytes; `harvest.py`
+  blocks `file://` and private/loopback/metadata targets by default; the
+  container key defaults to OpenSSH `restrict`; Dockge publishes on loopback
+  only (the Docker socket is still mounted, so treat Dockge as root-equivalent).
+  `security-posture.sh --offline` checks all of these invariants. `secret-scan`
+  no longer false-positives on `process.env` / `os.environ` reads.
 
 Rebuild the MUI bundle after editing `web/src` (the built `web/dist` is
 gitignored and served from disk):
@@ -300,13 +307,17 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 - The compose override no longer mounts `/home/owner`. The repo is still
   mounted at `/workspace`, so `.env.local`, `docker/litellm-db.env`, and
   `docker/certs/*` were readable by the web container. The override now hides
-  them with empty binds (`/dev/null`, `empty-certs`); the running container is
-  **16/3** until `./scripts/web-restart.sh --recreate` applies them (expect
-  **19/0**). `.env.local` values still enter the container environment because
-  the app needs them; a separate app/agent user is the next structural step.
+  them with empty binds (`/dev/null`, `empty-certs`); the **running** container
+  still needs `./scripts/web-restart.sh --recreate` to apply them. The file-level
+  posture check is **22 pass / 1 fail** (the one fail is the host `../notes/`
+  secret finding). `.env.local` values still enter the container environment
+  because the app needs them; a separate app/agent user is the next structural
+  step.
 - The RAG repo is mounted read-only at `/rag`. Host access uses the durable
-  `~/.config/opencode/container_key`, authorized once with `restrict` via
-  `authorize-container-key.sh`; the host home is not mounted.
+  `~/.config/opencode/container_key`, authorized with OpenSSH `restrict` **by
+  default** via `authorize-container-key.sh` (2026-11-10; `RESTRICT=0` is the
+  explicit opt-out). A pre-existing unrestricted line must be removed and
+  re-authorized. The host home is not mounted.
 - Tool results are scanned for prompt-injection markers and logged as
   `"verdict":"injection"` (advisory, value-free). This is telemetry, not
   prevention: model-level prompt injection remains a residual risk.

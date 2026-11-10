@@ -83,6 +83,10 @@ earlier disconnect flag was real but intermittent — not powersave.
 | SEC-6 | `auth.json` bytes printed; file mode too open | `scripts/rotate-api-keys.sh` prints provider names only; `docker/web-entrypoint.sh` writes mode `0600` |
 | SEC-7 | `harvest.py` accepted `file://` and private/loopback targets | `scripts/harvest.py` blocks both by default, re-validates redirects, `--allow-local` for deliberate reads |
 | SEC-8 | CVE-2026-123158 exposure | Host is glibc + PAM (`OpenSSH 10.0p2`), containers have no `sshd`; verify with `security-posture.sh` / the commands in the audit doc. Still patch OpenSSH. |
+| SEC-9 | Dashboard CSP allowed `unsafe-inline` scripts | `scripts/dashboard.mjs` now issues a per-response nonce; `test-dashboard.sh` asserts the header nonce matches the inline `<script nonce=…>` and that `unsafe-inline` is absent |
+| SEC-10 | Container key defaulted to unrestricted | `scripts/authorize-container-key.sh` defaults `RESTRICT=1` (`restrict`) and guarantees a newline boundary before appending |
+| SEC-11 | Dockge published on all interfaces | `deploy-dockge.sh` / `flatten-dockge-stacks.sh` bind `127.0.0.1`; the socket is still root-equivalent, so treat Dockge as local-admin tooling |
+| SEC-12 | `secret-scan` flagged `process.env` reads as secrets | `scripts/secret-scan.sh` negative lookahead + a self-test fixture that must stay clean |
 
 ### Outstanding (unresolved) — with the next exact action
 
@@ -90,10 +94,9 @@ earlier disconnect flag was real but intermittent — not powersave.
 |---|---|---|---|
 | OPS-1 | Client `b43`/2.4 GHz beacon loss | Needs a driver change or wired link; cannot be fixed by config alone | `sudo dnf install akmod-wl kmod-wl` (RPMFusion), blacklist `b43`/`bcma`, reboot; or use USB/Thunderbolt Ethernet. Re-check with `peer-health.sh --explain` |
 | OPS-2 | Dashboard auth/CORS takes effect only after restart | The running Node process still has the old code | `./scripts/web-restart.sh --recreate` (then Basic auth on `:5099`; `DASH_AUTH=off` is the explicit escape) |
-| OPS-3 | Dashboard CSP still allows `'unsafe-inline'` | Inline scripts are pervasive; needs nonces/hashes and an `innerHTML` audit | Replace `script-src 'self' 'unsafe-inline'` with per-response nonces; route all HTML through `esc` |
 | OPS-4 | `eval` / `bash -c` in `test-tools.sh` / `runbook.sh` | Inputs are repo-owned today; changing them is a refactor | Replace with `execFile` argument arrays or a command allow-list |
-| OPS-5 | `/var/run/docker.sock` mounted by Dockge helpers | Root-equivalent by design; needs a socket proxy or removal | Use a scoped socket proxy, or keep Dockge on a dedicated host |
-| OPS-6 | `authorize-container-key.sh` defaults `RESTRICT=0` | Changing it can break the existing container key | Set `RESTRICT=1`, add `from=` + `command=` gateway, fix the README claim |
+| OPS-5 | `/var/run/docker.sock` mounted by Dockge helpers | **Partially fixed:** published on loopback only, but the socket is still root-equivalent | Use a scoped socket proxy, or keep Dockge on a dedicated host |
+| OPS-6 | A pre-existing `authorized_keys` entry without `restrict` is not tightened | The default is now `RESTRICT=1`, but the script skips an existing key | Remove the old line and re-run `authorize-container-key.sh` |
 | OPS-7 | Provider keys enter the container environment | The app needs a key; the durable fix is a scoped key via LiteLLM | Route agent calls through LiteLLM with a per-agent virtual key |
 | OPS-8 | `secret-scan` finds 4 values in `../notes/` | Host notes, outside the repo; rotating them is an operator decision | Rotate the listed keys, then `./scripts/scrub-secrets.sh`; re-run `secret-scan.sh` |
 | OPS-9 | Tier-1 doc budget ~882 tokens over | Pre-existing; this session added the minimum | Consolidate `HANDOFF.md`/`RULES.md` in a dedicated docs pass |
@@ -167,7 +170,7 @@ node scripts/blacklist-guard-self-test.mjs
 ```
 
 Expected: `peer-health` exits `2` while the link is lossy (that is a true
-degraded state), `security-posture --offline` reports 19 pass and 1 pre-existing
+degraded state), `security-posture --offline` reports 22 pass and 1 pre-existing
 notes-secret finding, and the harness gates are green.
 
 ---

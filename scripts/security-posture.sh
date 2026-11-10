@@ -201,6 +201,22 @@ hardening_checks() {
   else
     bad "dashboard still grants a hardcoded public CORS origin"
   fi
+  if grep -q "script-src 'self' 'nonce-" "$f" && ! grep -q "script-src 'self' 'unsafe-inline'" "$f"; then
+    ok "dashboard CSP uses a per-response nonce (no unsafe-inline scripts)"
+  else
+    bad "dashboard CSP still allows unsafe-inline scripts"
+  fi
+  if grep -q 'RESTRICT="${RESTRICT:-1}"' "$REPO/scripts/authorize-container-key.sh"; then
+    ok "container key defaults to OpenSSH restrict"
+  else
+    bad "container key authorization still defaults to unrestricted"
+  fi
+  if grep -q '127.0.0.1:${DOCKGE_PORT}:5001' "$REPO/scripts/deploy-dockge.sh" \
+    && grep -q '127.0.0.1:5001:5001' "$REPO/scripts/flatten-dockge-stacks.sh"; then
+    ok "Dockge publishes on loopback only"
+  else
+    bad "Dockge still publishes on all interfaces (root-equivalent socket)"
+  fi
   if grep -q 'OPENCODE_SEMANTIC_GUARD === "on"' "$REPO/.opencode/plugins/blacklist-guard.js"; then
     ok "semantic classifier is opt-in (no command text sent by default)"
   else

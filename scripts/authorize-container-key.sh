@@ -10,13 +10,17 @@
 # Usage:
 #   ./scripts/authorize-container-key.sh
 #   ./scripts/authorize-container-key.sh /path/to/key.pub
-#   RESTRICT=1 ./scripts/authorize-container-key.sh /path/to/key.pub
+#   RESTRICT=0 ./scripts/authorize-container-key.sh /path/to/key.pub
+#
+# Default is RESTRICT=1: OpenSSH `restrict` disables port/agent/X11/pty
+# forwarding, user rc files, and tunnels for this key. Set RESTRICT=0 only for
+# a trusted, local-only key.
 
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEY="${1:-$REPO/container-key.pub}"
 AUTH="$HOME/.ssh/authorized_keys"
-RESTRICT="${RESTRICT:-0}"
+RESTRICT="${RESTRICT:-1}"
 
 [ -f "$KEY" ] || { printf 'missing public key: %s\n' "$KEY" >&2; exit 2; }
 command -v ssh-keygen >/dev/null || { printf 'ssh-keygen missing on host\n' >&2; exit 2; }
@@ -28,6 +32,11 @@ chmod 600 "$AUTH"
 if grep -qF "$(cat "$KEY")" "$AUTH"; then
     printf 'already authorized: '
 else
+    # An existing last line without a trailing newline would swallow the new
+    # key into the previous entry. Guarantee a line boundary first.
+    if [ -s "$AUTH" ] && [ -n "$(tail -c 1 "$AUTH")" ]; then
+        printf '\n' >> "$AUTH"
+    fi
     if [ "$RESTRICT" -eq 1 ]; then printf 'restrict ' >> "$AUTH"; fi
     cat "$KEY" >> "$AUTH" || { printf 'could not append to %s\n' "$AUTH" >&2; exit 2; }
     printf 'authorized: '

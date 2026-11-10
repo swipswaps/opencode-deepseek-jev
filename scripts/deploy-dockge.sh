@@ -46,7 +46,9 @@ services:
     container_name: dockge
     restart: unless-stopped
     ports:
-      - "${DOCKGE_PORT}:5001"
+      # Loopback only: Dockge mounts the Docker socket (root-equivalent) and
+      # has no built-in auth for a LAN. Reach it through an SSH tunnel.
+      - "127.0.0.1:${DOCKGE_PORT}:5001"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DOCKGE_DIR}/data:/app/data
