@@ -51,6 +51,14 @@ PS=""
 BAND=""
 HAS_5G=""
 NM_PS=""
+HARDWARE_PCI=""
+HARDWARE_NAME=""
+KNOWN_BAD_WL=""
+FW_VERSION=""
+BTCOEX=""
+QOS=""
+NOHWCRYPT=""
+BT_STATE=""
 BEACON=0
 DEAUTH=0
 FWLOAD=0
@@ -96,6 +104,41 @@ collect_iface() {
         DRIVER="$(lspci -k 2>&1 | awk '/Network controller|Wireless/{f=1} f && /Kernel driver in use:/{print $NF; exit}')"
     fi
     [ -n "$DRIVER" ] || DRIVER="unknown"
+
+    HARDWARE_PCI="${WIFIFX_PCI:-}"
+    if [ -z "$HARDWARE_PCI" ] && have readlink && have lspci; then
+        local bdf=""
+        # b43 hangs the netdev under bcma (…/0000:02:00.0/bcma0:1); take the
+        # LAST PCI BDF in the resolved path, not the first bridge.
+        bdf="$(readlink -f "/sys/class/net/$IFACE/device" 2>&1 | awk -F/ '{ for (i=1;i<=NF;i++) if ($i ~ /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+\.[0-9a-f]+$/) last=$i } END { print last }')"
+        if [ -n "$bdf" ]; then
+            HARDWARE_PCI="$(lspci -s "$bdf" -nn 2>&1 | awk -F"[][]" '{ for (i=1;i<=NF;i++) if ($i ~ /^[0-9a-f]+:[0-9a-f]+$/) { print $i; exit } }')"
+        fi
+    fi
+    case "$HARDWARE_PCI" in
+        14e4:4331) HARDWARE_NAME="Broadcom BCM4331 802.11a/b/g/n"; KNOWN_BAD_WL="yes" ;;
+        *) HARDWARE_NAME="${WIFIFX_HW_NAME:-unknown}"; KNOWN_BAD_WL="${WIFIFX_KNOWN_BAD_WL:-no}" ;;
+    esac
+    FW_VERSION="${WIFIFX_FW:-}"
+    if [ -z "$FW_VERSION" ] && have journalctl; then
+        FW_VERSION="$(journalctl -k -g 'Loading firmware version' -o cat 2>&1 | tail -1)"
+    fi
+    BTCOEX="${WIFIFX_BTCOEX:-}"
+    [ -n "$BTCOEX" ] || BTCOEX="$(cat /sys/module/b43/parameters/btcoex 2>&1)"
+    QOS="${WIFIFX_QOS:-}"
+    [ -n "$QOS" ] || QOS="$(cat /sys/module/b43/parameters/qos 2>&1)"
+    NOHWCRYPT="${WIFIFX_NOHWCRYPT:-}"
+    [ -n "$NOHWCRYPT" ] || NOHWCRYPT="$(cat /sys/module/b43/parameters/nohwcrypt 2>&1)"
+    BT_STATE="${WIFIFX_BT:-}"
+    if [ -z "$BT_STATE" ] && have rfkill; then
+        local bt_raw=""
+        bt_raw="$(rfkill list bluetooth 2>&1 | awk '/Soft blocked/{print $3; exit}')"
+        case "$bt_raw" in
+            yes) BT_STATE="blocked" ;;
+            no) BT_STATE="active" ;;
+            *) BT_STATE="unknown" ;;
+        esac
+    fi
 
     if [ -n "${WIFIFX_SSID:-}" ]; then
         SSID="$WIFIFX_SSID"; BSSID="${WIFIFX_BSSID:-?}"
@@ -178,6 +221,10 @@ classify() {
         add_reason "deauth/timeout x$DEAUTH and firmware reload x$FWLOAD"
     fi
     case "$DRIVER" in b43|bcma*) add_verdict driver-b43; add_reason "reverse-engineered b43 driver on Broadcom $IFACE" ;; esac
+    if [ "$KNOWN_BAD_WL" = "yes" ]; then
+        add_verdict hardware-bcm4331
+        add_reason "BCM4331 profile: b43 is 2.4GHz-only; wl loads but cannot scan/associate on this kernel"
+    fi
     if [ "$BAND" = "2.4GHz" ] && [ "$HAS_5G" = "no" ]; then
         add_verdict 2.4-only
         add_reason "radio advertises no 5GHz channel (b43 restriction), so it cannot escape crowded 2.4GHz"
@@ -199,8 +246,11 @@ report() {
     printf 'iface   : %s (driver=%s)\n' "${IFACE:-none}" "$DRIVER"
     printf 'link    : ssid=%s bssid=%s freq=%s band=%s signal=%s\n' \
         "${SSID:-?}" "${BSSID:-?}" "${FREQ:-0}" "${BAND:-?}" "${SIGNAL:-?}"
+    printf 'hardware: pci=%s name=%s known_bad_wl=%s\n' "${HARDWARE_PCI:-?}" "${HARDWARE_NAME:-?}" "${KNOWN_BAD_WL:-?}"
     printf 'radio   : 5GHz-capable=%s powersave=%s nm-powersave=%s\n' \
         "$HAS_5G" "$PS" "${NM_PS:-n/a}"
+    printf 'b43     : fw=%s btcoex=%s qos=%s nohwcrypt=%s bluetooth=%s\n' \
+        "${FW_VERSION:-?}" "${BTCOEX:-?}" "${QOS:-?}" "${NOHWCRYPT:-?}" "${BT_STATE:-?}"
     printf 'counts  : beacon-loss=%s deauth=%s fw-reload=%s nm-deactivate=%s\n' \
         "$BEACON" "$DEAUTH" "$FWLOAD" "$NMDEACT"
     printf 'overlay : tailscale-path-changes=%s  dns-commit-failures=%s\n' "$PATHFLAP" "$DNSFAIL"
@@ -214,6 +264,10 @@ emit_json() {
     printf '{"host":"%s","iface":"%s","driver":"%s","ssid":"%s","band":"%s","signal":"%s",' \
         "$(json_escape "$(hostname 2>&1)")" "$(json_escape "$IFACE")" "$(json_escape "$DRIVER")" \
         "$(json_escape "$SSID")" "$(json_escape "$BAND")" "$(json_escape "$SIGNAL")"
+    printf '"hardware":"%s","pci":"%s","known_bad_wl":"%s","firmware":"%s","btcoex":"%s","qos":"%s","nohwcrypt":"%s","bluetooth":"%s",' \
+        "$(json_escape "$HARDWARE_NAME")" "$(json_escape "$HARDWARE_PCI")" "$KNOWN_BAD_WL" \
+        "$(json_escape "$FW_VERSION")" "$(json_escape "$BTCOEX")" "$(json_escape "$QOS")" \
+        "$(json_escape "$NOHWCRYPT")" "$(json_escape "$BT_STATE")"
     printf '"five_ghz":"%s","powersave":"%s","beacon_loss":%s,"deauth":%s,"fw_reload":%s,' \
         "$HAS_5G" "$PS" "$BEACON" "$DEAUTH" "$FWLOAD"
     printf '"nm_deactivate":%s,"path_flap":%s,"dns_fail":%s,"verdicts":"%s","since_hours":%s}\n' \
@@ -224,10 +278,18 @@ recommend() {
     printf '\n-- fixes (safe first) --\n'
     printf '1. disable powersave now    : iw dev %s set power_save off\n' "${IFACE:-IFACE}"
     printf '   persist via NetworkManager: printf "[connection]\\nwifi.powersave = 2\\n" | sudo tee /etc/NetworkManager/conf.d/99-wifi-powersave-off.conf && sudo systemctl reload NetworkManager\n'
-    case "$DRIVER" in b43|bcma*)
-        printf '2. replace b43 (5GHz+stability): enable RPMFusion, then sudo dnf install akmod-wl kmod-wl; blacklist b43 bcma; reboot\n'
-        printf '   or bypass Wi-Fi entirely       : use wired/USB-Ethernet on enp1s0f0\n'
-        ;;
+    case "$KNOWN_BAD_WL" in
+        yes)
+            printf '2. BCM4331 profile: wl is known-bad (loads but cannot scan/associate); keep b43 2.4GHz and tune it:\n'
+            printf '   A/B btcoex/qos/nohwcrypt, isolate the AP 2.4 radio, or use a USB WiFi adapter with an in-kernel driver / USB-Ethernet\n'
+            ;;
+        *)
+            case "$DRIVER" in b43|bcma*)
+                printf '2. replace b43 (5GHz+stability): enable RPMFusion, then sudo dnf install akmod-wl kmod-wl; blacklist b43 bcma; reboot\n'
+                printf '   or bypass Wi-Fi entirely       : use wired/USB-Ethernet on enp1s0f0\n'
+                ;;
+            esac
+            ;;
     esac
     if [ "$DNSFAIL" -gt 0 ]; then
         printf '3. DNS commit failure       : ensure /etc is writable and /etc/resolv.conf is not immutable; or point NM at systemd-resolved\n'
@@ -269,6 +331,7 @@ self_test() {
     export WIFIFX_IFACE=wlp2s0b1 WIFIFX_DRIVER=b43 WIFIFX_SSID=belkin2
     export WIFIFX_BSSID=24:f3:e3:52:1a:06 WIFIFX_FREQ=2462 WIFIFX_SIGNAL=-38.00
     export WIFIFX_PS=on WIFIFX_5G=no WIFIFX_BEACON=95 WIFIFX_DEAUTH=6
+    export WIFIFX_PCI=14e4:4331 WIFIFX_FW='666.2' WIFIFX_BTCOEX=1 WIFIFX_QOS=0 WIFIFX_NOHWCRYPT=1 WIFIFX_BT=no
     export WIFIFX_FWLOAD=8 WIFIFX_DNSFAIL=2 WIFIFX_PATHFLAP=11 WIFIFX_NMDEACT=1
     collect_iface; collect_counts; classify
     case "$VERDICTS" in
@@ -282,6 +345,10 @@ self_test() {
     case "$VERDICTS" in
         *2.4-only*) : ;;
         *) printf 'FAIL self-test: expected 2.4-only verdict, got %s\n' "$VERDICTS"; rc=1 ;;
+    esac
+    case "$VERDICTS" in
+        *hardware-bcm4331*) : ;;
+        *) printf 'FAIL self-test: expected hardware-bcm4331 verdict, got %s\n' "$VERDICTS"; rc=1 ;;
     esac
     out="$(emit_json)"
     if have python3; then

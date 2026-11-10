@@ -1525,6 +1525,21 @@ wifi-durable-fix.sh
     hotspot notification's "Fix Wi-Fi (wl)" button opens an Apply/Cancel
     confirmation; Apply runs this detached. Gated in test-hygiene.sh.
 
+wifi-ab-benchmark.sh
+    A/B/A benchmark for the BCM4331/b43 2.4 GHz path. No Wi-Fi restart: it
+    toggles Bluetooth (rfkill) A1-on/B-off/A2-on and measures per phase
+    beacon-loss delta, tx-failed/rx-drop delta, ping loss/latency to
+    --target, signal, and tx/rx bitrate. Verdict distinguishes BT-coexistence
+    from inconclusive. --duration SEC (default 20; use 300+ for a real A/B),
+    --json, --self-test offline. Needs rfkill + passwordless sudo on the
+    client. Gated in test-hygiene.sh.
+
+hardware-profiles.json
+    Native hardware registry. Maps PCI IDs to name/driver/bands/known_bad_wl/
+    tunables/mitigations. wifi-link-forensics.sh embeds the same key (14e4:4331
+    -> Broadcom BCM4331, b43, 2.4GHz, known_bad_wl=yes) so --json reports
+    hardware/pci/known_bad_wl/firmware/btcoex/qos/nohwcrypt/bluetooth.
+
 peer-health.sh
     One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,
     SSH, TCP :5099/:4096, and Tailscale; separates REACHABILITY (state:

@@ -1671,6 +1671,17 @@
     ]
   },
   {
+    "id": "wifi-ab-benchmark",
+    "title": "A/B/A benchmark of the b43 2.4 GHz Bluetooth-coexistence path",
+    "where": "client",
+    "purpose": "No Wi-Fi restart: toggles Bluetooth (rfkill) A1-on/B-off/A2-on and measures beacon-loss delta, tx-failed/rx-drop delta, ping loss/latency to --target, signal, and tx/rx bitrate per phase. Verdict: BT-COEXISTENCE LIKELY or INCONCLUSIVE (beacon loss is intermittent; use --duration 300+). --json, --self-test offline; needs rfkill + passwordless sudo. Complements hardware-profiles.json (14e4:4331 = BCM4331/b43/known_bad_wl) reported by wifi-link-forensics --json.",
+    "commands": [
+      "bash scripts/wifi-ab-benchmark.sh --bt --duration 20",
+      "bash scripts/wifi-ab-benchmark.sh --bt --duration 20 --target 192.168.4.24 --json",
+      "bash scripts/wifi-ab-benchmark.sh --self-test"
+    ]
+  },
+  {
     "id": "peer-health",
     "title": "Evidence-backed peer reachability + link-quality verdict with hysteresis",
     "where": "host",

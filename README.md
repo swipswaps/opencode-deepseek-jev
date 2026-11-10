@@ -77,6 +77,15 @@ New/updated:
   silence 1 h, dismiss (suppressed for `HOTSPOT_DISMISS_SEC`, cleared on
   recovery), reconnect (queues + confirms), and **Fix Wi-Fi (wl)** (opens the
   reversible Apply/Cancel durable-driver confirmation).
+- **Hardware recognition + b43 A/B** — `scripts/hardware-profiles.json` and
+  `wifi-link-forensics.sh --json` now natively recognize the client as
+  `14e4:4331` = Broadcom BCM4331, `b43`, 2.4 GHz-only, `known_bad_wl=yes`,
+  firmware 666.2, `btcoex=1`/`qos=0`/`nohwcrypt=1`, Bluetooth active.
+  `scripts/wifi-ab-benchmark.sh` runs an A/B/A Bluetooth on/off benchmark
+  without restarting Wi-Fi (beacon-loss, tx/rx-drop, ping loss/latency,
+  bitrate). A 20 s screen was inconclusive (beacon loss 0, ping-loss drift was
+  not BT-correlated); run `--duration 300+` or the `btcoex=0` module-param test
+  for a real signal. The durable path remains a USB WiFi/Ethernet adapter.
 - **Durable Wi-Fi fix** — `scripts/wifi-durable-fix.sh` replaces `b43` with the
   vendor Broadcom `wl` driver (`akmod-wl`/`kmod-wl`), hard-blocks the
   conflicting in-kernel drivers (`install b43 /bin/false`), forces `wl` and

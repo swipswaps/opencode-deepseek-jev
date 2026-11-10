@@ -578,6 +578,27 @@ PY
         bad 'wifi-durable-fix.sh present'
     fi
 
+    if [ -f "$REPO/scripts/wifi-ab-benchmark.sh" ]; then
+        if bash "$REPO/scripts/wifi-ab-benchmark.sh" --self-test > "$work/wab_st.txt" 2>&1; then
+            ok 'wifi-ab-benchmark: self-test (BT improvement + inconclusive)'
+        else
+            bad 'wifi-ab-benchmark: self-test (BT improvement + inconclusive)'
+            cat "$work/wab_st.txt"
+        fi
+    else
+        bad 'wifi-ab-benchmark.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/hardware-profiles.json" ]; then
+        if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$REPO/scripts/hardware-profiles.json"; then
+            ok 'hardware-profiles.json parses and maps 14e4:4331'
+        else
+            bad 'hardware-profiles.json parses and maps 14e4:4331'
+        fi
+    else
+        bad 'hardware-profiles.json present'
+    fi
+
     if [ -f "$REPO/scripts/recovery-status.sh" ]; then
         if bash "$REPO/scripts/recovery-status.sh" --self-test > "$work/rs_st.txt" 2>&1; then
             ok 'recovery-status: self-test (healthy + expected-roam + degraded)'

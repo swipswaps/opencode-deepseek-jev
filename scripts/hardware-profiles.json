@@ -1,0 +1,24 @@
+{
+  "14e4:4331": {
+    "name": "Broadcom BCM4331 802.11a/b/g/n",
+    "family": "BCM4331",
+    "driver": "b43",
+    "bands": "2.4GHz",
+    "known_bad_wl": true,
+    "why": "b43 is 2.4GHz-only on this PHY; the vendor wl driver loads wlp2s0 but never scans/associates on Fedora 43 kernel 7.2.8 (unmaintained STA driver).",
+    "tunables": [
+      "btcoex",
+      "qos",
+      "nohwcrypt",
+      "pio",
+      "bad_frames_preempt"
+    ],
+    "mitigations": [
+      "A/B Bluetooth on/off and btcoex=0",
+      "move the AP off a crowded 2.4GHz channel and force 20MHz",
+      "disable NetworkManager background scanning and powersave",
+      "use a USB WiFi adapter with an in-kernel driver (mt7921u/ath9k_htc/rtw88)",
+      "use USB/Thunderbolt Ethernet"
+    ]
+  }
+}
