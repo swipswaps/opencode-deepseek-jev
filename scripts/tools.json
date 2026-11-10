@@ -1682,6 +1682,31 @@
     ]
   },
   {
+    "id": "b43-tune",
+    "title": "Apply/revert the BCM4331/b43 2.4 GHz mitigations",
+    "where": "client",
+    "purpose": "Writes options b43 btcoex=0, pins the NetworkManager connection to one 2.4 GHz BSSID, sets band bg and powersave off. --check/--json, --apply, --apply --reload (brief Wi-Fi drop; auto-restores the old btcoex if no Wi-Fi within B43TUNE_UP_SEC), --rollback, --self-test. Reversible. Part of the 2026-11-10 BT-coexistence intervention.",
+    "commands": [
+      "bash scripts/b43-tune.sh --check --json",
+      "bash scripts/b43-tune.sh --apply",
+      "bash scripts/b43-tune.sh --apply --reload",
+      "bash scripts/b43-tune.sh --rollback",
+      "bash scripts/b43-tune.sh --self-test"
+    ]
+  },
+  {
+    "id": "bluetooth-off",
+    "title": "Power off the Bluetooth radio and keep it off",
+    "where": "host",
+    "purpose": "rfkill block bluetooth + a bluetooth-off.service oneshot (rfkill block bluetooth, WantedBy=multi-user.target) so the radio stays off across reboots. Needed because bluetooth.service can be disabled/masked while hci0 is still powered, leaving b43 btcoex=1 and iwlwifi bt_coex active. --check/--json, --apply, --rollback, --self-test. Reversible.",
+    "commands": [
+      "bash scripts/bluetooth-off.sh --check --json",
+      "bash scripts/bluetooth-off.sh --apply",
+      "bash scripts/bluetooth-off.sh --rollback",
+      "bash scripts/bluetooth-off.sh --self-test"
+    ]
+  },
+  {
     "id": "peer-health",
     "title": "Evidence-backed peer reachability + link-quality verdict with hysteresis",
     "where": "host",

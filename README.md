@@ -77,6 +77,15 @@ New/updated:
   silence 1 h, dismiss (suppressed for `HOTSPOT_DISMISS_SEC`, cleared on
   recovery), reconnect (queues + confirms), and **Fix Wi-Fi (wl)** (opens the
   reversible Apply/Cancel durable-driver confirmation).
+- **Bluetooth-coexistence intervention** — `scripts/bluetooth-off.sh` powers
+  off the Bluetooth **radio** (`rfkill block bluetooth`) and pins it off with
+  `bluetooth-off.service`; `scripts/b43-tune.sh` sets `options b43 btcoex=0`,
+  pins `belkin2` to the 2.4 GHz BSSID, sets `band bg` and powersave off, and
+  auto-recovers if the live reload loses Wi-Fi. Applied on `.1`: BT
+  `Soft blocked: yes`, `btcoex=0`, pinned `24:F3:E3:52:1A:06`, connected.
+  `.24` service is already disabled; its radio needs one `sudo rfkill block
+  bluetooth` (no passwordless sudo). Rationale, measurement plan (24–48 h
+  `BEACON-LOSS` baseline) and rollback: `docs/BT-COEXISTENCE-2026-11-10.md`.
 - **Hardware recognition + b43 A/B** — `scripts/hardware-profiles.json` and
   `wifi-link-forensics.sh --json` now natively recognize the client as
   `14e4:4331` = Broadcom BCM4331, `b43`, 2.4 GHz-only, `known_bad_wl=yes`,

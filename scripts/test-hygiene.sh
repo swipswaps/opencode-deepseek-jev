@@ -589,6 +589,28 @@ PY
         bad 'wifi-ab-benchmark.sh present'
     fi
 
+    if [ -f "$REPO/scripts/b43-tune.sh" ]; then
+        if bash "$REPO/scripts/b43-tune.sh" --self-test > "$work/b43t_st.txt" 2>&1; then
+            ok 'b43-tune: self-test (conf write + apply + rollback)'
+        else
+            bad 'b43-tune: self-test (conf write + apply + rollback)'
+            cat "$work/b43t_st.txt"
+        fi
+    else
+        bad 'b43-tune.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/bluetooth-off.sh" ]; then
+        if bash "$REPO/scripts/bluetooth-off.sh" --self-test > "$work/btoff_st.txt" 2>&1; then
+            ok 'bluetooth-off: self-test (unit + apply + rollback)'
+        else
+            bad 'bluetooth-off: self-test (unit + apply + rollback)'
+            cat "$work/btoff_st.txt"
+        fi
+    else
+        bad 'bluetooth-off.sh present'
+    fi
+
     if [ -f "$REPO/scripts/hardware-profiles.json" ]; then
         if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$REPO/scripts/hardware-profiles.json"; then
             ok 'hardware-profiles.json parses and maps 14e4:4331'

@@ -1540,6 +1540,21 @@ hardware-profiles.json
     -> Broadcom BCM4331, b43, 2.4GHz, known_bad_wl=yes) so --json reports
     hardware/pci/known_bad_wl/firmware/btcoex/qos/nohwcrypt/bluetooth.
 
+b43-tune.sh
+    Apply/revert the BCM4331/b43 2.4 GHz mitigations: `options b43 btcoex=0`,
+    pin the NM connection to one 2.4 GHz BSSID (`802-11-wireless.bssid`),
+    `band bg`, powersave off. --check (--json), --apply, --apply --reload
+    (brief Wi-Fi drop; snapshots the old btcoex and auto-restores if no Wi-Fi
+    within B43TUNE_UP_SEC), --rollback. Reversible. Gated in test-hygiene.sh.
+
+bluetooth-off.sh
+    Power off the Bluetooth RADIO (not just the service) and keep it off:
+    `rfkill block bluetooth` + /etc/systemd/system/bluetooth-off.service
+    (ExecStart=rfkill block bluetooth, WantedBy=multi-user.target). --check
+    (--json), --apply, --rollback, --self-test. Needed because the radio stays
+    powered even when bluetooth.service is disabled/masked, so b43 btcoex=1
+    (and iwlwifi bt_coex) still run coexistence. Gated in test-hygiene.sh.
+
 peer-health.sh
     One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,
     SSH, TCP :5099/:4096, and Tailscale; separates REACHABILITY (state:
