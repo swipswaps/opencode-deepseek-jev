@@ -65,13 +65,14 @@ export function apiSearchFresh(dbPath, q, limit) {
   const rows = queryDb(
     dbPath,
     "SELECT p.session_id sid, s.title title, p.time_created ts, json_extract(p.data,'$.type') type, " +
+      "json_extract(p.data,'$.tool') tool, json_extract(p.data,'$.state.status') status, " +
       "COALESCE(json_extract(p.data,'$.text'), json_extract(p.data,'$.state.input.command'), json_extract(p.data,'$.tool'), '') snippet " +
       "FROM part p JOIN session s ON s.id = p.session_id " +
       "WHERE json_extract(p.data,'$.text') LIKE ? OR json_extract(p.data,'$.state.input.command') LIKE ? " +
       "ORDER BY p.time_created DESC LIMIT ?",
     like, like, limit
   );
-  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, snippet: String(h.snippet || "").slice(0, 200) }));
+  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, tool: h.tool || "", status: h.status || "", snippet: String(h.snippet || "").slice(0, 200) }));
   return { q: needle, sessions, hits };
 }
 

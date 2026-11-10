@@ -33,15 +33,16 @@ if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
         const path = require("path");
         const file = process.argv[1];
         const key = process.argv[2];
-        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
         let data = {};
         try {
             const raw = fs.readFileSync(file, "utf8");
             if (raw.trim() !== "") { data = JSON.parse(raw); }
         } catch (e) { data = {}; }
         data.deepseek = { type: "api", key: key };
-        fs.writeFileSync(file, JSON.stringify(data) + "\n");
-        console.error("[web-entrypoint] merged deepseek into " + file + " (" + fs.statSync(file).size + " bytes)");
+        fs.writeFileSync(file, JSON.stringify(data) + "\n", { mode: 0o600 });
+        try { fs.chmodSync(file, 0o600); } catch (e) { /* existing mount may forbid chmod */ }
+        console.error("[web-entrypoint] merged deepseek into " + file + " (" + fs.statSync(file).size + " bytes, mode 0600)");
     ' "$AUTH_FILE" "$DEEPSEEK_API_KEY"
 else
     printf '[web-entrypoint] DEEPSEEK_API_KEY empty; auth.json left untouched\n' >&2
@@ -72,8 +73,16 @@ GUARD_SRC="/workspace/.opencode/plugins/blacklist-guard.js"
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
 if [ -f "$GUARD_SRC" ]; then
     mkdir -p "$GUARD_DIR"
-    ln -sf "$GUARD_SRC" "$GUARD_DIR/blacklist-guard.js"
-    printf '[web-entrypoint] blacklist-guard linked into %s\n' "$GUARD_DIR" >&2
+    # Resolve the source before linking: a link to the container-only
+    # /workspace path is DANGLING on the host, so opencode silently loads no
+    # guard there (proven 2026-11-10). A resolved target works in both places.
+    RESOLVED_GUARD="$(readlink -f "$GUARD_SRC" 2>&1)"
+    if [ -n "$RESOLVED_GUARD" ] && [ -f "$RESOLVED_GUARD" ]; then
+        ln -sfn "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"
+        printf '[web-entrypoint] blacklist-guard linked into %s -> %s\n' "$GUARD_DIR" "$RESOLVED_GUARD" >&2
+    else
+        printf '[web-entrypoint] WARN: cannot resolve %s; guard not linked\n' "$GUARD_SRC" >&2
+    fi
 fi
 
 # Same root-cause fix for the process SKILLs: interactive sessions open at

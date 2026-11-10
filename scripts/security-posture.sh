@@ -187,6 +187,68 @@ artifact_checks() {
   fi
 }
 
+hardening_checks() {
+  log "=== 2026-11-10 hardening invariants ==="
+  local f
+  f="$REPO/scripts/dashboard.mjs"
+  if grep -q 'function authOk' "$f" && grep -q 'if (!authOk(req))' "$f"; then
+    ok "dashboard authenticates every route when OPENCODE_SERVER_PASSWORD is set"
+  else
+    bad "dashboard auth gate missing (see docs/SECURITY-AUDIT-2026-11-10.md V1)"
+  fi
+  if grep -q 'DASH_ALLOW_ORIGIN' "$f" && ! grep -q '"https://swipswaps.github.io"' "$f"; then
+    ok "dashboard CORS is opt-in (no hardcoded public origin)"
+  else
+    bad "dashboard still grants a hardcoded public CORS origin"
+  fi
+  if grep -q 'OPENCODE_SEMANTIC_GUARD === "on"' "$REPO/.opencode/plugins/blacklist-guard.js"; then
+    ok "semantic classifier is opt-in (no command text sent by default)"
+  else
+    bad "semantic classifier is not opt-in"
+  fi
+  if grep -q 'def redact' "$REPO/scripts/guard-classify.py"; then
+    ok "classifier redacts secret shapes before upload"
+  else
+    bad "classifier uploads command text without redaction"
+  fi
+  if grep -q 'trusted="${X11_TRUSTED:-0}"' "$REPO/scripts/ssh-x11-setup.sh" \
+    && grep -q 'trusted="${4:-0}"' "$REPO/scripts/ssh-x11-setup.sh"; then
+    ok "X11 forwarding defaults to untrusted (trusted is opt-in)"
+  else
+    bad "X11 forwarding still defaults to trusted"
+  fi
+  if grep -q 'head -c 200' "$REPO/scripts/rotate-api-keys.sh"; then
+    bad "rotate-api-keys.sh prints auth.json bytes"
+  else
+    ok "rotate-api-keys.sh prints provider names, not key bytes"
+  fi
+  if grep -q 'chmodSync(file, 0o600)' "$REPO/docker/web-entrypoint.sh"; then
+    ok "auth.json is written mode 0600"
+  else
+    bad "auth.json is not forced to mode 0600"
+  fi
+  if grep -q 'file:// is blocked by default' "$REPO/scripts/harvest.py"; then
+    ok "harvest.py blocks file:// and private/loopback targets by default"
+  else
+    bad "harvest.py does not block file:// / private targets"
+  fi
+  if [ -x "$REPO/scripts/install-global-guard.sh" ]; then
+    if "$REPO/scripts/install-global-guard.sh" --check >/dev/null 2>&1; then
+      ok "global blacklist-guard link is not dangling"
+    else
+      bad "global blacklist-guard link is dangling (run install-global-guard.sh --install)"
+    fi
+  else
+    bad "install-global-guard.sh missing"
+  fi
+  if grep -q 'CRITICAL_TIMEOUT' "$REPO/scripts/hotspot-reconnect.sh" \
+    && ! grep -q 'timeout=0; else' "$REPO/scripts/hotspot-reconnect.sh"; then
+    ok "hotspot notifications are bounded and replaceable (no -t 0)"
+  else
+    bad "hotspot notifications can persist forever (timeout=0)"
+  fi
+}
+
 local_redteam() {
   log "=== local red-team layer ==="
   if [ -x "$REPO/scripts/red-team.sh" ]; then
@@ -205,6 +267,7 @@ main() {
   compose_checks
   file_modes
   artifact_checks
+  hardening_checks
   local_redteam
   if [ "$OFFLINE" -eq 0 ]; then
     have docker || die "docker missing (use --offline for compose/file checks)"

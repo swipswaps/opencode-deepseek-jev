@@ -1,5 +1,22 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-10 (Wi-Fi = beacon loss, not powersave):** client
+> `10.100.0.1` is a BCM4331 on `b43`, **2.4 GHz only**; 24 h showed 300
+> `BEACON-LOSS`, 84 firmware reloads, 1055 Tailscale path changes, 13 DNS-commit
+> failures. Client powersave off; server `ws24` (5 GHz) had powersave ON.
+> Prove both ends: `scripts/wifi-link-forensics.sh --peer owner@100.70.43.78`;
+> `--fix` disables/persists powersave. **2026-11-10 16:04Z:** `sudo
+> scripts/wifi-link-forensics.sh --fix` on `ws24` → `power_save off`, persisted
+> `wifi.powersave=2` (`/etc/NetworkManager/conf.d/99-wifi-powersave-off.conf`),
+> NM reloaded; evidence `logs/wifi-link-forensics-20261110T160416Z.log`, ledger
+> `wifi-ws24-powersave-fix-20261110T1059`. Client still needs `akmod-wl`/wired.
+> Fixed the `hotspot-reconnect.sh` self-test cooldown case.
+> **Popup/UX:** critical alerts now bounded (45 s), replace-by-id, recovery
+> clear, server hysteresis (3); `scripts/peer-health.sh --explain` names the
+> cause (reachability vs link quality). Dashboard auth/CORS, semantic
+> opt-in+redaction, untrusted X11, `auth.json` 0600, harvest SSRF block landed.
+> Open queue: `docs/OUTSTANDING-ISSUES-2026-11-10.md`.
+
 > **PIN 2026-11-09:** `hotspot-reconnect.sh` + `terminal-reset.sh` (mouse-spam
 > reset); self-tests green; live roam proof open (`docs/HANDOFF-2026-11-09-hotspot.md`).
 

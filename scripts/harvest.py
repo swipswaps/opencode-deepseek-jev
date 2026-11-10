@@ -33,8 +33,10 @@ import argparse
 import datetime
 import hashlib
 import json
+import ipaddress
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -130,8 +132,61 @@ def normalize(raw: bytes, ctype: str) -> dict:
             "links": [], "text_len": len(text)}
 
 
-def fetch_bytes(url: str, timeout: int, max_bytes: int) -> tuple[bytes, str, str]:
+def _ip_blocked(ip: ipaddress._BaseAddress) -> bool:
+    return (ip.is_private or ip.is_loopback or ip.is_link_local or
+            ip.is_multicast or ip.is_reserved or ip.is_unspecified)
+
+
+def check_url(url: str, allow_local: bool = False) -> None:
+    """Refuse local/private targets unless the operator opted in.
+
+    This closes the agent-influenced SSRF/local-read path: a prompt injection
+    could otherwise make harvest.py read file:///etc/passwd or query the cloud
+    metadata endpoint (169.254.169.254), which the blacklist guard blocks for
+    cat/curl but not for this tool.
+    """
+    u = urllib.parse.urlparse(url)
+    scheme = (u.scheme or "").lower()
+    if scheme == "file":
+        if not allow_local:
+            raise HarvestError("file:// is blocked by default (use --allow-local for a deliberate local read)", 2)
+        return
+    if scheme not in ("http", "https"):
+        raise HarvestError(f"unsupported URL scheme {scheme or '(none)'}", 3)
+    host = u.hostname or ""
+    if not host:
+        raise HarvestError("URL has no host", 3)
+    if allow_local:
+        return
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise HarvestError(f"cannot resolve {host}: {e}", 2)
+    for info in infos:
+        addr = info[4][0].split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if _ip_blocked(ip):
+            raise HarvestError(
+                f"blocked local/private address {ip} for {host} (use --allow-local only for a trusted target)", 2)
+    if host.lower() in ("metadata.google.internal", "metadata"):
+        raise HarvestError(f"blocked cloud metadata host {host}", 2)
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    def __init__(self, allow_local: bool):
+        self.allow_local = allow_local
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        check_url(newurl, self.allow_local)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def fetch_bytes(url: str, timeout: int, max_bytes: int, allow_local: bool = False) -> tuple[bytes, str, str]:
     """Returns (raw, content_type, final_url). Raises HarvestError(2|3)."""
+    check_url(url, allow_local)
     if url.startswith("file://"):
         path = urllib.parse.urlparse(url).path
         ext = os.path.splitext(path)[1].lower()
@@ -147,10 +202,12 @@ def fetch_bytes(url: str, timeout: int, max_bytes: int) -> tuple[bytes, str, str
             raise HarvestError(f"file exceeds --max-bytes={max_bytes}", 3)
         return raw, ctype, url
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    opener = urllib.request.build_opener(_SafeRedirect(allow_local))
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
+        with opener.open(req, timeout=timeout) as res:
             ctype = (res.headers.get_content_type() or "").lower()
             final = res.geturl()
+            check_url(final, allow_local)
             if ctype not in ALLOWED_TYPES:
                 raise HarvestError(f"unsupported content-type {ctype or '(none)'}", 3)
             raw = res.read(max_bytes + 1)
@@ -265,21 +322,38 @@ def self_test() -> int:
     check(any("Second line" in p for p in n2["paras"]), "text paras")
 
     try:
-        fetch_bytes("file:///nonexistent-harvest-fixture.html", 5, 1000)
+        fetch_bytes("file:///nonexistent-harvest-fixture.html", 5, 1000, True)
         check(False, "missing file raises")
     except HarvestError as e:
         check(e.code == 2, "missing file -> exit 2")
     try:
-        fetch_bytes("file:///tmp/x.bin", 5, 1000)
+        fetch_bytes("file:///tmp/x.bin", 5, 1000, True)
         check(False, "unknown ext raises")
     except HarvestError as e:
         check(e.code == 3, "unknown ext -> exit 3")
+
+    # SSRF/local-read hardening: both are blocked unless --allow-local.
+    try:
+        fetch_bytes("file:///etc/passwd", 5, 1000)
+        check(False, "file:// blocked by default")
+    except HarvestError as e:
+        check(e.code == 2, "file:// blocked by default")
+    try:
+        fetch_bytes("http://127.0.0.1/", 5, 1000)
+        check(False, "loopback blocked by default")
+    except HarvestError as e:
+        check(e.code == 2, "loopback blocked by default")
+    try:
+        check_url("http://169.254.169.254/latest/meta-data/")
+        check(False, "cloud metadata blocked by default")
+    except HarvestError as e:
+        check(e.code == 2, "cloud metadata blocked by default")
 
     with tempfile.TemporaryDirectory() as tmp:
         src = os.path.join(tmp, "page.html")
         with open(src, "wb") as fh:
             fh.write(html)
-        raw, ctype, final = fetch_bytes("file://" + src, 5, 100000)
+        raw, ctype, final = fetch_bytes("file://" + src, 5, 100000, True)
         check(ctype == "text/html", "file:// type by extension")
         res = stage("file://" + src, raw, ctype, final, os.path.join(tmp, "out"))
         meta = json.load(open(os.path.join(res["dir"], "meta.json")))
@@ -299,7 +373,7 @@ def self_test() -> int:
             src = os.path.join(tmp, "big.txt")
             with open(src, "wb") as fh:
                 fh.write(big)
-            fetch_bytes("file://" + src, 5, 10)
+            fetch_bytes("file://" + src, 5, 10, True)
         check(False, "oversize raises")
     except HarvestError as e:
         check(e.code == 3, "oversize -> exit 3")
@@ -314,6 +388,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--outdir", default="logs")
     ap.add_argument("--max-bytes", type=int, default=1000000)
     ap.add_argument("--timeout", type=int, default=20)
+    ap.add_argument("--allow-local", action="store_true",
+                    help="allow file:// and private/loopback targets (deliberate local read only)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
     if args.self_test:
@@ -322,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
         print("harvest.py: --url is required (or --self-test)", file=sys.stderr)
         return 2
     try:
-        raw, ctype, final = fetch_bytes(args.url, args.timeout, args.max_bytes)
+        raw, ctype, final = fetch_bytes(args.url, args.timeout, args.max_bytes, args.allow_local)
         res = stage(args.url, raw, ctype, final, args.outdir)
     except HarvestError as e:
         print(f"harvest.py: {e}", file=sys.stderr)

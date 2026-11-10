@@ -263,6 +263,23 @@ PY
         bad 'blacklist-guard-self-test.mjs present + node'
     fi
 
+    if [ -f "$REPO/scripts/install-global-guard.sh" ]; then
+        if bash "$REPO/scripts/install-global-guard.sh" --self-test > "$work/igg_st.txt" 2>&1; then
+            ok 'install-global-guard: self-test (absent + required + install + dangling + uninstall)'
+        else
+            bad 'install-global-guard: self-test (absent + required + install + dangling + uninstall)'
+            cat "$work/igg_st.txt"
+        fi
+        if bash "$REPO/scripts/install-global-guard.sh" --check > "$work/igg_check.txt" 2>&1; then
+            ok 'global guard link is not dangling (or absent)'
+        else
+            bad 'global guard link is not dangling (or absent)'
+            cat "$work/igg_check.txt"
+        fi
+    else
+        bad 'install-global-guard.sh present'
+    fi
+
     if [ -f "$REPO/scripts/re-extract-session.sh" ]; then
         if bash "$REPO/scripts/re-extract-session.sh" --self-test > "$work/rx_st.txt" 2>&1; then
             ok 're-extract-session: self-test (stub node + fixtures)'
@@ -526,6 +543,28 @@ PY
         fi
     else
         bad 'hotspot-reconnect.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/wifi-link-forensics.sh" ]; then
+        if bash "$REPO/scripts/wifi-link-forensics.sh" --self-test > "$work/wlf_st.txt" 2>&1; then
+            ok 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
+        else
+            bad 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
+            cat "$work/wlf_st.txt"
+        fi
+    else
+        bad 'wifi-link-forensics.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/peer-health.sh" ]; then
+        if bash "$REPO/scripts/peer-health.sh" --self-test > "$work/ph_st.txt" 2>&1; then
+            ok 'peer-health: self-test (hysteresis down + recover + lossy + evidence + json)'
+        else
+            bad 'peer-health: self-test (hysteresis down + recover + lossy + evidence + json)'
+            cat "$work/ph_st.txt"
+        fi
+    else
+        bad 'peer-health.sh present'
     fi
 
     if [ -f "$REPO/scripts/recovery-status.sh" ]; then

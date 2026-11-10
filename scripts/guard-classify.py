@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 import urllib.error
@@ -68,10 +69,36 @@ def memo_put(path: str, key: str, verdict: str):
     p.write_text(json.dumps(d, indent=2))
 
 
+SECRET_PATTERNS = [
+    re.compile(r"\b(?:sk|pk|rk)-[A-Za-z0-9_\-]{16,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{20,}"),
+    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)\S+"),
+    re.compile(r"(?i)\b([A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY)[A-Z0-9_]*\s*[=:]\s*)\S+"),
+    re.compile(r"(?i)(--?(?:password|passwd|token|api[-_]?key)\s+)\S+"),
+    re.compile(r"\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s/]+@"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
+]
+
+
+def redact(cmd: str) -> str:
+    """Mask secret-shaped tokens before the command leaves this host or is
+    echoed into a log. The classifier never needs the credential value."""
+    out = cmd
+    for pat in SECRET_PATTERNS:
+        if pat.groups:
+            out = pat.sub(lambda m: m.group(1) + "[REDACTED]", out)
+        else:
+            out = pat.sub("[REDACTED]", out)
+    return out
+
+
 def body(cmd: str) -> dict:
     return {
         "model": MODEL,
-        "state": "Shell command about to run:\n" + cmd[:4000],
+        "state": "Shell command about to run:\n" + redact(cmd)[:4000],
         "questions": {
             "irreversible": {
                 "type": "noul",
@@ -106,6 +133,20 @@ def self_test() -> int:
     if dhash("a") == dhash("b") or dhash("a") != dhash("a"):
         print("FAIL hash")
         fail = 1
+    fake_key = "sk-" + "abcdefghijklmnop123456"
+    leaked = 'curl -H "Authorization: Bearer %s" https://x' % fake_key
+    if fake_key in redact(leaked) or fake_key in body(leaked)["state"]:
+        print("FAIL redact bearer key")
+        fail = 1
+    if "hunter2" in redact("OPENCODE_SERVER_PASSWORD=hunter2 npm start"):
+        print("FAIL redact env secret")
+        fail = 1
+    if "s3cr3t" in redact("psql postgres://user:s3cr3t@db/prod"):
+        print("FAIL redact url credential")
+        fail = 1
+    if fake_key in body(leaked)["state"]:
+        print("FAIL body leaks key")
+        fail = 1
     import tempfile
     d = tempfile.mkdtemp()
     m = os.path.join(d, "m.json")
@@ -138,26 +179,26 @@ def main() -> int:
         m = memo_get(a.memo, key)
         if m:
             v = m.get("verdict", "ALLOW")
-            print(json.dumps({"verdict": v, "cached": True, "command": cmd, "memo": key}) if a.json
+            print(json.dumps({"verdict": v, "cached": True, "command": redact(cmd), "memo": key}) if a.json
                   else "%s%s (memoized)" % (v, " \u2014 blocked" if v == "BLOCK" else ""))
             return 0 if v == "ALLOW" else 1
     k = load_key(a.env_file)
     if not k:
-        print(json.dumps({"verdict": "ALLOW", "reason": "no SUBQ_API_KEY (fail-open)", "command": cmd}) if a.json
+        print(json.dumps({"verdict": "ALLOW", "reason": "no SUBQ_API_KEY (fail-open)", "command": redact(cmd)}) if a.json
               else "ALLOW (no SUBQ_API_KEY \u2014 fail-open, durable-pi: unreachable guard runs the command)")
         return 0
     try:
         verdict, p = classify(cmd, k, a.timeout)
     except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-        print(json.dumps({"verdict": "ALLOW", "reason": "classifier unreachable (fail-open): %s" % str(e)[:80], "command": cmd}) if a.json
+        print(json.dumps({"verdict": "ALLOW", "reason": "classifier unreachable (fail-open): %s" % str(e)[:80], "command": redact(cmd)}) if a.json
               else "ALLOW (classifier unreachable \u2014 fail-open)")
         return 0
     if not a.no_memo:
         memo_put(a.memo, key, verdict)
     if a.json:
-        print(json.dumps({"verdict": verdict, "noul": round(p, 3), "cached": False, "command": cmd, "memo": key}))
+        print(json.dumps({"verdict": verdict, "noul": round(p, 3), "cached": False, "command": redact(cmd), "memo": key}))
     else:
-        print("%s (p=%0.2f)  %s" % (verdict, p, cmd))
+        print("%s (p=%0.2f)  %s" % (verdict, p, redact(cmd)))
     return 0 if verdict == "ALLOW" else 1
 
 

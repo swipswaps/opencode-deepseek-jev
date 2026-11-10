@@ -51,7 +51,9 @@ PATTERNS = [
     ("bearer_token", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]{16,}")),
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("env_assignment", re.compile(
-        r"(?:^|[^A-Za-z0-9])[A-Z][A-Z0-9_]*(?:API_KEY|PASSWORD|SECRET|TOKEN|MASTER_KEY)\s*=\s*[\"']?[A-Za-z0-9_./+\-]{12,}")),
+        r"(?:^|[^A-Za-z0-9])[A-Z][A-Z0-9_]*(?:API_KEY|PASSWORD|SECRET|TOKEN|MASTER_KEY)\s*=\s*[\"']?"
+        r"(?!(?:process\.env|os\.environ|os\.getenv|import\.meta\.env|env\(|\$\{|\$[A-Za-z_]))"
+        r"[A-Za-z0-9_./+\-]{12,}")),
     ("yaml_secret", re.compile(
         r"(?i)^\s*[A-Za-z0-9_.-]*(?:api_?key|password|secret|token|master_key|server_password)\s*:\s*(?!os\.environ/|env:|{{|\$\{|\$[A-Za-z_])[\"']?[A-Za-z0-9_./+\-]{20,}")),
 ]

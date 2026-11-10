@@ -60,7 +60,7 @@ scratch_ui_check() {
     # inline-script execution test against it. Prints PASS/FAIL detail.
     local repo="$1" port="$2" log=""
     log=$(mktemp)
-    node --no-warnings --experimental-sqlite "$repo/scripts/dashboard.mjs" \
+    DASH_AUTH=off node --no-warnings --experimental-sqlite "$repo/scripts/dashboard.mjs" \
         "$repo/data/opencode/opencode.db" "$port" 127.0.0.1 "$repo/scripts/audit-config.sh" \
         > "$log" 2>&1 &
     local pid=$!

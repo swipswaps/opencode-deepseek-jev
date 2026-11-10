@@ -37,6 +37,58 @@ plane.
   inline UI/PWA test PASS, `certs-verify` ALL PASS, `https-selfheal --check`
   ALL PASS, PC strict TLS 200/verify=0 on 5099 + 443 + LAN.
 
+## 2026-11-10 — network UX + hardening close-out
+
+**The persistent "10.100.0.1 disconnected" popup was real but misdiagnosed.**
+Powersave is off on both ends. The client is a BCM4331 on `b43`, **2.4 GHz
+only**, and lost 101 Wi-Fi beacons in 6 h; the server is on 5 GHz and stable.
+The popup persisted because critical alerts used `notify-send -t 0` (never
+expire), the server paged on the first missed probe, and recovery never
+withdrew the alert. The Reconnect button also looked live when no client watcher
+was consuming it.
+
+New/updated:
+
+- **`scripts/peer-health.sh`** — one evidence-backed verdict. Probes ICMP, SSH,
+  TCP `:5099`/`:4096`, and Tailscale; separates **reachability** from **link
+  quality**; applies hysteresis; writes `data/observability/peer-health.json`.
+  `--explain` states why (e.g. `beacon_loss=101 driver=b43 band=2.4GHz
+  powersave=off`), `--json`, `--watch`, `--self-test`.
+- **`scripts/wifi-link-forensics.sh`** — cross-host Wi-Fi evidence
+  (`--peer`), verdicts (`beacon-loss`, `driver-b43`, `2.4-only`, `path-flap`,
+  `dns-commit-failure`), `--fix` to disable/persist powersave.
+- **`scripts/hotspot-reconnect.sh`** — bounded TTL, replace-by-id, recovery
+  clear (even when silenced), server-side failure hysteresis, and evidence in
+  the notification body.
+- **Activity search** — typing a query now searches `/api/search` across **all
+  sessions**, not the 12-session live window; “Show all” expands the real hit
+  set. The UI must be hard-reloaded once to drop the cached shell.
+- **`scripts/install-global-guard.sh`** — the global blacklist-guard link was
+  dangling (`/workspace/...` on the host), so the guard silently did not load.
+  It now resolves to the checkout and `test-hygiene.sh` gates it.
+- **Guard matcher** — separators (`&& sed`, newline), absolute paths,
+  `sudo`/`env`/`xargs` prefixes, quoting/backslashes, `rm -fr`,
+  `--recursive --force`, pipe-to-interpreter, `source <(curl …)`,
+  `opencode debug config`, `base64`/`cp`/`cut` host reads, `set -o errexit`, and
+  `subprocess` import forms are covered by regression rows.
+- **Security defaults** — dashboard Basic auth (when
+  `OPENCODE_SERVER_PASSWORD` is set) + opt-in CORS; the semantic classifier is
+  opt-in and redacts secrets before upload; X11 defaults to untrusted; the
+  `auth.json` writer forces `0600` and the rotation tool no longer prints key
+  bytes; `harvest.py` blocks `file://` and private/loopback/metadata targets by
+  default. `security-posture.sh --offline` now checks all of these invariants.
+
+Rebuild the MUI bundle after editing `web/src` (the built `web/dist` is
+gitignored and served from disk):
+
+```bash
+( cd web && npm ci && npm run build )
+```
+
+Full detail and the unresolved queue:
+[`docs/OUTSTANDING-ISSUES-2026-11-10.md`](docs/OUTSTANDING-ISSUES-2026-11-10.md)
+and [`docs/SECURITY-AUDIT-2026-11-10.md`](docs/SECURITY-AUDIT-2026-11-10.md).
+
 ## Start here (first 10 minutes)
 
 If you are new, read in this order:
@@ -236,7 +288,15 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 
 - `./scripts/security-posture.sh` checks the invariants that are not one
   command: host-home exposure, container caps/user, loopback-only LiteLLM,
-  secret-file modes, artifact cleanliness, TLS, and the local red-team layer.
+  secret-file modes, artifact cleanliness, TLS, the local red-team layer, and
+  the 2026-11-10 hardening set (dashboard auth/CORS, semantic opt-in +
+  redaction, untrusted X11 default, `auth.json` `0600`, `harvest.py`
+  SSRF/local-read block, non-dangling global guard link, bounded hotspot
+  notifications). Run `--offline` when Docker is unavailable.
+- Residual risks and the exact next action for each are tracked in
+  [`docs/OUTSTANDING-ISSUES-2026-11-10.md`](docs/OUTSTANDING-ISSUES-2026-11-10.md).
+  The client Wi-Fi root cause (b43/2.4 GHz beacon loss) still needs a driver or
+  wired-link change; dashboard auth takes effect on the next restart.
 - The compose override no longer mounts `/home/owner`. The repo is still
   mounted at `/workspace`, so `.env.local`, `docker/litellm-db.env`, and
   `docker/certs/*` were readable by the web container. The override now hides

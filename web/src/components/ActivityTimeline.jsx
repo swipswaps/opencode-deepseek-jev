@@ -29,6 +29,7 @@ import {
   activityTiming,
   activityType,
   copyText,
+  fetchJSON,
   fmtDur,
   matchesFilter,
   timeStr,
@@ -138,6 +139,11 @@ function ActivityRow({ x, timing, t0, t1, now, maxMs, isMobile }) {
       </Typography>
 
       <Box sx={{ gridArea: isMobile ? "detail" : undefined, minWidth: 0 }}>
+        {x.sessionTitle && (
+          <Typography variant="caption" color="text.secondary" noWrap display="block" title={x.sessionTitle}>
+            {x.sessionTitle}
+          </Typography>
+        )}
         <Typography
           component="div"
           title={detail}
@@ -182,6 +188,13 @@ export default function ActivityTimeline({ activity, shed }) {
   const [showAll, setShowAll] = useState(false);
   const [showSteps, setShowSteps] = useState(false);
   const [now, setNow] = useState(Date.now());
+  // The live `activity` prop is bounded to the 12 most recently updated
+  // sessions (server-side, for latency). A search box over that window silently
+  // loses older hits as new activity arrives. When a query is present we ask
+  // /api/search, which scans all sessions, and render those hits in the same
+  // row shape. "Show all" then expands the real hit set, not just 30 rows.
+  const [remote, setRemote] = useState(null);
+  const [remoteBusy, setRemoteBusy] = useState(false);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -205,21 +218,64 @@ export default function ActivityTimeline({ activity, shed }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const all = activity || [];
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setRemote(null);
+      setRemoteBusy(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setRemoteBusy(true);
+    const timer = setTimeout(async () => {
+      let rows = [];
+      try {
+        const d = await fetchJSON("/api/search?q=" + encodeURIComponent(q) + "&limit=200");
+        rows = ((d && d.hits) || []).map((h) => ({
+          ts: h.ts,
+          te: h.ts,
+          type: h.type,
+          tool: h.type === "tool" ? (h.tool || "tool") : undefined,
+          status: h.status || "",
+          cmd: h.type === "tool" ? (h.snippet || "") : "",
+          text: h.type === "tool" ? "" : (h.snippet || ""),
+          session: h.session,
+          sessionTitle: h.title,
+          searchHit: true,
+        }));
+      } catch {
+        rows = [];
+      }
+      if (cancelled) return;
+      setRemote({ q, rows });
+      setRemoteBusy(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const q = query.trim();
+  const all = q
+    ? (remote && remote.q === q ? remote.rows : [])
+    : (activity || []);
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const needle = q.toLowerCase();
     return all.filter((x) => {
       if (!matchesFilter(x, filter)) return false;
       if (!showSteps && String(x.type || "").startsWith("step")) return false;
-      if (!q) return true;
+      // Remote hits already matched server-side across all sessions; re-testing
+      // the snippet would drop a hit whose match was in a field the snippet
+      // does not show (e.g. the command when text is present).
+      if (!needle || x.searchHit) return true;
       return (
-        activityDetail(x).toLowerCase().includes(q) ||
-        activityType(x).toLowerCase().includes(q) ||
-        String(x.status || "").toLowerCase().includes(q)
+        activityDetail(x).toLowerCase().includes(needle) ||
+        activityType(x).toLowerCase().includes(needle) ||
+        String(x.status || "").toLowerCase().includes(needle)
       );
     });
-  }, [all, filter, query, showSteps]);
-
+  }, [all, filter, q, showSteps]);
   const rows = showAll ? filtered : filtered.slice(0, 30);
   const timings = useMemo(() => rows.map((x) => activityTiming(x, now)), [rows, now]);
   const maxMs = Math.max(150, ...timings.map((t) => t.ms));
@@ -247,7 +303,11 @@ export default function ActivityTimeline({ activity, shed }) {
           <Box>
             <Typography variant="h5">Activity timeline</Typography>
             <Typography variant="caption" color="text.secondary">
-              {rows.length} of {filtered.length} parts{filtered.length !== all.length ? ` · ${all.length} total` : ""} · newest first
+              {remoteBusy
+                ? "searching all sessions…"
+                : q
+                  ? `${rows.length} of ${filtered.length} matches across all sessions · newest first`
+                  : `${rows.length} of ${filtered.length} parts${filtered.length !== all.length ? ` · ${all.length} recent` : ""} · newest first`}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center">
@@ -337,7 +397,9 @@ export default function ActivityTimeline({ activity, shed }) {
       )}
 
       {rows.length === 0 ? (
-        <Alert severity="info">No activity matches this filter.</Alert>
+        <Alert severity="info">
+          {remoteBusy ? "Searching all sessions…" : q ? `No matches for “${q}” across all sessions.` : "No activity matches this filter."}
+        </Alert>
       ) : (
         rows.map((x) => {
           const timing = activityTiming(x, now);

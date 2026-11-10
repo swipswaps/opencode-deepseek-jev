@@ -16,6 +16,7 @@
 // Usage: node --experimental-sqlite dashboard.mjs <db-path> [port] [host]
 
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
@@ -3868,14 +3869,44 @@ async function load(){
 load();
 </script></body></html>`;
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "https://swipswaps.github.io",
-  "Access-Control-Allow-Private-Network": "true",
-  "Vary": "Origin",
-};
+// Authentication: the dashboard exposes full session transcripts and exports,
+// so it is NOT a public surface. When OPENCODE_SERVER_PASSWORD is set (the same
+// password opencode-web uses), every route requires HTTP Basic auth. A test or
+// an explicitly local-only deployment can set DASH_AUTH=off. CORS is opt-in via
+// DASH_ALLOW_ORIGIN; the previous hardcoded GitHub Pages grant let a public site
+// read the private store from a visitor's browser.
+const DASH_PASSWORD = process.env.OPENCODE_SERVER_PASSWORD || "";
+const DASH_AUTH = (process.env.DASH_AUTH || "on").toLowerCase();
+const DASH_ALLOW_ORIGIN = process.env.DASH_ALLOW_ORIGIN || "";
 
-// Mutations must be same-origin. The GitHub Pages origin is allowed to READ
-// (CORS) but a public site must never be able to POST into the private store.
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+function authOk(req) {
+  if (DASH_AUTH === "off" || !DASH_PASSWORD) return true;
+  const m = /^Basic\s+(.+)$/i.exec(req.headers.authorization || "");
+  if (!m) return false;
+  let decoded = "";
+  try { decoded = Buffer.from(m[1], "base64").toString("utf8"); } catch { return false; }
+  const i = decoded.indexOf(":");
+  if (i < 0) return false;
+  return safeEqual(decoded.slice(i + 1), DASH_PASSWORD);
+}
+
+const CORS_HEADERS = DASH_ALLOW_ORIGIN
+  ? {
+      "Access-Control-Allow-Origin": DASH_ALLOW_ORIGIN,
+      "Access-Control-Allow-Private-Network": "true",
+      "Vary": "Origin",
+    }
+  : {};
+
+// Mutations must be same-origin (and authenticated above). A public site must
+// never be able to POST into the private store.
 function sameOriginMutation(req) {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser client (curl/CLI) on the private net
@@ -3992,6 +4023,18 @@ function recoveryPage() {
 const server = http.createServer(async (req, res) => {
   const url = req.url.split("?")[0];
   const params = qs(req);
+  // Auth gate for every route (including SSE and exports). SET
+  // OPENCODE_SERVER_PASSWORD to require Basic auth; DASH_AUTH=off is the
+  // explicit local/test escape hatch.
+  if (!authOk(req)) {
+    res.writeHead(401, {
+      "WWW-Authenticate": 'Basic realm="opencode dashboard", charset="UTF-8"',
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end("authentication required\n");
+    return;
+  }
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       ...CORS_HEADERS,

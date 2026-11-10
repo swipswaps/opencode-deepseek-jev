@@ -75,6 +75,16 @@ ALERT_COOLDOWN="${HOTSPOT_ALERT_COOLDOWN:-120}"
 ALERT_MAX="${HOTSPOT_ALERT_MAX:-4}"
 CRITICAL_AFTER="${HOTSPOT_CRITICAL_AFTER:-3}"
 ALERT_STATE="${HOTSPOT_ALERT_STATE:-$STATE.alerts}"
+# UX (2026-11-10): a transient link blip used to leave a `-t 0` critical popup
+# on screen forever with a Reconnect button. Bound every notification, replace
+# it by id, and always clear it when the peer recovers. The server watch also
+# requires SERVER_FAIL_THRESHOLD consecutive misses before it pages, so one
+# beacon-loss gap does not become a permanent "disconnected" banner.
+NOTIFY_TIMEOUT="${HOTSPOT_NOTIFY_TIMEOUT:-8000}"
+CRITICAL_TIMEOUT="${HOTSPOT_CRITICAL_TIMEOUT:-45000}"
+SERVER_FAIL_THRESHOLD="${HOTSPOT_SERVER_FAIL_THRESHOLD:-3}"
+NOTIFY_ID="${HOTSPOT_NOTIFY_ID:-7331}"
+PEER_HEALTH_JSON="${HOTSPOT_PEER_HEALTH_JSON:-$SELF_DIR/../data/observability/peer-health.json}"
 QUIET_UNTIL="${HOTSPOT_QUIET_UNTIL:-$HOME/.local/state/hotspot-quiet.until}"
 FIX_REQUEST="${HOTSPOT_FIX_REQUEST:-$HOME/.local/state/hotspot-fix.request}"
 ACTION_OUT="${HOTSPOT_ACTION_OUT:-$HOME/.local/state/hotspot-action.out}"
@@ -121,6 +131,44 @@ notify_has_actions() {
     [ "${HOTSPOT_FAKE_NOTIFY_ACTIONS:-0}" = "1" ] && return 0
     [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ] && return 1
     "$NOTIFY_BIN" --help 2>&1 | grep -q -e '--action'
+}
+
+notify_has_replace() {
+    [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ] && return 0
+    "$NOTIFY_BIN" --help 2>&1 | grep -q -E '(--replace-id|(^|[^A-Za-z])-r([^A-Za-z]|$))'
+}
+
+# Replace the outstanding alert with a short, low-urgency "recovered" notice.
+# This deliberately ignores silence/quiet: the point is to remove a stale
+# persistent popup, not to add a new alert.
+notify_clear() {
+    local msg="$1" out="" idargs=()
+    have_notify || return 0
+    notify_has_replace && idargs=(-r "$NOTIFY_ID")
+    out="$(notify_send -u low -t 2500 "${idargs[@]}" \
+        --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+        "opencode hotspot" "OK: $msg" 2>&1)"
+    printf '%s' "$out" > "$ACTION_OUT" 2>&1 || true
+}
+
+# Evidence from peer-health.sh (written by scripts/peer-health.sh) so the body
+# says WHY, not just "disconnected". Stale evidence (>1h) is not shown.
+peer_evidence_summary() {
+    [ -f "$PEER_HEALTH_JSON" ] || return 0
+    python3 - "$PEER_HEALTH_JSON" <<'PY'
+import json, sys, time
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+age = time.time() - float(d.get("ts") or 0)
+if age > 3600:
+    sys.exit(0)
+e = d.get("evidence") or {}
+print("link=%s reason=%s beacon_loss=%s driver=%s band=%s powersave=%s" % (
+    d.get("link", "?"), d.get("link_reason", ""), e.get("beacon_loss", "?"),
+    e.get("driver", "?"), e.get("band", "?"), e.get("powersave", "?")))
+PY
 }
 
 open_url() {
@@ -410,10 +458,14 @@ alert_urgency() {
 }
 
 notify_user() {
-    local level="$1" msg="$2" urgency="$3" timeout="$4" body=""
-    local -a actions=()
+    local level="$1" msg="$2" urgency="$3" timeout="$4" body="" ev=""
+    local -a actions=() idargs=()
+    notify_has_replace && idargs=(-r "$NOTIFY_ID")
     body="$level: $msg"
     if [ "$level" != "OK" ]; then
+        ev="$(peer_evidence_summary)"
+        [ -n "$ev" ] && body="$body
+evidence: $ev"
         body="$body
 fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
     fi
@@ -424,7 +476,7 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
             actions=(-A "fix=Reconnect" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         fi
         (
-            notify_send -u "$urgency" -t "$timeout" -w "${actions[@]}" \
+            notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" -w "${actions[@]}" \
                 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
                 "opencode hotspot" "$body" > "$ACTION_OUT" 2>&1
             case "$(cat "$ACTION_OUT" 2>&1)" in
@@ -437,7 +489,7 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
             esac
         ) &
     else
-        notify_send -u "$urgency" -t "$timeout" \
+        notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" \
             --hint=string:x-canonical-private-synchronous:opencode-hotspot \
             "opencode hotspot" "$body" 2>&1 || true
     fi
@@ -454,6 +506,15 @@ alert_local() {
     bell
     printf '\n==== %s [%s] %s ====\n' "$level" "$(ts)" "$msg"
     log_line "$(ts) $level $msg"
+    # Recovery always replaces the outstanding alert, even when the operator
+    # silenced alerts, so a stale "disconnected" popup cannot persist.
+    if [ "$level" = "OK" ]; then
+        notify_clear "$msg"
+        if [ "$ROLE" = "server" ] && have wall; then
+            printf '%s\n' "opencode hotspot: OK: $msg" | wall 2>&1 || true
+        fi
+        return 0
+    fi
     if quiet_now; then
         printf '(notifications silenced; still logged)\n'
         return 0
@@ -468,7 +529,7 @@ alert_local() {
         return 0
     fi
     urgency="$(alert_urgency)"
-    if [ "$urgency" = "critical" ]; then timeout=0; else timeout=8000; fi
+    if [ "$urgency" = "critical" ]; then timeout="$CRITICAL_TIMEOUT"; else timeout="$NOTIFY_TIMEOUT"; fi
     notify_user "$level" "$msg" "$urgency" "$timeout"
     if [ "$ROLE" = "server" ] && have wall; then
         printf '%s\n' "opencode hotspot: $level: $msg" | wall 2>&1 || true
@@ -774,11 +835,13 @@ probe_client() {
 }
 
 server_tick() {
-    local client="" prev="" reason=""
+    local client="" prev="" reason="" fails=""
     client="$(probe_client)"
     prev="$(state_get PREV)"
+    fails="$(state_get FAILS)"
+    case "$fails" in ''|*[!0-9]*) fails=0 ;; esac
     if [ "$client" = "up" ]; then
-        if [ -n "$prev" ] && [ "$prev" != "up" ]; then
+        if [ -n "$prev" ] && { [ "$prev" = "down" ] || [ "$prev" = "down-pending" ]; }; then
             alert_local OK "client $CLIENT_MESH is reachable again"
         fi
         if inhibit_active; then clear_inhibit; fi
@@ -794,11 +857,17 @@ server_tick() {
         save_state down 0
         return 2
     fi
-    if [ "$prev" != "down" ]; then
-        alert_local ALERT "client $CLIENT_MESH disappeared (hotspot/overlay lost?)"
+    # Hysteresis: a single missed probe (a beacon-loss gap) must not page.
+    fails=$((fails + 1))
+    if [ "$fails" -ge "$SERVER_FAIL_THRESHOLD" ]; then
+        if [ "$prev" != "down" ]; then
+            alert_local ALERT "client $CLIENT_MESH disappeared (hotspot/overlay lost?)"
+        fi
+        save_state down "$fails"
+    else
+        save_state down-pending "$fails"
     fi
-    save_state down 0
-    printf 'client %s: down\n' "$CLIENT_MESH"
+    printf 'client %s: down (miss %s/%s)\n' "$CLIENT_MESH" "$fails" "$SERVER_FAIL_THRESHOLD"
     return 2
 }
 
@@ -833,7 +902,9 @@ self_test() {
     export HOTSPOT_PENDING="$work/pending"
     export HOTSPOT_SETTLE_SEC=0
     export HOTSPOT_FAIL_THRESHOLD=1
+    export HOTSPOT_SERVER_FAIL_THRESHOLD=1
     export HOTSPOT_FAKE_BELL=1
+    export HOTSPOT_FAKE_NOTIFY=1
     export HOTSPOT_NO_HEAL=1
     export HOTSPOT_ALERT_STATE="$work/alerts.state"
     export HOTSPOT_INHIBIT="$work/inhibit.until"
@@ -874,11 +945,25 @@ self_test() {
     printf '%s' "$o" | grep -q 'server alert sent' || { printf 'FAIL server alert sent\n'; fail=1; }
 
     : > "$work/state"
+    : > "$work/alerts.state"
     o=$(HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
         HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=fff \
         bash "$0" --server --tick 2>&1); rc=$?
     [ "$rc" -eq 2 ] || { printf 'FAIL server-tick-down rc=%s\n' "$rc"; fail=1; }
     printf '%s' "$o" | grep -q 'disappeared' || { printf 'FAIL server alert text\n'; fail=1; }
+
+    # Server hysteresis: one missed probe (a beacon-loss gap) must not page.
+    : > "$work/state"
+    : > "$work/alerts.state"
+    o=$(HOTSPOT_SERVER_FAIL_THRESHOLD=2 HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
+        HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=iii \
+        bash "$0" --server --tick 2>&1); rc=$?
+    printf '%s' "$o" | grep -q 'disappeared' && { printf 'FAIL hysteresis fired on first miss\n'; fail=1; }
+    printf '%s' "$o" | grep -q 'miss 1/2' || { printf 'FAIL hysteresis miss text\n'; fail=1; }
+    o=$(HOTSPOT_SERVER_FAIL_THRESHOLD=2 HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 \
+        HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=iii \
+        bash "$0" --server --tick 2>&1); rc=$?
+    printf '%s' "$o" | grep -q 'disappeared' || { printf 'FAIL hysteresis did not fire on second miss\n'; fail=1; }
 
     # shared inhibition: a future TTL suppresses the peer-down alert; an expired
     # one lets it fire again.
@@ -935,6 +1020,7 @@ self_test() {
     : > "$nf"
     export HOTSPOT_FAKE_NOTIFY=1 HOTSPOT_NOTIFY_LOG="$nf"
     : > "$work/state"
+    : > "$work/alerts.state"
     HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 HOTSPOT_FAKE_SERVER=down HOTSPOT_FAKE_SIG=iii \
         bash "$0" --tick > /dev/null
     : > "$work/state"

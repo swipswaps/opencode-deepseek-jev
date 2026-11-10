@@ -97,7 +97,7 @@ main() {
         return 1
     fi
 
-    node --no-warnings --experimental-sqlite "$REPO/scripts/dashboard.mjs" "$db" "$PORT" "$HOST" "$REPO/scripts/audit-config.sh" >"$work/server.log" 2>&1 &
+    DASH_AUTH=off node --no-warnings --experimental-sqlite "$REPO/scripts/dashboard.mjs" "$db" "$PORT" "$HOST" "$REPO/scripts/audit-config.sh" >"$work/server.log" 2>&1 &
     local srv=$!
 
     local code="" tries=0

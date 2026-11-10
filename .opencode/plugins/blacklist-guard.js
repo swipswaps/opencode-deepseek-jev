@@ -49,7 +49,9 @@ const DEFAULT_OBS = fileURLToPath(new URL("../../data/observability/", import.me
 // error (missing script, no key, network, timeout) leaves the command alone —
 // exactly like durable-pi's jev-damage-control ("unreachable guard runs the
 // command"). Verdicts are memoized in guard-classify.py, so a repeated command
-// is free. Disable with OPENCODE_SEMANTIC_GUARD=off.
+// is free. OPT-IN: it uploads command text to api.subq.ai, so it runs only
+// with OPENCODE_SEMANTIC_GUARD=on. guard-classify.py also redacts secret
+// shapes before the request.
 const REPO = fileURLToPath(new URL("../../", import.meta.url)).replace(/\/+$/, "");
 const SEM_SCRIPT = REPO + "/scripts/guard-classify.py";
 const SEM_ENV = REPO + "/.env.local";
@@ -70,22 +72,22 @@ export function semanticVerdict(command) {
 }
 
 const RULES = [
-  { name: "env-read", pattern: "(?:^|[;&|()]\\s*)(?:cat|less|more|head|tail|nl|xxd|od|strings)\\b[^\\n]*\\.env", sev: "block", raw: true,
+  { name: "env-read", pattern: "(?:^|[;&|()]\\s*)(?:cat|less|more|head|tail|nl|xxd|od|strings|base64|cp|tar|dd|scp|rsync|install)\\b[^\\n]*\\.env", sev: "block", raw: true,
     fix: "never print .env: use awk -F= '/^KEY=/{print length($2)}' .env.local, or the rotate scripts (they mask)", rule: "security" },
   { name: "env-grep", pattern: "(?:^|[;&|()]\\s*)grep\\s+(?![^\\n]*(?:\\s*-[A-Za-z]*[qc]\\b|\\s*--count\\b|\\s*--quiet\\b))[^\\n]*\\.env", sev: "block", raw: true,
     fix: "grep -c/-q only (count/match, no value); otherwise awk length or the rotate scripts", rule: "security" },
-  { name: "sensitive-read", pattern: "(?:^|[;&|()]\\s*)(?:sudo\\s+)?(?:cat|less|more|head|tail|nl|xxd|od|strings|grep|awk)\\b[^\\n]*(?:/etc/(?:passwd|shadow|sudoers|gshadow)|(?:^|/)\\.ssh/|(?:^|/)\\.aws/credentials|/proc/[0-9]+/environ|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
+  { name: "sensitive-read", pattern: "(?:^|[;&|()]\\s*)(?:sudo\\s+)?(?:cat|less|more|head|tail|nl|xxd|od|strings|grep|awk|base64|cp|cut|tar|dd|scp|rsync|install)\\b[^\\n]*(?:/etc/(?:passwd|shadow|sudoers|gshadow)|(?:^|/)\\.ssh/|(?:^|/)\\.aws/credentials|/proc/[0-9]+/environ|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
     fix: "read only inside /workspace; ask the operator for host files", rule: "security" },
   { name: "secret-interpreter-read", pattern: "(?:^|[;&|()]\\s*)(?:python3?|node|ruby|perl|php)\\b[^\\n]*(?:\\.env(?:\\.local)?|(?:^|/)docker/certs/|(?:^|/)litellm-db\\.env)", sev: "block", raw: true,
     fix: "read only inside /workspace; ask the operator for secrets", rule: "security" },
-  { name: "config-dump", pattern: "(?:^|[;&|()]\\s*)(?:[^\\s;&|()]*/)?opencode\\s+debug\\s+config\\b", sev: "block",
+  { name: "config-dump", pattern: "(?:^|[;&|()]\\s*)(?:[^\\s;&|()]*/)?(?:sudo\\s+)?(?:npx\\s+)?opencode\\s+debug\\s+config\\b", sev: "block",
     fix: "resolved config substitutes {env:...} with plaintext; never dump it into a logged terminal — use provider metadata or a redacted view", rule: "security" },
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
-  { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+-rf\\b", sev: "block",
+  { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+(?:-[A-Za-z]*r[A-Za-z]*f|-[A-Za-z]*f[A-Za-z]*r|-[rR]\\s+-[fF]|-[fF]\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)\\b", sev: "block",
     fix: "rm -f on named paths", rule: "convention" },
   // The rest of the RULES.md blacklist that the guard used to omit.
-  { name: "set -e", pattern: "(?:^|[;&|()]\\s*)set\\s+-[A-Za-z]*e[A-Za-z]*\\b", sev: "block",
+  { name: "set -e", pattern: "(?:^|[;&|()]\\s*)set\\s+(?:-[A-Za-z]*e[A-Za-z]*\\b|-o\\s+errexit\\b)", sev: "block",
     fix: "set -o pipefail + explicit per-step handling", rule: "#5" },
   { name: "exit 1", pattern: "(?:^|[;&|()]\\s*)exit\\s+1(?![0-9])", sev: "block",
     fix: "main() wrapper returning a code; final line main \"$@\"", rule: "convention" },
@@ -93,9 +95,15 @@ const RULES = [
     fix: "signal explicitly: kill -TERM / -INT / -KILL", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",
     fix: "subprocess.Popen(..., stdout=PIPE, stderr=PIPE) + communicate()", rule: "convention" },
-  { name: "pipe-to-shell", pattern: "(?:curl|wget|base64)[^|\\n]*\\|\\s*(?:ba|z|k|da)?sh\\b", sev: "block",
+  { name: "pipe-to-shell", pattern: "(?:curl|wget|base64)[^|\\n]*\\|\\s*(?:sudo\\s+)?(?:ba|z|k|da|fi)?sh\\b", sev: "block",
     fix: "download and inspect the script before running it (no curl|sh, no base64|sh)", rule: "security" },
-  { name: "2>/dev/null", pattern: "2>\\s*/dev/null", sev: "fix",
+  { name: "pipe-to-interp", pattern: "(?:curl|wget|base64)[^|\\n]*\\|\\s*(?:sudo\\s+)?(?:python3?|node|perl|ruby|php)\\b", sev: "block",
+    fix: "download and inspect the script before running it; never pipe a download into an interpreter", rule: "security" },
+  { name: "source-process-sub", pattern: "(?:^|[;&|()]\\s*)(?:source|\\.|bash|sh|zsh|ksh|dash)\\s+<\\(\\s*(?:curl|wget)", sev: "block",
+    fix: "download to a file, inspect it, then run it (no source <(curl ...))", rule: "security" },
+  { name: "subprocess-import", pattern: "from\\s+subprocess\\s+import\\s+(?:run|\\*)|getattr\\s*\\(\\s*subprocess\\s*,\\s*['\"]run|asyncio\\.create_subprocess_", sev: "block", raw: true,
+    fix: "import subprocess and use subprocess.Popen(..., stdout=PIPE, stderr=PIPE)", rule: "convention" },
+  { name: "2>/dev/null", pattern: "2>>?\\s*/dev/null", sev: "fix",
     fix: "redirect removed so stderr (the proof) reaches the tool result", rule: "#8" },
   // #8 evasion family: `2>/dev/null` is auto-removed above, but these spell the
   // same "hide stderr" intent so the remover misses them. Block outright.
@@ -128,7 +136,7 @@ export function injectionVerdict(text) {
   return "";
 }
 
-const REDIRECT_RE = /2>\s*\/dev\/null/g;
+const REDIRECT_RE = /2>>?\s*\/dev\/null/g;
 
 // Blank single/double-quoted regions so `grep 'sed'` is not treated as `sed`.
 // Preserves string length, so match indices map back onto the original.
@@ -168,23 +176,100 @@ export function innerScripts(command) {
   return out;
 }
 
+// Split a command line at unquoted shell separators. This is a boundary finder,
+// not a full shell parser: its job is to stop the `&& sed`, `; sed`, newline,
+// subshell, and `| sh` evasions that a single `^` anchor misses.
+export function segments(command) {
+  const src = String(command || "");
+  const out = [];
+  let cur = "", quote = null;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) {
+      cur += ch;
+      if (ch === quote && src[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+    if (";|&\n(){}".includes(ch)) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+// Wrapper programs that prefix the real executable, plus the flags that take
+// a separate value. Kept small on purpose: over-skipping would hide the
+// command we are trying to inspect.
+const WRAPPERS = new Set(["sudo", "doas", "command", "builtin", "exec", "nohup", "nice", "time", "stdbuf", "xargs", "busybox", "env"]);
+const VALUE_FLAGS = new Set(["-u", "-g", "-n", "-I", "-L", "-P", "-s", "-e", "-C", "-t", "-c", "-o"]);
+
+// Resolve one segment to its executable word: unwrap wrappers, drop
+// VAR=value assignments and wrapper options, de-backslash, dequote the first
+// word, and take the basename. This is what catches `/usr/bin/sed`,
+// `sudo sed`, `"sed"`, `\sed`, `se\d`, `xargs sed`, and `busybox sed`.
+export function execWord(segment) {
+  const s = String(segment || "").replace(/\\+(?=[A-Za-z])/g, "");
+  const toks = s.match(/"[^"]*"|'[^']*'|\S+/g) || [];
+  const unq = (t) => t.replace(/^["']|["']$/g, "");
+  let i = 0;
+  while (i < toks.length) {
+    const w = unq(toks[i]);
+    if (!WRAPPERS.has(w)) return w.replace(/^.*\//, "");
+    i++;
+    while (i < toks.length) {
+      const n = unq(toks[i]);
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(n)) { i++; continue; }
+      if (n.startsWith("-")) {
+        const flag = n;
+        i++;
+        if (VALUE_FLAGS.has(flag) && i < toks.length && !unq(toks[i]).startsWith("-")) i++;
+        continue;
+      }
+      break;
+    }
+  }
+  return "";
+}
+
+function hasRecursiveForce(segment) {
+  const flags = (String(segment).match(/(?:^|\s)(--?[A-Za-z-]+)/g) || []).map((x) => x.trim());
+  const rec = flags.some((f) => /^(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)$/.test(f));
+  const force = flags.some((f) => /^(?:-[A-Za-z]*[fF][A-Za-z]*|--force)$/.test(f));
+  return rec && force;
+}
+
 // Return the rules matched by a command string. The outer command is matched
-// quote-aware (`grep 'sed'` passes); any interpreter-wrapped script is matched
-// too, so the wrapper cannot smuggle a blocked command past the guard.
+// quote-aware (`grep 'sed'` passes); interpreter-wrapped scripts and every
+// shell segment's executable word are matched too, so wrappers and separators
+// cannot smuggle a blocked command past the guard.
 export function inspect(command) {
   const hits = [];
   const seen = new Set();
+  const add = (name) => {
+    if (seen.has(name)) return;
+    const r = RULES.find((x) => x.name === name);
+    if (!r) return;
+    seen.add(name);
+    hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
+  };
   const scan = (text) => {
     const bare = stripQuotes(text);
     for (const r of RULES) {
-      if (!seen.has(r.name) && r.re.test(r.raw ? text : bare)) {
-        seen.add(r.name);
-        hits.push({ name: r.name, sev: r.sev, fix: r.fix, rule: r.rule });
-      }
+      if (!seen.has(r.name) && r.re.test(r.raw ? text : bare)) add(r.name);
     }
   };
   scan(command);
   for (const inner of innerScripts(command)) scan(inner);
+
+  for (const seg of segments(command)) {
+    const w = execWord(seg);
+    if (w === "sed") add("sed");
+    if (w === "rm" && hasRecursiveForce(seg)) add("rm -rf");
+    if (w === "opencode" && /\bdebug\s+config\b/.test(seg)) add("config-dump");
+    const execFlag = seg.match(/(?:^|\s)-exec\s+("[^"]*"|'[^']*'|\S+)/);
+    if (w === "find" && execFlag && /(?:^|\/)sed$/.test(execFlag[1].replace(/^["']|["']$/g, ""))) add("sed");
+  }
   return hits;
 }
 
@@ -369,9 +454,10 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         );
       }
 
-      // Semantic layer: pattern rules passed, but the command may still be
-      // irreversible. Ask the classifier; block only on a confident BLOCK.
-      if (m === "block" && process.env.OPENCODE_SEMANTIC_GUARD !== "off") {
+      // Semantic layer: OPT-IN. It uploads the command text to a third-party
+      // classifier (api.subq.ai) before execution, which is a confidentiality
+      // risk, so it runs only when the operator sets OPENCODE_SEMANTIC_GUARD=on.
+      if (m === "block" && process.env.OPENCODE_SEMANTIC_GUARD === "on") {
         let sv = { block: false };
         try { sv = semanticVerdict(command); } catch { /* fail open */ }
         if (sv.block) {
@@ -382,7 +468,7 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
             "semantic-guard blocked this command as irreversible/destructive" +
             (p != null ? (" (subq noul=" + p + ")") : "") +
             ".\nSplit it, use a reversible form, or confirm intent. " +
-            "Set OPENCODE_SEMANTIC_GUARD=off to disable."
+            "The semantic layer is opt-in; unset OPENCODE_SEMANTIC_GUARD (or set it to off) to disable."
           );
         }
       }

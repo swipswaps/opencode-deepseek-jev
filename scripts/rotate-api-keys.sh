@@ -293,8 +293,9 @@ r6_wait_http() {
 
 r7_verify_inside() {
     section "R7  verify inside the container"
-    printf 'auth.json:\n'
-    docker exec "$C" sh -c "ls -la '$CONTAINER_AUTH' && head -c 200 '$CONTAINER_AUTH'" 2>&1 | indent
+    printf 'auth.json (provider names only; never key bytes):\n'
+    docker exec "$C" sh -c "ls -la '$CONTAINER_AUTH'" 2>&1 | indent
+    docker exec "$C" node -e 'const fs=require("fs");const p=process.argv[1];try{const d=JSON.parse(fs.readFileSync(p,"utf8"));console.log("keys: "+Object.keys(d).join(", "))}catch(e){console.log("auth.json unreadable: "+e.message)}' "$CONTAINER_AUTH" 2>&1 | indent
     printf '\nproviders:\n'
     # opencode lives at /home/node/.opencode/bin, which is not on the default
     # non-login PATH. A bare `opencode` here exits 127 and prints nothing.

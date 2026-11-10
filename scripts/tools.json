@@ -1632,12 +1632,36 @@
     "id": "ssh-x11-setup",
     "title": "Codify clipboard-over-SSH X11 forwarding",
     "where": "host",
-    "purpose": "Encodes the trust decision instead of a one-off `ssh -Y`: ForwardX11 yes plus ForwardX11Trusted yes scoped to ONE managed Host block on the stable Nebula address, so the same alias works on the same LAN and across a network change. --print is safe on a client with no checkout; --check inspects sshd X11Forwarding and the current SSH/DISPLAY; --write edits ~/.ssh/config idempotently with a timestamped backup; --self-test offline (block shape + managed-region idempotency).",
+    "purpose": "Encodes the trust decision instead of a one-off `ssh -Y`: ForwardX11 yes scoped to ONE managed Host block on the stable Nebula address. UNTRUSTED is the default (2026-11-10); `--trusted`/X11_TRUSTED=1 opts in to ForwardX11Trusted (ssh -Y), which disables the X11 SECURITY extension so a compromised remote can read the local screen/clipboard and inject input. --print is safe on a client with no checkout; --check inspects sshd X11Forwarding and the current SSH/DISPLAY; --write edits ~/.ssh/config idempotently with a timestamped backup; --self-test offline (default untrusted + trusted opt-in + managed-region idempotency).",
     "commands": [
       "./scripts/ssh-x11-setup.sh --print",
       "./scripts/ssh-x11-setup.sh --check",
       "./scripts/ssh-x11-setup.sh --write",
       "./scripts/ssh-x11-setup.sh --self-test"
+    ]
+  },
+  {
+    "id": "wifi-link-forensics",
+    "title": "Prove why a Wi-Fi link stalls from both ends, then fix powersave",
+    "where": "host",
+    "purpose": "Read-only by default: driver, band, signal, powersave, 5GHz capability, and counts of wpa_supplicant BEACON-LOSS, deauth/firmware reloads, NetworkManager deactivations, Tailscale path changes and NetworkManager DNS-commit failures over --since HOURS. --peer USER@HOST re-runs the same script over SSH so one command reads both machines. Verdicts: beacon-loss, powersave-on, driver-b43, 2.4-only, path-flap, dns-commit-failure, stable. --fix disables powersave now + persists wifi.powersave=2; --dry-run prints only. Exit 0 healthy, 2 link-layer cause proven, 3 cannot run.",
+    "commands": [
+      "./scripts/wifi-link-forensics.sh",
+      "./scripts/wifi-link-forensics.sh --peer owner@100.70.43.78 --since 24",
+      "./scripts/wifi-link-forensics.sh --fix --dry-run",
+      "./scripts/wifi-link-forensics.sh --self-test"
+    ]
+  },
+  {
+    "id": "peer-health",
+    "title": "Evidence-backed peer reachability + link-quality verdict with hysteresis",
+    "where": "host",
+    "purpose": "Probes ICMP, SSH, TCP :5099/:4096, and Tailscale; separates reachability (state healthy/degraded/down) from link quality (clean/lossy + reason) using the peer's wifi-link-forensics JSON over SSH. Hysteresis: --fail-threshold (default 3) consecutive misses, --recover-threshold (default 2) successes. Writes data/observability/peer-health.json (ts, state, raw, consecutive, since, incident_id, link, checks, evidence) as the shared truth for hotspot-reconnect notifications and dashboards. --explain prints why (checks + evidence + conclusion); --json, --watch SEC, --self-test offline. Exit 0 healthy, 2 down/degraded, 3 cannot run.",
+    "commands": [
+      "./scripts/peer-health.sh",
+      "./scripts/peer-health.sh --peer owner@10.100.0.1 --tailscale 100.70.43.78 --explain",
+      "./scripts/peer-health.sh --json",
+      "./scripts/peer-health.sh --self-test"
     ]
   }
 ]

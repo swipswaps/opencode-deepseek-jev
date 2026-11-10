@@ -3,12 +3,13 @@
 # ssh-x11-setup.sh - codify clipboard-over-SSH (X11 forwarding) instead of
 # typing `ssh -Y` by hand after every network change.
 #
-# Decision this encodes: keep `ForwardX11 yes` for the normal case and add
-# `ForwardX11Trusted yes` (what `-Y` does) scoped to ONE Host block. Untrusted
-# X11 forwarding is safer but some clipboard owners/managers refuse untrusted
-# clients, which is why a bare `ssh -X` can still fail to paste. Trusting a
-# single mesh Host is the smallest change that makes the clipboard reliable,
-# and a Host block makes a reconnect after roaming deterministic.
+# Decision (changed 2026-11-10): default to UNTRUSTED forwarding
+# (`ForwardX11 yes`, the same as `ssh -X`). Trusted forwarding
+# (`ForwardX11Trusted yes`, `ssh -Y`) disables the X11 SECURITY extension, so a
+# compromised remote can read the local screen/clipboard and inject input.
+# Trusted is now opt-in per run (`--trusted` or X11_TRUSTED=1) for the rare
+# clipboard manager that refuses untrusted clients; a Host block still makes a
+# reconnect after roaming deterministic.
 #
 #   ./scripts/ssh-x11-setup.sh --print            # show the Host block
 #   ./scripts/ssh-x11-setup.sh --check            # inspect sshd + this session
@@ -16,8 +17,9 @@
 #   ./scripts/ssh-x11-setup.sh --remove [FILE]    # drop the managed block
 #   ./scripts/ssh-x11-setup.sh --self-test        # offline, temp files only
 #
-# Flags: --alias NAME, --host HOST, --user USER, --untrusted (omit the trusted
-# line). These let client-setup.sh drive this writer on any client.
+# Flags: --alias NAME, --host HOST, --user USER, --trusted (opt IN to -Y
+# semantics), --untrusted (explicit default). These let client-setup.sh drive
+# this writer on any client.
 #
 # No python3 required: the managed-region edit is pure bash, so it runs on a
 # fresh client (including macOS bash 3.2) with no extra tooling.
@@ -50,7 +52,7 @@ block_text() {
     # block_text ALIAS HOST USER TRUSTED
     # Match BOTH the alias and the literal host, so `ssh 10.100.0.24` gets the
     # trusted forwarding too (not just `ssh opencode-jev`).
-    local alias="$1" host="$2" user="$3" trusted="${4:-1}" match="$1"
+    local alias="$1" host="$2" user="$3" trusted="${4:-0}" match="$1"
     if [ "$host" != "$alias" ]; then match="$alias $host"; fi
     printf '%s\n' "$BEGIN_MARK"
     printf 'Host %s\n' "$match"
@@ -175,11 +177,13 @@ check_server() {
 
 self_test() {
     local fail=0 b="" tmp="" first="" second="" out="" n=0
-    b="$(block_text myalias 10.100.0.24 alice 1)"
+    b="$(block_text myalias 10.100.0.24 alice)"
     printf '%s' "$b" | grep -q '^Host myalias 10.100.0.24$' || { printf 'FAIL alias\n'; fail=1; }
     printf '%s' "$b" | grep -q '^    ForwardX11 yes$' || { printf 'FAIL ForwardX11\n'; fail=1; }
-    printf '%s' "$b" | grep -q '^    ForwardX11Trusted yes$' || { printf 'FAIL trusted\n'; fail=1; }
+    printf '%s' "$b" | grep -q 'ForwardX11Trusted' && { printf 'FAIL default is trusted\n'; fail=1; }
     printf '%s' "$b" | grep -q '^    HostName 10.100.0.24$' || { printf 'FAIL hostname\n'; fail=1; }
+    b="$(block_text myalias 10.100.0.24 alice 1)"
+    printf '%s' "$b" | grep -q '^    ForwardX11Trusted yes$' || { printf 'FAIL trusted opt-in\n'; fail=1; }
     b="$(block_text myalias 10.100.0.24 "" 1)"
     printf '%s' "$b" | grep -q '^    User ' && { printf 'FAIL empty user emitted\n'; fail=1; }
     b="$(block_text myalias 10.100.0.24 alice 0)"
@@ -211,7 +215,7 @@ self_test() {
 
 usage() {
     printf 'usage: %s [--print|--check|--write [FILE]|--remove [FILE]|--self-test]\n' "$0"
-    printf 'flags: --alias NAME --host HOST --user USER --untrusted\n'
+    printf 'flags: --alias NAME --host HOST --user USER --trusted|--untrusted (default untrusted)\n'
     printf '  --print        emit the managed ~/.ssh/config Host block (safe everywhere)\n'
     printf '  --check        inspect sshd X11 policy + the current SSH/DISPLAY\n'
     printf '  --write FILE   write/refresh the block idempotently (default ~/.ssh/config)\n'
@@ -219,7 +223,7 @@ usage() {
 }
 
 main() {
-    local mode="print" file="" alias="$DEFAULT_ALIAS" host="$DEFAULT_HOST" user="${USER:-}" trusted=1
+    local mode="print" file="" alias="$DEFAULT_ALIAS" host="$DEFAULT_HOST" user="${USER:-}" trusted="${X11_TRUSTED:-0}"
     local rc=0
     while [ $# -gt 0 ]; do
         case "$1" in

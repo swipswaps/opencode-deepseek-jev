@@ -1029,6 +1029,15 @@ guard-env-read.sh
     cat/less/more/head/tail/nl/xxd/od/strings on .env*, and grep unless
     -c/-q (no value printed). --check, --install.
 
+install-global-guard.sh
+    Make the blacklist guard load from ANY project. The global plugin link
+    must resolve to a real file; the 2026-11-10 audit found it pointing at the
+    container-only /workspace path, which is DANGLING on the host, so no guard
+    loaded there (a missing guard and an idle guard look identical). --check
+    (PASS resolves, FAIL dangling, WARN absent), --install (link the resolved
+    checkout plugin), --uninstall, --require (absent is FAIL), --self-test
+    offline. Exit 0 PASS, 2 FAIL, 3 usage. Gated in test-hygiene.sh.
+
 guard-verify.sh
     Prove jev-guard is loaded in the running web container and its backend
     answers: a read-only call ALLOWs and a destructive one DENYs. --restart,
@@ -1473,6 +1482,32 @@ hotspot-reconnect.sh
     Distinct from hotspot-test.sh: that proves a switch after the fact; this one
     watches live, alerts, and reconnects. Exit 0 up, 2 down/failed, 3 cannot
     run / unsafe input. Gated in test-hygiene.sh.
+
+peer-health.sh
+    One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,
+    SSH, TCP :5099/:4096, and Tailscale; separates REACHABILITY (state:
+    healthy/degraded/down) from LINK QUALITY (link: clean/lossy, reason) using
+    the peer's own wifi-link-forensics JSON. Hysteresis: --fail-threshold
+    (default 3) consecutive misses before down/degraded, --recover-threshold
+    (default 2) successes before healthy. Writes data/observability/peer-health.json
+    (ts, state, raw, consecutive, since, incident_id, link, checks, evidence) as
+    the shared source of truth for hotspot-reconnect.sh and any dashboard.
+    --explain prints why (checks + evidence + conclusion), --json machine
+    contract, --watch SEC print on change, --self-test offline. Exit 0 healthy,
+    2 down/degraded, 3 cannot run. Gated in test-hygiene.sh.
+
+wifi-link-forensics.sh
+    Prove WHY a Wi-Fi link stalls, from the logs on BOTH ends, then apply the
+    safe fixes. Local run reads driver, band, signal, powersave, the 5GHz
+    capability, and counts wpa_supplicant BEACON-LOSS, deauth/firmware reloads,
+    NetworkManager deactivations, Tailscale path changes, and DNS-commit
+    failures over --since HOURS. --peer USER@HOST re-runs the same script on the
+    other machine over SSH (stdin; nothing to install). Verdicts: beacon-loss,
+    powersave-on, driver-b43, 2.4-only, path-flap, dns-commit-failure, stable.
+    --fix disables powersave now and persists wifi.powersave=2 for
+    NetworkManager; --dry-run prints the commands without changing anything.
+    --json machine contract; --self-test offline. Exit 0 healthy, 2 link-layer
+    cause proven, 3 cannot run. Gated in test-hygiene.sh.
 
 terminal-reset.sh
     Clear leaked SGR mouse reports (the ESC[<b;x;yM tail shows as

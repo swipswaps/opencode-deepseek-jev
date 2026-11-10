@@ -262,6 +262,17 @@ Last updated: 2026-11-09
 
 - [~] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests
       green; live roam proof open.
+      **2026-11-10:** self-test cooldown fixed (stale `alerts.state` throttled
+      the first alert). Cause proven by
+      `scripts/wifi-link-forensics.sh --peer owner@100.70.43.78`: 2.4 GHz-only
+      `b43`/BCM4331 client, 300 `BEACON-LOSS`/24 h; server powersave ON.
+      **ws24 powersave `--fix` DONE 2026-11-10 16:04Z** (`power_save off`,
+      persisted `wifi.powersave=2`, NM reloaded; ledger
+      `wifi-ws24-powersave-fix-20261110T1059`). Next: client
+      `akmod-wl`/wired, NM `rc-manager=unmanaged`.
+      **Popup UX DONE:** bounded TTL + replace-id + recovery clear + server
+      hysteresis; `scripts/peer-health.sh --explain` proves reachability vs
+      link quality. Remaining queue: `docs/OUTSTANDING-ISSUES-2026-11-10.md`.
 - [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
       restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
       parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the
