@@ -45,6 +45,9 @@ con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_t1", "msg_u1", "ses_fi
 con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_tool_err", "msg_a1", "ses_fixture1", now - 58000, now - 57000, json.dumps({"type": "tool", "tool": "bash", "state": {"status": "error", "input": {"command": "cat no-such-file.sh"}, "error": "No such file or directory"}})))
 con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_tool_ok", "msg_a1", "ses_fixture1", now - 56000, now - 55000, json.dumps({"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "awk 'NR==1' scripts/x.sh"}, "output": "ok"}})))
 con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_t2", "msg_a1", "ses_fixture1", now - 54000, now - 54000, json.dumps({"type": "text", "text": "done: fixed the broken call"})))
+# Long part for the /api/search full=1 contract: the Activity timeline must get
+# the whole text, not the 200-char search teaser.
+con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_long", "msg_a1", "ses_fixture1", now - 53500, now - 53500, json.dumps({"type": "text", "text": "long-snippet-marker " * 80})))
 con.execute("INSERT INTO part VALUES(?,?,?,?,?,?)", ("prt_r1", "msg_a1", "ses_fixture1", now - 59000, now - 59000, json.dumps({"type": "reasoning", "text": "the broken call fails here"})))
 con.execute("INSERT INTO todo VALUES(?,?,?,?,?,?,?)", ("ses_fixture1", "replace the broken call with awk", "completed", "high", 0, now - 59000, now - 54000))
 con.execute("INSERT INTO session_message VALUES(?,?,?,?,?,?,?)", ("sm1", "ses_fixture1", "text", 1, now - 54000, now - 54000, json.dumps({"type": "text"})))

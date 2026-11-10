@@ -43,6 +43,22 @@ const FILTERS = [
   ["errors", "Errors"],
 ];
 
+function activityFromHit(h) {
+  const isTool = h.type === "tool";
+  return {
+    ts: h.ts,
+    te: h.ts,
+    type: h.type,
+    tool: isTool ? (h.tool || "tool") : undefined,
+    status: h.status || "",
+    cmd: isTool ? (h.snippet || "") : "",
+    text: isTool ? "" : (h.snippet || ""),
+    session: h.session,
+    sessionTitle: h.title,
+    searchHit: true,
+  };
+}
+
 function CopyButton({ text, label = "Copy" }) {
   const [done, setDone] = useState(false);
   return (
@@ -195,6 +211,7 @@ export default function ActivityTimeline({ activity, shed }) {
   // row shape. "Show all" then expands the real hit set, not just 30 rows.
   const [remote, setRemote] = useState(null);
   const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteError, setRemoteError] = useState("");
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -227,27 +244,29 @@ export default function ActivityTimeline({ activity, shed }) {
     }
     let cancelled = false;
     setRemoteBusy(true);
+    setRemoteError("");
     const timer = setTimeout(async () => {
       let rows = [];
+      let error = "";
       try {
-        const d = await fetchJSON("/api/search?q=" + encodeURIComponent(q) + "&limit=200");
-        rows = ((d && d.hits) || []).map((h) => ({
-          ts: h.ts,
-          te: h.ts,
-          type: h.type,
-          tool: h.type === "tool" ? (h.tool || "tool") : undefined,
-          status: h.status || "",
-          cmd: h.type === "tool" ? (h.snippet || "") : "",
-          text: h.type === "tool" ? "" : (h.snippet || ""),
-          session: h.session,
-          sessionTitle: h.title,
-          searchHit: true,
-        }));
+        // The legacy LIKE search can run for several seconds on a cold worker;
+        // the 12 s default was aborting and showing a false "No matches".
+        const d = await fetchJSON("/api/search?q=" + encodeURIComponent(q) + "&limit=200&full=1", 45000);
+        rows = ((d && d.hits) || []).map(activityFromHit);
       } catch {
-        rows = [];
+        // Fast fallback: the FTS5 index answers in ~200 ms. Its snippets are
+        // shorter, but a hit is better than a false negative.
+        try {
+          const s = await fetchJSON("/api/semantic?q=" + encodeURIComponent(q) + "&limit=200", 20000);
+          rows = ((s && s.results) || []).map(activityFromHit);
+        } catch {
+          rows = [];
+          error = "Search timed out. Retry, or use the Search card below.";
+        }
       }
       if (cancelled) return;
-      setRemote({ q, rows });
+      setRemote({ q, rows, error });
+      setRemoteError(error);
       setRemoteBusy(false);
     }, 250);
     return () => {
@@ -306,7 +325,9 @@ export default function ActivityTimeline({ activity, shed }) {
               {remoteBusy
                 ? "searching all sessions…"
                 : q
-                  ? `${rows.length} of ${filtered.length} matches across all sessions · newest first`
+                  ? remoteError
+                    ? remoteError
+                    : `${rows.length} of ${filtered.length} matches across all sessions · newest first`
                   : `${rows.length} of ${filtered.length} parts${filtered.length !== all.length ? ` · ${all.length} recent` : ""} · newest first`}
             </Typography>
           </Box>
@@ -397,8 +418,14 @@ export default function ActivityTimeline({ activity, shed }) {
       )}
 
       {rows.length === 0 ? (
-        <Alert severity="info">
-          {remoteBusy ? "Searching all sessions…" : q ? `No matches for “${q}” across all sessions.` : "No activity matches this filter."}
+        <Alert severity={remoteError ? "warning" : "info"}>
+          {remoteBusy
+            ? "Searching all sessions…"
+            : remoteError
+              ? remoteError
+              : q
+                ? `No matches for “${q}” across all sessions.`
+                : "No activity matches this filter."}
         </Alert>
       ) : (
         rows.map((x) => {

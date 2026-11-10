@@ -48,8 +48,8 @@ const FNS = {
   },
   // Remaining sync outliers measured on the live store (2026-10-19):
   // search 6.8 s, integrations 8.6 s, cost/activity on the 2 s poll path.
-  search(dbPath, q, limit) {
-    return apiSearchFresh(dbPath, q, limit);
+  search(dbPath, q, limit, full) {
+    return apiSearchFresh(dbPath, q, limit, full);
   },
   integrations(dbPath) {
     return apiIntegrationsFresh(dbPath);

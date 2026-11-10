@@ -3,17 +3,25 @@
 # hotspot-reconnect.sh - detect a lost hotspot/underlay, alert BOTH ends, and
 # walk the operator through an interactive reconnect.
 #
-# Client half - run ON THE CLIENT (the roaming box):
+# Client half - run ON THE CLIENT (the roaming box, in its DESKTOP session):
 #   ./scripts/hotspot-reconnect.sh --check            # one probe; 0 up, 2 down
-#   ./scripts/hotspot-reconnect.sh --watch            # detect, alert, guide
+#   ./scripts/hotspot-reconnect.sh --watch            # quiet ticker + popups
 #   ./scripts/hotspot-reconnect.sh --watch --reconnect # also try to rejoin
 #   ./scripts/hotspot-reconnect.sh --plan             # show the reconnect order
 #   ./scripts/hotspot-reconnect.sh --json             # machine state
+#   ./scripts/hotspot-reconnect.sh --notify-check     # DBus/X11/daemon diagnosis
 #   ./scripts/hotspot-reconnect.sh --self-test        # offline seams
 #
 # Server half - run ON THE SERVER (ws24):
 #   ./scripts/hotspot-reconnect.sh --server --watch
-#   -> alerts this server's console when the client overlay disappears/returns.
+#   -> writes wall + the local alert log. Desktop popups belong on the CLIENT:
+#      the server's notification daemon is a different desktop/session.
+#
+# 2026-11-10 UX: `--watch` hides the per-tick table by default (use --verbose
+# to see it), resolves DBUS_SESSION_BUS_ADDRESS from /run/user/$UID/bus, and
+# sets DISPLAY=:0 on an X11 seat when the caller forgot it. A broken channel is
+# reported once, not on every tick; --no-bell and --quiet-terminal are the
+# explicit escape hatches. `--quiet` still means "silence notifications".
 #
 # Two-sided alerting, honestly:
 #   - client --watch alerts the local terminal/bell/notify and, when the server
@@ -32,7 +40,10 @@
 # Env: ROAM_MESH_IP, ROAM_TAILSCALE_IP, ROAM_LAN_IP, CLIENT_MESH_IP,
 #      CLIENT_TAILSCALE_IP, HOTSPOT_SERVER_SSH, HOTSPOT_STATE, HOTSPOT_LOG,
 #      HOTSPOT_PENDING, HOTSPOT_WATCH_SEC, HOTSPOT_SETTLE_SEC,
-#      HOTSPOT_FAIL_THRESHOLD, HOTSPOT_PROFILE, HOTSPOT_SSID, HOTSPOT_IFACE.
+#      HOTSPOT_FAIL_THRESHOLD, HOTSPOT_PROFILE, HOTSPOT_SSID, HOTSPOT_IFACE,
+#      HOTSPOT_BELL (1/0), HOTSPOT_TERM_QUIET (1/0), HOTSPOT_WATCH_VERBOSE (1/0),
+#      HOTSPOT_NOTIFY_REMOTE (USER@HOST), HOTSPOT_NOTIFY_REMOTE_DISPLAY (:0),
+#      HOTSPOT_CLIENT_SSH (default owner@CLIENT_MESH_IP), HOTSPOT_DISMISS_SEC.
 # Seams (self-test): HOTSPOT_FAKE_OVERLAY, HOTSPOT_FAKE_LINK, HOTSPOT_FAKE_DNS,
 #      HOTSPOT_FAKE_SSID, HOTSPOT_FAKE_SERVER, HOTSPOT_FAKE_CLIENT,
 #      HOTSPOT_FAKE_HAVE_NMCLI, HOTSPOT_FAKE_RECONNECT, HOTSPOT_FAKE_BELL.
@@ -55,6 +66,7 @@ TAILSCALE="${ROAM_TAILSCALE_IP:-100.119.125.16}"
 LAN="${ROAM_LAN_IP:-192.168.4.24}"
 CLIENT_MESH="${CLIENT_MESH_IP:-10.100.0.1}"
 CLIENT_TAILSCALE="${CLIENT_TAILSCALE_IP:-}"
+CLIENT_SSH="${HOTSPOT_CLIENT_SSH:-owner@$CLIENT_MESH}"
 SERVER_SSH="${HOTSPOT_SERVER_SSH:-}"
 STATE="${HOTSPOT_STATE:-$HOME/.local/state/hotspot-reconnect.state}"
 LOG="${HOTSPOT_LOG:-$HOME/.local/state/hotspot-alerts.log}"
@@ -70,6 +82,19 @@ ALERTS_N="${HOTSPOT_ALERTS_N:-20}"
 INHIBIT_FILE="${HOTSPOT_INHIBIT:-$HOME/.local/state/hotspot-inhibit.until}"
 INHIBIT_TTL="${HOTSPOT_INHIBIT_TTL:-900}"
 QUIET="${HOTSPOT_QUIET:-0}"
+# 2026-11-10 UX: terminal banners/beeps are separate from desktop notifications.
+# `--quiet` still means "silence notifications"; TERM_QUIET hides only the
+# terminal ticker; BELL=0 disables the beep.
+BELL="${HOTSPOT_BELL:-1}"
+TERM_QUIET="${HOTSPOT_TERM_QUIET:-0}"
+WATCH_VERBOSE="${HOTSPOT_WATCH_VERBOSE:-0}"
+NOTIFY_OK=1
+NOTIFY_ERR=""
+NOTIFY_FAIL="${HOTSPOT_NOTIFY_FAIL:-$HOME/.local/state/hotspot-notify.fail}"
+# Cross-host popups: the desktop is the CLIENT (X11 seat :0). A watcher on the
+# server sends the notification over SSH into the client's own session bus.
+NOTIFY_REMOTE="${HOTSPOT_NOTIFY_REMOTE:-}"
+NOTIFY_REMOTE_DISPLAY="${HOTSPOT_NOTIFY_REMOTE_DISPLAY:-:0}"
 SILENCE_SEC="${HOTSPOT_SILENCE_SEC:-3600}"
 ALERT_COOLDOWN="${HOTSPOT_ALERT_COOLDOWN:-120}"
 ALERT_MAX="${HOTSPOT_ALERT_MAX:-4}"
@@ -86,6 +111,8 @@ SERVER_FAIL_THRESHOLD="${HOTSPOT_SERVER_FAIL_THRESHOLD:-3}"
 NOTIFY_ID="${HOTSPOT_NOTIFY_ID:-7331}"
 PEER_HEALTH_JSON="${HOTSPOT_PEER_HEALTH_JSON:-$SELF_DIR/../data/observability/peer-health.json}"
 QUIET_UNTIL="${HOTSPOT_QUIET_UNTIL:-$HOME/.local/state/hotspot-quiet.until}"
+DISMISS_UNTIL="${HOTSPOT_DISMISS_UNTIL:-$HOME/.local/state/hotspot-dismiss.until}"
+DISMISS_SEC="${HOTSPOT_DISMISS_SEC:-3600}"
 FIX_REQUEST="${HOTSPOT_FIX_REQUEST:-$HOME/.local/state/hotspot-fix.request}"
 ACTION_OUT="${HOTSPOT_ACTION_OUT:-$HOME/.local/state/hotspot-action.out}"
 NOTIFY_BIN="${HOTSPOT_NOTIFY_BIN:-notify-send}"
@@ -118,13 +145,75 @@ have_notify() {
     command -v "$NOTIFY_BIN" > /dev/null
 }
 
+# Resolve the session bus and an X11 display when the watcher was started from
+# a bare SSH/systemd context. On X11 the notification daemon lives on the
+# session bus; DISPLAY is only a fallback for clients that need it.
+notify_preflight() {
+    [ "$NOTIFY_OK" = "1" ] || return 1
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "/run/user/$(id -u)/bus" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+    fi
+    if [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+        export DISPLAY=":0"
+    fi
+    # A previous process proved the channel is broken. Retry after 1h so a
+    # desktop session that comes back is not ignored forever.
+    if [ -f "$NOTIFY_FAIL" ]; then
+        local mt now
+        mt="$(stat -c %Y "$NOTIFY_FAIL" 2>&1)"
+        now="$(date +%s)"
+        case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
+        if [ $((now - mt)) -lt 3600 ]; then return 1; fi
+        rm -f "$NOTIFY_FAIL"
+    fi
+    return 0
+}
+
 notify_send() {
     if [ "${HOTSPOT_FAKE_NOTIFY:-0}" = "1" ]; then
         printf '%s\n' "$*" >> "${HOTSPOT_NOTIFY_LOG:-/tmp/hotspot-notify.log}"
         printf '%s' "${HOTSPOT_FAKE_NOTIFY_ACTION:-}"
         return 0
     fi
-    "$NOTIFY_BIN" "$@"
+    notify_preflight || { printf '%s' "$NOTIFY_ERR"; return 1; }
+    local out="" rc=0
+    out="$("$NOTIFY_BIN" "$@" 2>&1)"; rc=$?
+    if [ "$rc" -ne 0 ]; then
+        NOTIFY_OK=0
+        NOTIFY_ERR="$out"
+        mkdir -p "$(dirname "$NOTIFY_FAIL")" 2>&1 || true
+        printf '%s\n' "$out" > "$NOTIFY_FAIL" 2>&1 || true
+        if [ "$TERM_QUIET" != "1" ]; then
+            printf 'notifications unavailable: %s\n' "$out" >&2
+            printf '  terminal/log only; run this on the desktop session (X11) or set HOTSPOT_BELL=0 to silence the bell\n' >&2
+        fi
+        return "$rc"
+    fi
+    if [ -f "$NOTIFY_FAIL" ]; then rm -f "$NOTIFY_FAIL"; fi
+    printf '%s' "$out"
+    return 0
+}
+
+# Send the body to the CLIENT's desktop session over SSH. The body arrives on
+# stdin, so it is never interpolated into the remote shell. Actions are not
+# forwarded (a remote notify-send cannot return a click to this process); the
+# body carries the fix command instead.
+remote_notify_send() {
+    local body="$1" urgency="$2" timeout="$3" out="" rc=0
+    if ! have ssh; then NOTIFY_OK=0; NOTIFY_ERR="ssh missing"; return 1; fi
+    out="$(printf '%s' "$body" | ssh -T -q -o BatchMode=yes -o ConnectTimeout=6 -o LogLevel=ERROR "$NOTIFY_REMOTE" \
+        "DISPLAY='$NOTIFY_REMOTE_DISPLAY' DBUS_SESSION_BUS_ADDRESS=\"unix:path=/run/user/\$(id -u)/bus\" notify-send -u '$urgency' -t '$timeout' 'opencode hotspot' \"\$(cat)\"" 2>&1)"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        NOTIFY_OK=0
+        NOTIFY_ERR="$out"
+        mkdir -p "$(dirname "$NOTIFY_FAIL")" 2>&1 || true
+        printf '%s\n' "$out" > "$NOTIFY_FAIL" 2>&1 || true
+        [ "$TERM_QUIET" = "1" ] || printf 'remote notifications unavailable (%s): %s\n' "$NOTIFY_REMOTE" "$out" >&2
+        return "$rc"
+    fi
+    if [ -f "$NOTIFY_FAIL" ]; then rm -f "$NOTIFY_FAIL"; fi
+    return 0
 }
 
 notify_has_actions() {
@@ -143,6 +232,7 @@ notify_has_replace() {
 # persistent popup, not to add a new alert.
 notify_clear() {
     local msg="$1" out="" idargs=()
+    if [ -n "$NOTIFY_REMOTE" ]; then remote_notify_send "OK: $msg" low 2500; return "$?"; fi
     have_notify || return 0
     notify_has_replace && idargs=(-r "$NOTIFY_ID")
     out="$(notify_send -u low -t 2500 "${idargs[@]}" \
@@ -183,8 +273,12 @@ open_url() {
 
 ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 say() { printf '%s\n' "$*"; }
+# Terminal-only echo: suppressed by --quiet-terminal / HOTSPOT_TERM_QUIET=1.
+tlog() { [ "$TERM_QUIET" = "1" ] || printf '%s\n' "$*"; }
 bell() {
     [ "${HOTSPOT_FAKE_BELL:-0}" = "1" ] && return 0
+    [ "$BELL" = "0" ] && return 0
+    [ "$TERM_QUIET" = "1" ] && return 0
     printf '\a'
 }
 
@@ -329,6 +423,7 @@ via() {
 }
 
 report() {
+    [ "$TERM_QUIET" = "1" ] && return 0
     printf '\n== state: %s (via %s) ==\n' "$STATE_NOW" "$(via)"
     printf '%-30s %-6s %s\n' TARGET CODE VERDICT
     printf '%-30s %-6s %s\n' "nebula:$MESH:4096" "$M4" "$(code_4096 "$M4")"
@@ -386,6 +481,54 @@ do_silence() {
     mkdir -p "$(dirname "$QUIET_UNTIL")" || return 0
     printf '%s\n' "$(( $(date +%s) + SILENCE_SEC ))" > "$QUIET_UNTIL"
     printf 'notifications silenced for %ss (delete %s to re-enable)\n' "$SILENCE_SEC" "$QUIET_UNTIL"
+}
+
+dismissed_now() {
+    [ -f "$DISMISS_UNTIL" ] || return 1
+    local until=""
+    until="$(cat "$DISMISS_UNTIL" 2>&1)"
+    case "$until" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$(date +%s)" -lt "$until" ]
+}
+
+do_dismiss() {
+    mkdir -p "$(dirname "$DISMISS_UNTIL")" || return 0
+    printf '%s\n' "$(( $(date +%s) + DISMISS_SEC ))" > "$DISMISS_UNTIL"
+    notify_clear "dismissed for ${DISMISS_SEC}s"
+    printf 'notifications dismissed for %ss\n' "$DISMISS_SEC"
+}
+
+# The "check" button must do real work: run the same evidence probe the
+# operator would run, then show the verdict in the notification itself.
+do_check_notify() {
+    local out="" summary=""
+    if [ -f "$SELF_DIR/peer-health.sh" ]; then
+        out="$(bash "$SELF_DIR/peer-health.sh" --json --peer "$CLIENT_SSH" 2>&1)"
+        summary="$(printf '%s' "$out" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("check unavailable")
+    raise SystemExit
+e = d.get("evidence") or {}
+print("state=%s link=%s beacon=%s driver=%s powersave=%s" % (
+    d.get("state", "?"), d.get("link", "?"), e.get("beacon_loss", "?"),
+    e.get("driver", "?"), e.get("powersave", "?")))
+' 2>&1)"
+    else
+        out="$(bash "$SELF_DIR/hotspot-reconnect.sh" --check --json 2>&1)"
+        summary="$(printf '%s' "$out" | head -c 300)"
+    fi
+    case "$summary" in '' | *[!a-zA-Z0-9=_.:,?-]*) summary="check: no verdict" ;; esac
+    if [ -n "$NOTIFY_REMOTE" ]; then
+        remote_notify_send "check: $summary" low 15000
+    elif have_notify; then
+        notify_send -u low -t 15000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+            "opencode hotspot" "check: $summary" 2>&1 || true
+    else
+        printf 'check: %s\n' "$summary"
+    fi
 }
 
 inhibit_active() {
@@ -469,11 +612,15 @@ evidence: $ev"
         body="$body
 fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
     fi
+    if [ -n "$NOTIFY_REMOTE" ]; then
+        remote_notify_send "$body" "$urgency" "$timeout"
+        return "$?"
+    fi
     if notify_has_actions; then
         if [ "$ROLE" = "server" ]; then
-            actions=(-A "open=Open dashboard" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+            actions=(-A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         else
-            actions=(-A "fix=Reconnect" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+            actions=(-A "fix=Reconnect" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         fi
         (
             notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" -w "${actions[@]}" \
@@ -483,9 +630,15 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
                 fix)
                     mkdir -p "$(dirname "$FIX_REQUEST")"
                     printf '%s\n' "$(ts)" > "$FIX_REQUEST"
+                    # Do not wait for the next watcher tick to at least
+                    # acknowledge the click.
+                    notify_send -u low -t 4000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                        "opencode hotspot" "reconnect requested; the watcher will try within ${WATCH_SEC}s" 2>&1 || true
                     ;;
                 open) open_url "https://$MESH:5099" ;;
+                check) do_check_notify ;;
                 silence) do_silence ;;
+                dismiss) do_dismiss ;;
             esac
         ) &
     else
@@ -504,28 +657,33 @@ note_local() {
 alert_local() {
     local level="$1" msg="$2" urgency="" timeout=""
     bell
-    printf '\n==== %s [%s] %s ====\n' "$level" "$(ts)" "$msg"
+    tlog ""
+    tlog "==== $level [$(ts)] $msg ===="
     log_line "$(ts) $level $msg"
     # Recovery always replaces the outstanding alert, even when the operator
     # silenced alerts, so a stale "disconnected" popup cannot persist.
     if [ "$level" = "OK" ]; then
+        rm -f "$DISMISS_UNTIL"
         notify_clear "$msg"
         if [ "$ROLE" = "server" ] && have wall; then
             printf '%s\n' "opencode hotspot: OK: $msg" | wall 2>&1 || true
         fi
         return 0
     fi
+    if dismissed_now; then
+        tlog '(dismissed; still logged)'
+        return 0
+    fi
     if quiet_now; then
-        printf '(notifications silenced; still logged)\n'
+        tlog '(notifications silenced; still logged)'
         return 0
     fi
     if ! have_notify; then
-        printf '(no %s; banner only — fix with: bash %s/hotspot-reconnect.sh --fix)\n' \
-            "$NOTIFY_BIN" "$SELF_DIR"
+        tlog "(no $NOTIFY_BIN; banner only — fix with: bash $SELF_DIR/hotspot-reconnect.sh --fix)"
         return 0
     fi
     if ! alert_budget "$level"; then
-        printf '(notification throttled; still logged)\n'
+        tlog '(notification throttled; still logged)'
         return 0
     fi
     urgency="$(alert_urgency)"
@@ -798,10 +956,10 @@ client_tick() {
                     ;;
             esac
         else
-            printf 'still down (%s misses): %s\n' "$FAILS" "$(down_message)"
+            tlog "still down ($FAILS misses): $(down_message)"
         fi
     else
-        printf 'miss %s/%s (settling): %s\n' "$FAILS" "$FAIL_THRESHOLD" "$(down_message)"
+        tlog "miss $FAILS/$FAIL_THRESHOLD (settling): $(down_message)"
     fi
     PREV="$STATE_NOW"
     save_state "$STATE_NOW" "$FAILS"
@@ -828,6 +986,17 @@ probe_client() {
         code="$(fetch "https://$CLIENT_TAILSCALE:5099/api/health")"
         if [ "$code" = "200" ]; then printf 'up'; return 0; fi
     fi
+    # The laptop does not run the :5099 dashboard. SSH (or a Tailscale pong) is
+    # direct proof that the client is connected and running; use it before
+    # declaring the peer down on a missing optional HTTP port.
+    if have ssh; then
+        if ssh -q -o BatchMode=yes -o ConnectTimeout=5 -o LogLevel=ERROR "$CLIENT_SSH" true 2>&1; then
+            printf 'up'; return 0
+        fi
+    fi
+    if have tailscale && [ -n "$CLIENT_TAILSCALE" ]; then
+        if tailscale ping -c 1 "$CLIENT_TAILSCALE" 2>&1 | grep -q 'pong'; then printf 'up'; return 0; fi
+    fi
     if have ping; then
         if ping -c 1 -W 2 "$CLIENT_MESH" 2>&1 | grep -q 'bytes from'; then printf 'up'; return 0; fi
     fi
@@ -846,14 +1015,14 @@ server_tick() {
         fi
         if inhibit_active; then clear_inhibit; fi
         save_state up 0
-        printf 'client %s: up\n' "$CLIENT_MESH"
+        tlog "client $CLIENT_MESH: up"
         return 0
     fi
     # Shared inhibition: the client (which knows it roamed) sets this TTL on the
     # server; a client that is expected to be away must not page the server.
     if inhibit_active; then
         reason="$(cat "$INHIBIT_FILE.reason" 2>&1 || true)"
-        printf 'client %s: down (inhibited: %s; expected, no alert)\n' "$CLIENT_MESH" "${reason:-inhibit}"
+        tlog "client $CLIENT_MESH: down (inhibited: ${reason:-inhibit}; expected, no alert)"
         save_state down 0
         return 2
     fi
@@ -867,7 +1036,7 @@ server_tick() {
     else
         save_state down-pending "$fails"
     fi
-    printf 'client %s: down (miss %s/%s)\n' "$CLIENT_MESH" "$fails" "$SERVER_FAIL_THRESHOLD"
+    tlog "client $CLIENT_MESH: down (miss $fails/$SERVER_FAIL_THRESHOLD)"
     return 2
 }
 
@@ -882,14 +1051,20 @@ do_check() {
 watch_mode() {
     PREV=""
     FAILS=0
+    # A watcher is a background service, not a scrolling monitor: hide the
+    # per-tick table and banners unless --verbose was asked for. Alerts still go
+    # to the desktop notification channel and the log.
+    [ "$WATCH_VERBOSE" = "1" ] || TERM_QUIET=1
     if [ "$ROLE" = "server" ]; then
         printf 'server watch: client=%s every %ss (Ctrl-C to stop)\n' "$CLIENT_MESH" "$WATCH_SEC"
+        printf 'terminal ticker is quiet; alerts use wall + the local log (use --verbose to watch ticks)\n'
         trap 'printf "interrupted\n"' INT
         while :; do server_tick || true; sleep "$WATCH_SEC"; done
     fi
     printf 'client watch: every %ss, fail-threshold %s, settle %ss (Ctrl-C to stop)\n' \
         "$WATCH_SEC" "$FAIL_THRESHOLD" "$SETTLE_SEC"
-    printf 'waiting for a loss; you will get a bell + banner, then reconnect guidance\n'
+    printf 'terminal ticker is quiet; alerts use desktop notifications (run on the desktop session) + the log\n'
+    printf 'use --verbose for the tick table, --no-bell to silence the beep\n'
     trap 'printf "interrupted\n"' INT
     while :; do client_tick || true; sleep "$WATCH_SEC"; done
 }
@@ -908,6 +1083,8 @@ self_test() {
     export HOTSPOT_NO_HEAL=1
     export HOTSPOT_ALERT_STATE="$work/alerts.state"
     export HOTSPOT_INHIBIT="$work/inhibit.until"
+    DISMISS_UNTIL="$work/dismiss.until"
+    export HOTSPOT_DISMISS_UNTIL="$work/dismiss.until"
     export HOTSPOT_QUIET_UNTIL="$work/quiet.until"
     export HOTSPOT_FIX_REQUEST="$work/fix.request"
     export HOTSPOT_ACTION_OUT="$work/action.out"
@@ -1036,6 +1213,19 @@ self_test() {
         bash "$0" --tick > /dev/null
     [ ! -s "$nf" ] || { printf 'FAIL quiet mode notified\n'; fail=1; }
 
+    # Dismiss must suppress re-alerts and recovery must clear the dismissal.
+    : > "$nf"
+    : > "$work/state"
+    : > "$work/alerts.state"
+    do_dismiss > /dev/null 2>&1
+    : > "$nf"
+    dismissed_now || { printf 'FAIL dismiss not set\n'; fail=1; }
+    HOTSPOT_FAKE_OVERLAY=down HOTSPOT_FAKE_LINK=down HOTSPOT_FAKE_DNS=0 HOTSPOT_FAKE_CLIENT=down HOTSPOT_FAKE_SIG=ddd2 \
+        bash "$0" --server --tick > /dev/null
+    [ ! -s "$nf" ] || { printf 'FAIL dismissed alert notified\n'; fail=1; }
+    alert_local OK "recovered" > /dev/null 2>&1
+    dismissed_now && { printf 'FAIL dismiss not cleared on OK\n'; fail=1; }
+
     o=$(bash "$0" --silence 60 2>&1); rc=$?
     [ "$rc" -eq 0 ] || { printf 'FAIL silence rc=%s\n' "$rc"; fail=1; }
     [ -s "$work/quiet.until" ] || { printf 'FAIL silence file\n'; fail=1; }
@@ -1064,13 +1254,42 @@ self_test() {
 }
 
 usage() {
-    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--inhibit [sec]|--clear-inhibit|--server|--self-test] [--reconnect] [--yes] [--json] [--quiet]\n' "$0"
+    printf 'usage: %s [--check|--watch|--tick|--plan|--fix|--alerts [N]|--silence [sec]|--inhibit [sec]|--clear-inhibit|--server|--notify-check|--notify-test|--clear-notify|--self-test] [--reconnect] [--yes] [--json] [--quiet] [--no-bell] [--quiet-terminal] [--verbose] [--notify-remote USER@HOST] [--remote-display :0]\n' "$0"
     printf 'client env: HOTSPOT_SSID, HOTSPOT_PROFILE, HOTSPOT_SERVER_SSH, ROAM_MESH_IP, ROAM_LAN_IP\n'
     printf 'server env: CLIENT_MESH_IP, CLIENT_TAILSCALE_IP\n'
     printf 'alerts: normal urgency + 8s expiry, coalesced, one per HOTSPOT_ALERT_COOLDOWN (120s),\n'
     printf '        capped at HOTSPOT_ALERT_MAX (4), critical only after HOTSPOT_CRITICAL_AFTER (3).\n'
     printf 'buttons: Reconnect (client) / Open dashboard (server) + Silence 1h + Dismiss.\n'
     printf 'run --watch on the client; --server --watch on the server\n'
+}
+
+notify_test() {
+    notify_user INFO "notification test: click a button (open / check / silence / dismiss / reconnect)" normal 60000
+    printf 'test notification sent; click a button (actions are handled in the background)\n'
+}
+
+clear_notify() {
+    notify_clear "cleared by operator"
+    printf 'clear notification sent\n'
+}
+
+notify_check() {
+    if [ -n "$NOTIFY_REMOTE" ]; then
+        printf 'remote=%s display=%s\n' "$NOTIFY_REMOTE" "$NOTIFY_REMOTE_DISPLAY"
+        ssh -T -q -o BatchMode=yes -o ConnectTimeout=6 -o LogLevel=ERROR "$NOTIFY_REMOTE" \
+            "DISPLAY='$NOTIFY_REMOTE_DISPLAY' DBUS_SESSION_BUS_ADDRESS=\"unix:path=/run/user/\$(id -u)/bus\" dbus-send --session --print-reply --dest=org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications.GetServerInformation 2>&1 | tail -4" 2>&1
+        return $?
+    fi
+    notify_preflight || { printf 'FAIL: %s\n' "${NOTIFY_ERR:-notifications unavailable}"; return 2; }
+    printf 'DBUS_SESSION_BUS_ADDRESS=%s\n' "${DBUS_SESSION_BUS_ADDRESS:-}"
+    printf 'DISPLAY=%s\n' "${DISPLAY:-}"
+    if have dbus-send; then
+        dbus-send --session --print-reply --dest=org.freedesktop.Notifications \
+            /org/freedesktop/Notifications org.freedesktop.Notifications.GetServerInformation 2>&1 | tail -4
+    else
+        printf 'dbus-send absent; the first alert will probe the channel\n'
+    fi
+    return 0
 }
 
 main() {
@@ -1105,6 +1324,15 @@ main() {
                 ;;
             --clear-inhibit) MODE="clear-inhibit"; shift ;;
             --quiet) QUIET=1; shift ;;
+            --no-bell) BELL=0; shift ;;
+            --bell) BELL=1; shift ;;
+            --quiet-terminal) TERM_QUIET=1; shift ;;
+            --verbose) WATCH_VERBOSE=1; shift ;;
+            --notify-check) MODE="notify-check"; shift ;;
+            --notify-test) MODE="notify-test"; shift ;;
+            --clear-notify) MODE="clear-notify"; shift ;;
+            --notify-remote) NOTIFY_REMOTE="${2:-}"; shift 2 ;;
+            --remote-display) NOTIFY_REMOTE_DISPLAY="${2:-:0}"; shift 2 ;;
             --silence)
                 shift
                 case "${1:-}" in
@@ -1133,6 +1361,9 @@ main() {
         inhibit) set_inhibit "$INHIBIT_TTL" "operator" ; return "$?" ;;
         clear-inhibit) clear_inhibit; printf 'inhibition cleared\n' ; return 0 ;;
         silence) do_silence; return "$?" ;;
+        notify-check) notify_check; return "$?" ;;
+        notify-test) notify_test; return "$?" ;;
+        clear-notify) clear_notify; return "$?" ;;
         tick)
             if [ "$ROLE" = "server" ]; then server_tick; return "$?"; fi
             client_tick; return "$?" ;;

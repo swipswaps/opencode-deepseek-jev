@@ -484,6 +484,24 @@ PY
         fi
         curl -s "http://$HOST:$PORT/api/search?q=the&limit=3" > "$work/search.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("sessions"),list) and isinstance(d.get("hits"),list) else 1)' "$work/search.json" && ok 'api/search' || bad 'api/search'
+        if [ -n "$fixdb" ]; then
+            if node --no-warnings --experimental-sqlite --input-type=module -e '
+const m = await import(process.argv[2]);
+const db = process.argv[1];
+const short = m.apiSearchFresh(db, "long-snippet-marker", 5, false).hits[0];
+const full = m.apiSearchFresh(db, "long-snippet-marker", 5, true).hits[0];
+if (!short || !full) { console.error("no search hit"); process.exit(1); }
+if (short.snippet.length > 200 || full.snippet.length <= 200) {
+  console.error("snippet lengths", short.snippet.length, full.snippet.length);
+  process.exit(1);
+}
+' "$fixdb" "$REPO/scripts/query-lib.mjs" > "$work/search-full.txt" 2>&1; then
+                ok 'api/search full=1 returns the whole part (Activity expand)'
+            else
+                bad 'api/search full=1 returns the whole part (Activity expand)'
+                cat "$work/search-full.txt"
+            fi
+        fi
         curl -s "http://$HOST:$PORT/api/cost" > "$work/cost.json"
         python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d.get("totals"),dict) and isinstance(d.get("sessions"),list) and "active" in d else 1)' "$work/cost.json" && ok 'api/cost' || bad 'api/cost'
         curl -s "http://$HOST:$PORT/api/cost" > "$work/cost2.json"

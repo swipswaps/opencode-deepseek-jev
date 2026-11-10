@@ -59,6 +59,15 @@ parse_args() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# 2026-11-10: the dashboard now requires Basic auth whenever
+# OPENCODE_SERVER_PASSWORD is set. Read it from the container env (never print
+# it) so the restart gate can still assert /api/resources=200 and a live SSE
+# snapshot.
+DASH_PW=""
+load_pw() {
+  DASH_PW="$(docker exec "$C" sh -c 'printf %s "${OPENCODE_SERVER_PASSWORD:-}"' 2>&1)"
+}
+
 dashboard_pids() {
   docker exec -i "$C" sh -s <<'IN'
 for p in /proc/[0-9]*; do
@@ -70,14 +79,18 @@ IN
 }
 
 snapshot_check() {
-  python3 - "$PORT" <<'PY'
-import http.client, json, ssl, sys, time
+  DASH_PW="$DASH_PW" python3 - "$PORT" <<'PY'
+import base64, http.client, json, os, ssl, sys, time
 port = int(sys.argv[1])
+pw = os.environ.get("DASH_PW", "")
+headers = {}
+if pw:
+    headers["Authorization"] = "Basic " + base64.b64encode(("opencode:" + pw).encode()).decode()
 ctx = ssl._create_unverified_context()
 for _ in range(20):
     try:
         c = http.client.HTTPSConnection("127.0.0.1", port, timeout=5, context=ctx)
-        c.request("GET", "/api/stream")
+        c.request("GET", "/api/stream", headers=headers)
         r = c.getresponse()
         lines = []
         while True:
@@ -103,15 +116,18 @@ PY
 }
 
 resources_check() {
-  curl -sk -m 5 -o /dev/null -w '%{http_code}' "https://127.0.0.1:$PORT/api/resources" 2>&1
+  local auth=()
+  [ -n "$DASH_PW" ] && auth=(-u "opencode:$DASH_PW")
+  curl -sk -m 5 -o /dev/null -w '%{http_code}' "${auth[@]}" "https://127.0.0.1:$PORT/api/resources" 2>&1
 }
 
 container_resources() {
-  docker exec "$C" curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/resources" 2>&1
+  docker exec "$C" sh -c "curl -s -m 3 -o /dev/null -w '%{http_code}' -u \"opencode:\$OPENCODE_SERVER_PASSWORD\" \"http://127.0.0.1:$PORT/api/resources\"" 2>&1
 }
 
 status() {
   log "=== dashboard status ==="
+  load_pw
   docker top "$C" 2>&1 | grep 'dashboard.mjs' | head -3 || log "  no dashboard process"
   printf 'host resources (caddy): %s\n' "$(resources_check)"
   printf 'container resources: %s\n' "$(container_resources)"
@@ -120,6 +136,7 @@ status() {
 
 apply() {
   have docker || die "docker missing (host-only)"
+  load_pw
   local pids
   pids=$(dashboard_pids)
   if [ -z "$pids" ]; then

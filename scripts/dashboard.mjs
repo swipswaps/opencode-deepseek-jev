@@ -1384,13 +1384,16 @@ function apiExportSession(id, format) {
   return redact(head + body.replace(/^### /gm, "").replace(/^_\(reasoning\)_\n/gm, "[reasoning] ").replace(/^_\[/gm, "["));
 }
 
-async function apiSearch(q, limit) {
+async function apiSearch(q, limit, full) {
   // Legacy substring search (measured 6.8 s). Cache by query and run in the
   // worker; /api/semantic is the fast FTS5 path for interactive search.
+  // full=1 returns up to 20k chars per hit for the Activity timeline; the
+  // search card keeps the 200-char teaser.
   const needle = String(q || "").replace(/[%_\\]/g, "");
   const lim = Number(limit) || 20;
-  return asyncCached("search:" + needle + ":" + lim, CACHE_TTL_MS, "search",
-    [needle, lim], () => searchFresh(dbPath, needle, lim));
+  const wantFull = !!full;
+  return asyncCached("search:" + needle + ":" + lim + ":" + (wantFull ? 1 : 0), CACHE_TTL_MS, "search",
+    [needle, lim, wantFull], () => searchFresh(dbPath, needle, lim, wantFull));
 }
 
 // The FTS index build runs in query-worker.mjs (apiSemanticFresh in
@@ -4266,7 +4269,7 @@ const server = http.createServer(async (req, res) => {
   } else if (url === "/api/session") {
     send(res, 200, JSON.stringify(apiSessionDetail(params.id, Number(params.limit) || 400)), "application/json");
   } else if (url === "/api/search") {
-    send(res, 200, JSON.stringify(await apiSearch(params.q, Number(params.limit) || 20)), "application/json");
+    send(res, 200, JSON.stringify(await apiSearch(params.q, Number(params.limit) || 20, params.full === "1")), "application/json");
   } else if (url === "/api/semantic") {
     send(res, 200, JSON.stringify(await apiSemantic(params.q, Number(params.limit) || 20)), "application/json");
   } else if (url === "/api/export/session") {

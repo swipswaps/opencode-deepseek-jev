@@ -1481,9 +1481,21 @@ hotspot-reconnect.sh
     alert log (+ wall); when the server is unreachable the line is queued and
     flushed on reconnect so both logs agree. Server: --server --watch alerts the
     server console when the client overlay (CLIENT_MESH_IP) disappears/returns.
-    Distinct from hotspot-test.sh: that proves a switch after the fact; this one
-    watches live, alerts, and reconnects. Exit 0 up, 2 down/failed, 3 cannot
-    run / unsafe input. Gated in test-hygiene.sh.
+    2026-11-10 UX: --watch hides the per-tick table (use --verbose), resolves
+    DBUS_SESSION_BUS_ADDRESS from /run/user/$UID/bus, sets DISPLAY=:0 on an X11
+    seat when missing, and reports a broken notification channel ONCE (not every
+    tick). --no-bell / --quiet-terminal are the explicit escapes; --quiet still
+    means "silence notifications". --notify-check prints the DBus/DISPLAY/daemon
+     diagnosis; --notify-remote USER@HOST sends the popup over SSH into the
+     CLIENT's own X11 session (the server's daemon displays on the server, not the
+     client); --notify-test shows the popup with live buttons; --clear-notify
+     withdraws a stale one. Server probe: a successful SSH (HOTSPOT_CLIENT_SSH) or
+     Tailscale pong counts as connected before the optional :5099 port. Buttons:
+     open dashboard, run check (state/link/beacon evidence), silence 1 h, dismiss
+     (HOTSPOT_DISMISS_SEC, cleared on recovery), reconnect (queues + confirms).
+     Distinct from hotspot-test.sh: that proves a switch after the fact;
+     this one watches live, alerts, and reconnects. Exit 0 up, 2 down/failed, 3
+     cannot run / unsafe input. Gated in test-hygiene.sh.
 
 peer-health.sh
     One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,

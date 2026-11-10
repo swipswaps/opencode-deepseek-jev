@@ -62,10 +62,28 @@ New/updated:
   `dns-commit-failure`), `--fix` to disable/persist powersave.
 - **`scripts/hotspot-reconnect.sh`** — bounded TTL, replace-by-id, recovery
   clear (even when silenced), server-side failure hysteresis, and evidence in
-  the notification body.
+  the notification body. `--watch` is terminal-quiet by default (`--verbose`
+  for ticks), auto-resolves the session bus and X11 display, and reports a
+  broken channel once instead of every tick. On X11 the popup must be raised in
+  the **client's** session: `--server --watch --notify-remote owner@100.70.43.78`
+  sends it over SSH into the client's own notification daemon (the server's
+  daemon would display on the server). Diagnose with `--notify-check`, show a
+  live test with `--notify-test`, withdraw a stale popup with `--clear-notify`;
+  silence the beep with `--no-bell` or the ticker with `--quiet-terminal`.
+  The server probe now treats a successful **SSH** (or Tailscale `pong`) as
+  connected before blaming the optional `:5099` dashboard port, so a laptop that
+  is running opencode over SSH is not reported as disconnected. Notification
+  buttons act: open dashboard, run check (prints state/link/beacon evidence),
+  silence 1 h, dismiss (suppressed for `HOTSPOT_DISMISS_SEC`, cleared on
+  recovery), and reconnect (queues + confirms).
 - **Activity search** — typing a query now searches `/api/search` across **all
   sessions**, not the 12-session live window; “Show all” expands the real hit
-  set. The UI must be hard-reloaded once to drop the cached shell.
+  set. `full=1` returns the whole part (20k-char cap), so **Expand shows the
+  full message**, not the 200-char search-card teaser. The request has a 45 s
+  budget (the 12 s default could abort a cold worker and show a false “No
+  matches”), falls back to the fast FTS `/api/semantic` index, and distinguishes
+  “timed out” from “no matches”. The UI must be hard-reloaded once to drop the
+  cached shell.
 - **`scripts/install-global-guard.sh`** — the global blacklist-guard link was
   dangling (`/workspace/...` on the host), so the guard silently did not load.
   It now resolves to the checkout and `test-hygiene.sh` gates it.

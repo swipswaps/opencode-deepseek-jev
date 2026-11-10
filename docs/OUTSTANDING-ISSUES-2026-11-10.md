@@ -42,6 +42,17 @@ Three separate facts were being conflated:
    client watcher; if the watcher is not running, the button looks live but is
    a no-op.
 
+**Why the desktop popup was silent on X11.** The server and the client each run
+their own notification daemon on their own session bus. The server's daemon
+(Xfce Notify Daemon on the server's seat) displays on the server; a watcher on
+the server cannot make the client's Xfce daemon pop a toast unless it forwards
+the message. Two supported shapes: run the client half on the client desktop
+(`--watch`), or run the server half with
+`--notify-remote owner@100.70.43.78` so the body is piped over SSH into the
+client's `DBUS_SESSION_BUS_ADDRESS` and `DISPLAY=:0`. `--notify-check` prints
+the resolved bus/display and the daemon's `GetServerInformation` for either
+shape.
+
 ### What changed
 
 | Problem | Fix |
@@ -75,6 +86,10 @@ earlier disconnect flag was real but intermittent — not powersave.
 | NET-1 | Persistent critical popup with stale Reconnect button | `scripts/hotspot-reconnect.sh` (bounded TTL, replace-id, recovery clear, server hysteresis, evidence) |
 | NET-2 | "Disconnected" had no evidence and no reachability/link split | `scripts/peer-health.sh` (new; `--explain`, `--json`, `--watch`, `--self-test`) |
 | NET-3 | Activity search lost older hits as new activity arrived | `web/src/components/ActivityTimeline.jsx` now searches `/api/search` across all sessions; `scripts/query-lib.mjs` returns `tool`/`status` |
+| NET-4 | Activity hits truncated at ~200 chars (≈7 lines) | `apiSearchFresh(..., full)` in `scripts/query-lib.mjs` returns up to 20k chars for `full=1`; Activity requests `full=1`; `test-dashboard.sh` asserts the short/full contract on the fixture DB |
+| NET-5 | Activity showed a false “0 of 0 / No matches” after working a moment earlier | 12 s `fetchJSON` timeout aborted a cold worker and was caught as an empty result. `ActivityTimeline` now uses a 45 s budget, falls back to `/api/semantic` (FTS), and shows “Search timed out” instead of “No matches” |
+| NET-6 | Hotspot watcher flooded the terminal, beeped with no desktop popup, and its buttons did nothing | `--watch` is terminal-quiet by default (`--verbose` for ticks), resolves `DBUS_SESSION_BUS_ADDRESS` from `/run/user/$UID/bus`, sets `DISPLAY=:0` on an X11 seat, reports a broken channel once, and adds `--no-bell`/`--quiet-terminal`/`--notify-check`. `--notify-remote USER@HOST` sends the popup over SSH into the **client's** own X11 session. Buttons now act: `open` opens the dashboard, `check` runs `peer-health.sh` and reports the verdict, `silence` sets 1 h, `dismiss` suppresses for `HOTSPOT_DISMISS_SEC` (cleared on recovery), and `fix` queues + confirms the reconnect. `--notify-test` shows the popup with live buttons; `--clear-notify` withdraws a stale one |
+| NET-7 | Server alert said “client disappeared” while `.1` was connected and running opencode over SSH | `probe_client` now treats a successful **SSH** (`HOTSPOT_CLIENT_SSH`, default `owner@CLIENT_MESH_IP`) or a Tailscale `pong` as connected before declaring the peer down on the optional `:5099` dashboard port. A one-shot `--server --tick` now reports `client 10.100.0.1: up` |
 | SEC-1 | Global blacklist guard was a dangling symlink, so no guard loaded on the host | `scripts/install-global-guard.sh` (new) + resolved link in `docker/web-entrypoint.sh` + `test-hygiene.sh` |
 | SEC-2 | Guard matcher bypasses (separators, paths, prefixes, quoting, backslashes, `rm -fr`, pipe-to-interpreter, `source <(curl)`, config dump, host/env reads, `set -o errexit`, `subprocess` imports) | `.opencode/plugins/blacklist-guard.js` + `scripts/blacklist-guard-self-test.mjs` |
 | SEC-3 | Every shell command was uploaded to `api.subq.ai` | Semantic layer is now **opt-in** (`OPENCODE_SEMANTIC_GUARD=on`); `scripts/guard-classify.py` redacts secret shapes before upload and in JSON output |
@@ -93,7 +108,7 @@ earlier disconnect flag was real but intermittent — not powersave.
 | ID | Issue | Why it is still open | Next action |
 |---|---|---|---|
 | OPS-1 | Client `b43`/2.4 GHz beacon loss | Needs a driver change or wired link; cannot be fixed by config alone | `sudo dnf install akmod-wl kmod-wl` (RPMFusion), blacklist `b43`/`bcma`, reboot; or use USB/Thunderbolt Ethernet. Re-check with `peer-health.sh --explain` |
-| OPS-2 | Dashboard auth/CORS takes effect only after restart | The running Node process still has the old code | `./scripts/web-restart.sh --recreate` (then Basic auth on `:5099`; `DASH_AUTH=off` is the explicit escape) |
+| OPS-2 | Dashboard auth/CORS/CSP takes effect only after restart | **Applied on this host 2026-11-10** via `dashboard-restart.sh --apply` (401 unauth, 200 auth, full=1 live). Other deployments need a restart | `./scripts/dashboard-restart.sh --apply` (or `web-restart.sh --recreate`); `DASH_AUTH=off` is the explicit escape |
 | OPS-4 | `eval` / `bash -c` in `test-tools.sh` / `runbook.sh` | Inputs are repo-owned today; changing them is a refactor | Replace with `execFile` argument arrays or a command allow-list |
 | OPS-5 | `/var/run/docker.sock` mounted by Dockge helpers | **Partially fixed:** published on loopback only, but the socket is still root-equivalent | Use a scoped socket proxy, or keep Dockge on a dedicated host |
 | OPS-6 | A pre-existing `authorized_keys` entry without `restrict` is not tightened | The default is now `RESTRICT=1`, but the script skips an existing key | Remove the old line and re-run `authorize-container-key.sh` |

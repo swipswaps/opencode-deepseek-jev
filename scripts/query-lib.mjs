@@ -53,9 +53,12 @@ export function apiTrendsFresh(dbPath) {
 // /api/search legacy substring search. The LIKE + json_extract scan measured
 // 6.8 s on the live 59k-part store, so it runs in the worker (off-loop) and is
 // cached by query; /api/semantic remains the fast FTS5 path.
-export function apiSearchFresh(dbPath, q, limit) {
+export function apiSearchFresh(dbPath, q, limit, full = false) {
   const needle = String(q || "").replace(/[%_\\]/g, "");
   const like = "%" + needle + "%";
+  // The search card wants a 200-char teaser; the Activity timeline wants the
+  // whole part so expanding a hit shows the message, not a cut-off snippet.
+  const cap = full ? 20000 : 200;
   if (!needle) return { q, sessions: [], hits: [] };
   const sessions = queryDb(
     dbPath,
@@ -72,8 +75,8 @@ export function apiSearchFresh(dbPath, q, limit) {
       "ORDER BY p.time_created DESC LIMIT ?",
     like, like, limit
   );
-  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, tool: h.tool || "", status: h.status || "", snippet: String(h.snippet || "").slice(0, 200) }));
-  return { q: needle, sessions, hits };
+  const hits = rows.map((h) => ({ session: h.sid, title: h.title, ts: h.ts, type: h.type, tool: h.tool || "", status: h.status || "", snippet: String(h.snippet || "").slice(0, cap) }));
+  return { q: needle, sessions, hits, full: !!full };
 }
 
 // /api/integrations: json_extract GROUP BY over every part (8.6 s measured).
