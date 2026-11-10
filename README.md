@@ -90,8 +90,14 @@ New/updated:
   client popup's **Fix Wi-Fi (wl)** button opens an Apply/Cancel confirmation
   and runs it detached. The 2026-11-10 attempt rolled back twice: the first
   `akmods` build took ~6 min (longer than the original 240 s), and the second
-  boot still loaded `b43` despite `blacklist b43`; both are now addressed. Live
-  check on `.1`: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes`.
+  boot still loaded `b43` despite `blacklist b43`. The final hardened attempt
+  loaded `wlp2s0`, but `wpa_supplicant` never associated and the interface got
+  no IP (the unmaintained Broadcom STA driver cannot scan/associate on this
+  BCM4331 + Fedora 43). `--check` now reports `known_bad=yes` and `--apply`
+  refuses unless `WIFIDF_FORCE=1`. For this hardware use a **USB WiFi adapter
+  with an in-kernel driver** or **USB/Thunderbolt Ethernet**; b43 remains the
+  automatic fallback. Live check on `.1`: `driver=b43 rpmfusion=yes
+  wl_available=yes known_bad=yes actionable=no`.
 - **Activity search** — typing a query now searches `/api/search` across **all
   sessions**, not the 12-session live window; “Show all” expands the real hit
   set. `full=1` returns the whole part (20k-char cap), so **Expand shows the

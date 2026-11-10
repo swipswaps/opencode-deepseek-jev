@@ -1307,8 +1307,8 @@ try:
 except Exception:
     print("check unavailable")
     raise SystemExit
-print("driver=%s rpmfusion=%s wl_available=%s actionable=%s" % (
-    d.get("driver", "?"), d.get("rpmfusion", "?"), d.get("wl_available", "?"), d.get("actionable", "?")))
+print("driver=%s rpmfusion=%s wl_available=%s known_bad=%s actionable=%s" % (
+    d.get("driver", "?"), d.get("rpmfusion", "?"), d.get("wl_available", "?"), d.get("known_bad", "?"), d.get("actionable", "?")))
 ' 2>&1
 }
 
@@ -1344,6 +1344,13 @@ durable_confirm() {
         return 1
     fi
     summary="$(durable_summary)"
+    case "$summary" in
+        *known_bad=yes*)
+            notify_send -u critical -t 30000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+                "opencode hotspot" "wl is not viable on this BCM4331: it loads but cannot scan/associate. b43 is restored. Use a USB WiFi adapter (in-kernel driver) or USB/Thunderbolt Ethernet for the durable fix." 2>&1 || true
+            return 0
+            ;;
+    esac
     body="Fix Wi-Fi durably: hard-block b43, force/load wl, rebuild initramfs, reboot. Auto-rollback if wl or Layer 3 fails. This disconnects the current session. Current: $summary. Body click keeps this open; Cancel closes."
     if notify_has_actions; then
         while :; do

@@ -383,7 +383,7 @@ schedule_reboot() {
 }
 
 do_check() {
-    local dr distro kern rpmf wla phase actionable="no"
+    local dr distro kern rpmf wla phase actionable="no" known_bad="no"
     dr="$(driver_now)"
     distro="$(distro_id)"
     kern="$(kernel_rel)"
@@ -391,13 +391,22 @@ do_check() {
     if wl_available; then wla="yes"; else wla="no"; fi
     phase="$(state_get phase)"
     [ -z "$phase" ] && phase="none"
+    case "${WIFIDF_FAKE_KNOWN_BAD:-}" in
+        yes) known_bad="yes" ;;
+        no) known_bad="no" ;;
+        *) if have lspci && lspci -nn 2>&1 | grep -qi '14e4:4331'; then known_bad="yes"; fi ;;
+    esac
     case "$dr" in
         wl) actionable="no" ;;
         b43|bcma|unknown) [ "$rpmf" = "yes" ] && [ "$wla" = "yes" ] && actionable="yes" ;;
     esac
+    [ "$known_bad" = "yes" ] && actionable="no"
+    if [ "$known_bad" = "yes" ]; then
+        printf 'note         : wl loads but does not scan/associate on BCM4331 + Fedora 43 (unmaintained STA driver); use a USB WiFi/Ethernet adapter\n'
+    fi
     if [ "$JSON" = "1" ]; then
-        printf '{"distro":"%s","kernel":"%s","driver":"%s","rpmfusion":"%s","wl_available":"%s","phase":"%s","actionable":"%s"}\n' \
-            "$distro" "$kern" "$dr" "$rpmf" "$wla" "$phase" "$actionable"
+        printf '{"distro":"%s","kernel":"%s","driver":"%s","rpmfusion":"%s","wl_available":"%s","phase":"%s","known_bad":"%s","actionable":"%s"}\n' \
+            "$distro" "$kern" "$dr" "$rpmf" "$wla" "$phase" "$known_bad" "$actionable"
         return 0
     fi
     printf 'distro       : %s\n' "$distro"
@@ -406,6 +415,7 @@ do_check() {
     printf 'RPMFusion    : %s\n' "$rpmf"
     printf 'akmod-wl     : %s\n' "$wla"
     printf 'phase        : %s\n' "$phase"
+    printf 'known_bad    : %s\n' "$known_bad"
     printf 'actionable   : %s\n' "$actionable"
     case "$dr" in
         wl) printf 'note         : already on the vendor wl driver; use --rollback to revert\n' ;;
@@ -437,10 +447,19 @@ do_apply() {
                 WIFIDF_GUARD_WAIT="$GUARD_WAIT" \
                 WIFIDF_NM_CONNECTION="$NM_CONNECTION" \
                 WIFIDF_NM_ZONE="$NM_ZONE" \
+                WIFIDF_FORCE="${WIFIDF_FORCE:-0}" \
                 "$0" --apply --yes
         fi
         die "root is required (run with sudo or configure passwordless sudo)"
         return 2
+    fi
+    if [ "${WIFIDF_FORCE:-0}" != "1" ] && [ "$SELFTEST" != "1" ]; then
+        if [ "${WIFIDF_FAKE_KNOWN_BAD:-}" = "yes" ] || { have lspci && lspci -nn 2>&1 | grep -qi '14e4:4331'; }; then
+            log "REFUSING: wl loads but cannot scan/associate on BCM4331 + Fedora 43 (unmaintained STA driver)."
+            log "Use a USB WiFi adapter with an in-kernel driver or USB/Thunderbolt Ethernet. Override with WIFIDF_FORCE=1."
+            notify "wl is not viable on this BCM4331. b43 remains active. Use a USB WiFi/Ethernet adapter."
+            return 2
+        fi
     fi
     if [ "$ASSUME_YES" != "1" ] && [ "$SELFTEST" != "1" ]; then
         printf 'This will install the vendor wl driver and REBOOT in %ss.\n' "$REBOOT_DELAY"

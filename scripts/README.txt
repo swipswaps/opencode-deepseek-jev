@@ -1513,6 +1513,10 @@ wifi-durable-fix.sh
     The apply writes a hard boot config (`install b43 /bin/false`,
     `force_drivers+=" wl "`, omit b43/bcma/ssb/brcmsmac, modules-load wl)
     because `blacklist b43` alone did not stop b43 from binding on 2026-11-10.
+    On BCM4331 the final attempt loaded wlp2s0 but never associated; --check
+    now reports known_bad=yes / actionable=no and --apply refuses unless
+    WIFIDF_FORCE=1. Use a USB WiFi adapter with an in-kernel driver or
+    USB/Thunderbolt Ethernet for the durable fix.
     The apply also
     sets the NM connection zone (WIFIDF_NM_ZONE=trusted) and the guard adds the
     live wl interface to that zone, because the driver renames the interface and
