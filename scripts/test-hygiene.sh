@@ -567,6 +567,17 @@ PY
         bad 'peer-health.sh present'
     fi
 
+    if [ -f "$REPO/scripts/wifi-durable-fix.sh" ]; then
+        if bash "$REPO/scripts/wifi-durable-fix.sh" --self-test > "$work/wdf_st.txt" 2>&1; then
+            ok 'wifi-durable-fix: self-test (state + apply + guard rollback + guard success + rollback)'
+        else
+            bad 'wifi-durable-fix: self-test (state + apply + guard rollback + guard success + rollback)'
+            cat "$work/wdf_st.txt"
+        fi
+    else
+        bad 'wifi-durable-fix.sh present'
+    fi
+
     if [ -f "$REPO/scripts/recovery-status.sh" ]; then
         if bash "$REPO/scripts/recovery-status.sh" --self-test > "$work/rs_st.txt" 2>&1; then
             ok 'recovery-status: self-test (healthy + expected-roam + degraded)'

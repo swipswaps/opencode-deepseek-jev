@@ -620,7 +620,7 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
         if [ "$ROLE" = "server" ]; then
             actions=(-A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         else
-            actions=(-A "fix=Reconnect" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
+            actions=(-A "fix=Reconnect" -A "durable=Fix Wi-Fi (wl)" -A "open=Open dashboard" -A "check=Run check" -A "silence=Silence 1h" -A "dismiss=Dismiss")
         fi
         (
             notify_send -u "$urgency" -t "$timeout" "${idargs[@]}" -w "${actions[@]}" \
@@ -635,6 +635,7 @@ fix: bash $SELF_DIR/hotspot-reconnect.sh --fix"
                     notify_send -u low -t 4000 --hint=string:x-canonical-private-synchronous:opencode-hotspot \
                         "opencode hotspot" "reconnect requested; the watcher will try within ${WATCH_SEC}s" 2>&1 || true
                     ;;
+                durable) durable_confirm ;;
                 open) open_url "https://$MESH:5099" ;;
                 check) do_check_notify ;;
                 silence) do_silence ;;
@@ -1271,6 +1272,70 @@ notify_test() {
 clear_notify() {
     notify_clear "cleared by operator"
     printf 'clear notification sent\n'
+}
+
+durable_summary() {
+    local script="$SELF_DIR/wifi-durable-fix.sh" out=""
+    [ -f "$script" ] || { printf 'script missing'; return 0; }
+    out="$(bash "$script" --check --json 2>&1)"
+    printf '%s' "$out" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("check unavailable")
+    raise SystemExit
+print("driver=%s rpmfusion=%s wl_available=%s actionable=%s" % (
+    d.get("driver", "?"), d.get("rpmfusion", "?"), d.get("wl_available", "?"), d.get("actionable", "?")))
+' 2>&1
+}
+
+# Two-step offer: the alert's "Fix Wi-Fi (wl)" opens a confirmation with
+# Apply/Cancel. Apply starts wifi-durable-fix.sh detached, so the reboot or the
+# SSH drop cannot kill it. Rollback is automatic on boot failure.
+run_durable_fix() {
+    local script="$SELF_DIR/wifi-durable-fix.sh"
+    if [ ! -f "$script" ]; then
+        notify_send -u normal -t 15000 "opencode hotspot" \
+            "durable fix unavailable: $script missing (copy scripts/wifi-durable-fix.sh next to hotspot-reconnect.sh)" 2>&1 || true
+        return 1
+    fi
+    if have sudo && sudo -n true 2>&1; then
+        if have setsid; then
+            setsid nohup sudo -n bash "$script" --apply --yes > /var/tmp/wifi-durable-fix.log 2>&1 < /dev/null &
+        else
+            ( sudo -n bash "$script" --apply --yes > /var/tmp/wifi-durable-fix.log 2>&1 < /dev/null & )
+        fi
+        notify_send -u normal -t 20000 "opencode hotspot" \
+            "durable fix started: installing wl, arming rollback, rebooting. Log: /var/tmp/wifi-durable-fix.log" 2>&1 || true
+    else
+        notify_send -u normal -t 20000 "opencode hotspot" \
+            "durable fix needs passwordless sudo; run: sudo bash $script --apply --yes" 2>&1 || true
+    fi
+}
+
+durable_confirm() {
+    local script="$SELF_DIR/wifi-durable-fix.sh" summary="" body="" out=""
+    if [ ! -f "$script" ]; then
+        notify_send -u normal -t 15000 "opencode hotspot" \
+            "durable fix unavailable: $script missing" 2>&1 || true
+        return 1
+    fi
+    summary="$(durable_summary)"
+    body="Fix Wi-Fi durably: install akmod-wl/kmod-wl, blacklist b43, rebuild initramfs, reboot. Auto-rollback to b43 if Wi-Fi does not return. This disconnects the current session. Current: $summary"
+    if notify_has_actions; then
+        out="$(notify_send -u normal -t 60000 -w -A "apply=Install wl (reversible)" -A "cancel=Cancel" \
+            --hint=string:x-canonical-private-synchronous:opencode-hotspot \
+            "opencode hotspot" "$body" 2>&1)"
+        case "$out" in
+            apply) run_durable_fix ;;
+            cancel) notify_clear "durable fix cancelled" ;;
+            *) : ;;
+        esac
+    else
+        notify_send -u normal -t 20000 "opencode hotspot" "$body
+run: bash $script --apply --yes" 2>&1 || true
+    fi
 }
 
 notify_check() {

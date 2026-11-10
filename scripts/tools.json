@@ -1031,7 +1031,7 @@
     "id": "hotspot-reconnect",
     "title": "Hotspot loss: detect + client/server alert + interactive reconnect",
     "where": "host",
-    "purpose": "Run --watch on the client (the roaming box): it debounces a lost underlay/overlay, alerts via desktop notification + the log, and alerts the server (append to the server log + wall) or queues the line when the server is unreachable, flushing it on reconnect. --watch --reconnect guides an interactive nmcli/networksetup rejoin in order, settles, then runs client-setup --heal and prints an ssh -t hint. --check/--plan/--json/--self-test. Run --server --watch on the server to alert when the client overlay (CLIENT_MESH_IP) disappears/returns. 2026-11-10: --watch is terminal-quiet by default (--verbose for ticks), auto-resolves DBUS_SESSION_BUS_ADDRESS and X11 DISPLAY, reports a broken channel once, and supports --no-bell/--quiet-terminal/--notify-check. --notify-remote USER@HOST sends the popup over SSH into the CLIENT's own X11 session; --notify-test shows it with live buttons; --clear-notify withdraws a stale popup. The server probe treats a successful SSH (HOTSPOT_CLIENT_SSH) or Tailscale pong as connected before the optional :5099 port. Buttons: open dashboard, run check (state/link/beacon), silence 1h, dismiss (HOTSPOT_DISMISS_SEC, cleared on recovery), reconnect (queues + confirms). Distinct from hotspot-test (that proves a switch after the fact; this watches live). Exit 0 up, 2 down/failed, 3 cannot run/unsafe input.",
+    "purpose": "Run --watch on the client (the roaming box): it debounces a lost underlay/overlay, alerts via desktop notification + the log, and alerts the server (append to the server log + wall) or queues the line when the server is unreachable, flushing it on reconnect. --watch --reconnect guides an interactive nmcli/networksetup rejoin in order, settles, then runs client-setup --heal and prints an ssh -t hint. --check/--plan/--json/--self-test. Run --server --watch on the server to alert when the client overlay (CLIENT_MESH_IP) disappears/returns. 2026-11-10: --watch is terminal-quiet by default (--verbose for ticks), auto-resolves DBUS_SESSION_BUS_ADDRESS and X11 DISPLAY, reports a broken channel once, and supports --no-bell/--quiet-terminal/--notify-check. --notify-remote USER@HOST sends the popup over SSH into the CLIENT's own X11 session; --notify-test shows it with live buttons; --clear-notify withdraws a stale popup. The server probe treats a successful SSH (HOTSPOT_CLIENT_SSH) or Tailscale pong as connected before the optional :5099 port. Buttons: open dashboard, run check (state/link/beacon), silence 1h, dismiss (HOTSPOT_DISMISS_SEC, cleared on recovery), reconnect (queues + confirms), Fix Wi-Fi (wl) (Apply/Cancel confirmation for wifi-durable-fix.sh). Distinct from hotspot-test (that proves a switch after the fact; this watches live). Exit 0 up, 2 down/failed, 3 cannot run/unsafe input.",
     "commands": [
       "bash scripts/hotspot-reconnect.sh --check",
       "bash scripts/hotspot-reconnect.sh --watch",
@@ -1653,6 +1653,21 @@
       "./scripts/wifi-link-forensics.sh --peer owner@100.70.43.78 --since 24",
       "./scripts/wifi-link-forensics.sh --fix --dry-run",
       "./scripts/wifi-link-forensics.sh --self-test"
+    ]
+  },
+  {
+    "id": "wifi-durable-fix",
+    "title": "Replace b43 with the vendor wl driver, reversibly, with boot-time auto-rollback",
+    "where": "client",
+    "purpose": "Fedora durable fix for the BCM4331/b43 beacon-loss root cause: --check (read-only driver/RPMFusion/wl availability; --json), --plan, --apply (enable RPMFusion if missing, install akmod-wl/kmod-wl, blacklist b43/bcma/ssb, dracut -f, install+enable wifi-durable-guard.service, reboot after WIFIDF_REBOOT_DELAY), --rollback (remove blacklist, modprobe b43, restart NetworkManager; --purge removes the packages), --status, --guard-check. The guard runs at boot while phase=awaiting-reboot; if wl is not loaded and no Wi-Fi is connected within WIFIDF_GUARD_WAIT it rolls back automatically and reboots, restoring b43. The hotspot popup's 'Fix Wi-Fi (wl)' button opens an Apply/Cancel confirmation and runs this detached; --self-test is offline with a temp root.",
+    "commands": [
+      "./scripts/wifi-durable-fix.sh --check",
+      "./scripts/wifi-durable-fix.sh --check --json",
+      "./scripts/wifi-durable-fix.sh --plan",
+      "./scripts/wifi-durable-fix.sh --apply --yes",
+      "./scripts/wifi-durable-fix.sh --rollback --yes",
+      "./scripts/wifi-durable-fix.sh --status",
+      "./scripts/wifi-durable-fix.sh --self-test"
     ]
   },
   {

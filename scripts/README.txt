@@ -1492,10 +1492,25 @@ hotspot-reconnect.sh
      withdraws a stale one. Server probe: a successful SSH (HOTSPOT_CLIENT_SSH) or
      Tailscale pong counts as connected before the optional :5099 port. Buttons:
      open dashboard, run check (state/link/beacon evidence), silence 1 h, dismiss
-     (HOTSPOT_DISMISS_SEC, cleared on recovery), reconnect (queues + confirms).
+     (HOTSPOT_DISMISS_SEC, cleared on recovery), reconnect (queues + confirms),
+     Fix Wi-Fi (wl) (Apply/Cancel confirmation for wifi-durable-fix.sh).
      Distinct from hotspot-test.sh: that proves a switch after the fact;
      this one watches live, alerts, and reconnects. Exit 0 up, 2 down/failed, 3
      cannot run / unsafe input. Gated in test-hygiene.sh.
+
+wifi-durable-fix.sh
+    Replace the reverse-engineered b43 driver with the vendor Broadcom wl
+    driver (akmod-wl/kmod-wl), reversibly, on Fedora. --check (read-only:
+    distro/kernel/driver/RPMFusion/wl availability; --json), --plan, --apply
+    (RPMFusion if missing, install, blacklist b43/bcma/ssb, dracut -f, install
+    and enable wifi-durable-guard.service, reboot in WIFIDF_REBOOT_DELAY),
+    --rollback (remove blacklist, modprobe b43, restart NetworkManager,
+    optional --purge), --status, --guard-check, --self-test (offline temp root
+    with fakes). Auto-recovery: the guard unit runs at boot while phase is
+    awaiting-reboot; if wl is not loaded and no Wi-Fi is connected within
+    WIFIDF_GUARD_WAIT, it runs --rollback and reboots, restoring b43. The
+    hotspot notification's "Fix Wi-Fi (wl)" button opens an Apply/Cancel
+    confirmation; Apply runs this detached. Gated in test-hygiene.sh.
 
 peer-health.sh
     One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,

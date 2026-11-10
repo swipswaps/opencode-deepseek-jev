@@ -75,7 +75,15 @@ New/updated:
   is running opencode over SSH is not reported as disconnected. Notification
   buttons act: open dashboard, run check (prints state/link/beacon evidence),
   silence 1 h, dismiss (suppressed for `HOTSPOT_DISMISS_SEC`, cleared on
-  recovery), and reconnect (queues + confirms).
+  recovery), reconnect (queues + confirms), and **Fix Wi-Fi (wl)** (opens the
+  reversible Apply/Cancel durable-driver confirmation).
+- **Durable Wi-Fi fix** — `scripts/wifi-durable-fix.sh` replaces `b43` with the
+  vendor Broadcom `wl` driver (`akmod-wl`/`kmod-wl`), blacklists the conflicting
+  in-kernel drivers, rebuilds the initramfs, and arms a boot guard. `--rollback`
+  restores `b43`; the guard auto-rolls back and reboots if `wl` does not bring
+  Wi-Fi back within `WIFIDF_GUARD_WAIT`. The client popup's **Fix Wi-Fi (wl)**
+  button opens an Apply/Cancel confirmation and runs it detached. Live check on
+  `.1`: `driver=b43 rpmfusion=yes wl_available=yes actionable=yes`.
 - **Activity search** — typing a query now searches `/api/search` across **all
   sessions**, not the 12-session live window; “Show all” expands the real hit
   set. `full=1` returns the whole part (20k-char cap), so **Expand shows the
