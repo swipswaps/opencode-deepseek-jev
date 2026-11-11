@@ -12,7 +12,7 @@ import vm from "node:vm";
 
 const BASE = process.argv[2] || "http://127.0.0.1:5099";
 const MODE = process.argv[3] || "home";
-const PATH = MODE === "explore" ? "/explore" : MODE === "graph" ? "/graph" : MODE === "usability" ? "/usability" : "/";
+const PATH = MODE === "explore" ? "/explore" : MODE === "graph" ? "/graph" : MODE === "usability" ? "/usability" : MODE === "settings" ? "/settings" : "/";
 
 class El {
   constructor(tag) {
@@ -186,6 +186,21 @@ async function main() {
     const auto = getEl("auto-body");
     if (!auto || !auto._html) fail("usability: automated evidence did not render");
     console.log("PASS usability: script executes, tasks load, guided start is wired");
+    process.exit(0);
+  }
+
+  if (MODE === "settings") {
+    const prov = getEl("prov");
+    const t0 = Date.now();
+    while ((!(prov && prov._html)) && Date.now() - t0 < 5000) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const h = (prov && prov._html) || "";
+    if (!h) fail("settings: provider table did not render");
+    if (h.indexOf("<table") < 0) fail("settings: no table in #prov");
+    if (h.indexOf("anthropic") < 0) fail("settings: expected an anthropic row, got " + h.slice(0, 200));
+    if (!getEl("confirm") || !getEl("status")) fail("settings: confirmation controls missing");
+    console.log("PASS settings: inline script executes and provider table renders");
     process.exit(0);
   }
 

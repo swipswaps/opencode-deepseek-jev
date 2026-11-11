@@ -318,12 +318,19 @@ if (!j || j.value.ok !== 1 || typeof j.at !== "number") process.exit(2);
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/api/doc?name=../../etc/passwd" > "$work/doc404.txt"
     has '404' "$work/doc404.txt" && ok 'api/doc rejects non-whitelisted path' || bad 'api/doc rejects non-whitelisted path'
     has 'href="/models"' "$work/home.html" && ok 'home nav models' || bad 'home nav models'
+    has 'href="/settings"' "$work/home.html" && ok 'home nav settings' || bad 'home nav settings'
     curl -s "http://$HOST:$PORT/models" > "$work/models.html"
     has '<title>opencode models</title>' "$work/models.html" && ok 'models title' || bad 'models title'
     has 'id="banner"' "$work/models.html" && ok 'models banner' || bad 'models banner'
     has '#cat{overflow-x:auto}' "$work/models.html" && ok 'models scrolls internally (390px)' || bad 'models scrolls internally (390px)'
     curl -s "http://$HOST:$PORT/api/models" > "$work/models.json"
     python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if "models" in d or d.get("available") is False else 1)' "$work/models.json" && ok 'api/models' || bad 'api/models'
+    curl -s "http://$HOST:$PORT/settings" > "$work/settings.html"
+    has '<title>opencode settings</title>' "$work/settings.html" && ok 'settings title' || bad 'settings title'
+    has 'id="prov"' "$work/settings.html" && ok 'settings provider table container' || bad 'settings provider table container'
+    curl -s "http://$HOST:$PORT/api/settings" > "$work/settings.json"
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); ps=d.get("providers") or []; sys.exit(0 if isinstance(ps,list) and ps and all(("id" in p and "envKey" in p and "state" in p) for p in ps) else 1)' "$work/settings.json" && ok 'api/settings shape' || bad 'api/settings shape'
+    if grep -qE 'sk-[A-Za-z0-9]{10,}|apikey_[A-Za-z0-9]{10,}' "$work/settings.json"; then bad 'api/settings redacted (no key shapes)'; else ok 'api/settings redacted (no key shapes)'; fi
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/viz" > "$work/vizcode.txt"
     has '302' "$work/vizcode.txt" && ok '/viz redirects (302)' || bad '/viz redirects (302)'
     curl -s -o /dev/null -w '%{http_code}' "http://$HOST:$PORT/vendor/d3.min.js" > "$work/d3code.txt"
@@ -631,6 +638,12 @@ PY
         else
             bad 'headless UI: usability script executes'
             cat "$work/ui-u.txt"
+        fi
+        if node "$REPO/scripts/test-dashboard-ui.mjs" "http://$HOST:$PORT" settings > "$work/ui-s.txt" 2>&1; then
+            ok 'headless UI: settings script executes'
+        else
+            bad 'headless UI: settings script executes'
+            cat "$work/ui-s.txt"
         fi
     else
         bad 'test-dashboard-ui.mjs present'

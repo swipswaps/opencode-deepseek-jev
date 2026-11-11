@@ -20,7 +20,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { healthReport, handoffAdvice, budgetRisks, applyLiveAdjudication, liveStatus } from "./session-health.mjs";
@@ -131,7 +131,7 @@ const CMDK_CSS =
   ".cmdk-item.active{background:#1f6feb33}" +
   ".cmdk-empty{padding:12px 10px;color:#8b949e;font-size:13px}";
 const NAV_ITEMS = [["/", "dashboard"], ["/recovery", "recovery"], ["/usability", "usability"], ["/graph", "graph"], ["/explore", "explore"], ["/app/", "app"], ["/models", "models"],
-                   ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
+                   ["/settings", "settings"], ["/runbooks", "runbooks"], ["/manage", "manage"], ["/docs", "docs"],
                    ["/api/export", "csv"]];
 
 // Design tokens (DESIGN.md): one accent, 8px grid, Material elevation. Injected
@@ -180,6 +180,7 @@ function nav(active) {
   h += "{label:'dashboard',hint:'home · stats · sessions',href:'/'},";
   h += "{label:'explore',hint:'sessions · charts · signals',href:'/explore'},";
   h += "{label:'models',hint:'catalog · policy',href:'/models'},";
+  h += "{label:'settings',hint:'providers · pause/resume',href:'/settings'},";
   h += "{label:'runbooks',hint:'procedures · filter',href:'/runbooks'},";
   h += "{label:'manage',hint:'tools · agents',href:'/manage'},";
   h += "{label:'docs',hint:'guides · readme',href:'/docs'}];";
@@ -247,6 +248,140 @@ function apiProviders() {
     return { id, name: p.name || id, npm: p.npm || "(models.dev)", env: p.env || [], models: Object.keys(p.models || {}) };
   });
   return { default_model: cfg.model || null, providers, allow: policy.allow || [], deny: policy.deny || [] };
+}
+
+// ---------------------------------------------------------------------------
+// Settings: one redacted provider matrix + a safe pause/resume control.
+// The browser never sees or sends a secret. Pause writes DESIRED state; the
+// host-side scripts/settings-apply.sh performs the env-key part (the container
+// has .env.local masked) and recreates the container.
+// ---------------------------------------------------------------------------
+const SETTINGS_STATE_PATH = fileURLToPath(new URL("../data/observability/settings-state.json", import.meta.url));
+const KNOWN_PROVIDER_ENV = {
+  anthropic: "ANTHROPIC_API_KEY", deepseek: "DEEPSEEK_API_KEY", gemini: "GEMINI_API_KEY",
+  subq: "SUBQ_API_KEY", jev: "JEV_API_KEY", litellm: "LITELLM_MASTER_KEY",
+  "opencode-go": "OPENCODE_CONSOLE_TOKEN", opencode: "OPENCODE_CONSOLE_TOKEN",
+};
+
+function readJsonAbsSafe(path, fallback) {
+  try { return JSON.parse(readFileSync(path, "utf8")); } catch { return fallback; }
+}
+
+function writeJsonAtomicAbs(path, obj) {
+  try { mkdirSync(path.slice(0, path.lastIndexOf("/")) || ".", { recursive: true }); } catch {}
+  const tmp = path + ".tmp." + process.pid;
+  writeFileSync(tmp, JSON.stringify(obj, null, 2) + "\n", { mode: 0o644 });
+  renameSync(tmp, path);
+}
+
+function authProviderNames() {
+  try {
+    const home = process.env.HOME || "/home/node";
+    const auth = JSON.parse(readFileSync(home + "/.local/share/opencode/auth.json", "utf8"));
+    return Object.keys(auth || {});
+  } catch {
+    return [];
+  }
+}
+
+function settingsState() {
+  const s = readJsonAbsSafe(SETTINGS_STATE_PATH, {});
+  return { updated: s.updated || "", providers: s.providers || {} };
+}
+
+function apiSettings() {
+  const cfg = readJsonAbsSafe(fileURLToPath(new URL("../opencode.json", import.meta.url)), {});
+  const policy = readJsonAbsSafe(fileURLToPath(new URL("../models.policy.json", import.meta.url)), {});
+  const dp = readJsonAbsSafe(fileURLToPath(new URL("../scripts/decision_providers.json", import.meta.url)), { providers: [] });
+  const state = settingsState();
+  const authKeys = authProviderNames();
+  const ids = new Set();
+  for (const id of Object.keys(cfg.provider || {})) ids.add(id);
+  for (const p of dp.providers || []) ids.add(p.id);
+  for (const m of (policy.allow || []).concat(policy.deny || [])) {
+    const s = String(m);
+    if (s.indexOf("/") > 0) ids.add(s.split("/")[0]);
+  }
+  for (const k of authKeys) ids.add(k);
+  for (const [id, env] of Object.entries(KNOWN_PROVIDER_ENV)) if (process.env[env]) ids.add(id);
+  const decision = new Map((dp.providers || []).map((p) => [p.id, p]));
+  const providers = [...ids].sort().map((id) => {
+    const inConfig = !!(cfg.provider && cfg.provider[id]);
+    const envVar = KNOWN_PROVIDER_ENV[id] || "";
+    const envKey = !!(envVar && process.env[envVar]);
+    const authEntry = authKeys.includes(id);
+    const pol = (policy.allow || []).some((x) => x === id || String(x).startsWith(id + "/")) ? "allow"
+      : (policy.deny || []).some((x) => x === id || String(x).startsWith(id + "/")) ? "deny" : "unlisted";
+    const d = decision.get(id);
+    const entry = state.providers[id] || null;
+    const paused = !!(entry && entry.paused);
+    const pendingApply = paused && entry && entry.applied !== true;
+    const active = !paused && (inConfig || envKey || authEntry || (d && d.enabled));
+    return {
+      id,
+      name: (cfg.provider && cfg.provider[id] && cfg.provider[id].name) || (d && d.name) || id,
+      inConfig, envVar, envKey, authEntry, policy: pol,
+      decision: d ? { enabled: d.enabled !== false } : null,
+      paused, pausedSince: paused ? entry.since || "" : "", pendingApply,
+      state: paused ? (pendingApply ? "paused (pending host apply)" : "paused") : active ? "active" : "unconfigured",
+      hostActionRequired: pendingApply && envKey,
+      hostCommand: pendingApply ? "./scripts/settings-apply.sh --apply --yes" : "",
+    };
+  });
+  return {
+    updated: state.updated || "",
+    default_model: cfg.model || null,
+    pausedCount: providers.filter((p) => p.paused).length,
+    providers,
+    note: "Redacted view of opencode.json, env presence, auth.json, models.policy.json and decision_providers.json. Pause writes desired state; the host applier removes the effective env key.",
+  };
+}
+
+function apiSettingsAction(doc) {
+  const id = String((doc && doc.id) || "").trim();
+  const action = String((doc && doc.action) || "").trim();
+  const confirm = String((doc && doc.confirm) || "").trim();
+  if (!id) return { ok: false, error: "id required" };
+  if (action !== "pause" && action !== "resume") return { ok: false, error: "action must be pause or resume" };
+  const view = apiSettings();
+  const provider = view.providers.find((p) => p.id === id);
+  if (!provider) return { ok: false, error: "unknown provider: " + id };
+  if (confirm !== id) return { ok: false, error: "typed confirmation must match: " + id };
+  const state = settingsState();
+  const now = new Date().toISOString();
+  const entry = state.providers[id] || { envVar: provider.envVar || "", since: now };
+  entry.envVar = entry.envVar || provider.envVar || "";
+  if (action === "pause") {
+    if (entry.paused) return { ok: true, skipped: "already paused", settings: view };
+    entry.paused = true;
+    entry.since = now;
+    entry.applied = false;
+    entry.reason = String((doc && doc.reason) || "").slice(0, 200);
+  } else {
+    if (!entry.paused) return { ok: true, skipped: "not paused", settings: view };
+    entry.paused = false;
+    entry.applied = false;
+  }
+  state.providers[id] = entry;
+  state.updated = now;
+  writeJsonAtomicAbs(SETTINGS_STATE_PATH, state);
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)));
+    db.exec("CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY, ts TEXT NOT NULL, type TEXT NOT NULL, actor TEXT DEFAULT '', tool TEXT DEFAULT '', resource TEXT DEFAULT '', verdict TEXT DEFAULT '', detail TEXT DEFAULT '', rev TEXT DEFAULT '', source TEXT DEFAULT '', source_key TEXT UNIQUE)");
+    db.prepare("INSERT OR IGNORE INTO ledger(ts,type,actor,tool,resource,verdict,detail,rev,source,source_key) VALUES(?,?,?,?,?,?,?,?,?,?)")
+      .run(now, "SETTINGS", "dashboard", "settings", "provider/" + id,
+           action === "pause" ? "PAUSE" : "RESUME",
+           "desired state " + action + " via /settings", "",
+           "settings-state", "settings-" + id + "-" + action + "-" + now);
+    db.close();
+  } catch {}
+  const after = apiSettings();
+  const ap = after.providers.find((p) => p.id === id);
+  return {
+    ok: true, id, action, settings: after,
+    hostActionRequired: !!(ap && ap.hostActionRequired),
+    hostCommand: ap ? ap.hostCommand : "",
+  };
 }
 
 function apiCode(limit) {
@@ -3872,6 +4007,76 @@ async function load(){
 load();
 </script></body></html>`;
 
+const settingsHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>opencode settings</title>
+<style>
+ body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}
+ table{border-collapse:collapse;width:100%;font-size:12px}
+ th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #21262d}
+ .ok{color:#3fb950}.warn{color:#d29922}.muted{color:#8b949e;font-size:12px}
+ button{background:#1f6feb;color:#fff;border:0;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;min-height:32px}
+ button:hover{filter:brightness(1.1)}
+ input{background:#161b22;color:#e6edf3;border:1px solid #30363d;border-radius:7px;padding:6px 8px;font-size:12px}
+ #prov{overflow-x:auto}
+ .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+ :focus-visible{outline:2px solid #1f6feb;outline-offset:1px}
+</style></head>
+<body>
+${nav("settings")}
+<main id="main" tabindex="-1">
+<h1>opencode settings</h1>
+<div class="muted">Provider controls. Secrets are never shown or sent here; pause writes desired state and the host applier removes the effective env key.</div>
+<div class="bar"><label for="confirm" class="muted">type the provider id to confirm:</label><input id="confirm" aria-label="typed confirmation" autocomplete="off"><span id="status" role="status" class="muted"></span></div>
+<div id="note" class="muted"></div>
+<h2>Providers</h2><div id="prov"><span class="muted" data-loading>loading...</span></div>
+</main>
+<script>
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function render(d){
+    var box=document.getElementById('prov'); if(!box) return;
+    if(!d||!d.providers){box.textContent='(settings unavailable)';return;}
+    var h='<table><caption>providers: config, env presence, auth, policy, state</caption><tr><th scope="col">provider</th><th scope="col">state</th><th scope="col">config</th><th scope="col">key</th><th scope="col">auth</th><th scope="col">policy</th><th scope="col">action</th></tr>';
+    for(var i=0;i<d.providers.length;i++){
+      var p=d.providers[i];
+      var act=p.paused?'resume':'pause';
+      h+='<tr><td><b>'+esc(p.id)+'</b>'+(p.inConfig?'':' <span class="muted">(env-only)</span>')+'</td>'
+        +'<td class="'+(p.paused?'warn':'ok')+'">'+esc(p.state)+'</td>'
+        +'<td>'+(p.inConfig?'yes':'no')+'</td>'
+        +'<td>'+(p.envKey?'present':'absent')+'</td>'
+        +'<td>'+(p.authEntry?'yes':'no')+'</td>'
+        +'<td>'+esc(p.policy)+'</td>'
+        +'<td><button data-act="'+act+'" data-id="'+esc(p.id)+'">'+act+'</button></td></tr>';
+    }
+    box.innerHTML=h+'</table>';
+    var n=document.getElementById('note'); if(n) n.textContent=d.note||'';
+  }
+  function load(){
+    fetch('/api/settings').then(function(r){return r.json();}).then(render).catch(function(e){var b=document.getElementById('prov');if(b)b.textContent='(settings unavailable: '+e+')';});
+  }
+  var box=document.getElementById('prov');
+  if(box&&box.addEventListener){
+    box.addEventListener('click',function(ev){
+      var t=ev&&ev.target; var b=t&&t.closest?t.closest('[data-act]'):null;
+      if(!b) return;
+      var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+      var c=document.getElementById('confirm'); var v=c?String(c.value||'').trim():'';
+      var s=document.getElementById('status');
+      if(v!==id){if(s)s.textContent='type "'+id+'" in the box to confirm '+act;return;}
+      if(s)s.textContent=act+' '+id+' ...';
+      fetch('/api/settings/provider',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:id,action:act,confirm:v})})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(s)s.textContent=d.ok?(act+' '+id+' recorded'+(d.hostActionRequired?' — run '+d.hostCommand:'')):('error: '+(d.error||'?'));
+          if(d.ok) render(d.settings||{});
+        })
+        .catch(function(e){if(s)s.textContent='error: '+e;});
+    });
+  }
+  load();
+})();
+</script></body></html>`;
+
 // Authentication: the dashboard exposes full session transcripts and exports,
 // so it is NOT a public surface. When OPENCODE_SERVER_PASSWORD is set (the same
 // password opencode-web uses), every route requires HTTP Basic auth. A test or
@@ -4085,6 +4290,19 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
     }
+  } else if (req.method === "POST" && url === "/api/settings/provider") {
+    if (!sameOriginMutation(req)) {
+      send(res, 403, JSON.stringify({ ok: false, error: "cross-origin mutation blocked" }), "application/json");
+      return;
+    }
+    try {
+      const raw = await readBody(req);
+      const doc = JSON.parse(raw || "{}");
+      const result = apiSettingsAction(doc);
+      send(res, result.ok ? 200 : 400, JSON.stringify(result), "application/json");
+    } catch (e) {
+      send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
+    }
   } else if (url === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "max-age=86400" });
     res.end();
@@ -4193,8 +4411,12 @@ const server = http.createServer(async (req, res) => {
     send(res, 200, docsHtml, "text/html; charset=utf-8");
   } else if (url === "/models") {
     send(res, 200, modelsHtml, "text/html; charset=utf-8");
+  } else if (url === "/settings") {
+    send(res, 200, settingsHtml, "text/html; charset=utf-8");
   } else if (url === "/api/models") {
     send(res, 200, JSON.stringify(apiModels()), "application/json");
+  } else if (url === "/api/settings") {
+    send(res, 200, JSON.stringify(apiSettings()), "application/json");
   } else if (url === "/api/solutions") {
     send(res, 200, JSON.stringify(apiSolutions()), "application/json");
   } else if (url === "/api/doc") {

@@ -1240,6 +1240,15 @@ scrub-secrets.sh
     snapshot dirs containing private keys/yaml secrets and .env.local.bak.*.
     Dry run by default; --apply --yes to write. Values are never printed.
 
+settings-apply.sh
+    Host-side applier for the /settings pause/resume control. The dashboard
+    (in the container, where .env.local is masked) writes desired state to
+    data/observability/settings-state.json; this script comments/restores the
+    provider's env-key line in .env.local, runs `opencode auth logout <id>` for
+    pauses, recreates opencode-web, and verifies the key is absent. Values are
+    never printed. Dry run by default; --apply --yes to write; --self-test
+    offline (comment + restore + unrelated line).
+
 security-posture.sh
     Read-only gate for the residual invariants: no whole-host-home mount,
     no-new-privileges + cap_drop ALL + non-root, LiteLLM loopback and an

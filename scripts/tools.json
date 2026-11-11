@@ -1751,5 +1751,16 @@
       "./scripts/verify-tier-budget.sh --fast",
       "./scripts/verify-tier-budget.sh --help"
     ]
+  },
+  {
+    "id": "settings-apply",
+    "title": "Apply dashboard /settings pause/resume on the host",
+    "where": "host",
+    "purpose": "The dashboard runs in the container where .env.local is masked, so /settings writes desired state to data/observability/settings-state.json; this host script comments/restores the provider's env-key line in .env.local, runs `opencode auth logout <id>` for pauses, recreates opencode-web, and verifies the key is absent. Values are never printed. Dry run by default; --apply --yes to write; --self-test offline.",
+    "commands": [
+      "./scripts/settings-apply.sh",
+      "./scripts/settings-apply.sh --apply --yes",
+      "./scripts/settings-apply.sh --self-test"
+    ]
   }
 ]
