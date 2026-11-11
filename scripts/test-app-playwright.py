@@ -58,6 +58,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--user", default=os.environ.get("APP_USER", "opencode"))
     ap.add_argument("--password", default=os.environ.get("OPENCODE_SERVER_PASSWORD", ""))
     ap.add_argument("--timeout", type=int, default=20000, help="per-wait timeout in ms")
+    ap.add_argument("--deadline", type=int, default=240, help="global budget in seconds")
+    ap.add_argument("--route", default="", help="only this route id (debug)")
     ap.add_argument("--headed", action="store_true", help="show the browser")
     ap.add_argument("--json", action="store_true", help="machine-readable summary")
     ap.add_argument("--shots", default="", help="screenshot dir (default logs/app-playwright-<ts>)")
@@ -104,6 +106,8 @@ def wait_visible_text(page, text: str, timeout: int) -> bool:
 def check_route(context, base: str, route: dict, timeout: int, shots: Path, width: int, height: int) -> dict:
     page = context.new_page()
     page.set_viewport_size({"width": width, "height": height})
+    page.set_default_timeout(timeout)
+    page.set_default_navigation_timeout(timeout)
     errors: list[str] = []
     console_errors(page, errors)
     url = base.rstrip("/") + "/app/#" + route["id"]
@@ -145,7 +149,10 @@ def check_route(context, base: str, route: dict, timeout: int, shots: Path, widt
         result["shot"] = str(shot)
     except Exception as e:  # noqa: BLE001 - report the browser failure verbatim
         errors.append("exception: %s" % e)
-    page.close()
+    try:
+        page.close()
+    except Exception as e:  # noqa: BLE001 - a closed/interrupted page is not a test failure
+        errors.append("close: %s" % e)
     result["ok"] = not errors
     return result
 
@@ -165,27 +172,67 @@ def main() -> int:
     creds = {"username": args.user, "password": args.password} if args.password else None
     results: list[dict] = []
     started = datetime.datetime.now(datetime.timezone.utc)
+    start_mono = time.monotonic()
+    routes = [r for r in ROUTES if not args.route or r["id"] == args.route]
+    if not routes:
+        print("FAIL: unknown --route %r (choose: %s)" % (args.route, ", ".join(r["id"] for r in ROUTES)), file=sys.stderr)
+        return 2
 
+    interrupted = False
     with sync_playwright() as p:
+        browser = None
         try:
             browser = p.chromium.launch(headless=not args.headed)
         except Exception as e:  # noqa: BLE001
             print("FAIL: cannot launch Chromium (%s)" % e, file=sys.stderr)
             print("  install: python -m playwright install chromium", file=sys.stderr)
             return 2
-        for width, height, label in ((1280, 900, "desktop"), (390, 844, "mobile")):
-            context = browser.new_context(
-                ignore_https_errors=True,
-                http_credentials=creds,
-                viewport={"width": width, "height": height},
-                reduced_motion="reduce",
-            )
-            for route in ROUTES:
-                r = check_route(context, args.base, route, args.timeout, shots, width, height)
-                r["mode"] = label
-                results.append(r)
-            context.close()
-        browser.close()
+        try:
+            for width, height, label in ((1280, 900, "desktop"), (390, 844, "mobile")):
+                context = browser.new_context(
+                    ignore_https_errors=True,
+                    http_credentials=creds,
+                    viewport={"width": width, "height": height},
+                    reduced_motion="reduce",
+                )
+                try:
+                    for route in routes:
+                        if time.monotonic() - start_mono > args.deadline:
+                            results.append({
+                                "id": route["id"], "mode": label, "width": width, "ok": False,
+                                "errors": ["global deadline %ss exceeded" % args.deadline],
+                                "overflow_px": 0, "shot": "",
+                            })
+                            if not args.json:
+                                print("  FAIL %-9s %-8s deadline exceeded" % (route["id"], label), flush=True)
+                            continue
+                        if not args.json:
+                            print("  ...  %-9s %-8s" % (route["id"], label), flush=True)
+                        r = check_route(context, args.base, route, args.timeout, shots, width, height)
+                        r["mode"] = label
+                        results.append(r)
+                        if not args.json:
+                            print("  %-4s %-9s %-8s overflow=%dpx %s" % (
+                                "PASS" if r["ok"] else "FAIL", r["id"], label, r["overflow_px"], r["shot"]), flush=True)
+                            for e in r["errors"]:
+                                print("       - %s" % e, flush=True)
+                finally:
+                    try:
+                        context.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\ninterrupted: closing browser", file=sys.stderr)
+        finally:
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:  # noqa: BLE001
+                    pass
+    if interrupted:
+        print("interrupted: %d result(s) recorded before Ctrl-C" % len(results), file=sys.stderr)
+        return 130
 
     failures = [r for r in results if not r["ok"]]
     elapsed = (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
@@ -201,14 +248,13 @@ def main() -> int:
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
-        print("=== test-app-playwright ===")
-        print("base: %s" % args.base)
-        for r in results:
-            mark = "PASS" if r["ok"] else "FAIL"
-            print("  %-4s %-8s %-9s overflow=%dpx %s" % (mark, r["id"], r["mode"], r["overflow_px"], r["shot"]))
-            for e in r["errors"]:
-                print("       - %s" % e)
-        print("summary: %d pass, %d fail in %.1fs (shots: %s)" % (summary["pass"], summary["fail"], elapsed, shots))
+        if failures:
+            print("failures:", flush=True)
+            for r in failures:
+                print("  FAIL %-9s %-8s overflow=%dpx" % (r["id"], r["mode"], r["overflow_px"]), flush=True)
+                for e in r["errors"]:
+                    print("       - %s" % e, flush=True)
+        print("summary: %d pass, %d fail in %.1fs (shots: %s)" % (summary["pass"], summary["fail"], elapsed, shots), flush=True)
     return 0 if not failures else 1
 
 
