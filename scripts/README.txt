@@ -1230,7 +1230,9 @@ rotate-guided.py
     read from the page (clipboard fallback), written atomically to .env.local
     (0600, backup) and never printed; no screenshot after reveal.
     --provider/--action login|revoke|create|rotate, --plan, --report, --reset,
-    --self-test, --browser-self-test. Run with the host browser venv:
+    --self-test, --browser-self-test, --reset-login. Login is verified
+    (ok/login/rejected); a vendor rejection (e.g. Google signin/rejected) is
+    reported instead of offering login links as candidates. Run with the host browser venv:
     ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
 
 rotate-opencode-token.sh

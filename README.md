@@ -103,7 +103,9 @@ miss it lists the candidate controls for a one-time pick and learns. The new key
 is read from the page (clipboard fallback), written atomically to `.env.local`
 (0600, backup), and never printed; no screenshot is taken after reveal.
 `--action login|revoke|create|rotate`, `--plan`, `--report`, `--reset`,
-`--self-test`, `--browser-self-test`.
+`--self-test`, `--browser-self-test`, `--reset-login`. Login is verified
+(ok/login/rejected); a rejected Google/SSO sign-in is reported, not mistaken
+for a keys page.
 
 ```bash
 ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate

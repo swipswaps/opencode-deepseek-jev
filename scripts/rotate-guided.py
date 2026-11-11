@@ -15,6 +15,7 @@ the right control once, then remembers that.
   ./scripts/browser-python.sh scripts/rotate-guided.py --plan --provider deepseek
   ./scripts/browser-python.sh scripts/rotate-guided.py --report
   ./scripts/browser-python.sh scripts/rotate-guided.py --self-test
+  ./scripts/browser-python.sh scripts/rotate-guided.py --reset-login
 
 Memory lives in data/observability/observability.db:
   rotation_memory(provider, action, locator, successes, failures, last_ok, ...)
@@ -251,8 +252,15 @@ def matches(cands: list, words: list) -> list:
     return out
 
 
+NAV_NOISE = ("continue with", "terms", "privacy", "contact", "cookbook", "quickstart",
+              "api reference", "developer docs", "documentation", "twitter", "linkedin",
+              "youtube", "instagram", "threads", "sign in", "log in")
+
+
 def ask_pick(cands: list, action: str, patterns: list, yes: bool) -> dict | None:
     hit = matches(cands, patterns)
+    if not hit:
+        cands = [c for c in cands if not any(x in (c.get("name", "") + " " + c.get("context", "")).lower() for x in NAV_NOISE)] or cands
     pool = hit or cands
     if not pool:
         return None
@@ -428,31 +436,75 @@ def remember_or_ask(page, provider, action, cfg, yes, no_learn) -> bool:
     return True
 
 
-def wait_login(page, args, cfg) -> bool:
-    page.wait_for_timeout(1200)
-    url = page.url.lower()
+LOGIN_URL_HINTS = ("login", "signin", "sign-in", "oauth", "auth")
+REJECT_HINTS = ("signin/rejected", "access blocked", "couldn't sign you in",
+                "couldn’t sign you in", "could not sign you in", "sign-in was rejected")
+LOGIN_BODY_HINTS = ("continue with google", "continue with email", "continue with sso",
+                    "sign in to", "log in to")
+KEYS_BODY_HINTS = ("api key", "api keys", "create key", "new key", "revoke", "delete key")
+
+
+def login_state(page, cfg) -> str:
+    """Return ok | login | rejected | unknown for the current page."""
+    try:
+        url = page.url.lower()
+    except Exception:  # noqa: BLE001
+        url = ""
+    try:
+        body = (page.locator("body").inner_text() or "").lower()[:12000]
+    except Exception:  # noqa: BLE001
+        body = ""
+    if any(k in url or k in body for k in REJECT_HINTS):
+        return "rejected"
     try:
         pw = page.locator('input[type="password"]').count()
     except Exception:  # noqa: BLE001
         pw = 0
-    body = ""
-    try:
-        body = (page.locator("body").inner_text() or "").lower()[:4000]
-    except Exception:  # noqa: BLE001
-        pass
-    needs = bool(pw) or any(k in url for k in ("login", "signin", "sign-in", "auth")) or ("sign in" in body and "password" in body)
-    if not needs:
-        return True
-    if args.action == "login" or sys.stdin.isatty():
-        print("\nLog in to %s in the opened browser window (once; the profile persists)." % cfg.get("console"))
-        print("Then press Enter here to continue...")
+    if pw or any(k in body for k in LOGIN_BODY_HINTS) or any(k in url for k in LOGIN_URL_HINTS):
+        return "login"
+    if any(k in body for k in KEYS_BODY_HINTS):
+        return "ok"
+    return "unknown"
+
+
+def wait_login(page, args, cfg) -> bool:
+    """Verify authentication; never assume the operator logged in."""
+    for attempt in range(6):
+        page.wait_for_timeout(1200)
+        st = login_state(page, cfg)
+        if st == "ok":
+            print("  logged in: %s" % page.url)
+            return True
+        if st == "rejected":
+            print("FAIL: the vendor rejected the sign-in (page: %s)" % page.url, file=sys.stderr)
+            print("  Google returned signin/rejected. Use 'Continue with email' or 'Continue with SSO'", file=sys.stderr)
+            print("  with an account that has access, then re-run --action login.", file=sys.stderr)
+            log_run(args.provider, args.action, "login", False, page.url, "vendor rejected sign-in")
+            return False
+        if st == "login":
+            if not sys.stdin.isatty():
+                print("login required; rerun interactively (or --action login) first", file=sys.stderr)
+                return False
+            print("\nNot logged in (%s). Log in in the opened browser window; the profile persists." % cfg.get("console"))
+            print("If a popup was rejected, close it and use 'Continue with email' or 'Continue with SSO'.")
+            print("Press Enter here only after you can see the API keys page...")
+            try:
+                input()
+            except EOFError:
+                return False
+            continue
+        # unknown: a dashboard or an unexpected page; let the operator reach the keys page
+        if not sys.stdin.isatty():
+            print("FAIL: not on an API keys page (%s)" % page.url, file=sys.stderr)
+            return False
+        print("\nWaiting for the API keys page (%s)." % page.url)
+        print("Navigate to the keys page in the browser, then press Enter here (Ctrl-C aborts)...")
         try:
             input()
         except EOFError:
             return False
-        page.wait_for_timeout(800)
-        return True
-    print("login required; rerun interactively (or --action login) first", file=sys.stderr)
+    print("FAIL: still not logged in after retries (%s)" % page.url, file=sys.stderr)
+    log_run(args.provider, args.action, "login", False, page.url, "not logged in after retries")
     return False
 
 
@@ -487,8 +539,10 @@ def run_browser(args, cfg) -> int:
             page.wait_for_timeout(1000)
             if target != cfg["console"]:
                 print("  navigating to remembered page: %s" % target)
+            if not wait_login(page, args, cfg):
+                return 2
             if action == "login":
-                print("login profile ready: %s" % profile_dir())
+                print("login profile verified: %s" % profile_dir())
                 return 0
             if action in ("revoke", "rotate"):
                 if not remember_or_ask(page, provider, "revoke", cfg, args.yes, args.no_learn):
@@ -612,9 +666,18 @@ def browser_self_test() -> int:
             assert loc.get("kind") == "role" and loc.get("name") == "Revoke", loc
             assert visible_first(locator_for(page, loc)) is not None, "locator did not resolve"
             assert "Create key" in names, names
+            login_page = browser.new_page()
+            login_page.set_content('<html><body><button>Continue with Google</button></body></html>')
+            assert login_state(login_page, {}) == "login", "login page not detected"
+            keys_page = browser.new_page()
+            keys_page.set_content('<html><body><h1>API keys</h1><button>Create key</button></body></html>')
+            assert login_state(keys_page, {}) == "ok", "keys page not detected"
+            reject_page = browser.new_page()
+            reject_page.set_content("<html><body><h1>Couldn't sign you in</h1></body></html>")
+            assert login_state(reject_page, {}) == "rejected", "rejection not detected"
         finally:
             browser.close()
-    print("rotate-guided: browser self-test PASS (candidates + locator derivation + resolve)")
+    print("rotate-guided: browser self-test PASS (candidates + locator + login/reject detection)")
     return 0
 
 
@@ -661,6 +724,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--clipboard", action="store_true", default=True)
     ap.add_argument("--recreate", action="store_true")
     ap.add_argument("--reset", action="store_true")
+    ap.add_argument("--reset-login", action="store_true")
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--list-providers", action="store_true")
@@ -672,6 +736,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.reset_login:
+        shutil.rmtree(profile_dir(), ignore_errors=True)
+        profile_dir()
+        print("cleared login profile: %s" % profile_dir())
+        return 0
     if args.self_test:
         return self_test()
     if args.browser_self_test:
