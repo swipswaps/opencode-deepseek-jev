@@ -113,6 +113,13 @@ for a keys page.
 ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke
 ```
 
+Recommended for a destructive revoke: `--action open` takes you to the keys
+page (login verified), you do the row-level **Actions → Revoke** and **Create
+key** in the browser, then `--action capture` reads the copied key and writes
+`.env.local` (prefix-validated, clipboard cleared, value never printed). Full
+`--action rotate` is best-effort; the row-level revoke menu is brittle, so a
+human click is safer.
+
 `--browser chrome-cdp` launches **real Chrome** with a dedicated persistent
 profile (no `--enable-automation`), attaches over CDP, and keeps the login
 profile across runs; `--browser auto` prefers an existing CDP endpoint, then

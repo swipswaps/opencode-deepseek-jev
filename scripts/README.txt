@@ -1230,6 +1230,11 @@ rotate-guided.py
     read from the page (clipboard fallback), written atomically to .env.local
     (0600, backup) and never printed; no screenshot after reveal.
     --provider/--action login|revoke|create|rotate, --plan, --report, --reset,
+    Recommended for a destructive revoke: `--action open` (login + keys page),
+    do the row-level Actions -> Revoke and Create key in the browser, click Copy,
+    then `--action capture` writes .env.local (clipboard, prefix-validated,
+    cleared) without any vendor clicks. Full `--action rotate` remains
+    best-effort: a row-level revoke menu is brittle and can target the wrong key.
     --browser auto|chrome-cdp|cdp|chrome|chromium (--cdp URL; default
     http://127.0.0.1:9222), --self-test, --browser-self-test, --cdp-self-test,
     --reset-login. If Google/LinkedIn says "This browser or app may not be

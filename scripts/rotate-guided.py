@@ -13,6 +13,8 @@ the right control once, then remembers that.
   ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
   ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login --browser chrome-cdp
   ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke --browser chrome-cdp
+  ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action open
+  ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action capture
 
 Google/LinkedIn SSO can reject Playwright's bundled Chromium with "This browser
 or app may not be secure". Use --browser chrome-cdp: it launches a REAL Chrome
@@ -355,14 +357,14 @@ def ask_pick(cands: list, action: str, patterns: list, yes: bool) -> dict | None
         print("no unique %s control; rerun interactively to pick one" % action, file=sys.stderr)
         return None
     print("\nCandidate %s controls:" % action)
-    for n, c in enumerate(pool[:20], 1):
+    for n, c in enumerate(pool[:40], 1):
         ctx = ("  | " + c["context"][:80]) if c.get("context") else ""
         print("  %2d. %-6s %-18s %s%s" % (n, c.get("tag"), c.get("role"), c.get("name", "")[:60], ctx))
     try:
-        choice = input("choose 1-%d (0 abort): " % min(len(pool), 20)).strip()
+        choice = input("choose 1-%d (0 abort): " % min(len(pool), 40)).strip()
     except EOFError:
         return None
-    if not choice.isdigit() or not (1 <= int(choice) <= min(len(pool), 20)):
+    if not choice.isdigit() or not (1 <= int(choice) <= min(len(pool), 40)):
         return None
     return pool[int(choice) - 1]
 
@@ -591,6 +593,37 @@ def wait_login(page, args, cfg) -> bool:
     return False
 
 
+def capture_key(args, cfg) -> int:
+    """Read the key the operator copied in the vendor page and write .env.local.
+
+    No browser and no vendor clicks: the operator does the revoke/create in the
+    already-open Chrome, clicks Copy, and this atomically writes the variable.
+    The key is never printed; the value is validated by prefix and length.
+    """
+    got = read_clipboard()
+    need = max(12, len(cfg["prefix"]) + 8)
+    if not (got.startswith(cfg["prefix"]) and len(got) >= need):
+        print("clipboard does not hold a %s key" % cfg["prefix"], file=sys.stderr)
+        if not sys.stdin.isatty():
+            return 1
+        import getpass
+        got = getpass.getpass("paste the new %s key (hidden), or Enter to abort: " % cfg["env"]).strip()
+    if not got:
+        return 1
+    if not (got.startswith(cfg["prefix"]) and len(got) >= need):
+        print("FAIL: value does not look like a %s key (len %d)" % (cfg["prefix"], len(got)), file=sys.stderr)
+        return 1
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = write_env(Path(args.env_file), cfg["env"], got, ts)
+    clear_clipboard()
+    print("updated %s in %s (mode 600, %d chars)" % (cfg["env"], args.env_file, len(got)))
+    print("backup: %s (contains the old key; purge with ./scripts/scrub-secrets.sh --apply --yes --purge-env-backups)" % backup)
+    print("next: ./scripts/web-restart.sh")
+    print("note: if this provider is paused in /settings, resume/clear it before settings-apply, or the new key will be commented")
+    log_run(args.provider, "capture", "write", True, "", "clipboard")
+    return 0
+
+
 def goto_retry(page, url: str, timeout: int) -> bool:
     """Navigate with a generous bound + one retry (console pages redirect and are heavy)."""
     last = None
@@ -665,6 +698,11 @@ def run_browser(args, cfg) -> int:
             if action == "login":
                 where = args.cdp if mode in ("cdp", "chrome-cdp") else str(profile_dir())
                 print("login profile verified (%s)" % where)
+                return 0
+            if action == "open":
+                print("keys page open: %s" % page.url)
+                print("Do the revoke/create in this browser, click Copy on the new key,")
+                print("then run: ./scripts/browser-python.sh scripts/rotate-guided.py --provider %s --action capture" % provider)
                 return 0
             if action in ("revoke", "rotate"):
                 if not remember_or_ask(page, provider, "revoke", cfg, args.yes, args.no_learn):
@@ -869,7 +907,7 @@ def plan(args) -> int:
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Playwright-guided, learning key rotation")
     ap.add_argument("--provider", default="", help="deepseek|anthropic|subq|jev|gemini|litellm")
-    ap.add_argument("--action", default="rotate", choices=["login", "revoke", "create", "rotate"])
+    ap.add_argument("--action", default="rotate", choices=["login", "open", "revoke", "create", "rotate", "capture"])
     ap.add_argument("--env-file", default=str(env_path()))
     ap.add_argument("--key-name", default="")
     ap.add_argument("--browser", default="auto", choices=["auto", "chrome-cdp", "cdp", "chrome", "chromium"])
@@ -936,6 +974,8 @@ def main() -> int:
     if not Path(args.env_file).is_file():
         print("env file missing: %s (run this on the host)" % args.env_file, file=sys.stderr)
         return 2
+    if args.action == "capture":
+        return capture_key(args, cfg)
     return run_browser(args, cfg)
 
 

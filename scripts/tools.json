@@ -1791,11 +1791,11 @@
     "where": "host",
     "purpose": "Open the vendor console in a persistent Chromium profile (log in once), find revoke/create controls, and remember them in observability.db (rotation_memory + rotation_run). On a miss it lists candidate controls for a one-time pick and learns. Reads the new key from the page (clipboard fallback), writes .env.local atomically (0600, backup), never prints the value, and takes no screenshot after reveal. --provider/--action login|revoke|create|rotate, --plan, --report, --reset, --self-test, --browser-self-test. --browser auto|chrome-cdp|cdp|chrome|chromium (default auto; chrome-cdp launches real Chrome without automation flags and attaches over CDP, which avoids Google's 'browser or app may not be secure' rejection).",
     "commands": [
+      "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action open",
+      "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action capture",
       "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login --browser chrome-cdp",
-      "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke",
-      "./scripts/browser-python.sh scripts/rotate-guided.py --provider deepseek --action rotate --browser chrome-cdp",
-      "./scripts/browser-python.sh scripts/rotate-guided.py --plan --report",
-      "./scripts/browser-python.sh scripts/rotate-guided.py --self-test"
+      "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke --browser chrome-cdp",
+      "./scripts/browser-python.sh scripts/rotate-guided.py --plan --report"
     ]
   }
 ]
