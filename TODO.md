@@ -4,9 +4,17 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-11-09
+Last updated: 2026-11-11
 
 ## Done (most recent first)
+
+- [x] **SETTINGS-1 — 2026-11-11.** `/settings` + `/app/#settings` provider
+      matrix with pause/resume (typed confirm, ledger row, pending-host-apply);
+      `scripts/settings-apply.sh` host applier (dry-run/`--apply --yes`/
+      `--self-test`). Anthropic hard-paused. `/app/#usability` simplified to an
+      evidence summary + `/usability` link; `/recovery` and global a11y fixes;
+      React tables scroll on mobile; reduced-motion honored. a11y 11/11 per
+      classic page; lint 419/0.
 
 Archived 2026-11-11 to hold the tier-1 read-first budget (RULE #77).
 See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).

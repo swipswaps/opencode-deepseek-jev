@@ -10,6 +10,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -76,6 +77,7 @@ export default function Usability() {
                   <Chip size="small" variant="outlined" label={`effectiveness ${num(run.effectiveness)}`} />
                   <Chip size="small" variant="outlined" label={`time ${run.efficiency_s == null ? "n/a" : `${run.efficiency_s}s`}`} />
                 </Stack>
+                <TableContainer>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -98,6 +100,7 @@ export default function Usability() {
                     ))}
                   </TableBody>
                 </Table>
+                </TableContainer>
                 {(run.failures || []).slice(0, 5).map((f) => (
                   <Typography key={`${f.axis}-${f.metric}`} variant="caption" color="error" component="div">
                     FAIL {f.axis}/{f.metric}: {f.detail}
@@ -139,6 +142,7 @@ export default function Usability() {
             </Typography>
           )}
           {sessions.length > 0 && (
+            <TableContainer>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -163,6 +167,7 @@ export default function Usability() {
                 ))}
               </TableBody>
             </Table>
+            </TableContainer>
           )}
           <Divider sx={{ my: 1 }} />
           <Typography variant="caption" color="text.secondary">

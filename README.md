@@ -40,6 +40,43 @@ plane.
   inline UI/PWA test PASS, `certs-verify` ALL PASS, `https-selfheal --check`
   ALL PASS, PC strict TLS 200/verify=0 on 5099 + 443 + LAN.
 
+## 2026-11-11 — settings controls + UX pass
+
+**Settings is now a control surface, not a runbook.** `/settings` (classic) and
+`/app/#settings` (MUI) show one redacted provider matrix — config block, env-key
+presence (name only), `auth.json` entry, model policy, decision-router state —
+and safe **pause/resume** with a typed provider-id confirmation. Every action
+writes a `SETTINGS` ledger row and a pending-host-apply badge; the UI also links
+each provider's key console and copies the matching rotate command. No secret is
+ever rendered, accepted, or posted to the browser.
+
+The container cannot edit `.env.local` (it is masked), so the dashboard writes
+desired state and the host applier makes it effective:
+
+```bash
+./scripts/settings-apply.sh                 # dry run
+./scripts/settings-apply.sh --apply --yes   # comment/restore key, auth logout, recreate, verify
+./scripts/settings-apply.sh --self-test
+```
+
+Anthropic was hard-paused and verified absent from the container environment.
+
+**Usability and accessibility pass.**
+
+- `/app/#usability` is now a clear evidence summary (automated axes + recent
+  guided sessions) with a single **Run the guided test** button to the dedicated
+  `/usability` runner, instead of a confusing duplicate runner.
+- `/recovery` gained the missing skip-link target, `:focus-visible`, base
+  layout, and `pre`/table overflow handling.
+- Global `:focus-visible` and `pre{overflow-x:auto}`; React tables now scroll
+  horizontally on narrow screens; `prefers-reduced-motion` is honored.
+- `a11y-audit.mjs` reports **11/11 on every classic page** (`/`, `/explore`,
+  `/graph`, `/usability`, `/models`, `/settings`, `/runbooks`, `/manage`,
+  `/docs`, `/recovery`). Lint **419/0**; `cd web && npm run build` succeeds.
+
+`web/dist` is a build artifact (gitignored): run `cd web && npm run build` (or
+`./scripts/web-build-restart.sh`) after a checkout.
+
 ## 2026-11-10 — network UX + hardening close-out
 
 **The persistent "10.100.0.1 disconnected" popup was real but misdiagnosed.**

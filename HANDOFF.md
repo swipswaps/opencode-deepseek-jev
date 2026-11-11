@@ -1,5 +1,17 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-11b (settings + UX):** `/settings` and `/app/#settings` now
+> show a redacted provider matrix (config/env/auth/policy/state) and safe
+> pause/resume (typed confirm, `SETTINGS` ledger row, pending-host-apply badge,
+> console + rotate-command links; no secret in the browser).
+> `scripts/settings-apply.sh` comments/restores the env key, logs out the
+> provider, recreates `opencode-web`, and verifies (dry-run default; `--apply
+> --yes`; `--self-test`). Anthropic hard-paused and verified absent from the
+> container. `/app/#usability` simplified to evidence + link to `/usability`;
+> `/recovery` a11y fixed (skip target, focus-visible, styled layout); global
+> focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
+> honored. a11y audit 11/11 on every classic page; lint 419/0.
+
 > **PIN 2026-11-11 (audit/triage):** full report in
 > `docs/AUDIT-TRIAGE-2026-11-10.md`; durable handoff in
 > `docs/HANDOFF-2026-11-11.md`. P0: rotate the 4 `../notes/` secrets; patch

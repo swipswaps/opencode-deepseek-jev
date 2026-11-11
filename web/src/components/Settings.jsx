@@ -11,6 +11,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   TextField,
@@ -139,6 +140,8 @@ export default function Settings() {
               size="small"
               label="Confirm provider id"
               value={confirm}
+              autoComplete="off"
+              spellCheck={false}
               onChange={(e) => setConfirm(e.target.value)}
               helperText="Type the provider id to enable its pause/resume action."
               sx={{ maxWidth: 260 }}
@@ -149,6 +152,7 @@ export default function Settings() {
               </Button>
             )}
           </Stack>
+          <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -211,6 +215,7 @@ export default function Settings() {
               ))}
             </TableBody>
           </Table>
+          </TableContainer>
         </CardContent>
       </Card>
 
@@ -225,6 +230,7 @@ export default function Settings() {
             the console, then run the matching script on the host; the new value never leaves <code>.env.local</code>.
           </Typography>
           <Divider sx={{ mb: 1 }} />
+          <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow><TableCell>provider</TableCell><TableCell>env var</TableCell><TableCell>status</TableCell><TableCell>console</TableCell><TableCell>rotate</TableCell></TableRow>
@@ -249,6 +255,7 @@ export default function Settings() {
               ))}
             </TableBody>
           </Table>
+          </TableContainer>
         </CardContent>
       </Card>
     </Box>

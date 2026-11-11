@@ -158,7 +158,9 @@ const THEME_CSS =
   ".stat{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--e1)}" +
   ".card{overflow-x:auto}" +
   ".skip-link{position:absolute;left:-9999px;top:8px;background:var(--accent);color:var(--bg);padding:8px 12px;border-radius:var(--radius);z-index:200;text-decoration:none;font-size:13px}" +
-  ".skip-link:focus{left:8px}";
+  ".skip-link:focus{left:8px}" +
+  ":focus-visible{outline:2px solid var(--accent);outline-offset:2px}" +
+  "pre{overflow-x:auto}";
 
 function nav(active) {
   let h = "<style>" + NAV_CSS + THEME_CSS + CMDK_CSS + "</style><a class=\"skip-link\" href=\"#main\">Skip to main content</a><nav class=\"nav\" aria-label=\"Primary\"><span class=\"brand\">opencode observability</span>";
@@ -304,6 +306,7 @@ function apiSettings() {
   }
   for (const k of authKeys) ids.add(k);
   for (const [id, env] of Object.entries(KNOWN_PROVIDER_ENV)) if (process.env[env]) ids.add(id);
+  for (const id of Object.keys(state.providers || {})) ids.add(id);
   const decision = new Map((dp.providers || []).map((p) => [p.id, p]));
   const providers = [...ids].sort().map((id) => {
     const inConfig = !!(cfg.provider && cfg.provider[id]);
@@ -4236,7 +4239,12 @@ function recoveryPage() {
       body += "</ul>";
     }
   }
-  return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>recovery</title></head><body>" + nav("recovery") + "<main id=\"main\">" + body + "</main></body></html>";
+  const css = "<style>body{font-family:system-ui,monospace;background:#0d1117;color:#e6edf3;margin:0;padding:20px}" +
+    "main{max-width:1100px}table{border-collapse:collapse;width:100%;font-size:12px}" +
+    "th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #21262d}th{color:#8b949e}" +
+    "pre{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;overflow-x:auto}" +
+    ":focus-visible{outline:2px solid #1f6feb;outline-offset:1px}</style>";
+  return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>recovery</title>" + css + "</head><body>" + nav("recovery") + "<main id=\"main\" tabindex=\"-1\">" + body + "</main></body></html>";
 }
 
 const server = http.createServer(async (req, res) => {

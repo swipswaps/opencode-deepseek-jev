@@ -35,6 +35,14 @@ export function makeTheme(mode) {
           body: { overscrollBehaviorY: "contain" },
           "*": { boxSizing: "border-box" },
           "::selection": { background: dark ? "#1f6feb66" : "#0969da33" },
+          "@media (prefers-reduced-motion: reduce)": {
+            "*, *::before, *::after": {
+              animationDuration: "0.01ms !important",
+              animationIterationCount: "1 !important",
+              transitionDuration: "0.01ms !important",
+              scrollBehavior: "auto !important",
+            },
+          },
         },
       },
       MuiCard: {
