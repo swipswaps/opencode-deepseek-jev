@@ -82,8 +82,9 @@ Anthropic was hard-paused and verified absent from the container environment.
   10 s; `.24` posture **23/0**; secret scan clean.
 - `scripts/audit-app-ux.py` audits the React DOM (Playwright): h1/heading tree,
   accessible names, focus, tap targets, nav state, and console errors. The
-  2026-11-11 run found and fixed the missing h1 on every view; remaining
-  findings are tracked as `APP-UX-1` in `TODO.md`.
+  2026-11-11 run found and fixed the missing h1 on every view, then the
+  residual `APP-UX-1` items (search labels, `aria-current`, 44px mobile
+  targets). Current audit: **0 findings**; battery **12/12**.
 
 `web/dist` is a build artifact (gitignored): run `cd web && npm run build` (or
 `./scripts/web-build-restart.sh`) after a checkout.

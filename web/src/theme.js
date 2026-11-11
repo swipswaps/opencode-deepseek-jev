@@ -64,7 +64,22 @@ export function makeTheme(mode) {
           },
         },
       },
-      MuiButton: { defaultProps: { disableElevation: true } },
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        styleOverrides: {
+          root: { "@media (max-width:600px)": { minHeight: 44 } },
+          sizeSmall: { "@media (max-width:600px)": { minHeight: 44 } },
+        },
+      },
+      MuiIconButton: {
+        styleOverrides: { root: { "@media (max-width:600px)": { minWidth: 44, minHeight: 44 } } },
+      },
+      MuiInputBase: {
+        styleOverrides: { input: { "@media (max-width:600px)": { minHeight: 44 } } },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: { root: { "@media (max-width:600px)": { minHeight: 44 } } },
+      },
       MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
       MuiTableCell: {
         styleOverrides: {

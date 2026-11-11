@@ -88,6 +88,7 @@ export default function Sessions({ sessions, error, isMobile }) {
                   </InputAdornment>
                 ),
               },
+              htmlInput: { "aria-label": "Search sessions" },
             }}
           />
         </Stack>

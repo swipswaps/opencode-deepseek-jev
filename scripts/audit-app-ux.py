@@ -33,7 +33,12 @@ import sys
 VIEWS = ["overview", "activity", "sessions", "todos", "usability", "settings"]
 
 JS = r"""() => {
-  const vis = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const vis = el => {
+    if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    const s = getComputedStyle(el);
+    return s.opacity !== '0' && s.pointerEvents !== 'none';
+  };
   const nm = el => (el.getAttribute('aria-label') || el.getAttribute('title') ||
     (el.innerText || '').trim() ||
     (el.labels && el.labels[0] && el.labels[0].innerText) || '').trim();

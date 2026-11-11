@@ -93,6 +93,9 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
           zIndex: 2000,
           px: 2,
           py: 1,
+          minHeight: 44,
+          display: "inline-flex",
+          alignItems: "center",
           borderRadius: 1,
           bgcolor: "primary.main",
           color: "#0d1117",
@@ -180,6 +183,7 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
               <ListItemButton
                 key={v.id}
                 selected={view === v.id}
+                aria-current={view === v.id ? "page" : undefined}
                 onClick={() => selectView(v.id)}
                 sx={{ borderRadius: 2, mb: 0.5, minHeight: 44 }}
               >
@@ -237,7 +241,8 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
         }}
       >
         {VIEWS.map((v) => (
-          <BottomNavigationAction key={v.id} value={v.id} label={v.label} icon={v.icon} />
+          <BottomNavigationAction key={v.id} value={v.id} label={v.label} icon={v.icon}
+            aria-current={view === v.id ? "page" : undefined} />
         ))}
       </BottomNavigation>
     </Box>

@@ -20,8 +20,10 @@
 > focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
 > `audit-app-ux.py` (Playwright) found **no h1** on the React views; fixed:
 > every view now renders one h1 (AppBar brand demoted). Residual UX findings
-> (unselected): Activity/Sessions search inputs unnamed, active nav lacks
-> aria-current, mobile targets <44px — tracked as **APP-UX-1**.
+> Then fixed **APP-UX-1**: Activity/Sessions search fields named, active nav
+> `aria-current="page"`, and <=600px 44px targets (buttons, icon buttons,
+> inputs, skip link). `audit-app-ux.py` now reports **0 findings**; Playwright
+> battery **12/12**.
 > honored. a11y audit 11/11 on every classic page; lint 419/0. Playwright
 > `/app` battery **12/12** (desktop 1280x900 + mobile 390x844, 10 s); `.24`
 > posture **23/0**, secret-scan clean, guard link fixed, OpenSSH patched and

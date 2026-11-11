@@ -384,6 +384,7 @@ export default function ActivityTimeline({ activity, shed }) {
                 </InputAdornment>
               ) : null,
             },
+            htmlInput: { "aria-label": "Filter activity" },
           }}
         />
       </Paper>
