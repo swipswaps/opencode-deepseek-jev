@@ -11,7 +11,14 @@ the page, the tool falls back to heuristics and asks the operator to point at
 the right control once, then remembers that.
 
   ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
-  ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login
+  ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login --browser chrome-cdp
+  ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke --browser chrome-cdp
+
+Google/LinkedIn SSO can reject Playwright's bundled Chromium with "This browser
+or app may not be secure". Use --browser chrome-cdp: it launches a REAL Chrome
+with a dedicated persistent profile (no automation flags) and attaches over CDP.
+Log in there once; the Chrome profile persists. --browser auto prefers an
+existing CDP endpoint, then real Chrome, then bundled Chromium.
   ./scripts/browser-python.sh scripts/rotate-guided.py --plan --provider deepseek
   ./scripts/browser-python.sh scripts/rotate-guided.py --report
   ./scripts/browser-python.sh scripts/rotate-guided.py --self-test
@@ -42,6 +49,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -114,6 +122,81 @@ def db_path() -> Path:
 
 def env_path() -> Path:
     return Path(os.environ.get("ROTATION_ENV") or (repo_root() / ".env.local"))
+
+
+def chrome_profile_dir() -> Path:
+    p = Path(os.environ.get("ROTATION_CHROME_PROFILE") or
+             (Path.home() / ".local" / "state" / "opencode-rotation" / "chrome-profile"))
+    p.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(p, 0o700)
+    except OSError:
+        pass
+    return p
+
+
+def find_chrome() -> str:
+    for name in ("google-chrome-stable", "google-chrome", "chromium-browser", "chromium"):
+        exe = shutil.which(name)
+        if exe:
+            return exe
+    return ""
+
+
+def cdp_reachable(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/json/version", timeout=3) as r:
+            return b"Browser" in r.read(200)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _cdp_port(url: str, default: int) -> int:
+    try:
+        return urlsplit(url).port or default
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def chrome_hint(args) -> str:
+    return ("%s --remote-debugging-port=%d --remote-allow-origins=* --user-data-dir=%s "
+            "--no-first-run --no-default-browser-check about:blank"
+            % (find_chrome() or "google-chrome-stable", _cdp_port(args.cdp, args.cdp_port), chrome_profile_dir()))
+
+
+def launch_chrome(args) -> bool:
+    exe = find_chrome()
+    if not exe:
+        print("FAIL: no Chrome/Chromium binary found (google-chrome-stable, google-chrome, chromium)", file=sys.stderr)
+        return False
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print("FAIL: chrome-cdp needs a desktop session (DISPLAY/WAYLAND_DISPLAY unset)", file=sys.stderr)
+        print("  run this from the desktop terminal, or start Chrome yourself with --remote-debugging-port", file=sys.stderr)
+        return False
+    cmd = [exe, "--remote-debugging-port=%d" % _cdp_port(args.cdp, args.cdp_port),
+           "--remote-allow-origins=*", "--user-data-dir=%s" % chrome_profile_dir(),
+           "--no-first-run", "--no-default-browser-check"]
+    if args.headless:
+        cmd.append("--headless=new")
+    cmd.append("about:blank")
+    print("launching real Chrome (no automation flags): %s" % " ".join(cmd))
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(30):
+        if cdp_reachable(args.cdp):
+            return True
+        time.sleep(1)
+    print("FAIL: Chrome CDP not reachable at %s after 30s" % args.cdp, file=sys.stderr)
+    return False
+
+
+def choose_browser_mode(args) -> str:
+    if args.browser != "auto":
+        return args.browser
+    if cdp_reachable(args.cdp):
+        return "cdp"
+    if find_chrome():
+        return "chrome-cdp"
+    return "chromium"
 
 
 def profile_dir() -> Path:
@@ -521,13 +604,32 @@ def run_browser(args, cfg) -> int:
     provider = args.provider
     action = args.action
     key = ""
+    mode = choose_browser_mode(args)
+    print("browser mode: %s" % mode)
     with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            str(profile_dir()), headless=args.headless, ignore_https_errors=True,
-            viewport={"width": 1280, "height": 900},
-        )
+        owned = None
+        browser = None
+        if mode in ("cdp", "chrome-cdp"):
+            if mode == "chrome-cdp" and not cdp_reachable(args.cdp):
+                if not launch_chrome(args):
+                    return 2
+            try:
+                browser = p.chromium.connect_over_cdp(args.cdp)
+            except Exception as e:  # noqa: BLE001
+                print("FAIL: cannot connect to Chrome CDP at %s (%s)" % (args.cdp, e), file=sys.stderr)
+                print("  start: %s" % chrome_hint(args), file=sys.stderr)
+                return 2
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+        else:
+            kwargs = {"headless": args.headless, "ignore_https_errors": True,
+                      "viewport": {"width": 1280, "height": 900}}
+            if mode == "chrome":
+                kwargs.update(channel="chrome", ignore_default_args=["--enable-automation"],
+                              args=["--disable-blink-features=AutomationControlled"])
+            context = p.chromium.launch_persistent_context(str(profile_dir()), **kwargs)
+            owned = context
         try:
-            page = context.pages[0] if context.pages else context.new_page()
+            page = context.new_page()
             page.set_default_timeout(args.timeout)
             page.set_default_navigation_timeout(args.timeout)
             page.on("dialog", lambda d: d.accept())
@@ -542,7 +644,8 @@ def run_browser(args, cfg) -> int:
             if not wait_login(page, args, cfg):
                 return 2
             if action == "login":
-                print("login profile verified: %s" % profile_dir())
+                where = args.cdp if mode in ("cdp", "chrome-cdp") else str(profile_dir())
+                print("login profile verified (%s)" % where)
                 return 0
             if action in ("revoke", "rotate"):
                 if not remember_or_ask(page, provider, "revoke", cfg, args.yes, args.no_learn):
@@ -604,10 +707,17 @@ def run_browser(args, cfg) -> int:
                         print("  next: ./scripts/web-restart.sh  (or docker compose ... up -d --force-recreate opencode-web)")
                 print("  rotate complete for %s" % provider)
         finally:
-            try:
-                context.close()
-            except Exception:  # noqa: BLE001
-                pass
+            if owned is not None:
+                try:
+                    owned.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            elif browser is not None:
+                # connected over CDP: disconnect, leave the real Chrome/profile running
+                try:
+                    browser.close()
+                except Exception:  # noqa: BLE001
+                    pass
     return 0
 
 
@@ -641,6 +751,33 @@ def self_test() -> int:
     assert env.read_text(encoding="utf-8").count("DEEPSEEK_API_KEY=") == 1, "paused line duplicated"
     shutil.rmtree(work, ignore_errors=True)
     print("rotate-guided: self-test PASS (memory recall/upsert + redaction + env write + paused line)")
+    return 0
+
+
+def cdp_self_test(args) -> int:
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:  # noqa: BLE001
+        print("FAIL: Playwright missing (%s)" % e, file=sys.stderr)
+        return 2
+    if not cdp_reachable(args.cdp):
+        print("SKIP: no CDP endpoint at %s (start Chrome with --remote-debugging-port)" % args.cdp, file=sys.stderr)
+        return 2
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(args.cdp)
+        try:
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.new_page()
+            page.set_content('<html><body><h1>API keys</h1><button>Create key</button></body></html>')
+            names = [c.get("name") for c in candidates(page)]
+            assert "Create key" in names, names
+            assert login_state(page, {}) == "ok", "keys page not detected over CDP"
+        finally:
+            try:
+                browser.close()
+            except Exception:  # noqa: BLE001
+                pass
+    print("rotate-guided: CDP self-test PASS (attach + candidates + login state)")
     return 0
 
 
@@ -717,6 +854,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--action", default="rotate", choices=["login", "revoke", "create", "rotate"])
     ap.add_argument("--env-file", default=str(env_path()))
     ap.add_argument("--key-name", default="")
+    ap.add_argument("--browser", default="auto", choices=["auto", "chrome-cdp", "cdp", "chrome", "chromium"])
+    ap.add_argument("--cdp", default=os.environ.get("ROTATION_CDP", "http://127.0.0.1:9222"))
+    ap.add_argument("--cdp-port", type=int, default=9222)
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--no-learn", action="store_true")
@@ -730,6 +870,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--list-providers", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--browser-self-test", action="store_true")
+    ap.add_argument("--cdp-self-test", action="store_true")
     ap.add_argument("--timeout", type=int, default=20000)
     return ap.parse_args()
 
@@ -738,13 +879,17 @@ def main() -> int:
     args = parse_args()
     if args.reset_login:
         shutil.rmtree(profile_dir(), ignore_errors=True)
+        shutil.rmtree(chrome_profile_dir(), ignore_errors=True)
         profile_dir()
-        print("cleared login profile: %s" % profile_dir())
+        chrome_profile_dir()
+        print("cleared login profiles: %s ; %s" % (profile_dir(), chrome_profile_dir()))
         return 0
     if args.self_test:
         return self_test()
     if args.browser_self_test:
         return browser_self_test()
+    if args.cdp_self_test:
+        return cdp_self_test(args)
     if args.report:
         return report()
     if args.list_providers:

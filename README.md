@@ -108,8 +108,16 @@ is read from the page (clipboard fallback), written atomically to `.env.local`
 for a keys page.
 
 ```bash
-./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
+# real Chrome over CDP (avoids Google's "browser or app may not be secure")
+./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login --browser chrome-cdp
+./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke
 ```
+
+`--browser chrome-cdp` launches **real Chrome** with a dedicated persistent
+profile (no `--enable-automation`), attaches over CDP, and keeps the login
+profile across runs; `--browser auto` prefers an existing CDP endpoint, then
+real Chrome, then Playwright's bundled Chromium. Google/SSO rejections are
+reported, never treated as a keys page.
 
 ## 2026-11-10 — network UX + hardening close-out
 
