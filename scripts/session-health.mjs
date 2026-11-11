@@ -48,6 +48,7 @@
 
 import { DatabaseSync } from "node:sqlite"; // Node >= 22 built-in; no npm dep
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const POLICY_PATH = fileURLToPath(new URL("../models.policy.json", import.meta.url));
@@ -591,8 +592,9 @@ export function applyLiveAdjudication(report, live, opts = {}) {
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.includes("--self-test")) return selfTest();
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const dbPath =
-    argv.find((a) => !a.startsWith("--")) || "/workspace/data/opencode/opencode.db";
+    argv.find((a) => !a.startsWith("--")) || path.join(repoRoot, "data", "opencode", "opencode.db");
   const report = healthReport(dbPath, { includeGaps: argv.includes("--include-gaps") });
   if (argv.includes("--live")) report.live = await liveStatus();
   if (argv.includes("--live")) applyLiveAdjudication(report, report.live);

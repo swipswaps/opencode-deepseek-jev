@@ -1,5 +1,12 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-11 (audit/triage):** full report in
+> `docs/AUDIT-TRIAGE-2026-11-10.md`. P0: rotate the 4 `../notes/` secrets; patch
+> OpenSSH. P1: B43 24–48 h measurement (184 pre / 0 post so far), TUNNEL-1
+> external #5, stale sessions, JEV key. Fixed: `session-health` default DB path,
+> `issue-bridge.py` exec bit, SEC-3 closed (container secret binds are
+> `/dev/null`/`empty-certs`). Gates: fast 3/0, dashboard 161/0, posture 22/1.
+
 > **PIN 2026-11-10 (Wi-Fi = beacon loss, not powersave):** client
 > `10.100.0.1` is a BCM4331 on `b43`, **2.4 GHz only**; 24 h showed 300
 > `BEACON-LOSS`, 84 firmware reloads, 1055 Tailscale path changes, 13 DNS-commit

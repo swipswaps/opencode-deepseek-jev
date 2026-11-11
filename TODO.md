@@ -85,7 +85,7 @@ Last updated: 2026-11-09
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 
-- [ ] **OPS-4 — gate observability, not blind timeouts.** Use
+- [x] **GATE-1 — gate observability, not blind timeouts.** (renamed from OPS-4; that ID collides with OUTSTANDING OPS-4 = eval/bash.) Verified 2026-11-11: full dashboard 161/0; use `gate-watch.sh` for full runs, no blind timers.
       `./scripts/gate-watch.sh ./scripts/harness.sh` (live log + heartbeat, no
       deadline) and record the last `ms=/ts=` line. The full-harness attempt
       was killed by a tool-level 420 s timeout under host load 19 (`dsh web`
@@ -138,7 +138,7 @@ Last updated: 2026-11-09
       permits only `https://swipswaps.github.io` with CORS + Private Network
       Access preflight. No changes to the other receipts Pages sites.
 
-- [ ] **SEC-3 — repo-mounted secrets (staged, needs recreate).** The web
+- [x] **SEC-3 — repo-mounted secrets (CLOSED 2026-11-11).** Container mounts prove `.env.local` and `docker/litellm-db.env` -> `/dev/null`, `docker/certs` -> `empty-certs`; the only remaining posture fail is the host `../notes/` secret. Original text: The web
       container still reads `/workspace/.env.local`,
       `/workspace/docker/litellm-db.env`, and `/workspace/docker/certs/*`.
       The override now hides them with empty binds (`/dev/null`, `empty-certs`);
@@ -260,7 +260,12 @@ Last updated: 2026-11-09
 
 ## Queue (ranked, top first)
 
-- [~] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests
+- [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`.
+      P0: rotate the 4 `../notes/` secrets; patch OpenSSH. P1: B43 24–48 h
+      measurement (184 pre / 0 post so far), TUNNEL-1 external #5, stale
+      sessions, JEV key. Fixed this pass: `session-health` default DB path,
+      `issue-bridge.py` exec bit, SEC-3 closed (container secret binds hidden).
+- [x] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests (CLOSED 2026-11-11; open part is the B43-1 measurement: beacon-watch 184 pre / 0 post)
       green; live roam proof open.
       **2026-11-10:** self-test cooldown fixed (stale `alerts.state` throttled
       the first alert). Cause proven by

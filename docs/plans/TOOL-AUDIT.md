@@ -64,7 +64,7 @@ served container. `nimble` is commercial and not wanted for localhost work.
 
 ## Catalog state
 
-- `scripts/tools.json`: 106 -> **108** (`a11y-audit`, `durable-agents`).
+- `scripts/tools.json`: 106 -> **159** (2026-11-11; includes a11y-audit, durable-agents, peer-health, wifi/b43, bluetooth-off, host-cert-sign, beacon-watch).
 - `scripts/` top-level: 151 files; `test-hygiene.sh` enforces that every
   tracked top-level script is documented, so the catalog cannot silently drift.
 - `capabilities.mjs`: **15 GREEN / 0 DEGRADED / 0 MISSING** (the E1 gate).

@@ -298,6 +298,12 @@ PY
             bad 'session-health: self-test (offline fixtures)'
             cat "$work/sh_st.txt"
         fi
+        if node --experimental-sqlite "$REPO/scripts/session-health.mjs" > "$work/sh_default.txt" 2>&1; then
+            ok 'session-health: default DB path resolves (repo-relative)'
+        else
+            bad 'session-health: default DB path resolves (repo-relative)'
+            cat "$work/sh_default.txt"
+        fi
     else
         bad 'session-health.mjs present + node'
     fi
