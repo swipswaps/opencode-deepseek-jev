@@ -120,12 +120,15 @@ key** in the browser, then `--action capture` reads the copied key and writes
 `--action rotate` is best-effort; the row-level revoke menu is brittle, so a
 human click is safer.
 
-**In-app key entry (2026-11-11).** `/app/#settings` → **Set key** queues the key
-in a mode-0600 request for the host. Install the host path unit once
-(`./scripts/key-request-install.sh`); it runs
-`rotate-guided.py --action apply-request --restart`, writes `.env.local`
-atomically with a backup, deletes the request, and restarts `opencode-web`.
-The key is never displayed or logged.
+**In-app key entry (2026-11-11).** One-time host setup:
+`./scripts/key-request-install.sh` (systemd user path unit; no sudo). Then:
+
+1. `xdg-open "https://localhost:5099/app/#settings"` — or Overview -> **Provider keys**, or a provider row -> **set key**.
+2. Choose the provider, paste the key, type the provider id, click **Queue key**.
+3. The host writes `.env.local` (0600 + backup), deletes the request, and restarts `opencode-web`; hard-refresh if the PWA shell is stale.
+4. If the provider is paused, resume/clear it first; otherwise `settings-apply` will comment the new key.
+
+The **copy cmd** button only copies the rotate CLI command; **console** opens the vendor page. The key is never displayed or logged.
 
 `--browser chrome-cdp` launches **real Chrome** with a dedicated persistent
 profile (no `--enable-automation`), attaches over CDP, and keeps the login

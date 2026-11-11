@@ -1245,11 +1245,12 @@ rotate-guided.py
     reported instead of offering login links as candidates. Run with the host browser venv:
     ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
 
-    In-app entry: /app/#settings -> Set key queues a 0600 request in
-    data/observability/key-request.json; the host path unit
-    (./scripts/key-request-install.sh, one-time) runs
-    `rotate-guided.py --action apply-request --restart`, which writes .env.local
-    atomically and restarts opencode-web.
+    In-app entry: one-time ./scripts/key-request-install.sh, then open
+    https://localhost:5099/app/#settings (Overview -> Provider keys, or a
+    provider row -> set key), choose the provider, paste, confirm, Queue key.
+    The host path unit runs `rotate-guided.py --action apply-request --restart`
+    (writes .env.local atomically and restarts opencode-web); hard-refresh if
+    the PWA shell is stale. copy cmd only copies the CLI command.
 
 key-request-install.sh
     Host-side systemd USER path unit for in-app key entry. Watches

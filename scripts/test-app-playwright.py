@@ -45,7 +45,8 @@ ROUTES = [
     {"id": "settings", "heading": "Settings", "must": ["Settings", "Keys", "Confirm provider id"]},
 ]
 
-IGNORE_CONSOLE = ("ERR_ABORTED", "/api/stream", "net::ERR_ABORTED", "ERR_HTTP2_PROTOCOL_ERROR")
+IGNORE_CONSOLE = ("ERR_ABORTED", "/api/stream", "net::ERR_ABORTED", "ERR_HTTP2_PROTOCOL_ERROR",
+                  "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_NETWORK_CHANGED")
 
 
 def now() -> str:

@@ -38,6 +38,14 @@ const ROTATE = {
   subq: "./scripts/rotate-provider-keys.sh",
 };
 const APPLY = "./scripts/settings-apply.sh --apply --yes";
+const SETUP_STEPS = [
+  "Provider key setup",
+  "1. One-time host applier: ./scripts/key-request-install.sh",
+  "2. Open https://localhost:5099/app/#settings (or Overview -> Provider keys, or a provider row -> set key)",
+  "3. Choose the provider, paste the key, type the provider id, click Queue key",
+  "4. The host writes .env.local (0600) and restarts opencode-web; hard-refresh if the PWA shell is stale",
+  "5. If the provider is paused, resume/clear it first; otherwise settings-apply will comment the new key",
+].join("\n");
 
 export default function Settings() {
   const [doc, setDoc] = useState(null);
@@ -257,6 +265,17 @@ export default function Settings() {
                           copy cmd
                         </Button>
                       )}
+                      {p.envVar && (
+                        <Button size="small" variant="text" onClick={() => {
+                          setKeyProvider(p.id);
+                          const box = document.getElementById("set-key");
+                          if (box) box.scrollIntoView({ behavior: "smooth" });
+                          const f = document.getElementById("new-key");
+                          if (f) f.focus();
+                        }}>
+                          set key
+                        </Button>
+                      )}
                     </Stack>
                   </TableCell>
                 </TableRow>
@@ -267,7 +286,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card sx={{ mb: 2 }}>
+      <Card id="set-key" sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
             <KeyIcon fontSize="small" />
@@ -285,7 +304,7 @@ export default function Settings() {
                 <MenuItem key={p.id} value={p.id}>{p.id} ({p.envVar})</MenuItem>
               ))}
             </TextField>
-            <TextField size="small" type="password" label="New key" value={newKey}
+            <TextField id="new-key" size="small" type="password" label="New key" value={newKey}
               onChange={(e) => setNewKey(e.target.value)} autoComplete="new-password" sx={{ minWidth: 240 }} />
             <TextField size="small" label="Confirm provider for key" value={keyConfirm}
               onChange={(e) => setKeyConfirm(e.target.value)} autoComplete="off" spellCheck={false} sx={{ minWidth: 210 }} />
@@ -294,6 +313,14 @@ export default function Settings() {
               Queue key
             </Button>
           </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            One-time host applier: <code>./scripts/key-request-install.sh</code>. Then choose a provider, paste,
+            confirm, and <b>Queue key</b>. The host writes <code>.env.local</code> and restarts; hard-refresh if the
+            PWA shell is stale. Paused providers must be resumed first.
+          </Typography>
+          <Button size="small" startIcon={<ContentCopyIcon />} sx={{ mt: 1 }} onClick={() => copy(SETUP_STEPS)}>
+            copy setup steps
+          </Button>
           {keyStatus && (
             <Alert severity={keyStatus.startsWith("error") ? "error" : "success"}
               role={keyStatus.startsWith("error") ? "alert" : "status"} sx={{ mt: 1.5 }}>

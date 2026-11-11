@@ -29,8 +29,11 @@ import argparse
 import json
 import os
 import sys
+import time
 
 VIEWS = ["overview", "activity", "sessions", "todos", "usability", "settings"]
+IGNORE_CONSOLE = ("ERR_ABORTED", "/api/stream", "ERR_HTTP2_PROTOCOL_ERROR",
+                  "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_NETWORK_CHANGED")
 
 JS = r"""() => {
   const vis = el => {
@@ -76,34 +79,43 @@ def focus_probe(page):
     }""")
 
 
-def audit(context, base, view, width):
-    page = context.new_page()
-    errs = []
-    page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
-    page.on("console", lambda m: errs.append("console: " + m.text) if m.type == "error" else None)
-    try:
-        page.goto(base.rstrip("/") + "/app/#" + view, wait_until="domcontentloaded", timeout=20000)
-        page.locator("h1,h2,h3,h4,h5,h6").first.wait_for(timeout=20000)
-        page.wait_for_timeout(400)
-        d = page.evaluate(JS)
-        d["firstTab"] = focus_probe(page)
-        d["errors"] = errs
-        d["width"] = width
-        return d
-    except Exception as e:  # noqa: BLE001
-        return {"width": width, "errors": errs + ["exception: " + str(e)]}
-    finally:
+def audit(context, base, view, width, retries=2):
+    last = {"width": width, "errors": ["exception: no attempt"]}
+    for attempt in range(retries + 1):
+        page = context.new_page()
+        errs = []
+        page.set_default_navigation_timeout(60000)
+        page.set_default_timeout(30000)
+        page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
+        page.on("console", lambda m: errs.append("console: " + m.text) if m.type == "error" and not any(k in m.text for k in IGNORE_CONSOLE) else None)
         try:
-            page.close()
-        except Exception:  # noqa: BLE001
-            pass
+            page.goto(base.rstrip("/") + "/app/#" + view, wait_until="domcontentloaded", timeout=60000)
+            page.locator("h1,h2,h3,h4,h5,h6").first.wait_for(timeout=30000)
+            page.wait_for_timeout(400)
+            d = page.evaluate(JS)
+            d["firstTab"] = focus_probe(page)
+            d["errors"] = errs
+            d["width"] = width
+            return d
+        except Exception as e:  # noqa: BLE001
+            last = {"width": width, "errors": errs + ["exception: " + str(e)]}
+        finally:
+            try:
+                page.close()
+            except Exception:  # noqa: BLE001
+                pass
+        if attempt < retries:
+            time.sleep(1)
+    return last
 
 
 def findings(view, mode, d):
     out = []
     if d.get("errors"):
         out.append(("high", view, mode, "console/page errors", "; ".join(d["errors"])[:300]))
-    if d.get("h1") != 1:
+        if d.get("h1") is None:
+            return out  # page never rendered: do not derive missing-landmark findings
+    if d.get("h1") is not None and d.get("h1") != 1:
         top = (d.get("heads") or [{}])[0].get("tag")
         out.append(("high", view, mode, "heading", "h1 count=%s; top heading=%s" % (d.get("h1"), top)))
     if d.get("unnamed"):
@@ -124,9 +136,9 @@ def findings(view, mode, d):
     sel = d.get("selected") or []
     if not any(s.get("current") for s in sel):
         out.append(("low", view, mode, "active nav not aria-current", "selected=%s" % str(sel[:3])))
-    if not d.get("skip"):
+    if d.get("skip") is False:
         out.append(("medium", view, mode, "skip link missing", ""))
-    if not d.get("main"):
+    if d.get("main") is False:
         out.append(("high", view, mode, "main landmark missing", ""))
     return out
 

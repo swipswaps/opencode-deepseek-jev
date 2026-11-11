@@ -117,6 +117,7 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
             </Box>
             <Stack direction="row" spacing={1}>
               <Button size="small" variant="outlined" onClick={() => onNavigate && onNavigate("usability")}>Usability</Button>
+              <Button size="small" variant="outlined" onClick={() => onNavigate && onNavigate("settings")}>Provider keys</Button>
               <Button size="small" href="/" target="_blank" rel="noopener">Classic pulse</Button>
             </Stack>
           </Stack>
