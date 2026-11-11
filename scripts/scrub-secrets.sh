@@ -6,6 +6,8 @@
 # Rotation makes a leaked value worthless; the artifact still holds it, so a
 # later transcript/export can re-disclose it. This script:
 #   - redacts text logs in place with scripts/redact.mjs (atomic, mode kept)
+#   - with --include-notes, also redacts the sibling notes/ chat logs (the
+#     env_assignment findings that live outside logs/data)
 #   - optionally purges snapshot dirs that contain a private key or yaml secret
 #   - optionally removes .env.local.bak.* files (old/new key copies)
 #   - reports whether the LIVE TLS key matches a leaked snapshot
@@ -14,7 +16,9 @@
 #
 # Usage:
 #   ./scripts/scrub-secrets.sh
+#   ./scripts/scrub-secrets.sh --include-notes
 #   ./scripts/scrub-secrets.sh --apply --yes
+#   ./scripts/scrub-secrets.sh --apply --yes --include-notes
 #   ./scripts/scrub-secrets.sh --apply --yes --purge-snapshots --purge-env-backups
 #   ./scripts/scrub-secrets.sh --check-tls
 #
@@ -27,6 +31,8 @@ YES=0
 PURGE_SNAPSHOTS=0
 PURGE_ENV_BACKUPS=0
 CHECK_TLS=0
+INCLUDE_NOTES=0
+NOTES=""
 
 log() { printf '%s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; }
@@ -35,10 +41,11 @@ fail() { printf 'GATE FAIL  %s\n' "$*" >&2; return 1; }
 die() { err "$*"; exit 2; }
 
 usage() {
-  printf '%s\n' "Usage: $SCRIPT_NAME [--apply --yes] [--purge-snapshots] [--purge-env-backups] [--check-tls]"
+  printf '%s\n' "Usage: $SCRIPT_NAME [--apply --yes] [--include-notes] [--purge-snapshots] [--purge-env-backups] [--check-tls]"
   printf '%s\n' ""
   printf '%s\n' "  --apply             rewrite text artifacts (requires --yes)"
   printf '%s\n' "  --yes               confirm writes/purges"
+  printf '%s\n' "  --include-notes     also scan/redact the sibling notes/ chat logs"
   printf '%s\n' "  --purge-snapshots   delete snapshot dirs containing private keys/secrets"
   printf '%s\n' "  --purge-env-backups delete .env.local.bak.*"
   printf '%s\n' "  --check-tls         compare the live TLS key with leaked snapshots"
@@ -50,6 +57,7 @@ parse_args() {
     case "$1" in
       --apply) APPLY=1 ;;
       --yes) YES=1 ;;
+      --include-notes) INCLUDE_NOTES=1 ;;
       --purge-snapshots) PURGE_SNAPSHOTS=1 ;;
       --purge-env-backups) PURGE_ENV_BACKUPS=1 ;;
       --check-tls) CHECK_TLS=1 ;;
@@ -61,7 +69,21 @@ parse_args() {
 }
 
 scan_json() {
-  "$REPO/scripts/secret-scan.sh" --paths "$REPO/logs $REPO/data/observability" --json 2>&1
+  local paths="$REPO/logs $REPO/data/observability"
+  [ "$INCLUDE_NOTES" -eq 1 ] && paths="$paths $NOTES"
+  "$REPO/scripts/secret-scan.sh" --paths "$paths" --json 2>&1
+}
+
+notes_dir() {
+  if [ -d "$REPO/../notes" ]; then
+    printf '%s/notes' "$(cd "$REPO/.." && pwd)"
+    return 0
+  fi
+  if [ -d "$REPO/notes" ]; then
+    printf '%s' "$REPO/notes"
+    return 0
+  fi
+  return 1
 }
 
 redact_file() {
@@ -113,6 +135,11 @@ main() {
   [ -x "$REPO/scripts/secret-scan.sh" ] || die "secret-scan.sh missing"
   [ -f "$REPO/scripts/redact.mjs" ] || die "redact.mjs missing"
 
+  if [ "$INCLUDE_NOTES" -eq 1 ]; then
+    NOTES=$(notes_dir) || die "notes directory not found (expected ../notes or ./notes)"
+    log "include-notes: $NOTES"
+  fi
+
   local json files
   json=$(scan_json)
   printf '%s' "$json" | python3 -c 'import json,sys; json.load(sys.stdin)' >/dev/null 2>&1 \
@@ -126,7 +153,9 @@ print("\n".join(sorted({f["file"] for f in d.get("findings", [])})))
   count=$(printf '%s' "$json" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("findings", [])))' 2>&1)
   log "findings=$count files=$(printf '%s\n' "$files" | grep -c .)"
   if [ "$count" -eq 0 ]; then
-    pass "no secret-shaped values in logs/ or data/observability/"
+    local scope="logs/ and data/observability/"
+    [ "$INCLUDE_NOTES" -eq 1 ] && scope="logs/, data/observability/ and notes/"
+    pass "no secret-shaped values in $scope"
     if [ "$APPLY" -eq 1 ] && [ "$YES" -eq 1 ] && [ "$PURGE_ENV_BACKUPS" -eq 1 ]; then
       purge_env_backups
     fi

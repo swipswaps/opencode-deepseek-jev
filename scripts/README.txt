@@ -1235,9 +1235,10 @@ rotate-tls.sh
 
 scrub-secrets.sh
     Redact secret-shaped values in logs/ and data/observability with
-    redact.mjs; optionally purge snapshot dirs containing private keys/yaml
-    secrets and .env.local.bak.*. Dry run by default; --apply --yes to write.
-    Values are never printed.
+    redact.mjs; --include-notes also redacts the sibling notes/ chat logs (the
+    env_assignment findings that live outside logs/data); optionally purge
+    snapshot dirs containing private keys/yaml secrets and .env.local.bak.*.
+    Dry run by default; --apply --yes to write. Values are never printed.
 
 security-posture.sh
     Read-only gate for the residual invariants: no whole-host-home mount,
