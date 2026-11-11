@@ -325,6 +325,13 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 
 ## If something is wrong
 
+- **`Certificate invalid: name is not a listed principal`** on
+  `ssh owner@10.100.0.1`: re-sign the client host cert with the address as a
+  principal (the CA key stays on the client):
+  `ssh owner@10.100.0.1 'bash /tmp/host-cert-sign.sh --sign'` (or copy
+  `scripts/host-cert-sign.sh` and run `--sign`). Verified after the 2026-11-10
+  re-sign: principals include `10.100.0.1` and the warning is gone.
+
 - **opencode TUI overlap or `[Image 1]` instead of pasted text:** a server
   `wall` broadcast writes into the full-screen TUI. `hotspot-reconnect.sh` now
   logs via `logger` and sends a notification; `HOTSPOT_WALL=1` opts back in.

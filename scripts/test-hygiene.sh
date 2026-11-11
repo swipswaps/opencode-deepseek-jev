@@ -611,6 +611,17 @@ PY
         bad 'bluetooth-off.sh present'
     fi
 
+    if [ -f "$REPO/scripts/host-cert-sign.sh" ]; then
+        if bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
+            ok 'host-cert-sign: self-test (temp CA + host key + principal)'
+        else
+            bad 'host-cert-sign: self-test (temp CA + host key + principal)'
+            cat "$work/hcs_st.txt"
+        fi
+    else
+        bad 'host-cert-sign.sh present'
+    fi
+
     if [ -f "$REPO/scripts/hardware-profiles.json" ]; then
         if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$REPO/scripts/hardware-profiles.json"; then
             ok 'hardware-profiles.json parses and maps 14e4:4331'

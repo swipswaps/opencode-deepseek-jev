@@ -1555,6 +1555,15 @@ bluetooth-off.sh
     powered even when bluetooth.service is disabled/masked, so b43 btcoex=1
     (and iwlwifi bt_coex) still run coexistence. Gated in test-hygiene.sh.
 
+host-cert-sign.sh
+    Re-sign this host's SSH host certificate with the principal clients actually
+    use. --check lists the mesh CA files + current principals; --sign backs up
+    the cert, runs ssh-keygen -s with HOSTCERT_PRINCIPALS (default
+    fedora,fedora.local,10.100.0.1,192.168.4.45,100.70.43.78), and restarts
+    sshd; --rollback restores the newest pre-rotate cert. The CA private key
+    never leaves the host. Fixes "Certificate invalid: name is not a listed
+    principal" for 10.100.0.1. Gated in test-hygiene.sh.
+
 peer-health.sh
     One evidence-backed verdict for "is the peer down, and why?". Probes ICMP,
     SSH, TCP :5099/:4096, and Tailscale; separates REACHABILITY (state:

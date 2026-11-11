@@ -1707,6 +1707,18 @@
     ]
   },
   {
+    "id": "host-cert-sign",
+    "title": "Re-sign the SSH host certificate with the 10.100.0.1 principal",
+    "where": "host",
+    "purpose": "--check lists /etc/ssh/mesh-ca CA files and the current host-cert principals; --sign backs up the cert, signs the ed25519 host public key with the local mesh CA and HOSTCERT_PRINCIPALS (default fedora,fedora.local,10.100.0.1,192.168.4.45,100.70.43.78), and restarts sshd; --rollback restores the newest pre-rotate cert. The CA key stays on the host. Fixes 'Certificate invalid: name is not a listed principal' for 10.100.0.1. --self-test offline.",
+    "commands": [
+      "bash scripts/host-cert-sign.sh --check",
+      "bash scripts/host-cert-sign.sh --sign",
+      "bash scripts/host-cert-sign.sh --rollback",
+      "bash scripts/host-cert-sign.sh --self-test"
+    ]
+  },
+  {
     "id": "peer-health",
     "title": "Evidence-backed peer reachability + link-quality verdict with hysteresis",
     "where": "host",
