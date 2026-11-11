@@ -91,6 +91,8 @@ const RULES = [
     fix: "set -o pipefail + explicit per-step handling", rule: "#5" },
   { name: "exit 1", pattern: "(?:^|[;&|()]\\s*)exit\\s+1(?![0-9])", sev: "block",
     fix: "main() wrapper returning a code; final line main \"$@\"", rule: "convention" },
+  { name: "exit 2", pattern: "(?:^|[;&|()]\\s*)exit\\s+2(?![0-9])", sev: "block",
+    fix: "main() wrapper returning a code; final line main \"$@\"", rule: "convention" },
   { name: "kill N", pattern: "(?:^|[^0-9])kill\\s+[1-9][0-9]*(?![0-9])", sev: "block",
     fix: "signal explicitly: kill -TERM / -INT / -KILL", rule: "convention" },
   { name: "subprocess.run", pattern: "\\bsubprocess\\.run\\s*\\(", sev: "block",

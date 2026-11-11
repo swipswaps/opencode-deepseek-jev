@@ -35,6 +35,9 @@ const cases = [
   ["exit 1", "exit 1", true],
   ["exit 0", "exit 1", false],
   ["grep 'exit 1' f", "exit 1", false],
+  ["exit 2", "exit 2", true],
+  ["exit 20", "exit 2", false],
+  ["main \"$@\"", "exit 2", false],
   ["kill 1234", "kill N", true],
   ["kill 9", "kill N", true],
   ["kill -TERM 1234", "kill N", false],
@@ -241,6 +244,11 @@ const proseCases = [
   ["the rule is `2>/dev/null` here", false, ""],
   ["do not use `sed -i x`", true, "sed"],
   ["we never use 2>/dev/null in commands", false, ""],
+  ["```bash\nexit 1\n```\n", true, "exit 1"],
+  ["```bash\nexit 2\n```\n", true, "exit 2"],
+  ["```bash\nset -e\n```\n", true, "set -e"],
+  ["```python\nsubprocess.run(['x'])\n```\n", true, "subprocess.run"],
+
 ];
 for (const [text, changed, name] of proseCases) {
   const r = remediateProse(text, "block");
