@@ -260,12 +260,12 @@ Last updated: 2026-11-09
 
 ## Queue (ranked, top first)
 
-- [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`.
+- [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`; handoff `docs/HANDOFF-2026-11-11.md`.
       P0: rotate the 4 `../notes/` secrets; patch OpenSSH. P1: B43 24–48 h
-      measurement (184 pre / 0 post so far), TUNNEL-1 external #5, stale
+      measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1 external #5, stale
       sessions, JEV key. Fixed this pass: `session-health` default DB path,
       `issue-bridge.py` exec bit, SEC-3 closed (container secret binds hidden).
-- [x] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests (CLOSED 2026-11-11; open part is the B43-1 measurement: beacon-watch 184 pre / 0 post)
+- [x] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests (CLOSED 2026-11-11; open part is the B43-1 measurement: beacon-watch 185 total / 184 pre / 1 post)
       green; live roam proof open.
       **2026-11-10:** self-test cooldown fixed (stale `alerts.state` throttled
       the first alert). Cause proven by

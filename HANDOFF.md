@@ -1,8 +1,9 @@
 # Handoff — opencode-deepseek-jev
 
 > **PIN 2026-11-11 (audit/triage):** full report in
-> `docs/AUDIT-TRIAGE-2026-11-10.md`. P0: rotate the 4 `../notes/` secrets; patch
-> OpenSSH. P1: B43 24–48 h measurement (184 pre / 0 post so far), TUNNEL-1
+> `docs/AUDIT-TRIAGE-2026-11-10.md`; durable handoff in
+> `docs/HANDOFF-2026-11-11.md`. P0: rotate the 4 `../notes/` secrets; patch
+> OpenSSH. P1: B43 24–48 h measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1
 > external #5, stale sessions, JEV key. Fixed: `session-health` default DB path,
 > `issue-bridge.py` exec bit, SEC-3 closed (container secret binds are
 > `/dev/null`/`empty-certs`). Gates: fast 3/0, dashboard 161/0, posture 22/1.

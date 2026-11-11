@@ -88,10 +88,11 @@ New/updated:
   `BEACON-LOSS` baseline) and rollback: `docs/BT-COEXISTENCE-2026-11-10.md`.
 - **Beacon-loss measurement** — `scripts/beacon-watch.sh` counts
   `BEACON-LOSS` per hour and splits at the intervention timestamp
-  (`~/.local/state/b43-tune.applied`). First measured 24 h split on `.1`:
-  total **184**, pre-intervention **184**, post-intervention **0** (last event
-  16:04, intervention 18:20). The post window is still short; keep watching
-  24–48 h. This avoids counting pre-fix history as post-fix evidence.
+  (`~/.local/state/b43-tune.applied`). Measured 24 h split on `.1`:
+  total **185**, pre-intervention **184**, post-intervention **1** (post event
+  20:54:42; intervention 18:20). The post rate is far below the clustered pre
+  baseline but not zero; keep watching 24–48 h. This avoids counting pre-fix
+  history as post-fix evidence.
 - **Hardware recognition + b43 A/B** — `scripts/hardware-profiles.json` and
   `wifi-link-forensics.sh --json` now natively recognize the client as
   `14e4:4331` = Broadcom BCM4331, `b43`, 2.4 GHz-only, `known_bad_wl=yes`,

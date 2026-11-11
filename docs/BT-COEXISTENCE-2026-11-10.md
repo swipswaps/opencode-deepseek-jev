@@ -85,28 +85,31 @@ Wi-Fi does not return within `B43TUNE_UP_SEC` (40 s).
 | `fedora` `.1` | **blocked** (`Soft blocked: yes`), unit installed | `btcoex=0` | pinned `belkin2` `…1A:06`, band `bg`, powersave off, connected |
 | `ws24` `.24` | service inactive/disabled; **radio still powered** | iwlwifi `bt_coex_active=Y` | stable 5 GHz; needs one `sudo rfkill block bluetooth` (no passwordless sudo) |
 
-## 5. First measured split (2026-11-10 19:40)
+## 5. Measured split (2026-11-10 21:00)
 
 `beacon-watch.sh --hours 24 --intervention ~/.local/state/b43-tune.applied`:
 
 | Window | Count |
 |---|---|
-| Total 24 h | **184** |
+| Total 24 h | **185** |
 | Before intervention (pre) | **184** |
-| After intervention (post) | **0** |
-| Last event | 16:04:47 |
+| After intervention (post) | **1** |
+| Last pre event | 16:04:47 |
+| First post event | 20:54:42 |
 | Current boot (from 17:08:25) | 0 |
 | Intervention | 18:20:14 |
 
 Per-hour pre-intervention counts: 07:00 = 28, 10:00 = 61, 12:00 = 23,
 13:00 = 7, 15:00 = 1, 16:00 = 1.
 
-**Interpretation:** all 184 events are pre-intervention; there are zero
-post-intervention events so far. This is consistent with H1 but **not yet
-proof**: the current boot was also clean for ~72 min before the intervention,
-and the post window is only ~1.3 h. Continue the 24–48 h measurement with
-`beacon-watch.sh` (using the same applied timestamp). If the post count stays
-near zero, H1 is supported; if it returns to the pre rate, reject H1 and test
+**Interpretation:** 184 events are pre-intervention and **1** is
+post-intervention (20:54:42). The pre baseline was clustered (59 in one hour,
+61 in another), so the raw 24 h total is not a rate; the post window is ~2.5 h
+with one event (~0.4/h), versus ~9/h across the pre window. That is a large
+reduction but **not elimination**, and the sample is still short. This is
+consistent with H1 but **not proof**. Continue the 24–48 h measurement with
+`beacon-watch.sh` (same applied timestamp). If the post rate stays near zero,
+H1 is supported; if it returns to the clustered pre rate, reject H1 and test
 H2 (different 2.4 GHz AP), then H3/hardware.
 
 ## 5. Measurement plan (estimands)
