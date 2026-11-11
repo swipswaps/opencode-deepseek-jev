@@ -1762,5 +1762,16 @@
       "./scripts/settings-apply.sh --apply --yes",
       "./scripts/settings-apply.sh --self-test"
     ]
+  },
+  {
+    "id": "test-app-playwright",
+    "title": "Real-browser test of every /app page and component",
+    "where": "host",
+    "purpose": "Playwright Chromium battery for every /app hash route (overview, activity, sessions, todos, usability, settings): heading/content, no page or console errors (SSE aborts ignored), no page-level horizontal overflow at 1280x900 and 390x844, mobile bottom nav, the Settings typed-confirm guard, and the Usability link to /usability. Screenshots to logs/ (gitignored). Run with ./scripts/browser-python.sh scripts/test-app-playwright.py (--base, --password/$OPENCODE_SERVER_PASSWORD, --headed, --json, --shots).",
+    "commands": [
+      "./scripts/browser-python.sh scripts/test-app-playwright.py",
+      "./scripts/browser-python.sh scripts/test-app-playwright.py --base https://localhost:5099 --password \"$OPENCODE_SERVER_PASSWORD\" --json",
+      "./scripts/browser-python.sh scripts/test-app-playwright.py --headed --shots logs/app-pw"
+    ]
   }
 ]

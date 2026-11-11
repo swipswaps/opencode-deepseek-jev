@@ -131,7 +131,15 @@ export default function Settings() {
       </Alert>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {status && <Alert severity={status.startsWith("error") ? "error" : "success"} sx={{ mb: 2 }}>{status}</Alert>}
+      {status && (
+        <Alert
+          severity={status.startsWith("error") ? "error" : "success"}
+          role={status.startsWith("error") ? "alert" : "status"}
+          sx={{ mb: 2 }}
+        >
+          {status}
+        </Alert>
+      )}
 
       <Card sx={{ mb: 2 }}>
         <CardContent>

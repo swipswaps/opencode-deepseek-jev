@@ -73,6 +73,11 @@ Anthropic was hard-paused and verified absent from the container environment.
 - `a11y-audit.mjs` reports **11/11 on every classic page** (`/`, `/explore`,
   `/graph`, `/usability`, `/models`, `/settings`, `/runbooks`, `/manage`,
   `/docs`, `/recovery`). Lint **419/0**; `cd web && npm run build` succeeds.
+- See `open a real browser` for the `/app` surface:
+  `./scripts/browser-python.sh scripts/test-app-playwright.py` drives every
+  `/app/#<view>` at desktop and mobile widths and checks content, console/page
+  errors, overflow, the mobile nav, the Settings confirm guard, and the
+  Usability link. Screenshots land in `logs/`.
 
 `web/dist` is a build artifact (gitignored): run `cd web && npm run build` (or
 `./scripts/web-build-restart.sh`) after a checkout.

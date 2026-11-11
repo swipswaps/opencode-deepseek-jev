@@ -665,6 +665,17 @@ test-dashboard-ui.mjs
     refreshers once, asserts #session/#stats/#sessions/#activity/#config
     populate. No browser required.
 
+test-app-playwright.py
+    Real-browser (Playwright Chromium) battery for every /app hash route:
+    overview, activity, sessions, todos, usability, settings. Asserts the
+    heading and key content, no page/console errors (SSE aborts ignored), no
+    page-level horizontal overflow at 1280x900 and 390x844 (tables scroll
+    inside their containers), the mobile bottom nav, the Settings typed-confirm
+    guard, and the Usability view's link to /usability. Screenshots to logs/
+    (gitignored). Run with the host browser venv:
+    ./scripts/browser-python.sh scripts/test-app-playwright.py
+    (--base, --password/$OPENCODE_SERVER_PASSWORD, --headed, --json, --shots).
+
 thinking.sh
     Live view of what the agent is doing while "thinking": tails the opencode
     db and prints step boundaries, tool calls (state + command), reasoning
