@@ -269,10 +269,10 @@ function readJsonAbsSafe(path, fallback) {
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return fallback; }
 }
 
-function writeJsonAtomicAbs(path, obj) {
+function writeJsonAtomicAbs(path, obj, mode = 0o644) {
   try { mkdirSync(path.slice(0, path.lastIndexOf("/")) || ".", { recursive: true }); } catch {}
   const tmp = path + ".tmp." + process.pid;
-  writeFileSync(tmp, JSON.stringify(obj, null, 2) + "\n", { mode: 0o644 });
+  writeFileSync(tmp, JSON.stringify(obj, null, 2) + "\n", { mode });
   renameSync(tmp, path);
 }
 
@@ -296,6 +296,7 @@ function apiSettings() {
   const policy = readJsonAbsSafe(fileURLToPath(new URL("../models.policy.json", import.meta.url)), {});
   const dp = readJsonAbsSafe(fileURLToPath(new URL("../scripts/decision_providers.json", import.meta.url)), { providers: [] });
   const state = settingsState();
+  const keyReq = readJsonAbsSafe(SETTINGS_KEY_REQUEST, null);
   const authKeys = authProviderNames();
   const ids = new Set();
   for (const id of Object.keys(cfg.provider || {})) ids.add(id);
@@ -326,6 +327,7 @@ function apiSettings() {
       inConfig, envVar, envKey, authEntry, policy: pol,
       decision: d ? { enabled: d.enabled !== false } : null,
       paused, pausedSince: paused ? entry.since || "" : "", pendingApply,
+      keyQueued: !!(keyReq && keyReq.provider === id),
       state: paused ? (pendingApply ? "paused (pending host apply)" : "paused") : active ? "active" : "unconfigured",
       hostActionRequired: pendingApply && envKey,
       hostCommand: pendingApply ? "./scripts/settings-apply.sh --apply --yes" : "",
@@ -370,6 +372,7 @@ function apiSettingsAction(doc) {
   writeJsonAtomicAbs(SETTINGS_STATE_PATH, state);
   try {
     const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)));
+    try { db.exec("PRAGMA busy_timeout = 500"); } catch {}
     db.exec("CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY, ts TEXT NOT NULL, type TEXT NOT NULL, actor TEXT DEFAULT '', tool TEXT DEFAULT '', resource TEXT DEFAULT '', verdict TEXT DEFAULT '', detail TEXT DEFAULT '', rev TEXT DEFAULT '', source TEXT DEFAULT '', source_key TEXT UNIQUE)");
     db.prepare("INSERT OR IGNORE INTO ledger(ts,type,actor,tool,resource,verdict,detail,rev,source,source_key) VALUES(?,?,?,?,?,?,?,?,?,?)")
       .run(now, "SETTINGS", "dashboard", "settings", "provider/" + id,
@@ -385,6 +388,47 @@ function apiSettingsAction(doc) {
     hostActionRequired: !!(ap && ap.hostActionRequired),
     hostCommand: ap ? ap.hostCommand : "",
   };
+}
+
+const SETTINGS_KEY_REQUEST = fileURLToPath(new URL("../data/observability/key-request.json", import.meta.url));
+const KEY_PREFIX = {
+  anthropic: "sk-ant-", deepseek: "sk-", subq: "sk-", jev: "apikey_",
+  gemini: "AIza", litellm: "sk-", opencode: "sk-", "opencode-go": "sk-",
+};
+
+// Queue a key entered in /app/#settings. The dashboard cannot write the
+// host's .env.local (it is masked in the container), so it writes a mode-0600
+// request in the shared data dir; the host path unit runs
+// `rotate-guided.py --action apply-request`, which writes .env.local and
+// deletes the request. The key is never returned or logged.
+function apiSettingsKey(doc) {
+  const id = String((doc && doc.id) || "").trim();
+  const key = String((doc && doc.key) || "").trim();
+  const confirm = String((doc && doc.confirm) || "").trim();
+  if (!id) return { ok: false, error: "id required" };
+  if (!key) return { ok: false, error: "key required" };
+  if (confirm !== id) return { ok: false, error: "typed confirmation must match: " + id };
+  const view = apiSettings();
+  const p = view.providers.find((x) => x.id === id);
+  if (!p || !p.envVar) return { ok: false, error: "provider has no env key: " + id };
+  const prefix = KEY_PREFIX[id] || "";
+  if (prefix && !key.startsWith(prefix)) return { ok: false, error: "key does not start with " + prefix };
+  if (key.length < 12) return { ok: false, error: "key is too short" };
+  const now = new Date().toISOString();
+  const req = { ts: now, provider: id, env: p.envVar, key, source: "dashboard" };
+  writeJsonAtomicAbs(SETTINGS_KEY_REQUEST, req, 0o600);
+  try {
+    const db = new DatabaseSync(fileURLToPath(new URL("../data/observability/observability.db", import.meta.url)));
+    try { db.exec("PRAGMA busy_timeout = 500"); } catch {}
+    db.exec("CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY, ts TEXT NOT NULL, type TEXT NOT NULL, actor TEXT DEFAULT '', tool TEXT DEFAULT '', resource TEXT DEFAULT '', verdict TEXT DEFAULT '', detail TEXT DEFAULT '', rev TEXT DEFAULT '', source TEXT DEFAULT '', source_key TEXT UNIQUE)");
+    db.prepare("INSERT OR IGNORE INTO ledger(ts,type,actor,tool,resource,verdict,detail,rev,source,source_key) VALUES(?,?,?,?,?,?,?,?,?,?)")
+      .run(now, "SETTINGS", "dashboard", "settings", "provider/" + id, "KEY_QUEUE",
+           "queued " + p.envVar + " (len " + key.length + ")", "", "dashboard-key-queue",
+           "key-queue-" + id + "-" + now);
+    db.close();
+  } catch {}
+  return { ok: true, queued: true, provider: id, env: p.envVar, len: key.length,
+           note: "queued for the host applier; it writes .env.local and restarts the web container" };
 }
 
 function apiCode(limit) {
@@ -4307,6 +4351,19 @@ const server = http.createServer(async (req, res) => {
       const raw = await readBody(req);
       const doc = JSON.parse(raw || "{}");
       const result = apiSettingsAction(doc);
+      send(res, result.ok ? 200 : 400, JSON.stringify(result), "application/json");
+    } catch (e) {
+      send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");
+    }
+  } else if (req.method === "POST" && url === "/api/settings/key") {
+    if (!sameOriginMutation(req)) {
+      send(res, 403, JSON.stringify({ ok: false, error: "cross-origin mutation blocked" }), "application/json");
+      return;
+    }
+    try {
+      const raw = await readBody(req);
+      const doc = JSON.parse(raw || "{}");
+      const result = apiSettingsKey(doc);
       send(res, result.ok ? 200 : 400, JSON.stringify(result), "application/json");
     } catch (e) {
       send(res, 400, JSON.stringify({ ok: false, error: String(e && e.message ? e.message : e) }), "application/json");

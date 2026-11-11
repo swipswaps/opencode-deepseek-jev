@@ -593,6 +593,66 @@ def wait_login(page, args, cfg) -> bool:
     return False
 
 
+def request_path() -> Path:
+    return Path(os.environ.get("ROTATION_REQUEST") or
+                (repo_root() / "data" / "observability" / "key-request.json"))
+
+
+def apply_request(args) -> int:
+    """Host side: apply a key queued from /app/#settings and remove the request.
+
+    The request is written by the dashboard (mode 0600) in the shared data dir.
+    This runs as the host user (systemd user path unit or manually), writes
+    .env.local atomically with a backup, and deletes the request. The key is
+    validated by prefix/length and never printed.
+    """
+    p = request_path()
+    if not p.is_file():
+        print("no pending key request at %s" % p)
+        return 0
+    try:
+        req = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        print("FAIL: cannot read key request (%s)" % e, file=sys.stderr)
+        return 1
+    provider = str(req.get("provider") or "").strip()
+    key = str(req.get("key") or "").strip()
+    env = str(req.get("env") or "").strip()
+    cfg = load_providers().get(provider)
+    if not cfg:
+        print("FAIL: unknown provider in request: %r" % provider, file=sys.stderr)
+        return 1
+    if env and env != cfg["env"]:
+        print("FAIL: env mismatch in request (%s != %s)" % (env, cfg["env"]), file=sys.stderr)
+        return 1
+    need = max(12, len(cfg["prefix"]) + 8)
+    if not (key.startswith(cfg["prefix"]) and len(key) >= need):
+        print("FAIL: request key does not look like a %s key (len %d)" % (cfg["prefix"], len(key)), file=sys.stderr)
+        return 1
+    envf = Path(args.env_file)
+    if not envf.is_file():
+        print("FAIL: env file missing: %s" % envf, file=sys.stderr)
+        return 1
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = write_env(envf, cfg["env"], key, ts)
+    try:
+        p.unlink()
+    except OSError as e:  # noqa: BLE001
+        print("WARN: request not removed (%s)" % e, file=sys.stderr)
+    print("applied %s (len %d, value not printed)" % (cfg["env"], len(key)))
+    print("backup: %s (contains the old key; purge with ./scripts/scrub-secrets.sh --apply --yes --purge-env-backups)" % backup)
+    if getattr(args, "restart", False):
+        print("restarting the web container to load the new key...")
+        rc, _out, _err = _popen([str(repo_root() / "scripts" / "web-restart.sh")], timeout=240)
+        print("restart: rc=%s" % rc)
+        if rc != 0:
+            print("WARN: restart failed; run ./scripts/web-restart.sh", file=sys.stderr)
+    else:
+        print("next: ./scripts/web-restart.sh")
+    log_run(provider, "apply-request", "write", True, "", "host")
+    return 0
+
+
 def capture_key(args, cfg) -> int:
     """Read the key the operator copied in the vendor page and write .env.local.
 
@@ -805,8 +865,25 @@ def self_test() -> int:
     env.write_text("# PAUSED 20260101T000000Z DEEPSEEK_API_KEY=old\n", encoding="utf-8")
     write_env(env, "DEEPSEEK_API_KEY", key, "20260101T000001Z")
     assert env.read_text(encoding="utf-8").count("DEEPSEEK_API_KEY=") == 1, "paused line duplicated"
+    # apply-request: queued key -> env write -> request removed
+    env2 = work / "env2.local"
+    env2.write_text("DEEPSEEK_API_KEY=old\n", encoding="utf-8")
+    os.chmod(env2, 0o600)
+    req = work / "key-request.json"
+    req.write_text(json.dumps({"provider": "deepseek", "env": "DEEPSEEK_API_KEY",
+                               "key": "sk-" + "q" * 24}), encoding="utf-8")
+    prev = os.environ.get("ROTATION_REQUEST")
+    os.environ["ROTATION_REQUEST"] = str(req)
+    rc = apply_request(argparse.Namespace(env_file=str(env2), restart=False))
+    if prev is None:
+        os.environ.pop("ROTATION_REQUEST", None)
+    else:
+        os.environ["ROTATION_REQUEST"] = prev
+    assert rc == 0, "apply-request rc=%s" % rc
+    assert not req.exists(), "request not removed"
+    assert ("DEEPSEEK_API_KEY=sk-" + "q" * 24) in env2.read_text(encoding="utf-8"), "env not applied"
     shutil.rmtree(work, ignore_errors=True)
-    print("rotate-guided: self-test PASS (memory recall/upsert + redaction + env write + paused line)")
+    print("rotate-guided: self-test PASS (memory recall/upsert + redaction + env write + paused line + apply-request)")
     return 0
 
 
@@ -907,7 +984,7 @@ def plan(args) -> int:
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Playwright-guided, learning key rotation")
     ap.add_argument("--provider", default="", help="deepseek|anthropic|subq|jev|gemini|litellm")
-    ap.add_argument("--action", default="rotate", choices=["login", "open", "revoke", "create", "rotate", "capture"])
+    ap.add_argument("--action", default="rotate", choices=["login", "open", "revoke", "create", "rotate", "capture", "apply-request"])
     ap.add_argument("--env-file", default=str(env_path()))
     ap.add_argument("--key-name", default="")
     ap.add_argument("--browser", default="auto", choices=["auto", "chrome-cdp", "cdp", "chrome", "chromium"])
@@ -919,6 +996,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--no-write", action="store_true")
     ap.add_argument("--clipboard", action="store_true", default=True)
     ap.add_argument("--recreate", action="store_true")
+    ap.add_argument("--restart", action="store_true", help="apply-request: restart opencode-web to load the key")
     ap.add_argument("--reset", action="store_true")
     ap.add_argument("--reset-login", action="store_true")
     ap.add_argument("--report", action="store_true")
@@ -954,6 +1032,8 @@ def main() -> int:
     if args.plan:
         return plan(args)
     provs = load_providers()
+    if args.action == "apply-request":
+        return apply_request(args)
     if not args.provider:
         print("--provider required (one of: %s)" % ", ".join(sorted(provs)), file=sys.stderr)
         return 2

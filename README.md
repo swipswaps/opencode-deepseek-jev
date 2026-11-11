@@ -120,6 +120,13 @@ key** in the browser, then `--action capture` reads the copied key and writes
 `--action rotate` is best-effort; the row-level revoke menu is brittle, so a
 human click is safer.
 
+**In-app key entry (2026-11-11).** `/app/#settings` → **Set key** queues the key
+in a mode-0600 request for the host. Install the host path unit once
+(`./scripts/key-request-install.sh`); it runs
+`rotate-guided.py --action apply-request --restart`, writes `.env.local`
+atomically with a backup, deletes the request, and restarts `opencode-web`.
+The key is never displayed or logged.
+
 `--browser chrome-cdp` launches **real Chrome** with a dedicated persistent
 profile (no `--enable-automation`), attaches over CDP, and keeps the login
 profile across runs; `--browser auto` prefers an existing CDP endpoint, then

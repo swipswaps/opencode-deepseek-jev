@@ -1245,6 +1245,20 @@ rotate-guided.py
     reported instead of offering login links as candidates. Run with the host browser venv:
     ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
 
+    In-app entry: /app/#settings -> Set key queues a 0600 request in
+    data/observability/key-request.json; the host path unit
+    (./scripts/key-request-install.sh, one-time) runs
+    `rotate-guided.py --action apply-request --restart`, which writes .env.local
+    atomically and restarts opencode-web.
+
+key-request-install.sh
+    Host-side systemd USER path unit for in-app key entry. Watches
+    data/observability/key-request.json and runs
+    `rotate-guided.py --action apply-request --restart` (validates the key,
+    writes .env.local atomically 0600 + backup, deletes the request, restarts
+    opencode-web). --install (default), --status, --print, --uninstall. No sudo;
+    run from the desktop session so systemd --user is reachable.
+
 rotate-opencode-token.sh
     Rotate OPENCODE_CONSOLE_TOKEN (the token printed by `opencode debug
     config`): browser revoke checklist, hidden new-token input, atomic single

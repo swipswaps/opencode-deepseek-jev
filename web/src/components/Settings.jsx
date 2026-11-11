@@ -14,6 +14,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  MenuItem,
   TextField,
   Typography,
 } from "@mui/material";
@@ -45,6 +46,11 @@ export default function Settings() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [keyProvider, setKeyProvider] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [keyConfirm, setKeyConfirm] = useState("");
+  const [keyStatus, setKeyStatus] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -98,8 +104,41 @@ export default function Settings() {
     }
   };
 
+  const queueKey = async () => {
+    if (keyConfirm.trim() !== keyProvider) {
+      setKeyStatus("type the provider id to confirm");
+      return;
+    }
+    setKeyBusy(true);
+    setKeyStatus("");
+    try {
+      const r = await fetch("/api/settings/key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: keyProvider, key: newKey, confirm: keyConfirm }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || "queue failed");
+      setNewKey("");
+      setKeyConfirm("");
+      setKeyStatus("queued " + d.env + " (" + d.len + " chars); " + (d.note || "host applier writes .env.local; restart required"));
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setKeyStatus("error: " + (e.message || String(e)));
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
   const providers = doc?.providers || [];
   const pending = providers.filter((p) => p.pendingApply);
+
+  useEffect(() => {
+    if (!keyProvider && providers.length) {
+      const p = providers.find((x) => x.envVar);
+      if (p) setKeyProvider(p.id);
+    }
+  }, [providers, keyProvider]);
 
   return (
     <Box>
@@ -188,8 +227,8 @@ export default function Settings() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" color={p.envKey ? "success.main" : "text.secondary"}>
-                      {p.envKey ? "present" : "absent"}
+                    <Typography variant="body2" color={p.envKey ? "success.main" : p.keyQueued ? "warning.main" : "text.secondary"}>
+                      {p.envKey ? "present" : p.keyQueued ? "queued (host apply)" : "absent"}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">{p.envVar || "—"}</Typography>
                   </TableCell>
@@ -227,6 +266,42 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+            <KeyIcon fontSize="small" />
+            <Typography variant="h6">Set a key</Typography>
+          </Stack>
+          <Alert severity="info" sx={{ mb: 1.5 }}>
+            Paste a key from the vendor console. It is sent once over HTTPS to a 0600 host queue and is not shown
+            again; the host applier writes <code>.env.local</code> and restarts the web container (one-time install:
+            <code>./scripts/key-request-install.sh</code>). If the provider is paused, resume/clear it first, or the
+            next settings-apply will comment the new key.
+          </Alert>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} useFlexGap flexWrap="wrap" alignItems={{ sm: "center" }}>
+            <TextField select size="small" label="Provider" value={keyProvider} onChange={(e) => setKeyProvider(e.target.value)} sx={{ minWidth: 190 }}>
+              {providers.filter((p) => p.envVar).map((p) => (
+                <MenuItem key={p.id} value={p.id}>{p.id} ({p.envVar})</MenuItem>
+              ))}
+            </TextField>
+            <TextField size="small" type="password" label="New key" value={newKey}
+              onChange={(e) => setNewKey(e.target.value)} autoComplete="new-password" sx={{ minWidth: 240 }} />
+            <TextField size="small" label="Confirm provider for key" value={keyConfirm}
+              onChange={(e) => setKeyConfirm(e.target.value)} autoComplete="off" spellCheck={false} sx={{ minWidth: 210 }} />
+            <Button variant="contained" disabled={keyBusy || !keyProvider || !newKey || keyConfirm.trim() !== keyProvider}
+              onClick={queueKey}>
+              Queue key
+            </Button>
+          </Stack>
+          {keyStatus && (
+            <Alert severity={keyStatus.startsWith("error") ? "error" : "success"}
+              role={keyStatus.startsWith("error") ? "alert" : "status"} sx={{ mt: 1.5 }}>
+              {keyStatus}
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -234,8 +309,8 @@ export default function Settings() {
             <Typography variant="h6">Keys</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Key entry stays in the terminal or the provider console — a secret is never posted to this page. Rotate at
-            the console, then run the matching script on the host; the new value never leaves <code>.env.local</code>.
+            Use the Set key form above to queue a key, or rotate at the console and run the matching script on the
+            host. The new value is never displayed again.
           </Typography>
           <Divider sx={{ mb: 1 }} />
           <TableContainer>

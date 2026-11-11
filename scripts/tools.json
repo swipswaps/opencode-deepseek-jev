@@ -1789,13 +1789,26 @@
     "id": "rotate-guided",
     "title": "Playwright-guided, learning key rotation",
     "where": "host",
-    "purpose": "Open the vendor console in a persistent Chromium profile (log in once), find revoke/create controls, and remember them in observability.db (rotation_memory + rotation_run). On a miss it lists candidate controls for a one-time pick and learns. Reads the new key from the page (clipboard fallback), writes .env.local atomically (0600, backup), never prints the value, and takes no screenshot after reveal. --provider/--action login|revoke|create|rotate, --plan, --report, --reset, --self-test, --browser-self-test. --browser auto|chrome-cdp|cdp|chrome|chromium (default auto; chrome-cdp launches real Chrome without automation flags and attaches over CDP, which avoids Google's 'browser or app may not be secure' rejection).",
+    "purpose": "Open the vendor console in a persistent Chromium profile (log in once), find revoke/create controls, and remember them in observability.db (rotation_memory + rotation_run). On a miss it lists candidate controls for a one-time pick and learns. Reads the new key from the page (clipboard fallback), writes .env.local atomically (0600, backup), never prints the value, and takes no screenshot after reveal. --provider/--action login|revoke|create|rotate, --plan, --report, --reset, --self-test, --browser-self-test. --browser auto|chrome-cdp|cdp|chrome|chromium (default auto; chrome-cdp launches real Chrome without automation flags and attaches over CDP, which avoids Google's 'browser or app may not be secure' rejection). In-app: /app/#settings queues data/observability/key-request.json; scripts/key-request-install.sh installs the host user path unit that runs --action apply-request --restart.",
     "commands": [
       "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action open",
+      "./scripts/browser-python.sh scripts/rotate-guided.py --action apply-request --restart",
       "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action capture",
       "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action login --browser chrome-cdp",
       "./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action revoke --browser chrome-cdp",
       "./scripts/browser-python.sh scripts/rotate-guided.py --plan --report"
+    ]
+  },
+  {
+    "id": "key-request-install",
+    "title": "Host applier for in-app provider key entry",
+    "where": "host",
+    "purpose": "Installs a systemd USER path unit that watches data/observability/key-request.json (written by /app/#settings Set key) and runs rotate-guided.py --action apply-request --restart: validates the key, writes .env.local atomically (0600 + backup), deletes the request, and restarts opencode-web. --install (default), --status, --print, --uninstall. No sudo; run from the desktop session.",
+    "commands": [
+      "./scripts/key-request-install.sh",
+      "./scripts/key-request-install.sh --status",
+      "./scripts/key-request-install.sh --print",
+      "./scripts/key-request-install.sh --uninstall"
     ]
   }
 ]
