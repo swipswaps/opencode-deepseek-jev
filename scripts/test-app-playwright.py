@@ -59,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--password", default=os.environ.get("OPENCODE_SERVER_PASSWORD", ""))
     ap.add_argument("--timeout", type=int, default=20000, help="per-wait timeout in ms")
     ap.add_argument("--deadline", type=int, default=240, help="global budget in seconds")
+    ap.add_argument("--retries", type=int, default=2, help="retries per route on a transient failure")
     ap.add_argument("--route", default="", help="only this route id (debug)")
     ap.add_argument("--headed", action="store_true", help="show the browser")
     ap.add_argument("--json", action="store_true", help="machine-readable summary")
@@ -103,7 +104,7 @@ def wait_visible_text(page, text: str, timeout: int) -> bool:
     return False
 
 
-def check_route(context, base: str, route: dict, timeout: int, shots: Path, width: int, height: int) -> dict:
+def _check_once(context, base: str, route: dict, timeout: int, shots: Path, width: int, height: int) -> dict:
     page = context.new_page()
     page.set_viewport_size({"width": width, "height": height})
     page.set_default_timeout(timeout)
@@ -113,7 +114,7 @@ def check_route(context, base: str, route: dict, timeout: int, shots: Path, widt
     url = base.rstrip("/") + "/app/#" + route["id"]
     result = {"id": route["id"], "width": width, "ok": True, "errors": errors, "overflow_px": 0, "shot": ""}
     try:
-        page.goto(url, wait_until="load", timeout=timeout)
+        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.get_by_role("heading", name=route["heading"], exact=True).first.wait_for(timeout=timeout)
         for text in route["must"]:
             if not wait_visible_text(page, text, timeout):
@@ -157,6 +158,49 @@ def check_route(context, base: str, route: dict, timeout: int, shots: Path, widt
     return result
 
 
+def check_route(context, base: str, route: dict, timeout: int, shots: Path, width: int, height: int, retries: int) -> dict:
+    result = None
+    for attempt in range(retries + 1):
+        result = _check_once(context, base, route, timeout, shots, width, height)
+        result["attempt"] = attempt + 1
+        if result["ok"]:
+            return result
+        if attempt < retries:
+            time.sleep(0.8)
+    return result
+
+
+def preflight(browser, base: str, timeout: int, creds):
+    """Fail fast when the dashboard itself is unreachable: one page load of
+    /app/ must render the Overview heading. Avoids 12 x timeout when the
+    server/caddy is down or flapping."""
+    budget = min(timeout, 15000)
+    context = browser.new_context(
+        ignore_https_errors=True,
+        http_credentials=creds,
+        viewport={"width": 1280, "height": 900},
+        reduced_motion="reduce",
+    )
+    page = context.new_page()
+    page.set_default_timeout(budget)
+    page.set_default_navigation_timeout(budget)
+    try:
+        page.goto(base.rstrip("/") + "/app/", wait_until="domcontentloaded", timeout=budget)
+        page.get_by_role("heading", name="Overview", exact=True).first.wait_for(timeout=budget)
+        return True, ""
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)
+    finally:
+        try:
+            page.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            context.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -188,6 +232,12 @@ def main() -> int:
             print("  install: python -m playwright install chromium", file=sys.stderr)
             return 2
         try:
+            ok, err = preflight(browser, args.base, args.timeout, creds)
+            if not ok:
+                print("FAIL: dashboard unreachable at %s/app/: %s" % (args.base, err), file=sys.stderr)
+                print("  check: curl -sk -o /dev/null -w '%%{http_code}\\n' %s/" % args.base, file=sys.stderr)
+                print("  hint: caddy 502/timeouts mean the upstream dashboard is down or restarting", file=sys.stderr)
+                return 2
             for width, height, label in ((1280, 900, "desktop"), (390, 844, "mobile")):
                 context = browser.new_context(
                     ignore_https_errors=True,
@@ -208,7 +258,7 @@ def main() -> int:
                             continue
                         if not args.json:
                             print("  ...  %-9s %-8s" % (route["id"], label), flush=True)
-                        r = check_route(context, args.base, route, args.timeout, shots, width, height)
+                        r = check_route(context, args.base, route, args.timeout, shots, width, height, args.retries)
                         r["mode"] = label
                         results.append(r)
                         if not args.json:
