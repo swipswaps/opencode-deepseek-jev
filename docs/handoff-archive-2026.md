@@ -403,3 +403,53 @@ hardening (RULE #77); these are 2026-10-18/19 durable-loop PINs.
 > **271/0** · patterns **6/0** · dashboard **123/0**. **The ranked queue is now
 > external/host-only** (TUNNEL-1 #5 + T8 watch; G4 needs the proxy; G6/G7 need a
 > host) — the next local unit must come from a new audited gap, not this queue.
+
+## Archived 2026-11-11 (moved from HANDOFF.md; newest first)
+
+> **PIN 2026-11-09:** `hotspot-reconnect.sh` + `terminal-reset.sh` (mouse-spam
+> reset); self-tests green; live roam proof open (`docs/HANDOFF-2026-11-09-hotspot.md`).
+> **PIN 2026-11-08b (paste + roam — RULE #95):** `clipboard-preflight.sh`
+> gates the paste path and exits 3 on an image flavour (opencode aborts with
+> `ImageDecodeError`); `--clear-text` fixes it. `network-change-probe.sh` is
+> the post-roam test (`--watch`; `--peer HOST` = client-side half, LAN vs
+> overlay). One-shot client bootstrap: `client-setup.sh` discovers the server,
+> calls `ssh-x11-setup.sh` for the trusted one-Host block, and installs a
+> self-heal timer (systemd/launchd). All self-tests wired into test-hygiene.
+> **PIN 2026-11-08 (access-plane reliability — RULE #94):** the live web plane
+> was healthy (`4096=401`, `5099=200` on loopback, Nebula `10.100.0.24`,
+> Tailscale `100.119.125.16`, LAN `192.168.4.24`; caddy logs show the macbook
+> `10.100.0.1` getting `200`s), so the "not running" claim was reachability,
+> not a process fault. The audit found the **2-minute watchdog could self-induce
+> a restart loop**: a probe taken during a caddy restart returned `000`, which
+> ran `web.sh` and restarted caddy again. `web-health.sh` now absorbs one sample
+> (settle), requires a **consecutive-failure threshold** and a **recovery
+> cooldown** held in `data/observability/web-health.state`, delegates the action
+> to the checkpointed `recover-4096.sh --recover`, and writes the recovery log
+> under `logs/` (not `/tmp`). Compose now gates caddy on an `opencode-web`
+> `healthcheck` via `depends_on: condition: service_healthy` (Docker: Compose
+> waits for *running*, not *ready*). User units dropped the no-op
+> `network-online.target` ordering (user managers cannot see system targets,
+> systemd/systemd#3312) and the timer uses `OnUnitInactiveSec` (from FINISH, no
+> drift). `test-hygiene.sh` now runs both self-tests. Live re-verify: web-health
+> rc=0 on all four paths.
+> **PIN 2026-11-06 (status automation):** added `issue-benchmark.py`
+> (security/stall/tunnel metrics -> `issue_bench` + `benchmark.json`),
+> `choice-gate.py` (+ `choices.json`) for the human-only residuals, `pulse.py`
+> (one status screen), and `/graph` (editable 3D graph of real repo data with
+> `graph_edit` persistence). Map: `docs/STATUS-AUTOMATION.md`. First audit on
+> this checkout: running_tools=3, blank_tails=2, over_budget=18; tunnel clean.
+> **PIN 2026-11-06 (gate green):** `harness.sh` is **4/0** at `4107b0f`
+> (lint 343/0, hygiene 64/0, patterns 6/0, dashboard 136/0); `next-action` is
+> clean (`ahead=0`, docs 34,028/35,000). `test-tooling` contracts are bounded
+> at 60s, so a hung tool fails by name instead of wedging the gate. The only
+> open unit is external TUNNEL-1 (`proxmox-dual-plane-mesh#5` / `T-c39910`).
+> Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
+> **PIN 2026-11-05 (security/rotation/a11y):** SEC-3 is closed; `security-posture.sh` is **19/0**; DeepSeek, SUBQ, Anthropic, LiteLLM, the server password, and the OpenCode console token were rotated; `verify-rotation-go.sh` is **11/0/1/1** (manual console-token check); `harness.sh` is **4/0** at **2026-11-05T19:48Z** (hygiene 64/0, tier-1 docs 33,997/35,000); the a11y fix is `50c535b` and the docs/permission close is `77782a5` (pushed). The chat DB is read-only and still lists historical pasted secrets; rotate, do not edit it. The only remaining queue unit is external: `proxmox-dual-plane-mesh#5` / `T-c39910` (tunnel flap). Current handoff: [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md).
+> **PIN 2026-10-18 (session `ses_eb04be01…`):** shipped the script **catalog
+> completion + coverage gate** (`25a0576`: 30 uncatalogued scripts documented,
+> tools.json 72→102, `test-hygiene.sh` fails closed on an undocumented tracked
+> script) and **rule #83** (bounded decision menu) + TODO **§E** durable-agent
+> gaps (`268f316`). Both pushed. The session then crossed the hard budget
+> (1.17× / 233k in) → `preflight.sh` STOP → scripted handoff; **start fresh**.
+> Next: TUNNEL-1's fix is external (#5, T8 watch live); local queue otherwise
+> exhausted — sections C/E remain. `gh` is absent in-container (E2).

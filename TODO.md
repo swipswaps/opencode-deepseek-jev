@@ -8,80 +8,8 @@ Last updated: 2026-11-09
 
 ## Done (most recent first)
 
-- [x] **CLIENT-AUTO — 2026-11-08.** `client-setup.sh`: one-shot client
-      bootstrap (discover server, write ssh block, X server, self-heal timer
-      via systemd/launchd); `--heal` repairs after a roam. Self-tested.
-
-- [x] **PASTE-ROAM — 2026-11-08 (RULE #95).**
-      `scripts/clipboard-preflight.sh` gates the paste path (Wayland vs X11 vs
-      SSH-forwarded X11), reads TARGETS, and fails on an image flavour that
-      makes opencode abort with "Failed to send prompt" (`--set`,
-      `--clear-text`, `--json`, `--self-test`).
-      `scripts/network-change-probe.sh` proves the plane after a network change
-      (interface x :4096/:5099 matrix, cert SANs, wildcard binds); `--watch`
-      re-runs on change and `--peer HOST` is the client-side half (LAN vs
-      overlay). `scripts/ssh-x11-setup.sh` codifies clipboard-over-SSH trust.
-      Self-tests wired into `test-hygiene.sh`.
-
-- [x] **WEB-REL — 2026-11-08 (RULE #94).** Hardened the access-plane watchdog:
-      `web-health.sh` now takes one settle re-probe, requires a
-      consecutive-failure threshold (`WEB_HEALTH_FAIL_THRESHOLD`, 2) and a
-      recovery cooldown (`WEB_HEALTH_COOLDOWN_SEC`, 600) from a durable state
-      file, delegates recovery to the checkpointed `recover-4096.sh --recover`,
-      writes its log under `logs/`, and has a behavioral offline `--self-test`.
-      `docker-compose.yml` gates caddy on an `opencode-web` healthcheck
-      (`depends_on: condition: service_healthy`). User units dropped the no-op
-      `network-online.target` ordering; the timer switched to
-      `OnUnitInactiveSec`. Both self-tests wired into `test-hygiene.sh`.
-      Also fixed clipboard delivery: `rotate-server-password.sh` now
-      auto-detects `DISPLAY`/`WAYLAND_DISPLAY` (tty/SSH fallback to the local
-      X socket) and backgrounds `xclip`; a guarded `~/.bashrc` block does the
-      same for interactive shells (backup kept).
-
-- [x] **UX-8 — 2026-11-06.** Added `usability-suite.py` (ISO 9241-11
-      tasks, WCAG automated subset, CWV lab, target/keyboard/reflow/reduced
-      motion, optional axe/SUS), a 30-minute timer installer, a CI workflow,
-      and the `/usability` guided human runner (+ `usability-guided.py`).
-      Added `/app/#usability` + MUI pulse, `/app/<legacy>` redirects, guide,
-      and RULES #93 closeout gate (BLOCKED on the post-fix retest).
-
-- [x] **STATUS-1 — 2026-11-06.** Added `issue-benchmark.py` (real
-      security/stall/tunnel metrics → `issue_bench` + `benchmark.json`),
-      `choice-gate.py` (+ `choices.json`) for the human-only residuals,
-      `pulse.py` (one status screen), and the editable `/graph` page
-      (`graph_edit` persistence). Map: `docs/STATUS-AUTOMATION.md`.
-
-- [x] **DOCS-2 / SEC-4 — 2026-11-05.** Archived older HANDOFF PINs and TODO
-      Done entries to restore tier-1 to **33,873 / 35,000**. Added a
-      deterministic `permission` policy (deny secret/cert reads and
-      `opencode debug config`; ask on task/webfetch/doom_loop) and a
-      `test-hygiene` assertion for it, mitigating the prompt-injection
-      residual. Host gate re-run pending after the permission/docs change.
-
-- [x] **TLS-2 / UX-7 — 2026-11-05.** Added 443 + Tailscale + LAN + Nebula TLS
-      redundancy, SAN verification, `/ca.crt`, path redirects, and the HTTPS
-      self-heal/client CA scripts. PC trust installed (system/Firefox/Chromium);
-      strict verification 200 on 5099/443/LAN. Fixed the legacy `time · now`
-      header collision and refreshed all 12 screenshots. Added the public
-      `opencode-observability` Pages app with live API probing and real
-      screenshot fallback. Handoff: `docs/HANDOFF-2026-11-05.md`.
-
-- [x] **DOCS-1 — 2026-11-05.** README, web/README, scripts catalog, UX audit,
-      handoff PIN, TODO, screenshots, and the new Pages README refreshed for
-      the current TLS/Pages/scripts state.
-
-- [x] **SEC-2 — 2026-11-04.** DB-backed LiteLLM (private postgres, admin login
-      200); same-CA TLS leaf rotation after the live key matched 3 snapshots;
-      85 findings scrubbed (logs redacted, snapshots/env backups purged,
-      post-scan 0/2224); red-team offline+live; `sensitive-read` rule;
-      prompt-injection tripwire; host-home mount removed from the override and
-      applied by the 2026-11-04 recreate; `security-posture.sh` 16/3
-      pre-recreate (the 3 `repo_secrets` checks; expect 19/0 after SEC-3);
-      durable key `.config/opencode/container_key` (restrict), `/rag:ro`, and
-      `openssh-client` in the Dockerfile (rebuild; `11 --install` for the
-      current container).
-
-- [x] **Older Done (2026-10-22 and earlier) archived 2026-11-05.** See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md).
+Archived 2026-11-11 to hold the tier-1 read-first budget (RULE #77).
+See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
 
 ## Outstanding issues (audited — resolve or explicitly accept)
 

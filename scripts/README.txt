@@ -1553,8 +1553,9 @@ beacon-watch.sh
     b43-tune.sh --apply --reload). --hours N, --since DATE, --intervention
     EPOCH|FILE, --json, --write (~/.local/state/beacon-watch.json),
     --self-test. This avoids confusing pre-intervention history with the
-    post-fix rate; e.g. the 2026-11-10 24h split was total=184, pre=184,
-    post=0. Gated in test-hygiene.sh.
+    post-fix rate; e.g. the 2026-11-10 24h split was total=185, pre=184,
+    post=1 (post event 20:54:42; reduced, not eliminated). Gated in
+    test-hygiene.sh.
 
 bluetooth-off.sh
     Power off the Bluetooth RADIO (not just the service) and keep it off:
