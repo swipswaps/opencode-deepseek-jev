@@ -20,6 +20,9 @@
 > focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
 > `audit-app-ux.py` (Playwright) found **no h1** on the React views; fixed:
 > every view now renders one h1 (AppBar brand demoted). Residual UX findings
+> Guided rotation: `rotate-guided.py` (Playwright, login-once profile) learns
+> revoke/create locators in `rotation_memory`/`rotation_run`, writes the new key
+> to `.env.local` without printing it, and never screenshots after reveal.
 > Then fixed **APP-UX-1**: Activity/Sessions search fields named, active nav
 > `aria-current="page"`, and <=600px 44px targets (buttons, icon buttons,
 > inputs, skip link). `audit-app-ux.py` now reports **0 findings**; Playwright

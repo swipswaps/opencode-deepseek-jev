@@ -8,6 +8,11 @@ Last updated: 2026-11-11
 
 ## Done (most recent first)
 
+- [x] **ROTATE-GUIDED-1 — 2026-11-11.** `rotate-guided.py`: Playwright-guided
+      revoke/create/rotate with a persistent login profile and a learned
+      `rotation_memory`/`rotation_run` DB (candidate pick on drift, remembers
+      success). New key written to `.env.local` 0600 with backup; never printed;
+      no screenshot after reveal. `--self-test` + `--browser-self-test`.
 - [x] **SETTINGS-1 — 2026-11-11.** `/settings` + `/app/#settings` provider
       matrix with pause/resume (typed confirm, ledger row, pending-host-apply);
       `scripts/settings-apply.sh` host applier (dry-run/`--apply --yes`/

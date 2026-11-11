@@ -95,6 +95,20 @@ intervention did **not** hold. Rolling 24 h at 11:22 EST: **227 total / 32 pre /
 different 2.4 GHz AP, then a USB Wi-Fi/Ethernet adapter. Evidence:
 `docs/BT-COEXISTENCE-2026-11-10.md` §9.
 
+**Guided rotation (Playwright, 2026-11-11).** `scripts/rotate-guided.py` opens
+the vendor console in a persistent Chromium profile (log in once), finds the
+revoke/create controls, and remembers them in
+`data/observability/observability.db` (`rotation_memory` + `rotation_run`). On a
+miss it lists the candidate controls for a one-time pick and learns. The new key
+is read from the page (clipboard fallback), written atomically to `.env.local`
+(0600, backup), and never printed; no screenshot is taken after reveal.
+`--action login|revoke|create|rotate`, `--plan`, `--report`, `--reset`,
+`--self-test`, `--browser-self-test`.
+
+```bash
+./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
+```
+
 ## 2026-11-10 — network UX + hardening close-out
 
 **The persistent "10.100.0.1 disconnected" popup was real but misdiagnosed.**

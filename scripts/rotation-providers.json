@@ -1,0 +1,78 @@
+{
+  "$comment": "Guided rotation targets. console = the key page; env = the .env.local variable; prefix = key shape (used to extract, never printed); patterns are fallbacks when no learned locator exists. local=true means the credential is generated locally, not in a vendor console.",
+  "providers": {
+    "deepseek": {
+      "console": "https://platform.deepseek.com/api_keys",
+      "env": "DEEPSEEK_API_KEY",
+      "prefix": "sk-",
+      "patterns": {
+        "revoke": ["revoke", "delete", "remove"],
+        "create": ["create new key", "create api key", "new key", "add key", "create"],
+        "name": ["name", "key name", "description"],
+        "confirm": ["revoke", "delete", "confirm", "yes"],
+        "reveal": ["copy", "show", "reveal"]
+      }
+    },
+    "anthropic": {
+      "console": "https://console.anthropic.com/settings/keys",
+      "env": "ANTHROPIC_API_KEY",
+      "prefix": "sk-ant-",
+      "patterns": {
+        "revoke": ["revoke", "delete", "remove"],
+        "create": ["create key", "new key", "add key", "create"],
+        "name": ["name", "key name", "description"],
+        "confirm": ["revoke", "delete", "confirm", "yes"],
+        "reveal": ["copy", "show", "reveal"]
+      }
+    },
+    "subq": {
+      "console": "https://console.subq.ai/",
+      "env": "SUBQ_API_KEY",
+      "prefix": "sk-",
+      "patterns": {
+        "revoke": ["revoke", "delete", "remove"],
+        "create": ["create key", "new key", "add key", "generate"],
+        "name": ["name", "label", "description"],
+        "confirm": ["revoke", "delete", "confirm", "yes"],
+        "reveal": ["copy", "show", "reveal"]
+      }
+    },
+    "jev": {
+      "console": "https://console.typesafe.ai/keys",
+      "env": "JEV_API_KEY",
+      "prefix": "apikey_",
+      "patterns": {
+        "revoke": ["revoke", "delete", "remove"],
+        "create": ["create key", "new key", "add key", "generate"],
+        "name": ["name", "label", "description"],
+        "confirm": ["revoke", "delete", "confirm", "yes"],
+        "reveal": ["copy", "show", "reveal"]
+      }
+    },
+    "gemini": {
+      "console": "https://aistudio.google.com/apikey",
+      "env": "GEMINI_API_KEY",
+      "prefix": "AIza",
+      "patterns": {
+        "revoke": ["delete", "remove", "revoke"],
+        "create": ["create api key", "new key", "create"],
+        "name": ["name", "key name"],
+        "confirm": ["delete", "confirm", "yes"],
+        "reveal": ["copy", "show"]
+      }
+    },
+    "litellm": {
+      "console": "http://127.0.0.1:4000/ui",
+      "env": "LITELLM_MASTER_KEY",
+      "prefix": "sk-",
+      "local": true,
+      "patterns": {
+        "revoke": ["delete", "remove"],
+        "create": ["create key", "generate"],
+        "name": ["name", "key alias"],
+        "confirm": ["delete", "confirm", "yes"],
+        "reveal": ["copy", "show"]
+      }
+    }
+  }
+}

@@ -1221,6 +1221,18 @@ rotate-provider-keys.sh
     input, masked confirmation, values never printed; SUBQ also updates
     JEV_BASE_API_KEY. --self-test.
 
+rotate-guided.py
+    Playwright-guided, learning key rotation. A persistent Chromium profile
+    keeps the vendor login (log in once). For revoke/create/rotate it tries a
+    learned locator from data/observability/observability.db
+    (rotation_memory + rotation_run), else heuristics; on a miss it lists the
+    candidate controls for a one-time pick and remembers it. The new key is
+    read from the page (clipboard fallback), written atomically to .env.local
+    (0600, backup) and never printed; no screenshot after reveal.
+    --provider/--action login|revoke|create|rotate, --plan, --report, --reset,
+    --self-test, --browser-self-test. Run with the host browser venv:
+    ./scripts/browser-python.sh scripts/rotate-guided.py --provider anthropic --action rotate
+
 rotate-opencode-token.sh
     Rotate OPENCODE_CONSOLE_TOKEN (the token printed by `opencode debug
     config`): browser revoke checklist, hidden new-token input, atomic single
