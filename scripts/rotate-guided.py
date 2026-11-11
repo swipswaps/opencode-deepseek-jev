@@ -591,6 +591,23 @@ def wait_login(page, args, cfg) -> bool:
     return False
 
 
+def goto_retry(page, url: str, timeout: int) -> bool:
+    """Navigate with a generous bound + one retry (console pages redirect and are heavy)."""
+    last = None
+    for _ in range(2):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=max(timeout, 60000))
+            return True
+        except Exception as e:  # noqa: BLE001
+            last = e
+            try:
+                page.wait_for_timeout(1500)
+            except Exception:  # noqa: BLE001
+                pass
+    print("FAIL: navigation failed: %s (%s)" % (url, last), file=sys.stderr)
+    return False
+
+
 def run_browser(args, cfg) -> int:
     try:
         from playwright.sync_api import sync_playwright
@@ -631,13 +648,15 @@ def run_browser(args, cfg) -> int:
         try:
             page = context.new_page()
             page.set_default_timeout(args.timeout)
-            page.set_default_navigation_timeout(args.timeout)
+            page.set_default_navigation_timeout(max(args.timeout, 60000))
             page.on("dialog", lambda d: d.accept())
-            page.goto(cfg["console"], wait_until="domcontentloaded")
+            if not goto_retry(page, cfg["console"], args.timeout):
+                return 1
             if not wait_login(page, args, cfg):
                 return 2
             target = cfg["console"] if action == "login" else (recall_url(provider, action, cfg["console"]) or cfg["console"])
-            page.goto(target, wait_until="domcontentloaded")
+            if not goto_retry(page, target, args.timeout):
+                return 1
             page.wait_for_timeout(1000)
             if target != cfg["console"]:
                 print("  navigating to remembered page: %s" % target)
@@ -713,11 +732,10 @@ def run_browser(args, cfg) -> int:
                 except Exception:  # noqa: BLE001
                     pass
             elif browser is not None:
-                # connected over CDP: disconnect, leave the real Chrome/profile running
-                try:
-                    browser.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                # Connected over CDP: do NOT close the real Chrome. The profile
+                # (and the login) must survive for the next rotation; closing the
+                # browser here was why the next run relaunched Chrome.
+                print("  leaving real Chrome open for the next rotation (CDP %s)" % args.cdp)
     return 0
 
 
