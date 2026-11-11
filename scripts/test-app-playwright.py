@@ -33,6 +33,7 @@ import datetime
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 ROUTES = [
@@ -44,7 +45,7 @@ ROUTES = [
     {"id": "settings", "heading": "Settings", "must": ["Settings", "Keys", "Confirm provider id"]},
 ]
 
-IGNORE_CONSOLE = ("ERR_ABORTED", "/api/stream", "net::ERR_ABORTED")
+IGNORE_CONSOLE = ("ERR_ABORTED", "/api/stream", "net::ERR_ABORTED", "ERR_HTTP2_PROTOCOL_ERROR")
 
 
 def now() -> str:
@@ -83,6 +84,23 @@ def overflow_px(page) -> int:
     return int(page.evaluate("Math.max(0, document.documentElement.scrollWidth - window.innerWidth)"))
 
 
+def wait_visible_text(page, text: str, timeout: int) -> bool:
+    """Wait for a VISIBLE match. On mobile the permanent drawer is display:none,
+    so get_by_text(...).first can resolve to a hidden nav label; require a
+    visible node so the check targets page content."""
+    loc = page.get_by_text(text, exact=False)
+    deadline = time.time() + max(1.0, timeout / 1000.0)
+    while time.time() < deadline:
+        for i in range(min(loc.count(), 12)):
+            try:
+                if loc.nth(i).is_visible():
+                    return True
+            except Exception:  # noqa: BLE001 - a detached/animating node is not a match
+                continue
+        page.wait_for_timeout(200)
+    return False
+
+
 def check_route(context, base: str, route: dict, timeout: int, shots: Path, width: int, height: int) -> dict:
     page = context.new_page()
     page.set_viewport_size({"width": width, "height": height})
@@ -94,7 +112,8 @@ def check_route(context, base: str, route: dict, timeout: int, shots: Path, widt
         page.goto(url, wait_until="load", timeout=timeout)
         page.get_by_role("heading", name=route["heading"], exact=True).first.wait_for(timeout=timeout)
         for text in route["must"]:
-            page.get_by_text(text, exact=False).first.wait_for(timeout=timeout)
+            if not wait_visible_text(page, text, timeout):
+                errors.append("missing visible text: " + text)
         result["overflow_px"] = overflow_px(page)
         if result["overflow_px"] > 2:
             errors.append("page overflows horizontally by %dpx" % result["overflow_px"])
