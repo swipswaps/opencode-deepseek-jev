@@ -66,6 +66,18 @@ tools, run on 2026-11-10/11.
 | **TOOL-2** | ripgrep JSON >64 KB; FileSystem.access path; read offset; question dismissed | `issue-solutions` | tooling/user-error class; no product change unless they recur. |
 | **GATE-1** | full-harness blind-timeout risk | TODO `OPS-4` (a **different** OPS-4 — ID collision) | Use `gate-watch.sh`; dashboard 161/0 now proves the full gate. Rename to `GATE-1`. |
 
+## 2b. 2026-11-11 recovery addendum
+
+| ID | Issue | Resolution |
+|---|---|---|
+| **WEBHEALTH-1** | Dashboard 401 (new auth) was treated as “down”, so `web-health.sh` relaunched the dashboard every ~30 s | `web-health.sh` accepts 200/401 on `:5099`; self-test covers dashboard-401-healthy; dashboard stable (no relaunch events) |
+| **GUARD-2** | Container entrypoint wrote container-only `/workspace` symlinks into the shared host config (guard + skills), leaving them dangling on the host | Entrypoint now **copies** the guard and skills; host links repaired; hygiene passes |
+| **DB-1** | “Check chat log DB” after the UI failure | `quick_check(1)=ok` (293.6 s), WAL, 156 sessions / 84,185 parts / 182 todos, freelist 0; not the cause |
+
+**UI access:** `:4096`/`:5099` return 401 without credentials and 200 with
+`OPENCODE_SERVER_PASSWORD`; TLS SAN includes `100.119.125.16`; clear stale
+Basic auth/site data or use a private window.
+
 ## 3. Outstanding in the other sense — preserve
 
 - **Evidence before verdicts.** `peer-health`, `beacon-watch`, `session-health`,

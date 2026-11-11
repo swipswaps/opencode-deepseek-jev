@@ -73,13 +73,15 @@ GUARD_SRC="/workspace/.opencode/plugins/blacklist-guard.js"
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
 if [ -f "$GUARD_SRC" ]; then
     mkdir -p "$GUARD_DIR"
-    # Resolve the source before linking: a link to the container-only
-    # /workspace path is DANGLING on the host, so opencode silently loads no
-    # guard there (proven 2026-11-10). A resolved target works in both places.
+    # $HOME/.config/opencode is the HOST config bind-mounted into this
+    # container. A symlink to the container-only /workspace path is DANGLING on
+    # the host (proven twice), so COPY the plugin instead: a regular file is
+    # valid in both namespaces and survives container restarts.
     RESOLVED_GUARD="$(readlink -f "$GUARD_SRC" 2>&1)"
     if [ -n "$RESOLVED_GUARD" ] && [ -f "$RESOLVED_GUARD" ]; then
-        ln -sfn "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"
-        printf '[web-entrypoint] blacklist-guard linked into %s -> %s\n' "$GUARD_DIR" "$RESOLVED_GUARD" >&2
+        cp -f "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"
+        chmod 0644 "$GUARD_DIR/blacklist-guard.js" 2>&1 || true
+        printf '[web-entrypoint] blacklist-guard copied into %s\n' "$GUARD_DIR" >&2
     else
         printf '[web-entrypoint] WARN: cannot resolve %s; guard not linked\n' "$GUARD_SRC" >&2
     fi
@@ -88,16 +90,19 @@ fi
 # Same root-cause fix for the process SKILLs: interactive sessions open at
 # $HOME/.opencode, so the project-scoped `{skill,skills}/**/SKILL.md` glob
 # misses /workspace/.opencode/skills. opencode scans the global config dir, so
-# symlink the repo skills there — otherwise they silently do not load for the
-# sessions the operator actually uses.
+# copy the repo skills there — otherwise they silently do not load for the
+# sessions the operator actually uses, and symlinks dangle on the host.
 SKILL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
-for skill in jev-harness explain-first; do
-    SKILL_SRC="/workspace/.opencode/skills/$skill"
-    if [ -d "$SKILL_SRC" ]; then
-        mkdir -p "$SKILL_DIR"
-        ln -sfn "$SKILL_SRC" "$SKILL_DIR/$skill"
-        printf '[web-entrypoint] skill %s linked into %s\n' "$skill" "$SKILL_DIR" >&2
-    fi
+for SKILL_SRC in /workspace/.opencode/skills/*; do
+    [ -d "$SKILL_SRC" ] || continue
+    skill="$(basename "$SKILL_SRC")"
+    mkdir -p "$SKILL_DIR"
+    # Same namespaces problem as the guard: replace a container-only symlink
+    # with real files so the host sessions load the skills too.
+    if [ -L "$SKILL_DIR/$skill" ]; then rm -f "$SKILL_DIR/$skill"; fi
+    mkdir -p "$SKILL_DIR/$skill"
+    cp -a "$SKILL_SRC/." "$SKILL_DIR/$skill/" 2>&1 || true
+    printf '[web-entrypoint] skill %s copied into %s\n' "$skill" "$SKILL_DIR" >&2
 done
 
 # Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;

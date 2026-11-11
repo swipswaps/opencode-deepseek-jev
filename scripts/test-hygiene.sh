@@ -377,14 +377,15 @@ PY
         bad 'web-entrypoint installs the skill globally'
     fi
     local slink="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/jev-harness/SKILL.md"
+    local sexpected="$REPO/.opencode/skills/jev-harness/SKILL.md"
     if [ -e "$slink" ]; then
-        if [ "$(readlink -f "$slink")" = "$REPO/.opencode/skills/jev-harness/SKILL.md" ]; then
-            ok 'global skill symlink resolves to the repo skill'
+        if { [ -L "$slink" ] && [ "$(readlink -f "$slink")" = "$sexpected" ]; } || cmp -s "$slink" "$sexpected"; then
+            ok 'global skill resolves to / copies the repo skill'
         else
-            bad 'global skill symlink resolves to the repo skill'
+            bad 'global skill resolves to / copies the repo skill'
         fi
     else
-        ok 'global skill symlink not present yet (entrypoint creates it at start)'
+        ok 'global skill not present yet (entrypoint creates it at start)'
     fi
 
     if have node && [ -f "$REPO/scripts/redact.mjs" ]; then

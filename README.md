@@ -428,6 +428,14 @@ Data lives under `data/` (`opencode/` store, `observability/` logs and DBs).
 
 ## If something is wrong
 
+- **`opencode-web` / dashboard fails to open or keeps restarting:** both
+  `:4096` and `:5099` require Basic auth. Authenticate with
+  `OPENCODE_SERVER_PASSWORD` (username ignored); 401 without it is expected.
+  `web-health.sh` accepts 401 on `:5099` (fixed 2026-11-11), so it no longer
+  relaunches the dashboard. If the browser does not prompt, clear stored Basic
+  auth/site data or use a private window; clear the `/app/` service worker if
+  the shell is stale. The chat DB was verified with `quick_check(1)=ok`.
+
 - **`Certificate invalid: name is not a listed principal`** on
   `ssh owner@10.100.0.1`: re-sign the client host cert with the address as a
   principal (the CA key stays on the client):

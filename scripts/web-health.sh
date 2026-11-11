@@ -84,12 +84,12 @@ client_ips() {
 }
 
 healthy_on() {
-    # healthy_on IP -> 0 when :4096 is 200/401 and :5099 is 200
+    # healthy_on IP -> 0 when :4096 is 200/401 and :5099 is 200/401 (dashboard auth)
     local ip="$1" c4 c5
     c4="$(http_code "https://$ip:4096/api/health")"
     c5="$(http_code "https://$ip:5099/api/health")"
     case "$c4" in 200|401) ;; *) return 1 ;; esac
-    case "$c5" in 200) ;; *) return 1 ;; esac
+    case "$c5" in 200|401) ;; *) return 1 ;; esac
     return 0
 }
 
@@ -183,10 +183,18 @@ self_test() {
         || { printf 'FAIL dashboard-only dry\n'; fail=1; }
     unset WEB_HEALTH_EDGE_CODE WEB_HEALTH_DASH_CODE
 
+    # dashboard auth: :5099 401 is healthy, not "down"
+    export WEB_HEALTH_EDGE_CODE=401 WEB_HEALTH_DASH_CODE=401
+    o=$(bash "${BASH_SOURCE[0]}" 2>&1)
+    rc=$?
+    [ "$rc" -eq 0 ] || { printf 'FAIL dashboard 401 run rc=%s (want 0)\n' "$rc"; fail=1; }
+    printf '%s' "$o" | grep -q 'dashboard down' && { printf 'FAIL dashboard 401 treated as down\n'; fail=1; }
+    unset WEB_HEALTH_EDGE_CODE WEB_HEALTH_DASH_CODE
+
     rm -f "$WEB_HEALTH_STATE"
     rmdir "$work"
     if [ "$fail" -eq 0 ]; then
-        printf 'web-health: self-test PASS (threshold + cooldown + clear + dashboard-only)\n'
+        printf 'web-health: self-test PASS (threshold + cooldown + clear + dashboard-only + dashboard-401-healthy)\n'
     else
         printf 'web-health: self-test FAIL\n'
     fi
@@ -240,7 +248,7 @@ probe_all() {
     DOWN_IPS=""
     for ip in $ips; do
         if healthy_on "$ip"; then
-            log "web-health: OK https://$ip:4096 (401/200) :5099=200"
+            log "web-health: OK https://$ip:4096 (401/200) :5099=200/401 (auth)"
         else
             DOWN_IPS="$DOWN_IPS $ip"
             log "web-health: DOWN https://$ip:4096 or :5099"
@@ -324,7 +332,7 @@ main() {
         local e_code="" d_code=""
         e_code="$(http_code "https://127.0.0.1:4096/api/health")"
         d_code="$(http_code "https://127.0.0.1:5099/api/health")"
-        if { [ "$e_code" = "200" ] || [ "$e_code" = "401" ]; } && [ "$d_code" != "200" ]; then
+        if { [ "$e_code" = "200" ] || [ "$e_code" = "401" ]; } && [ "$d_code" != "200" ] && [ "$d_code" != "401" ]; then
             if [ "${WEB_HEALTH_DRY:-0}" = "1" ]; then
                 log "web-health: edge up but dashboard down ($d_code); dry: would relaunch the dashboard"
             else
