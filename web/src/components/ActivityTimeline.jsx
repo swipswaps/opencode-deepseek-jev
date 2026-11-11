@@ -320,7 +320,7 @@ export default function ActivityTimeline({ activity, shed }) {
       <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between">
           <Box>
-            <Typography variant="h5">Activity timeline</Typography>
+            <Typography component="h1" variant="h5">Activity timeline</Typography>
             <Typography variant="caption" color="text.secondary">
               {remoteBusy
                 ? "searching all sessions…"

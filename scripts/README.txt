@@ -676,6 +676,16 @@ test-app-playwright.py
     ./scripts/browser-python.sh scripts/test-app-playwright.py
     (--base, --password/$OPENCODE_SERVER_PASSWORD, --headed, --json, --shots).
 
+audit-app-ux.py
+    Playwright UX/accessibility audit for the MUI /app (the React pages are
+    client-rendered, so a11y-audit.mjs cannot see them). For each view at
+    1280x900 and 390x844: one h1 and heading tree, accessible names, first-Tab
+    focus, tap targets (<24 px fails WCAG AA, <44 px is the AAA warning),
+    bottom-nav label truncation, aria-current on the active nav, skip link +
+    main landmark, console/page errors. Run with the host browser venv:
+    ./scripts/browser-python.sh scripts/audit-app-ux.py --base http://172.28.0.2:5099
+    (--json, --views). Exit 1 on findings.
+
 thinking.sh
     Live view of what the agent is doing while "thinking": tails the opencode
     db and prints step boundaries, tool calls (state + command), reasoning

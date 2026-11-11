@@ -105,7 +105,7 @@ export default function Settings() {
     <Box>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h4">Settings</Typography>
+          <Typography component="h1" variant="h4">Settings</Typography>
           <Typography variant="body2" color="text.secondary">
             Pause or resume providers and see which keys are present. Secrets are never shown or entered here.
           </Typography>

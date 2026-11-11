@@ -32,7 +32,7 @@ function Kpi({ label, value, hint, color = "text.primary" }) {
         <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: ".08em" }}>
           {label}
         </Typography>
-        <Typography variant="h5" sx={{ color, lineHeight: 1.2 }} noWrap>
+        <Typography component="div" variant="h5" sx={{ color, lineHeight: 1.2 }} noWrap>
           {value}
         </Typography>
         {hint && (
@@ -87,7 +87,7 @@ export default function Overview({ cost, health, healthError, sessions, onNaviga
     <Box>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1} sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h4">Overview</Typography>
+          <Typography component="h1" variant="h4">Overview</Typography>
           <Typography variant="body2" color="text.secondary">
             Cost, activity, sessions, and health from the local OpenCode store.
           </Typography>

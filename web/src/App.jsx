@@ -117,7 +117,7 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
           >
             <TimelineIcon sx={{ fontSize: 19, color: "#0d1117" }} />
           </Box>
-          <Typography variant="h6" sx={{ letterSpacing: "-.02em", fontSize: { xs: "0.95rem", sm: "1.1rem" }, display: "block" }}>
+          <Typography component="div" variant="h6" sx={{ letterSpacing: "-.02em", fontSize: { xs: "0.95rem", sm: "1.1rem" }, display: "block" }}>
             observability
           </Typography>
           <Chip

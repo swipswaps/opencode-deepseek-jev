@@ -14,7 +14,7 @@ export default function Todos({ todos }) {
   const list = Array.isArray(todos) ? todos : [];
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 0.5 }}>
+      <Typography component="h1" variant="h4" sx={{ mb: 0.5 }}>
         Todos
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

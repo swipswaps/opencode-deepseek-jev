@@ -33,7 +33,7 @@ export default function Usability() {
     <Box>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1} sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h4">Usability</Typography>
+          <Typography component="h1" variant="h4">Usability</Typography>
           <Typography variant="body2" color="text.secondary">
             Two separate signals: an automated screen (machine evidence) and a guided human test (operator + participant).
           </Typography>

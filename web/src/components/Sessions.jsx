@@ -55,7 +55,7 @@ export default function Sessions({ sessions, error, isMobile }) {
     <Box>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h4">Sessions</Typography>
+          <Typography component="h1" variant="h4">Sessions</Typography>
           <Typography variant="body2" color="text.secondary">
             {rows.length} sessions · {fmtUsd(totalCost)} · cost, tokens, model, and last update
           </Typography>

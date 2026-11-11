@@ -197,6 +197,10 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
 
 ## Queue (ranked, top first)
 
+- [ ] **APP-UX-1:** React `/app` residual a11y from `scripts/audit-app-ux.py`:
+      label the Activity/Sessions search inputs, add `aria-current="page"` to the
+      active drawer/bottom-nav item, raise mobile controls to 44px. Verify with
+      `./scripts/browser-python.sh scripts/audit-app-ux.py --base http://172.28.0.2:5099`.
 - [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`; handoff `docs/HANDOFF-2026-11-11.md`.
       P0: rotate the 4 `../notes/` secrets; patch OpenSSH. P1: B43 24–48 h
       measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1 external #5, stale

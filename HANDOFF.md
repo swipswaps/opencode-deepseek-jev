@@ -18,6 +18,10 @@
 > container. `/app/#usability` simplified to evidence + link to `/usability`;
 > `/recovery` a11y fixed (skip target, focus-visible, styled layout); global
 > focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
+> `audit-app-ux.py` (Playwright) found **no h1** on the React views; fixed:
+> every view now renders one h1 (AppBar brand demoted). Residual UX findings
+> (unselected): Activity/Sessions search inputs unnamed, active nav lacks
+> aria-current, mobile targets <44px — tracked as **APP-UX-1**.
 > honored. a11y audit 11/11 on every classic page; lint 419/0. Playwright
 > `/app` battery **12/12** (desktop 1280x900 + mobile 390x844, 10 s); `.24`
 > posture **23/0**, secret-scan clean, guard link fixed, OpenSSH patched and

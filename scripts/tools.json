@@ -1773,5 +1773,16 @@
       "./scripts/browser-python.sh scripts/test-app-playwright.py --base https://localhost:5099 --password \"$OPENCODE_SERVER_PASSWORD\" --json",
       "./scripts/browser-python.sh scripts/test-app-playwright.py --headed --shots logs/app-pw"
     ]
+  },
+  {
+    "id": "audit-app-ux",
+    "title": "Playwright UX/a11y audit for the MUI /app",
+    "where": "host",
+    "purpose": "Audits the client-rendered React app: one h1 and heading tree, accessible names, first-Tab focus, tap targets (<24 fails WCAG AA, <44 AAA warning), bottom-nav label truncation, aria-current on the active nav, skip link + main landmark, console/page errors, at desktop and mobile widths. Use --base http://172.28.0.2:5099 to bypass caddy under load. Exit 1 on findings.",
+    "commands": [
+      "./scripts/browser-python.sh scripts/audit-app-ux.py --base http://172.28.0.2:5099 --password \"$OPENCODE_SERVER_PASSWORD\"",
+      "./scripts/browser-python.sh scripts/audit-app-ux.py --json",
+      "./scripts/browser-python.sh scripts/audit-app-ux.py --views settings,usability"
+    ]
   }
 ]
