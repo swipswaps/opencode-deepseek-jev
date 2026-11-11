@@ -203,6 +203,9 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
       sessions, JEV key. Fixed this pass: `session-health` default DB path,
       `issue-bridge.py` exec bit, SEC-3 closed (container secret binds hidden).
 - [x] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests (CLOSED 2026-11-11; open part is the B43-1 measurement: beacon-watch 185 total / 184 pre / 1 post)
+      **2026-11-11 11:22:** rolling 24 h **227 total / 32 pre / 195 post**
+      (127 in the 10:00 hour) → **H1 rejected**; next H2 (different 2.4 AP),
+      then hardware. See `docs/BT-COEXISTENCE-2026-11-10.md` §9.
       green; live roam proof open.
       **2026-11-10:** self-test cooldown fixed (stale `alerts.state` throttled
       the first alert). Cause proven by

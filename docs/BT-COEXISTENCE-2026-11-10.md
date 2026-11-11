@@ -160,3 +160,24 @@ sudo bash scripts/bluetooth-off.sh --rollback
 
 *All changes are reversible. If b43+BT-off does not reduce beacon loss over
 24–48 h, stop tuning and move to a supported USB Wi-Fi/Ethernet adapter.*
+
+## 9. Follow-up 2026-11-11 11:22 EST — H1 rejected
+
+Rolling 24 h window (`ssh owner@10.100.0.1 'bash /tmp/beacon-watch.sh --hours 24
+--intervention ~/.local/state/b43-tune.applied --json --write'`):
+
+| window | count |
+|---|---|
+| total | **227** |
+| pre (before 18:20:14) | **32** |
+| post (17 h) | **195** |
+
+The post window was not quiet: 20:00=1, 21:00=4, 23:00=7, 04:00=1, 06:00=10,
+07:00=2, 09:00=30, **10:00=127**, 11:00=13 (partial). Post ≈ 11.5/h, at or
+above the clustered pre rate; the 10:00 spike is a clear regression. **H1
+(Bluetooth off + `btcoex=0` + BSSID pin) is rejected.** Next: **H2** — test a
+different 2.4 GHz AP (`14ef1c9` ch6, `SpectrumSetup-00` ch1, phone hotspot);
+if H2 fails, **H3/hardware** (USB Wi-Fi or Ethernet). Do not retry `wl`.
+
+The 18:20-local 24 h-post gate is still due; this 17 h-post sample is already
+decisive.

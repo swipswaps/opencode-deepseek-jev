@@ -84,6 +84,12 @@ Anthropic was hard-paused and verified absent from the container environment.
 `web/dist` is a build artifact (gitignored): run `cd web && npm run build` (or
 `./scripts/web-build-restart.sh`) after a checkout.
 
+**B43 (client Wi-Fi):** the Bluetooth-off / `btcoex=0` / BSSID-pin
+intervention did **not** hold. Rolling 24 h at 11:22 EST: **227 total / 32 pre /
+195 post** (17 h post; **127** in the 10:00 hour). H1 rejected; next is a
+different 2.4 GHz AP, then a USB Wi-Fi/Ethernet adapter. Evidence:
+`docs/BT-COEXISTENCE-2026-11-10.md` §9.
+
 ## 2026-11-10 — network UX + hardening close-out
 
 **The persistent "10.100.0.1 disconnected" popup was real but misdiagnosed.**

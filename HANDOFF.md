@@ -1,5 +1,13 @@
 # Handoff — opencode-deepseek-jev
 
+> **PIN 2026-11-11c (B43 H1 rejected):** 24 h window at 11:22 EST =
+> **227 total / 32 pre / 195 post** (17 h post; **127** beacon-losses in the
+> 10:00 hour). Post ≈ 11.5/h, at or above the clustered pre rate → the
+> Bluetooth-off / `btcoex=0` / BSSID-pin intervention did **not** fix it.
+> Next: H2 (different 2.4 GHz AP: `14ef1c9` ch6, `SpectrumSetup-00` ch1, phone
+> hotspot), then H3/hardware (USB Wi-Fi/Ethernet). 24 h-post gate: 18:20 local.
+> Evidence: `docs/BT-COEXISTENCE-2026-11-10.md` §9.
+
 > **PIN 2026-11-11b (settings + UX):** `/settings` and `/app/#settings` now
 > show a redacted provider matrix (config/env/auth/policy/state) and safe
 > pause/resume (typed confirm, `SETTINGS` ledger row, pending-host-apply badge,
@@ -22,23 +30,6 @@
 > external #5, stale sessions, JEV key. Fixed: `session-health` default DB path,
 > `issue-bridge.py` exec bit, SEC-3 closed (container secret binds are
 > `/dev/null`/`empty-certs`). Gates: fast 3/0, dashboard 161/0, posture 22/1.
-
-> **PIN 2026-11-10 (Wi-Fi = beacon loss, not powersave):** client
-> `10.100.0.1` is a BCM4331 on `b43`, **2.4 GHz only**; 24 h showed 300
-> `BEACON-LOSS`, 84 firmware reloads, 1055 Tailscale path changes, 13 DNS-commit
-> failures. Client powersave off; server `ws24` (5 GHz) had powersave ON.
-> Prove both ends: `scripts/wifi-link-forensics.sh --peer owner@100.70.43.78`;
-> `--fix` disables/persists powersave. **2026-11-10 16:04Z:** `sudo
-> scripts/wifi-link-forensics.sh --fix` on `ws24` → `power_save off`, persisted
-> `wifi.powersave=2` (`/etc/NetworkManager/conf.d/99-wifi-powersave-off.conf`),
-> NM reloaded; evidence `logs/wifi-link-forensics-20261110T160416Z.log`, ledger
-> `wifi-ws24-powersave-fix-20261110T1059`. Client still needs `akmod-wl`/wired.
-> Fixed the `hotspot-reconnect.sh` self-test cooldown case.
-> **Popup/UX:** critical alerts now bounded (45 s), replace-by-id, recovery
-> clear, server hysteresis (3); `scripts/peer-health.sh --explain` names the
-> cause (reachability vs link quality). Dashboard auth/CORS, semantic
-> opt-in+redaction, untrusted X11, `auth.json` 0600, harvest SSRF block landed.
-> Open queue: `docs/OUTSTANDING-ISSUES-2026-11-10.md`.
 
 ## What this is
 Docker-packaged coding-agent environment: **OpenCode** + **DeepSeek**
