@@ -78,6 +78,8 @@ Anthropic was hard-paused and verified absent from the container environment.
   `/app/#<view>` at desktop and mobile widths and checks content, console/page
   errors, overflow, the mobile nav, the Settings confirm guard, and the
   Usability link. Screenshots land in `logs/`.
+  **Verified 2026-11-11:** **12/12** (desktop 1280×900 + mobile 390×844) in
+  10 s; `.24` posture **23/0**; secret scan clean.
 
 `web/dist` is a build artifact (gitignored): run `cd web && npm run build` (or
 `./scripts/web-build-restart.sh`) after a checkout.

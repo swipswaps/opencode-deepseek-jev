@@ -10,7 +10,10 @@
 > container. `/app/#usability` simplified to evidence + link to `/usability`;
 > `/recovery` a11y fixed (skip target, focus-visible, styled layout); global
 > focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
-> honored. a11y audit 11/11 on every classic page; lint 419/0.
+> honored. a11y audit 11/11 on every classic page; lint 419/0. Playwright
+> `/app` battery **12/12** (desktop 1280x900 + mobile 390x844, 10 s); `.24`
+> posture **23/0**, secret-scan clean, guard link fixed, OpenSSH patched and
+> running the new binary. Pushed `b8bf26c`.
 
 > **PIN 2026-11-11 (audit/triage):** full report in
 > `docs/AUDIT-TRIAGE-2026-11-10.md`; durable handoff in

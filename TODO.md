@@ -14,7 +14,8 @@ Last updated: 2026-11-11
       `--self-test`). Anthropic hard-paused. `/app/#usability` simplified to an
       evidence summary + `/usability` link; `/recovery` and global a11y fixes;
       React tables scroll on mobile; reduced-motion honored. a11y 11/11 per
-      classic page; lint 419/0.
+      classic page; lint 419/0. Playwright `/app` battery **12/12** (desktop +
+      mobile); `.24` posture **23/0**; secret-scan clean; pushed `b8bf26c`.
 
 Archived 2026-11-11 to hold the tier-1 read-first budget (RULE #77).
 See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
