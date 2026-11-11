@@ -148,6 +148,17 @@ PY
     has '/api/graph/edit' "$work/graph.html" && ok 'graph writes edits' || bad 'graph writes edits'
     code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://$HOST:$PORT/app/explore")
     case "$code" in 302*"/explore") ok 'app legacy path redirects (/app/explore -> /explore)' ;; *) bad "app legacy path redirect ($code)" ;; esac
+    curl -s "http://$HOST:$PORT/app/" > "$work/app.html"
+    app_asset=$(grep -m1 -o 'assets/index-[A-Za-z0-9_-]*\.js' "$work/app.html")
+    if [ -n "$app_asset" ] && curl -s "http://$HOST:$PORT/app/$app_asset" > "$work/app.js"; then
+        if has 'pending host apply' "$work/app.js" && has 'Run the guided test' "$work/app.js"; then
+            ok 'app bundle has settings + usability views'
+        else
+            bad 'app bundle stale (run: cd web && npm run build)'
+        fi
+    else
+        bad 'app bundle asset missing'
+    fi
     curl -s "http://$HOST:$PORT/usability" > "$work/usability.html"
     has '<title>opencode usability</title>' "$work/usability.html" && ok 'usability title' || bad 'usability title'
     has 'id="u-start"' "$work/usability.html" && ok 'usability guided start' || bad 'usability guided start'

@@ -28,6 +28,7 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import StorageIcon from "@mui/icons-material/Storage";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
+import SettingsIcon from "@mui/icons-material/Settings";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import Overview from "./components/Overview.jsx";
@@ -35,6 +36,7 @@ import ActivityTimeline from "./components/ActivityTimeline.jsx";
 import Sessions from "./components/Sessions.jsx";
 import Todos from "./components/Todos.jsx";
 import Usability from "./components/Usability.jsx";
+import Settings from "./components/Settings.jsx";
 import { makeTheme } from "./theme.js";
 import { timeStr } from "./lib.js";
 import { useLive, useRemote } from "./useLive.js";
@@ -45,6 +47,7 @@ const VIEWS = [
   { id: "sessions", label: "Sessions", icon: <StorageIcon /> },
   { id: "todos", label: "Todos", icon: <ChecklistIcon /> },
   { id: "usability", label: "Usability", icon: <FactCheckIcon /> },
+  { id: "settings", label: "Settings", icon: <SettingsIcon /> },
 ];
 
 const viewFromHash = () => {
@@ -215,6 +218,7 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
           {view === "sessions" && <Sessions sessions={sessions.data} error={sessions.error} isMobile={isMobile} />}
           {view === "todos" && <Todos todos={live.todos} />}
           {view === "usability" && <Usability />}
+          {view === "settings" && <Settings />}
         </Box>
       </Box>
 
