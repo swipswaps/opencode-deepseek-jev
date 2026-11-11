@@ -3,7 +3,7 @@
 // Imported by test-hygiene.sh. Kept as .mjs (not .sh) so the literal patterns
 // under test do not trip lint.sh's RULES grep over scripts/*.sh. The plugin
 // file is ESM (see .opencode/package.json {"type":"module"}).
-import { inspect, stripQuotes, remediate2devnull, innerScripts, BlacklistGuard, injectionVerdict } from "../.opencode/plugins/blacklist-guard.js";
+import { inspect, stripQuotes, remediate2devnull, innerScripts, BlacklistGuard, injectionVerdict, remediateProse } from "../.opencode/plugins/blacklist-guard.js";
 import { readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 
 const has = (cmd, name) => inspect(cmd).some((h) => h.name === name);
@@ -232,6 +232,28 @@ if (!editMissOk) fail++;
 if (!editHitOk) fail++;
 console.log((editMissOk ? "  PASS " : "  FAIL ") + "edit oldString pre-check records an advisory when absent");
 console.log((editHitOk ? "  PASS " : "  FAIL ") + "edit pre-check is silent when oldString is present");
+
+// Assistant OUTPUT (prose) enforcement: code spans only, same RULES.
+const proseCases = [
+  ["run:\n```bash\nstrace 2>/dev/null; true\n```\n", true, "2>/dev/null"],
+  ["x\n```bash\nsed -i 's/a/b/' f\n```\n", true, "sed"],
+  ["```sh\nrm -rf /tmp/x\n```\n", true, "rm -rf"],
+  ["the rule is `2>/dev/null` here", false, ""],
+  ["do not use `sed -i x`", true, "sed"],
+  ["we never use 2>/dev/null in commands", false, ""],
+];
+for (const [text, changed, name] of proseCases) {
+  const r = remediateProse(text, "block");
+  const ok = r.changed === changed && (!changed || r.patterns.includes(name)) && (!changed || r.text !== text);
+  if (!ok) fail++;
+  console.log((ok ? "  PASS " : "  FAIL ") + "prose: " + JSON.stringify(text.slice(0, 34)) +
+    " changed=" + r.changed + " patterns=" + JSON.stringify(r.patterns));
+}
+
+const warnProse = remediateProse("```bash\nls 2>/dev/null\n```\n", "warn");
+const warnProseOk = warnProse.changed === false && warnProse.patterns.includes("2>/dev/null");
+if (!warnProseOk) fail++;
+console.log((warnProseOk ? "  PASS " : "  FAIL ") + "prose warn mode logs but does not rewrite");
 
 console.log("result: " + (fail ? "FAIL" : "PASS"));
 process.exit(fail ? 1 : 0);

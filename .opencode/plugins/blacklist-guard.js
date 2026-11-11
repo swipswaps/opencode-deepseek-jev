@@ -293,6 +293,64 @@ export function remediate2devnull(command) {
   return { cmd: parts.join(" "), count: spans.length };
 }
 
+// ---------------------------------------------------------------------------
+// Assistant OUTPUT (prose) enforcement. `experimental.text.complete` gives the
+// final text part; scan CODE SPANS (fenced blocks + inline code) with the same
+// RULES. Fenced blocks are fully remediated (2>/dev/null removed, block rules
+// replaced with a visible marker). Inline code is only rewritten for
+// block-severity rules, so a sentence that explains `2>/dev/null` survives.
+// Prose is otherwise untouched. Fail-open; only pattern names are logged.
+// ---------------------------------------------------------------------------
+const FENCED_RE = /```([^\n]*)\n([\s\S]*?)```/g;
+const INLINE_RE = /`([^`\n]+)`/g;
+
+function processCode(code, mode) {
+  const patterns = new Set();
+  let removed = 0, blocked = 0, changed = false;
+  const out = String(code).split("\n").map((line) => {
+    let hits;
+    try { hits = inspect(line); } catch { return line; }
+    if (!hits.length) return line;
+    hits.forEach((h) => patterns.add(h.name));
+    let next = line;
+    if (mode === "block" && hits.some((h) => h.sev === "fix")) {
+      const r = remediate2devnull(next);
+      if (r.count) { next = r.cmd; removed += r.count; changed = true; }
+    }
+    const blocks = mode === "block" ? hits.filter((h) => h.sev === "block") : [];
+    if (blocks.length) {
+      next = "[blacklist-guard blocked " + blocks.map((h) => h.name).join(", ") +
+        " - use " + blocks.map((h) => h.fix).join("; ") + "]";
+      blocked += blocks.length;
+      changed = true;
+    }
+    return next;
+  });
+  return { code: out.join("\n"), patterns: [...patterns], removed, blocked, changed };
+}
+
+export function remediateProse(text, mode = "block") {
+  const patterns = new Set();
+  let removed = 0, blocked = 0, changed = false;
+  let out = String(text || "").replace(FENCED_RE, (_m, lang, body) => {
+    const r = processCode(body, mode);
+    r.patterns.forEach((p) => patterns.add(p));
+    removed += r.removed; blocked += r.blocked; changed = changed || r.changed;
+    return "```" + lang + "\n" + r.code + "```";
+  });
+  out = out.replace(INLINE_RE, (m, code) => {
+    if (mode !== "block") return m;
+    let hits;
+    try { hits = inspect(code).filter((h) => h.sev === "block"); } catch { return m; }
+    if (!hits.length) return m;
+    hits.forEach((h) => patterns.add(h.name));
+    blocked += hits.length; changed = true;
+    return "[blacklist-guard blocked " + hits.map((h) => h.name).join(", ") +
+      " - use " + hits.map((h) => h.fix).join("; ") + "]";
+  });
+  return { text: out, changed, removed, blocked, patterns: [...patterns] };
+}
+
 function mode() {
   const m = (process.env.OPENCODE_BLACKLIST_GUARD || "block").toLowerCase();
   return (m === "off" || m === "warn") ? m : "block";
@@ -493,6 +551,24 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         const text = String((output && (output.result || output.output || output.text)) || "");
         const marker = injectionVerdict(text);
         if (marker) record("injection", "prompt-injection marker in tool result", { tool: input && input.tool, marker });
+      } catch { /* fail open */ }
+    },
+    "experimental.text.complete": async (input, output) => {
+      const m = mode();
+      if (m === "off") return;
+      try {
+        const r = remediateProse(String((output && output.text) || ""), m);
+        if (m === "block") {
+          if (!r.changed) return;
+          output.text = r.text;
+          const detail = { patterns: r.patterns, removed: r.removed, blocked: r.blocked, part: input && input.partID };
+          record("prose", "rewrote blacklisted construct in assistant code", detail);
+          await log("warn", "blacklisted construct in assistant code; rewritten", detail);
+        } else if (r.patterns.length) {
+          const detail = { patterns: r.patterns, part: input && input.partID };
+          record("prose-warn", "blacklisted construct in assistant code (warn; not rewritten)", detail);
+          await log("warn", "blacklisted construct in assistant code (warn mode)", detail);
+        }
       } catch { /* fail open */ }
     },
   };
