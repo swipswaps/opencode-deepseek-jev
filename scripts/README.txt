@@ -539,6 +539,12 @@ doc-budget.sh
     sizes to data/observability/docs.json. --json; --fail exits 1 when tier 1 is
     over budget; --self-test offline (DOC_BUDGET_REPO is the test seam).
 
+verify-tier-budget.sh
+    One paste-safe proof that the tier-1 budget and its guarding gates are
+    green: doc-budget --fail, lint, test-hygiene (skipped with --fast), and
+    beacon-watch --self-test. Prints per-step PASS/FAIL plus the HEAD and exits
+    1 on any failure. The scripted form of the 2026-11-11 tier-1 trim proof.
+
 test-tooling.sh
     Contract test for the tooling's machine interfaces: proves every tool that
     advertises --json emits parseable JSON with the keys a wrapper reads

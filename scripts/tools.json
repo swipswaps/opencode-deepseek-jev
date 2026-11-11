@@ -1740,5 +1740,16 @@
       "./scripts/peer-health.sh --json",
       "./scripts/peer-health.sh --self-test"
     ]
+  },
+  {
+    "id": "verify-tier-budget",
+    "title": "One paste-safe proof of the tier-1 doc budget + gates",
+    "where": "container",
+    "purpose": "Runs doc-budget --fail, lint, test-hygiene (skipped with --fast), and beacon-watch --self-test from the repo root; prints per-step PASS/FAIL plus the HEAD and exits 1 on any failure. The scripted form of the 2026-11-11 tier-1 trim proof, so the check is one command instead of pasted annotated output.",
+    "commands": [
+      "./scripts/verify-tier-budget.sh",
+      "./scripts/verify-tier-budget.sh --fast",
+      "./scripts/verify-tier-budget.sh --help"
+    ]
   }
 ]
