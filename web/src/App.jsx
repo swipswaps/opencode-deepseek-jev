@@ -51,7 +51,8 @@ const VIEWS = [
 ];
 
 const viewFromHash = () => {
-  const id = String(window.location.hash || "").replace(/^#/, "");
+  const raw = String(window.location.hash || "").replace(/^#/, "");
+  const id = raw.split(/[^A-Za-z0-9_-]/)[0];
   return VIEWS.some((v) => v.id === id) ? id : "overview";
 };
 

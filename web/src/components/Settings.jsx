@@ -252,8 +252,9 @@ export default function Settings() {
                         </Button>
                       )}
                       {ROTATE[p.id] && (
-                        <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copy(ROTATE[p.id])}>
-                          rotate cmd
+                        <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copy(ROTATE[p.id])}
+                          title="copies the rotate command; it does not run it">
+                          copy cmd
                         </Button>
                       )}
                     </Stack>

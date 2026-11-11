@@ -144,7 +144,10 @@ main() {
 
     printf 'restart issued; waiting for :5099 (boot + health pre-warm)\n'
     local i served
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    local iters="${WEB_RESTART_ITERS:-24}"
+    case "$iters" in '' | *[!0-9]*) iters=24 ;; esac
+    i=1
+    while [ "$i" -le "$iters" ]; do
         sleep 5
         served=$(probe_rev)
         if [ -n "$served" ]; then
@@ -153,8 +156,9 @@ main() {
                 "$head"*stale=False*) printf 'PASS: :5099 serves current checkout\n'; return 0 ;;
             esac
         fi
+        i=$((i + 1))
     done
-    printf 'FAIL: :5099 did not serve %s within 60s (last: %s)\n' "$head" "$served"
+    printf 'FAIL: :5099 did not serve %s within %ss (last: %s)\n' "$head" "$((iters * 5))" "$served"
     printf 'hint: docker logs --tail 20 opencode-deepseek-web (https probe; http:// -> 400 by design)\n'
     return 1
 }
