@@ -1695,6 +1695,17 @@
     ]
   },
   {
+    "id": "beacon-watch",
+    "title": "Per-hour b43 BEACON-LOSS counts with a pre/post intervention split",
+    "where": "client",
+    "purpose": "Counts wpa_supplicant BEACON-LOSS per hour and splits at the b43-tune intervention timestamp (default ~/.local/state/b43-tune.applied). --hours/--since select the window, --intervention EPOCH|FILE sets the split, --json, --write stores ~/.local/state/beacon-watch.json, --self-test offline. Prevents the common error of treating the 24h pre-intervention history as post-fix evidence.",
+    "commands": [
+      "bash scripts/beacon-watch.sh --hours 24",
+      "bash scripts/beacon-watch.sh --hours 24 --intervention ~/.local/state/b43-tune.applied --json --write",
+      "bash scripts/beacon-watch.sh --self-test"
+    ]
+  },
+  {
     "id": "bluetooth-off",
     "title": "Power off the Bluetooth radio and keep it off",
     "where": "host",

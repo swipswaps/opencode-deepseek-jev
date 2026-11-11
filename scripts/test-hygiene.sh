@@ -611,6 +611,17 @@ PY
         bad 'bluetooth-off.sh present'
     fi
 
+    if [ -f "$REPO/scripts/beacon-watch.sh" ]; then
+        if bash "$REPO/scripts/beacon-watch.sh" --self-test > "$work/bw_st.txt" 2>&1; then
+            ok 'beacon-watch: self-test (per-hour + pre/post split)'
+        else
+            bad 'beacon-watch: self-test (per-hour + pre/post split)'
+            cat "$work/bw_st.txt"
+        fi
+    else
+        bad 'beacon-watch.sh present'
+    fi
+
     if [ -f "$REPO/scripts/host-cert-sign.sh" ]; then
         if bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
             ok 'host-cert-sign: self-test (temp CA + host key + principal)'

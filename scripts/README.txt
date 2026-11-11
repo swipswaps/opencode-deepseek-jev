@@ -1547,6 +1547,15 @@ b43-tune.sh
     (brief Wi-Fi drop; snapshots the old btcoex and auto-restores if no Wi-Fi
     within B43TUNE_UP_SEC), --rollback. Reversible. Gated in test-hygiene.sh.
 
+beacon-watch.sh
+    Count b43 BEACON-LOSS events per hour and split them at the intervention
+    timestamp (default ~/.local/state/b43-tune.applied, written by
+    b43-tune.sh --apply --reload). --hours N, --since DATE, --intervention
+    EPOCH|FILE, --json, --write (~/.local/state/beacon-watch.json),
+    --self-test. This avoids confusing pre-intervention history with the
+    post-fix rate; e.g. the 2026-11-10 24h split was total=184, pre=184,
+    post=0. Gated in test-hygiene.sh.
+
 bluetooth-off.sh
     Power off the Bluetooth RADIO (not just the service) and keep it off:
     `rfkill block bluetooth` + /etc/systemd/system/bluetooth-off.service

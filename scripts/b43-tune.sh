@@ -29,7 +29,6 @@
 #
 set -o pipefail
 
-SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 MODPROBE_CONF="${B43TUNE_CONF:-/etc/modprobe.d/99-b43-tune.conf}"
 NM_CONN="${B43TUNE_CONN:-belkin2}"
 BSSID="${B43TUNE_BSSID:-24:F3:E3:52:1A:06}"
@@ -39,6 +38,7 @@ JSON=0
 SELFTEST="${B43TUNE_SELFTEST:-0}"
 IFACE="${B43TUNE_IFACE:-}"
 LOG="${B43TUNE_LOG:-$HOME/.local/state/b43-tune.log}"
+APPLIED="${B43TUNE_APPLIED:-$HOME/.local/state/b43-tune.applied}"
 
 usage() {
     printf 'usage: %s [--check|--apply|--rollback|--self-test] [--reload] [--json]\n' "$0"
@@ -194,6 +194,8 @@ do_apply() {
         reload_b43
         restart_nm
         if wait_up "$UP_SEC"; then
+            mkdir -p "$(dirname "$APPLIED")" 2>&1 || true
+            printf '%s\n' "$(date +%s)" > "$APPLIED" 2>&1 || true
             log "connected; btcoex=$(b43_param btcoex) bssid=$(nm_field "$NM_CONN" 802-11-wireless.bssid)"
         else
             log "no Wi-Fi after ${UP_SEC}s; rolling back"
@@ -215,6 +217,7 @@ do_rollback() {
     rollback_nm
     reload_b43
     restart_nm
+    rm -f "$APPLIED" 2>&1 || true
     wait_up "$UP_SEC" || log "not yet connected after rollback"
     log "rollback complete"
     return 0
