@@ -119,9 +119,17 @@ fi
 # the same file opencode uses; read-only access coexists with the writer.
 DASH_MJS="/workspace/scripts/dashboard.mjs"
 if [ -f "$DASH_MJS" ]; then
-    node --no-warnings --experimental-sqlite "$DASH_MJS" \
-        "$DATA_DIR/opencode.db" 5099 0.0.0.0 /workspace/scripts/audit-config.sh >/tmp/dashboard.log 2>&1 &
-    printf '[web-entrypoint] dashboard listening on :5099 (log /tmp/dashboard.log)\n' >&2
+    # Supervisor: a restart can briefly leave :5099 unbound (EADDRINUSE) and
+    # the old one-shot start then left the dashboard down. Retry forever.
+    (
+        while true; do
+            node --no-warnings --experimental-sqlite "$DASH_MJS" \
+                "$DATA_DIR/opencode.db" 5099 0.0.0.0 /workspace/scripts/audit-config.sh >>/tmp/dashboard.log 2>&1
+            printf '[web-entrypoint] dashboard exited; retrying in 2s (log /tmp/dashboard.log)\n' >&2
+            sleep 2
+        done
+    ) &
+    printf '[web-entrypoint] dashboard supervisor started on :5099 (log /tmp/dashboard.log)\n' >&2
 else
     printf '[web-entrypoint] dashboard.mjs not found; skipping dashboard\n' >&2
 fi

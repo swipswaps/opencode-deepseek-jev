@@ -390,7 +390,8 @@ function apiSettingsAction(doc) {
   };
 }
 
-const SETTINGS_KEY_REQUEST = fileURLToPath(new URL("../data/observability/key-request.json", import.meta.url));
+const SETTINGS_KEY_REQUEST = process.env.KEY_REQUEST_PATH ||
+  fileURLToPath(new URL("../data/observability/key-request.json", import.meta.url));
 const KEY_PREFIX = {
   anthropic: "sk-ant-", deepseek: "sk-", subq: "sk-", jev: "apikey_",
   gemini: "AIza", litellm: "sk-", opencode: "sk-", "opencode-go": "sk-",

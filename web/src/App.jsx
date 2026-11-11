@@ -126,9 +126,9 @@ function Shell({ mode, onToggleMode, canInstall, onInstall }) {
           </Typography>
           <Chip
             size="small"
-            color={live.connected ? "success" : "default"}
-            label={live.connected ? "live" : "offline"}
-            variant={live.connected ? "filled" : "outlined"}
+            color={live.connected ? "success" : live.polling ? "warning" : "default"}
+            label={live.connected ? "live" : live.polling ? "polling" : "offline"}
+            variant={live.connected || live.polling ? "filled" : "outlined"}
           />
           {live.shed && <Chip size="small" color="warning" label="paused" />}
           <Box sx={{ flexGrow: 1 }} />

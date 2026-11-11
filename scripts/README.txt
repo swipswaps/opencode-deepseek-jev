@@ -668,10 +668,13 @@ test-dashboard-ui.mjs
 test-app-playwright.py
     Real-browser (Playwright Chromium) battery for every /app hash route:
     overview, activity, sessions, todos, usability, settings. Asserts the
-    heading and key content, no page/console errors (SSE aborts ignored), no
-    page-level horizontal overflow at 1280x900 and 390x844 (tables scroll
-    inside their containers), the mobile bottom nav, the Settings typed-confirm
-    guard, and the Usability view's link to /usability. Screenshots to logs/
+    heading and key content, no page/console errors (transient transport errors
+    ignored), no page-level horizontal overflow at 1280x900 and 390x844 (tables
+    scroll inside their containers), the mobile bottom nav, the Settings
+    typed-confirm guard, and the Usability view's link to /usability. Also
+    clicks every drawer/bottom-nav item, Overview -> All sessions/Usability/
+    Provider keys, Settings -> set key (focus), and the theme toggle.
+    Screenshots to logs/
     (gitignored). Run with the host browser venv:
     ./scripts/browser-python.sh scripts/test-app-playwright.py
     (--base, --password/$OPENCODE_SERVER_PASSWORD, --headed, --json, --shots).

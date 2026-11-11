@@ -7,6 +7,7 @@ const initial = {
   todos: [],
   shed: false,
   connected: false,
+  polling: false,
   last: null,
   error: null,
 };
@@ -27,11 +28,13 @@ export function useLive() {
         todos: Array.isArray(payload.todos) ? payload.todos : s.todos,
         shed: Boolean(payload.shed),
         connected: true,
+        polling: false,
         last: Date.now(),
         error: null,
       }));
     };
 
+    let poll = null;
     const fallback = async () => {
       try {
         const [cost, activity, todos] = await Promise.all([
@@ -45,10 +48,21 @@ export function useLive() {
           cost: cost || s.cost,
           activity: Array.isArray(activity) ? activity : s.activity,
           todos: Array.isArray(todos) ? todos : s.todos,
-          last: s.last || Date.now(),
+          polling: true,
+          last: Date.now(),
         }));
       } catch {
       }
+    };
+    const startPoll = () => {
+      if (poll) return;
+      poll = setInterval(fallback, 15000);
+      fallback();
+    };
+    const stopPoll = () => {
+      if (!poll) return;
+      clearInterval(poll);
+      poll = null;
     };
 
     if (typeof EventSource !== "undefined") {
@@ -62,23 +76,26 @@ export function useLive() {
         };
         es.addEventListener("snapshot", onflow);
         es.addEventListener("delta", onflow);
-        es.onopen = () => setState((s) => ({ ...s, connected: true, error: null }));
-        es.onerror = () => setState((s) => ({ ...s, connected: false, error: "stream disconnected" }));
+        es.onopen = () => {
+          stopPoll();
+          setState((s) => ({ ...s, connected: true, error: null }));
+        };
+        es.onerror = () => {
+          setState((s) => ({ ...s, connected: false, error: "stream disconnected" }));
+          startPoll();
+        };
       } catch {
         es = null;
       }
     }
 
     fallback();
-    let poll = null;
-    if (!es) {
-      poll = setInterval(fallback, 15000);
-    }
+    if (!es) startPoll();
 
     return () => {
       closed = true;
       if (es) es.close();
-      if (poll) clearInterval(poll);
+      stopPoll();
     };
   }, []);
 
@@ -91,21 +108,28 @@ export function useRemote(path, interval = 60000) {
 
   useEffect(() => {
     let closed = false;
-    const load = async () => {
+    let timer = null;
+    let load;
+    const schedule = (ms) => {
+      if (!closed) timer = setTimeout(load, ms);
+    };
+    load = async () => {
       try {
         const next = await fetchJSON(path);
         if (closed) return;
         setData(next);
         setError(null);
+        schedule(interval);
       } catch (e) {
-        if (!closed) setError(e.message || "request failed");
+        if (closed) return;
+        setError(e.message || "request failed");
+        schedule(Math.min(interval, 5000));
       }
     };
     load();
-    const timer = setInterval(load, interval);
     return () => {
       closed = true;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [path, interval]);
 

@@ -202,6 +202,96 @@ def preflight(browser, base: str, timeout: int, creds):
             pass
 
 
+def visible_control(page, selector: str, text: str):
+    loc = page.locator(selector, has_text=text)
+    for i in range(min(loc.count(), 12)):
+        try:
+            if loc.nth(i).is_visible():
+                return loc.nth(i)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def nav_check(browser, base: str, timeout: int, width: int, height: int, creds) -> list:
+    errors = []
+    context = browser.new_context(ignore_https_errors=True, http_credentials=creds,
+                                  viewport={"width": width, "height": height}, reduced_motion="reduce")
+    page = context.new_page()
+    page.set_default_timeout(timeout)
+    page.set_default_navigation_timeout(max(timeout, 60000))
+    page.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
+    page.on("console", lambda m: errors.append("console: " + m.text)
+            if m.type == "error" and not any(k in m.text for k in IGNORE_CONSOLE) else None)
+    try:
+        page.goto(base.rstrip("/") + "/app/#settings", wait_until="domcontentloaded", timeout=max(timeout, 60000))
+        page.get_by_role("heading", name="Settings", exact=True).first.wait_for(timeout=timeout)
+        sel = ".MuiListItemButton-root" if width >= 700 else ".MuiBottomNavigationAction-root"
+        nav = [("Overview", "overview", "Overview"), ("Activity", "activity", "Activity timeline"),
+               ("Sessions", "sessions", "Sessions"), ("Todos", "todos", "Todos"),
+               ("Usability", "usability", "Usability"), ("Settings", "settings", "Settings")]
+        for label, view, heading in nav:
+            el = visible_control(page, sel, label)
+            if el is None:
+                errors.append("nav: no visible %r control" % label)
+                continue
+            el.click()
+            page.get_by_role("heading", name=heading, exact=True).first.wait_for(timeout=timeout)
+            h = page.evaluate("location.hash")
+            if h != "#" + view:
+                errors.append("nav %s: hash %r" % (label, h))
+        setb = page.get_by_role("button", name="set key", exact=True).first
+        if setb.count() == 0:
+            errors.append("settings: set key button missing")
+        else:
+            setb.click()
+            page.wait_for_timeout(300)
+            active = page.evaluate("document.activeElement && document.activeElement.id")
+            if active != "new-key":
+                errors.append("settings: set key did not focus new-key (active=%r)" % active)
+        page.goto(base.rstrip("/") + "/app/#overview", wait_until="domcontentloaded", timeout=max(timeout, 60000))
+        page.get_by_role("heading", name="Overview", exact=True).first.wait_for(timeout=timeout)
+        pb = page.get_by_role("button", name="Provider keys", exact=True).first
+        if pb.count() == 0:
+            errors.append("overview: Provider keys button missing")
+        else:
+            pb.click()
+            page.get_by_role("heading", name="Settings", exact=True).first.wait_for(timeout=timeout)
+            if page.evaluate("location.hash") != "#settings":
+                errors.append("overview: Provider keys did not navigate to settings")
+        page.goto(base.rstrip("/") + "/app/#overview", wait_until="domcontentloaded", timeout=max(timeout, 60000))
+        page.get_by_role("heading", name="Overview", exact=True).first.wait_for(timeout=timeout)
+        for label, heading in (("All sessions", "Sessions"), ("Usability", "Usability")):
+            b = page.get_by_role("button", name=label, exact=True).first
+            if b.count() == 0:
+                errors.append("overview: %r button missing" % label)
+            else:
+                b.click()
+                page.get_by_role("heading", name=heading, exact=True).first.wait_for(timeout=timeout)
+                if page.evaluate("location.hash") != "#" + heading.lower():
+                    errors.append("overview: %r did not navigate" % label)
+                page.goto(base.rstrip("/") + "/app/#overview", wait_until="domcontentloaded", timeout=max(timeout, 60000))
+                page.get_by_role("heading", name="Overview", exact=True).first.wait_for(timeout=timeout)
+        before = page.evaluate("document.querySelector('meta[name=theme-color]') && document.querySelector('meta[name=theme-color]').content")
+        page.get_by_role("button", name="Toggle light or dark theme").first.click()
+        page.wait_for_timeout(250)
+        after = page.evaluate("document.querySelector('meta[name=theme-color]') && document.querySelector('meta[name=theme-color]').content")
+        if before == after:
+            errors.append("theme toggle did not change theme-color (%r)" % before)
+    except Exception as e:  # noqa: BLE001
+        errors.append("nav exception: " + str(e))
+    finally:
+        try:
+            page.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            context.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return errors
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -272,6 +362,14 @@ def main() -> int:
                         context.close()
                     except Exception:  # noqa: BLE001
                         pass
+            for width, height, label in ((1280, 900, "desktop"), (390, 844, "mobile")):
+                errs = nav_check(browser, args.base, args.timeout, width, height, creds)
+                results.append({"id": "nav:" + label, "mode": label, "width": width,
+                                "ok": not errs, "errors": errs, "overflow_px": 0, "shot": ""})
+                if not args.json:
+                    print("  %-4s nav:%s" % ("PASS" if not errs else "FAIL", label), flush=True)
+                    for e in errs:
+                        print("       - %s" % e, flush=True)
         except KeyboardInterrupt:
             interrupted = True
             print("\ninterrupted: closing browser", file=sys.stderr)
