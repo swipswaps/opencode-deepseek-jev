@@ -42,6 +42,8 @@ plane.
 
 ## 2026-11-11 — settings controls + UX pass
 
+**Harness hardening (P0):** independent review, evidence, handoff and guard-health gates — see `docs/HARNESS-HARDENING.md`.
+
 **Settings is now a control surface, not a runbook.** `/settings` (classic) and
 `/app/#settings` (MUI) show one redacted provider matrix — config block, env-key
 presence (name only), `auth.json` entry, model policy, decision-router state —

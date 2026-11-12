@@ -1416,6 +1416,27 @@ review-diff.sh
     installed — never FAIL, because a missing optional tool must not block a
     push (RULES #37). Exit 0 clean or SKIP, 2 findings.
 
+review-gate.py
+    Independent adversarial review of the redacted working-tree diff by a separate
+    tool-less model. --run stores a PASS/FAIL artifact keyed by the diff SHA;
+    --gate fails MED/HIGH without a PASS; docs-only LOW may skip.
+
+evidence-gate.py
+    Capture a claim's command, rc, stdout/stderr and optional screenshot;
+    --check --require fails on a missing/failed claim (SKIP is not PASS).
+
+handoff-validate.py
+    Validate the newest docs/HANDOFF-*.md against docs/handoff.schema.json and
+    record a SHA-256; --write updates, --check fails a stale hash.
+
+guard-health.sh
+    Fail closed on a missing/dangling guard, missing assistant-output hook, no
+    strict mode or irreversible rule, a failed self-test, or a loaded instance
+    older than the file. Preflight STOPs on it.
+
+hardening-gate.sh
+    Run review + evidence + handoff + guard health; the closeout requires it.
+
 verify-password-drift.sh
     4-gate verification that OPENCODE_SERVER_PASSWORD handling is consistent
     across web.sh, .env.local and the running container.

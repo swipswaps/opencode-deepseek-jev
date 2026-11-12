@@ -34,6 +34,7 @@
 // so the file keeps no escaped regex literals.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 // The observability directory is anchored to THIS file's location, not to the
@@ -52,6 +53,17 @@ const DEFAULT_OBS = fileURLToPath(new URL("../../data/observability/", import.me
 // is free. OPT-IN: it uploads command text to api.subq.ai, so it runs only
 // with OPENCODE_SEMANTIC_GUARD=on. guard-classify.py also redacts secret
 // shapes before the request.
+
+// Content hash of this file, logged with "loaded" so guard-health can prove the
+// in-memory instance matches disk (mtime alone can be forged/stale).
+const SELF_SHA = (() => {
+  try {
+    return createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex");
+  } catch {
+    return "";
+  }
+})();
+
 const REPO = fileURLToPath(new URL("../../", import.meta.url)).replace(/\/+$/, "");
 const SEM_SCRIPT = REPO + "/scripts/guard-classify.py";
 const SEM_ENV = REPO + "/.env.local";
@@ -82,6 +94,8 @@ const RULES = [
     fix: "read only inside /workspace; ask the operator for secrets", rule: "security" },
   { name: "config-dump", pattern: "(?:^|[;&|()]\\s*)(?:[^\\s;&|()]*/)?(?:sudo\\s+)?(?:npx\\s+)?opencode\\s+debug\\s+config\\b", sev: "block",
     fix: "resolved config substitutes {env:...} with plaintext; never dump it into a logged terminal — use provider metadata or a redacted view", rule: "security" },
+  { name: "irreversible", pattern: "(?:^|[;&|()]\\s*)(?:dd|mkfs(?:\\.[a-z0-9]+)?|shutdown|reboot|iptables\\s+-F|docker\\s+system\\s+prune|git\\s+reset\\s+--hard|git\\s+clean\\s+(?![^\\n]*(?:-[A-Za-z]*n[A-Za-z]*|--dry-run))[^\\n]*?(?:--force|-[A-Za-z]*f[A-Za-z]*)|chmod\\s+-R\\s+(?:0?777)\\b|truncate\\s+-s\\s*0)\\b", sev: "block", raw: true,
+    fix: "use a reversible form or ask the operator for explicit approval (typed confirmation)", rule: "#97" },
   { name: "sed", pattern: "(?:^|[;&|()]\\s*)sed\\s", sev: "block",
     fix: "python3, then awk, then grep/find; cat/curl to read — prefer all of these before sed", rule: "#7" },
   { name: "rm -rf", pattern: "(?:^|[;&|()]\\s*)rm\\s+(?:-[A-Za-z]*r[A-Za-z]*f|-[A-Za-z]*f[A-Za-z]*r|-[rR]\\s+-[fF]|-[fF]\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)\\b", sev: "block",
@@ -315,11 +329,11 @@ function processCode(code, mode) {
     if (!hits.length) return line;
     hits.forEach((h) => patterns.add(h.name));
     let next = line;
-    if (mode === "block" && hits.some((h) => h.sev === "fix")) {
+    if ((mode === "block" || mode === "strict") && hits.some((h) => h.sev === "fix")) {
       const r = remediate2devnull(next);
       if (r.count) { next = r.cmd; removed += r.count; changed = true; }
     }
-    const blocks = mode === "block" ? hits.filter((h) => h.sev === "block") : [];
+    const blocks = (mode === "block" || mode === "strict") ? hits.filter((h) => h.sev === "block") : [];
     if (blocks.length) {
       next = "[blacklist-guard blocked " + blocks.map((h) => h.name).join(", ") +
         " - use " + blocks.map((h) => h.fix).join("; ") + "]";
@@ -341,7 +355,7 @@ export function remediateProse(text, mode = "block") {
     return "```" + lang + "\n" + r.code + "```";
   });
   out = out.replace(INLINE_RE, (m, code) => {
-    if (mode !== "block") return m;
+    if (mode !== "block" && mode !== "strict") return m;
     let hits;
     try { hits = inspect(code).filter((h) => h.sev === "block"); } catch { return m; }
     if (!hits.length) return m;
@@ -355,7 +369,7 @@ export function remediateProse(text, mode = "block") {
 
 function mode() {
   const m = (process.env.OPENCODE_BLACKLIST_GUARD || "block").toLowerCase();
-  return (m === "off" || m === "warn") ? m : "block";
+  return (m === "off" || m === "warn" || m === "strict") ? m : "block";
 }
 
 export const BlacklistGuard = async ({ client, directory }, options) => {
@@ -399,7 +413,7 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
   // "guard idle" look identical on disk. Appended once per process.
   if (!globalThis.__opencodeBlacklistGuardLoaded) {
     globalThis.__opencodeBlacklistGuardLoaded = true;
-    record("loaded", "blacklist-guard registered", { log: GUARD_LOG, mode: mode() });
+    record("loaded", "blacklist-guard registered", { log: GUARD_LOG, mode: mode(), sha: SELF_SHA });
   }
 
   // Learned rules (scripts/learn-rules.py --write): shapes with a high
@@ -494,11 +508,17 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
       try {
         hits = inspect(command);
       } catch {
+        if (m === "strict") {
+          await log("error", "guard failed closed (strict)", {});
+          record("block", "guard internal error; strict fail-closed", {});
+          throw new Error("blacklist-guard failed closed (strict): inspect error");
+        }
         return; // fail open
       }
       if (!hits.length) return;
 
-      const blockers = m === "block" ? hits.filter((h) => h.sev === "block") : [];
+      const blocking = m === "block" || m === "strict";
+      const blockers = blocking ? hits.filter((h) => h.sev === "block") : [];
       const warners = hits.filter((h) => h.sev === "warn");
 
       if (blockers.length) {
@@ -517,7 +537,7 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
       // Semantic layer: OPT-IN. It uploads the command text to a third-party
       // classifier (api.subq.ai) before execution, which is a confidentiality
       // risk, so it runs only when the operator sets OPENCODE_SEMANTIC_GUARD=on.
-      if (m === "block" && process.env.OPENCODE_SEMANTIC_GUARD === "on") {
+      if (blocking && process.env.OPENCODE_SEMANTIC_GUARD === "on") {
         let sv = { block: false };
         try { sv = semanticVerdict(command); } catch { /* fail open */ }
         if (sv.block) {
@@ -533,7 +553,7 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         }
       }
 
-      if (m === "block" && hits.some((h) => h.sev === "fix")) {
+      if (blocking && hits.some((h) => h.sev === "fix")) {
         const r = remediate2devnull(output.args.command);
         if (r.count) {
           output.args.command = r.cmd;
@@ -560,7 +580,7 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
       if (m === "off") return;
       try {
         const r = remediateProse(String((output && output.text) || ""), m);
-        if (m === "block") {
+        if (m === "block" || m === "strict") {
           if (!r.changed) return;
           output.text = r.text;
           const detail = { patterns: r.patterns, removed: r.removed, blocked: r.blocked, part: input && input.partID };

@@ -1810,5 +1810,55 @@
       "./scripts/key-request-install.sh --print",
       "./scripts/key-request-install.sh --uninstall"
     ]
+  },
+  {
+    "id": "review-gate",
+    "title": "Independent adversarial review gate",
+    "where": "container",
+    "purpose": "Redacted working-tree diff to a separate tool-less model; a PASS/FAIL artifact keyed by the diff SHA; MED/HIGH require PASS, docs-only LOW may skip.",
+    "commands": [
+      "python3 scripts/review-gate.py --run --claim 'short description'",
+      "python3 scripts/review-gate.py --gate"
+    ]
+  },
+  {
+    "id": "evidence-gate",
+    "title": "Runtime evidence capture",
+    "where": "container",
+    "purpose": "Capture a claim's command, rc, stdout/stderr and optional DOM/screenshot; --check --require fails on missing or failed proof (SKIP is not PASS).",
+    "commands": [
+      "python3 scripts/evidence-gate.py --claim gates -- ./scripts/lint.sh",
+      "python3 scripts/evidence-gate.py --check --require gates"
+    ]
+  },
+  {
+    "id": "handoff-validate",
+    "title": "Handoff schema + SHA-256",
+    "where": "container",
+    "purpose": "Validate the newest docs/HANDOFF-*.md against docs/handoff.schema.json and record a SHA-256; a stale hash is a FAIL.",
+    "commands": [
+      "python3 scripts/handoff-validate.py --write",
+      "python3 scripts/handoff-validate.py --check"
+    ]
+  },
+  {
+    "id": "guard-health",
+    "title": "Guard health (fail closed)",
+    "where": "container",
+    "purpose": "Fail closed on a missing/dangling guard, missing assistant-output hook, no strict mode or irreversible rule, a failed self-test, or a loaded instance older than the file. Preflight STOPs on it.",
+    "commands": [
+      "bash scripts/guard-health.sh --check",
+      "bash scripts/guard-health.sh --self-test"
+    ]
+  },
+  {
+    "id": "hardening-gate",
+    "title": "Hardening gate (P0 umbrella)",
+    "where": "container",
+    "purpose": "Run independent review, evidence, handoff validation and guard health; the closeout gate requires it.",
+    "commands": [
+      "bash scripts/hardening-gate.sh",
+      "bash scripts/hardening-gate.sh --self-test"
+    ]
   }
 ]

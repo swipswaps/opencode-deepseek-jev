@@ -177,6 +177,23 @@ def tracked_missing() -> list[str]:
     return missing
 
 
+def hardening_result():
+    # hardening-gate is a leaf (never calls closeout). review-gate --gate exits
+    # 0 for PASS/LOW-skip and 2 for FAIL/missing; step() treats rc!=0 as FAIL.
+    # The --gate path never exits 3 (that is --run with no provider).
+    p = REPO / "scripts" / "hardening-gate.sh"
+    if not p.is_file():
+        return "SKIP", "hardening-gate.sh missing"
+    try:
+        pr = subprocess.Popen(["bash", str(p)], cwd=str(REPO),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = pr.communicate(timeout=180)
+        lines = (out + err).decode("utf-8", "replace").strip().splitlines()
+        return ("PASS" if pr.returncode == 0 else "FAIL"), (lines[-1] if lines else "")
+    except Exception as e:  # noqa: BLE001
+        return "FAIL", "hardening-gate error: %s" % e
+
+
 def evaluate(base: str) -> dict:
     status_paths = changed_paths()
     commit_ts = 0
@@ -216,6 +233,7 @@ def evaluate(base: str) -> dict:
         and DOC.read_text(encoding="utf-8", errors="replace").count("https://") >= 5
     root_ok = pathlib.Path.cwd().resolve() == REPO.resolve()
 
+    hard_status, hard_evidence = hardening_result()
     items = [
         {"id": "root", "question": "Were build/restart commands run from the repo root (or via scripts/web-build-restart.sh)?",
          "status": "PASS" if root_ok else "WARN",
@@ -249,6 +267,9 @@ def evaluate(base: str) -> dict:
          "status": "PASS" if citations_ok else "FAIL",
          "evidence": str(DOC),
          "next": "restore docs/USABILITY-TESTING.md §8 Verification log"},
+        {"id": "hardening", "question": "Does hardening-gate pass (review/evidence/handoff/guard)?",
+         "status": hard_status, "evidence": hard_evidence,
+         "next": "./scripts/hardening-gate.sh (review-gate --run; evidence-gate --claim; handoff-validate --write; restart to load the guard)"},
         {"id": "host", "question": "Was the host checkout synced, rebuilt, and restarted?",
          "status": "WARN",
          "evidence": "host-specific; the sandbox cannot see /home/owner/...",

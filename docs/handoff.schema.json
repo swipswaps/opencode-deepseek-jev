@@ -1,0 +1,13 @@
+{
+  "$comment": "Required sections for a durable docs/HANDOFF-<date>.md (explainer #6). Matching is substring-based so headings may carry qualifiers. handoff-validate.py also records a SHA-256.",
+  "file_glob": "docs/HANDOFF-*.md",
+  "required_sections": [
+    "## TL;DR",
+    "## Answers checked",
+    "## What changed",
+    "## Outstanding work",
+    "## Rollback",
+    "## Next unit",
+    "## Caveats"
+  ]
+}

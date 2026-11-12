@@ -241,6 +241,17 @@ except Exception:
         esac
     fi
 
+    # Guard health (P0): a missing/dangling/stale guard is a STOP.
+    if [ -x "$REPO/scripts/guard-health.sh" ]; then
+        if "$REPO/scripts/guard-health.sh" --check > /tmp/preflight-guard-health 2>&1; then
+            good "guard health (strict, irreversible, output hook, loaded)"
+        else
+            crit "guard health: $(tail -1 /tmp/preflight-guard-health)"
+        fi
+    else
+        crit "guard-health.sh missing"
+    fi
+
     local ready=1
     [ "$CRIT" -gt 0 ] && ready=0
 

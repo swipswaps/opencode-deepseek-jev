@@ -1187,6 +1187,13 @@ PY
         printf 'ts=%s level=WARN status=SKIP script catalog (no git worktree)\n' "$(date -u +%H:%M:%S)"
     fi
 
+    if bash "$REPO/scripts/hardening-gate.sh" --self-test > "$work/hardening_st.txt" 2>&1; then
+        ok 'hardening-gate: self-test (review/evidence/handoff/guard)'
+    else
+        bad 'hardening-gate: self-test'
+        tail -n 3 "$work/hardening_st.txt"
+    fi
+
     rm -f "$work"/*.txt "$work"/*.json "$work/live.db"
     rmdir "$work"
 

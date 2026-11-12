@@ -24,7 +24,8 @@ import sys
 ALLOW = {
     "AI", "API", "CD", "CI", "CLI", "CPU", "CSV", "DB", "DNS", "GPU", "HTML",
     "HTTP", "HTTPS", "ID", "IP", "JSON", "LLM", "MIT", "NOTE", "NO", "OK", "OS",
-    "PDF", "PR", "RAM", "SQL", "SSH", "TLS", "TODO", "TUI", "UI", "URL", "UTC",
+    # SHA: deliberate exception for the hash name used in every handoff/review.
+    "PDF", "PR", "RAM", "SHA", "SQL", "SSH", "TLS", "TODO", "TUI", "UI", "URL", "UTC",
     "XML", "YAML", "YES",
 }
 
