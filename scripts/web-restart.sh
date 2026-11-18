@@ -59,10 +59,34 @@ except Exception:
     pass'
 }
 
+dash_password() {
+    local p="${OPENCODE_SERVER_PASSWORD:-}"
+    if [ -z "$p" ] && [ -f "$REPO_DIR/.env.local" ]; then
+        p=$(grep -E '^[[:space:]]*(export[[:space:]]+)?OPENCODE_SERVER_PASSWORD=' "$REPO_DIR/.env.local" | tail -n 1)
+        p=${p#*=}
+        p=${p%$'\r'}
+        p=${p%\"}; p=${p#\"}
+        p=${p%\'}; p=${p#\'}
+    fi
+    printf '%s' "$p"
+}
+
+dash_curl() {
+    local url="$1" pass esc
+    pass=$(dash_password)
+    if [ -z "$pass" ]; then
+        curl -k -s --max-time 8 "$url"
+        return
+    fi
+    esc=${pass//\\/\\\\}
+    esc=${esc//\"/\\\"}
+    printf 'user = "opencode:%s"\n' "$esc" | curl -k -s --max-time 8 --config - "$url"
+}
+
 probe_rev() {
     local out
-    out=$(curl -k -s --max-time 8 https://127.0.0.1:5099/api/rev 2>&1 | rev_json)
-    [ -n "$out" ] || out=$(curl -s --max-time 8 http://127.0.0.1:5099/api/rev 2>&1 | rev_json)
+    out=$(dash_curl https://127.0.0.1:5099/api/rev | rev_json)
+    [ -n "$out" ] || out=$(dash_curl http://127.0.0.1:5099/api/rev | rev_json)
     printf '%s' "$out"
 }
 

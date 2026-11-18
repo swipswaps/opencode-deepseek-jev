@@ -8,6 +8,7 @@ services:
       - /home/owner/Documents/c014e170dbcae936/notes:/subvox-notes:ro
       - /home/owner/.config/opencode:/home/node/.config/opencode:rw
       - /home/owner/Documents/2282af3557819803/repo/production-local-rag:/rag:ro
+      - /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839:/audit:rw
       - /dev/null:/workspace/.env.local:ro
       - /dev/null:/workspace/docker/litellm-db.env:ro
       - /home/owner/.config/opencode/empty-certs:/workspace/docker/certs:ro
@@ -24,6 +25,7 @@ services:
       - /home/owner/Documents/c014e170dbcae936/notes:/subvox-notes:ro
       - /home/owner/.config/opencode:/home/node/.config/opencode:rw
       - /home/owner/Documents/2282af3557819803/repo/production-local-rag:/rag:ro
+      - /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839:/audit:rw
       - /dev/null:/workspace/.env.local:ro
       - /dev/null:/workspace/docker/litellm-db.env:ro
       - /home/owner/.config/opencode/empty-certs:/workspace/docker/certs:ro
