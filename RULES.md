@@ -75,6 +75,7 @@ number and a constraint overlap, both are listed.
 | #96 | **Expand every acronym/abbreviation on first mention.** Answers, docs, alerts, runbooks and handoffs define the term once — `Service Level Objective (SLO)` — then use the short form; long docs carry a glossary. Code identifiers, commands and paths keep their exact spelling. A bare three-letter acronym (TLA) is not an answer. `scripts/acronym-lint.py` enforces it on a file or stdin (`--strict` disables the common allowlist); the `explain-first` skill carries the writing rules. | this session; `acronym-lint.py`; `explain-first` skill |
 | #97 | **Hardening (P0).** `review-gate` (redacted diff; PASS), `evidence-gate` (proof), `handoff-validate` (schema + SHA), `guard-health` (strict, irreversible; preflight STOP); `hardening-gate` runs them. | `hardening-gate.sh` |
 | #98 | **No silent critical failure.** A step the harness depends on (guard/plugin install, credential or certificate install, gate artifact) is checked (`if ! cp ...; then exit 1`), verified (`cmp -s`, `test -f`) and **fails closed**; never `|| true` it. The 2026-11-20 guard outage was exactly this class: `cp -f` onto a dangling symlink failed, the entrypoint continued, and `sed`/`2>/dev/null` ran unblocked. Optional steps may warn, never fail silently. | `docker/web-entrypoint.sh`; `guard-health.sh` |
+| #99 | **A copy-paste command carries resolved values, never placeholders.** `<run-id>`, `<your-key>`, `YOUR_TOKEN`, or `...` in a shell block is a delivery defect: the operator pastes it and the shell fails (`-bash: run-id: No such file or directory`; chat DB 2026-11-20, assistant part `prt_1fb3ed842001YVny3TQwCtYIyV`). Resolve the value with a lookup (`gh run list -R owner/repo --limit 1 --json databaseId --jq '.[0].databaseId'`) or print the lookup command first; if the flag does not exist (`gh run watch --latest`), do not invent a placeholder path. Enforced by `scripts/check-placeholders.sh` (self-test plus a cursor over assistant shell fences in the chat DB). | `scripts/check-placeholders.sh`; `scripts/check-placeholders.py` |
 
 ## Substitutions for the blacklist
 
@@ -245,6 +246,10 @@ From `scripts/README.txt`:
 - Use a distinct closing delimiter per nesting level (for example
   `SCRIPT_EOF`, `PATCH_EOF`, `WATCH_EOF`). A delimiter must appear on a line
   of its own with no leading whitespace.
+- Every command block is paste-ready: no `<token>`, `YOUR_TOKEN`, or `...`
+  argument. Resolve unknown IDs inline (`$(gh run list -R owner/repo --limit 1
+  --json databaseId --jq '.[0].databaseId')`) and let rule #99's gate
+  (`scripts/check-placeholders.sh`) catch regressions.
 
 ## Interaction contract
 
