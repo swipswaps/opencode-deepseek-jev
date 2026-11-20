@@ -71,21 +71,36 @@ fi
 # subprocess.run with no telemetry (proven: no guard.log heartbeat).
 GUARD_SRC="/workspace/.opencode/plugins/blacklist-guard.js"
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
-if [ -f "$GUARD_SRC" ]; then
-    mkdir -p "$GUARD_DIR"
-    # $HOME/.config/opencode is the HOST config bind-mounted into this
-    # container. A symlink to the container-only /workspace path is DANGLING on
-    # the host (proven twice), so COPY the plugin instead: a regular file is
-    # valid in both namespaces and survives container restarts.
-    RESOLVED_GUARD="$(readlink -f "$GUARD_SRC" 2>&1)"
-    if [ -n "$RESOLVED_GUARD" ] && [ -f "$RESOLVED_GUARD" ]; then
-        cp -f "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"
-        chmod 0644 "$GUARD_DIR/blacklist-guard.js" 2>&1 || true
-        printf '[web-entrypoint] blacklist-guard copied into %s\n' "$GUARD_DIR" >&2
-    else
-        printf '[web-entrypoint] WARN: cannot resolve %s; guard not linked\n' "$GUARD_SRC" >&2
-    fi
+if [ ! -f "$GUARD_SRC" ]; then
+    printf '[web-entrypoint] FAIL: %s missing; refusing to serve without the guard\n' "$GUARD_SRC" >&2
+    exit 1
 fi
+if ! mkdir -p "$GUARD_DIR"; then
+    printf '[web-entrypoint] FAIL: cannot create %s; refusing to serve without the guard\n' "$GUARD_DIR" >&2
+    exit 1
+fi
+# $HOME/.config/opencode is the HOST config bind-mounted into this container.
+# A symlink to the container-only /workspace path is DANGLING on the host, and
+# cp -f onto a dangling link fails; so replace any stale link with a real copy
+# and FAIL CLOSED if the copy cannot be verified (RULES #98).
+RESOLVED_GUARD="$(readlink -f "$GUARD_SRC" 2>&1)"
+if [ -z "$RESOLVED_GUARD" ] || [ ! -f "$RESOLVED_GUARD" ]; then
+    printf '[web-entrypoint] FAIL: cannot resolve %s; refusing to serve without the guard\n' "$GUARD_SRC" >&2
+    exit 1
+fi
+if [ -L "$GUARD_DIR/blacklist-guard.js" ]; then rm -f "$GUARD_DIR/blacklist-guard.js"; fi
+if ! cp -f "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"; then
+    printf '[web-entrypoint] FAIL: could not install blacklist-guard; refusing to serve\n' >&2
+    exit 1
+fi
+if ! cmp -s "$RESOLVED_GUARD" "$GUARD_DIR/blacklist-guard.js"; then
+    printf '[web-entrypoint] FAIL: blacklist-guard copy did not verify; refusing to serve\n' >&2
+    exit 1
+fi
+if ! chmod 0644 "$GUARD_DIR/blacklist-guard.js"; then
+    printf '[web-entrypoint] WARN: could not chmod the guard copy (continuing)\n' >&2
+fi
+printf '[web-entrypoint] blacklist-guard copied and verified into %s\n' "$GUARD_DIR" >&2
 
 # Same root-cause fix for the process SKILLs: interactive sessions open at
 # $HOME/.opencode, so the project-scoped `{skill,skills}/**/SKILL.md` glob
@@ -101,8 +116,11 @@ for SKILL_SRC in /workspace/.opencode/skills/*; do
     # with real files so the host sessions load the skills too.
     if [ -L "$SKILL_DIR/$skill" ]; then rm -f "$SKILL_DIR/$skill"; fi
     mkdir -p "$SKILL_DIR/$skill"
-    cp -a "$SKILL_SRC/." "$SKILL_DIR/$skill/" 2>&1 || true
-    printf '[web-entrypoint] skill %s copied into %s\n' "$skill" "$SKILL_DIR" >&2
+    if cp -a "$SKILL_SRC/." "$SKILL_DIR/$skill/"; then
+        printf '[web-entrypoint] skill %s copied into %s\n' "$skill" "$SKILL_DIR" >&2
+    else
+        printf '[web-entrypoint] WARN: skill %s copy failed (optional; continuing)\n' "$skill" >&2
+    fi
 done
 
 # Refuse to serve unauthenticated. Set OPENCODE_SERVER_PASSWORD in .env.local;
