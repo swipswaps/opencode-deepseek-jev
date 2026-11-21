@@ -674,7 +674,8 @@ chromium-video-audit.sh
     --revert; --verify re-checks hardware decode after a restart. Stock Linux
     Chromium refuses VA-API for encrypted configs (a build-time gate, not a
     runtime flag), so DRM video stays software-decoded; a patched/other player
-    can differ. --json, --self-test.
+    can differ. Discovery scans /proc by comm (no pgrep dependency). --json,
+    --self-test.
 
 chromium-video-priority.sh
     RUN ON THE HOST. Finds the processes that actually decode video (Widevine
@@ -688,7 +689,9 @@ chromium-video-priority.sh
     migrate a PID out of session-2.scope and the user manager does not apply
     CPUWeight to transient scopes, so effective priority is root-only. The
     no-root fallback is to renice a same-user competitor (e.g. opencode) +10.
-    --self-test.
+    Discovery scans /proc by comm (no pgrep dependency) and splits argv on NUL;
+    --nice/--weight/--sample are validated, and exit 2 means "no video process
+    found" (not "nothing to do"). --self-test.
 
 ux-smoke.py
     Live UX smoke for the six :5099 pages through the host browser over CDP

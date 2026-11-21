@@ -40,18 +40,32 @@ SELF=$(readlink -f "$0")
 say() { printf '%s\n' "$*"; }
 head2() { printf '\n== %s ==\n' "$*"; }
 
+# One argv entry per line. `tr '\0'` is not portable here; GNU tr needs the
+# octal '\000'. The previous form (`tr ' ' '\n' | tr -d '\000'`) deleted the
+# NUL separators and silently joined every argument into one string.
+nul_lines() { tr '\000' '\n'; }
+argv_lines() { nul_lines < "/proc/$1/cmdline"; }
+
+# Scan /proc by comm instead of matching a build-specific path with pgrep:
+# pgrep is not installed everywhere, and the browser path differs by distro.
 chromium_pids() {
-  pgrep -f '/usr/lib64/chromium-browser/chromium-browser' || true
+  local d p comm
+  for d in /proc/[0-9]*; do
+    p=${d##*/}
+    test -r "$d/comm" || continue
+    comm=$(cat "$d/comm") || continue
+    case "$comm" in
+      *chromium*|*chrome*) printf '%s\n' "$p" ;;
+    esac
+  done
 }
 
-cmdline_of() {
-  tr ' ' '\n' < "/proc/$1/cmdline" | tr -d '\000'
-}
+is_int() { [[ ${1:-} =~ ^-?[0-9]+$ ]]; }
 
 cdm_pid() {
   local p
   for p in $(chromium_pids); do
-    if cmdline_of "$p" | grep -qa 'CdmServiceBroker'; then
+    if argv_lines "$p" | grep -qa 'CdmServiceBroker'; then
       printf '%s\n' "$p"
       return 0
     fi
@@ -62,7 +76,7 @@ cdm_pid() {
 gpu_pid() {
   local p
   for p in $(chromium_pids); do
-    if cmdline_of "$p" | grep -qa -- '--type=gpu-process'; then
+    if argv_lines "$p" | grep -qa -- '--type=gpu-process'; then
       printf '%s\n' "$p"
       return 0
     fi
@@ -73,7 +87,7 @@ gpu_pid() {
 renderer_pids() {
   local p
   for p in $(chromium_pids); do
-    if cmdline_of "$p" | grep -qa -- '--type=renderer'; then
+    if argv_lines "$p" | grep -qa -- '--type=renderer'; then
       printf '%s\n' "$p"
     fi
   done
@@ -130,6 +144,8 @@ load_targets() {
   test -n "$c" && TARGETS+=("cdm $c")
   test -n "$g" && TARGETS+=("gpu $g")
   test -n "$r" && TARGETS+=("renderer $r")
+  test "${#TARGETS[@]}" -gt 0 || return 2
+  return 0
 }
 
 emit_targets() {
@@ -166,7 +182,7 @@ plan() {
     cg=$(cgroup_of "$p")
     printf 'target %-9s pid=%-8s nice=%-3s cgroup=%s weight=%s\n' \
       "$role" "$p" "$(nice_of "$p")" "$cg" "$(cgroup_weight "$cg")"
-    printf '  would run: renice -n %s -p <each of %s threads>\n' "$NICE" "$(tids_of "$p" | wc -l)"
+    printf '  would run: renice -n %s -p (all %s threads)\n' "$NICE" "$(tids_of "$p" | wc -l)"
   done < <(emit_targets)
   if test "$WEIGHT" -gt 0; then
     while read -r cg; do
@@ -274,6 +290,16 @@ do_selftest() {
   fi
   printf '#!/bin/sh\n' > "$tmp/s"
   if bash -n "$tmp/s"; then printf 'PASS bash -n fixture\n'; else printf 'FAIL fixture\n'; rc=1; fi
+  if test "$(printf 'a\000b\000c\000' | nul_lines | wc -l)" -eq 3; then
+    printf 'PASS argv NUL split\n'
+  else
+    printf 'FAIL argv NUL split\n'; rc=1
+  fi
+  if is_int -10 && is_int 7 && is_int 0 && ! is_int x && ! is_int 1-2; then
+    printf 'PASS int validation\n'
+  else
+    printf 'FAIL int validation\n'; rc=1
+  fi
   rm -f "$tmp/cpu" "$tmp/state" "$tmp/s"
   rmdir "$tmp"
   return "$rc"
@@ -301,9 +327,27 @@ main() {
     shift
   done
 
+  if ! is_int "$NICE" || test "$NICE" -lt -20 || test "$NICE" -gt 19; then
+    printf 'bad --nice %s (want -20..19)\n' "$NICE"
+    return 3
+  fi
+  if ! is_int "$WEIGHT" || test "$WEIGHT" -lt 0 || test "$WEIGHT" -gt 10000; then
+    printf 'bad --weight %s (want 0..10000)\n' "$WEIGHT"
+    return 3
+  fi
+  if ! is_int "$SAMPLE" || test "$SAMPLE" -lt 1 || test "$SAMPLE" -gt 60; then
+    printf 'bad --sample %s (want 1..60)\n' "$SAMPLE"
+    return 3
+  fi
+
   case "$want" in
     selftest) do_selftest; return $? ;;
-    *) load_targets ;;
+    *)
+      load_targets || {
+        printf 'no chromium video processes found (scanned /proc by comm)\n'
+        return 2
+      }
+      ;;
   esac
 
   case "$want" in

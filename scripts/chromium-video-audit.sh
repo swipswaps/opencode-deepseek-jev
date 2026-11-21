@@ -16,7 +16,7 @@
 # says so instead of promising a flag fix that cannot work.
 #
 # The decode evidence is the kernel's own counter:
-#   /proc/<gpu-pid>/fdinfo/<fd>  drm-engine-dec: <ns>
+#   /proc/PID/fdinfo/FD  drm-engine-dec: ns
 # A nonzero delta during playback means the VCN decode engine is working.
 # Renderer thread names (VaapiDecoder / VideoDecodeThread) corroborate it.
 #
@@ -55,8 +55,23 @@ json_escape() {
 
 # ---- discovery ------------------------------------------------------------
 
+# One argv entry per line. `tr '\0'` is not portable here; GNU tr needs the
+# octal '\000'.
+nul_lines() { tr '\000' '\n'; }
+argv_lines() { nul_lines < "/proc/$1/cmdline"; }
+
+# Scan /proc by comm instead of matching a build-specific path with pgrep:
+# pgrep is not installed everywhere, and the browser path differs by distro.
 chromium_pids() {
-  pgrep -f '/usr/lib64/chromium-browser/chromium-browser' || true
+  local d p comm
+  for d in /proc/[0-9]*; do
+    p=${d##*/}
+    test -r "$d/comm" || continue
+    comm=$(cat "$d/comm") || continue
+    case "$comm" in
+      *chromium*|*chrome*) printf '%s\n' "$p" ;;
+    esac
+  done
 }
 
 main_pid() {
@@ -101,7 +116,7 @@ proc_status() {
 }
 
 proc_cpu_s() {
-  awk '{print ($14+$15)/100}' "/proc/$1/stat"
+  awk '{sub(/^.*\) /, ""); print ($12+$13)/100}' "/proc/$1/stat"
 }
 
 engine_values() {
@@ -176,7 +191,7 @@ section_chromium() {
     "$p" "$(proc_status "$p" VmRSS)" "$(proc_status "$p" VmSwap)" "$(proc_cpu_s "$p")"
   printf 'version=%s\n' "$("$bin" --version 2>&1 | head -n 1)"
   printf 'flags=\n'
-  tr ' ' '\n' < "/proc/$p/cmdline" | tr -d '\000' | grep -aE '^--' | awk '{print "  " $0}'
+  argv_lines "$p" | grep -aE '^--' | awk '{print "  " $0}'
   return 0
 }
 
@@ -431,7 +446,7 @@ do_verify() {
   head2 'verify (after restart)'
   local main g fd d0 d1
   main=$(main_pid) || { say 'Chromium is not running'; return 1; }
-  if tr ' ' '\n' < "/proc/$main/cmdline" | grep -qa -- '--enable-accelerated-video-decode'; then
+  if argv_lines "$main" | grep -qa -- '--enable-accelerated-video-decode'; then
     printf 'flags=AMD decode switch present\n'
   else
     printf 'flags=AMD decode switch absent (GRAPHIC_DRIVER not amd, or not restarted)\n'
@@ -465,6 +480,12 @@ do_selftest() {
     printf 'PASS engine_values\n'
     rc=0
   fi
+  if test "$(printf -- '--a\000--b\000x\000' | nul_lines | grep -c '^--')" -eq 2; then
+    printf 'PASS argv NUL split\n'
+  else
+    printf 'FAIL argv NUL split\n'
+    rc=1
+  fi
   printf '# keep\nGRAPHIC_DRIVER=default\n# tail\n' > "$tmp/conf"
   conf_set_amd "$tmp/conf" || rc=1
   if grep -q '^GRAPHIC_DRIVER=amd$' "$tmp/conf" && test "$(grep -c '^# ' "$tmp/conf")" = "2"; then
@@ -474,11 +495,15 @@ do_selftest() {
     rc=1
   fi
   printf '# no driver line here\n' > "$tmp/conf2"
-  if conf_set_amd "$tmp/conf2"; then
+  local err rc2
+  err=$(conf_set_amd "$tmp/conf2" 2>&1)
+  rc2=$?
+  if test "$rc2" -eq 0; then
     printf 'FAIL conf_set_amd should reject a missing anchor\n'
     rc=1
   else
     printf 'PASS conf_set_amd fails closed\n'
+    printf '  evidence: %s\n' "$err"
   fi
   rm -f "$tmp/fdinfo" "$tmp/conf" "$tmp/conf2"
   rmdir "$tmp"

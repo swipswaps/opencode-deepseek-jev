@@ -1886,7 +1886,7 @@
     "id": "chromium-video-priority",
     "title": "Prioritize the Chromium video process",
     "where": "host",
-    "purpose": "Find the CDM/GPU/renderer that actually decode video and raise their CPU priority reversibly: per-thread nice (root) and optional cgroup cpu.weight, with --revert. Reports the no-root limits (cannot migrate out of a logind session scope).",
+    "purpose": "Find the CDM/GPU/renderer that actually decode video and raise their CPU priority reversibly: per-thread nice (root) and optional cgroup cpu.weight, with --revert. Discovers by /proc comm (no pgrep), splits argv on NUL, validates --nice/--weight/--sample, and exits 2 when no video process is found. Reports the no-root limits (cannot migrate out of a logind session scope).",
     "commands": [
       "./scripts/chromium-video-priority.sh --dry-run",
       "sudo ./scripts/chromium-video-priority.sh --apply",
