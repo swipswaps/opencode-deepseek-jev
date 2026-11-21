@@ -57,31 +57,33 @@ resolve_db() {
 }
 
 self_test() {
-    local work fails=0 out want
+    local work fails=0 out want script
     work=$(mktemp -d "${TMPDIR:-/tmp}/dbpath.XXXXXX" 2>&1) || {
         printf 'FAIL mktemp\n'; return 1; }
-    mkdir -p "$work/repo/docker" "$work/xdg/opencode" "$work/home/.local/share/opencode"
+    mkdir -p "$work/repo/docker" "$work/repo/scripts" "$work/xdg/opencode" "$work/home/.local/share/opencode"
     printf '{}\n' > "$work/repo/opencode.json"
     printf 'FROM scratch\n' > "$work/repo/docker/Dockerfile"
     printf 'db\n' > "$work/xdg/opencode/opencode.db"
     printf 'db\n' > "$work/home/.local/share/opencode/opencode.db"
+    script="$work/repo/scripts/db-path.sh"
+    cp -- "${BASH_SOURCE[0]}" "$script"
 
     DB_OVERRIDE="$work/xdg/opencode/opencode.db"
-    out=$(OPENCODE_DB= bash "${BASH_SOURCE[0]}" --db "$DB_OVERRIDE" 2>&1)
+    out=$(OPENCODE_DB= bash "$script" --db "$DB_OVERRIDE" 2>&1)
     [ "$out" = "$DB_OVERRIDE" ] && printf 'PASS explicit override\n' || {
         printf 'FAIL explicit override (%s)\n' "$out"; fails=$((fails + 1)); }
 
     DB_OVERRIDE=""
     out=$(OPENCODE_DB= XDG_DATA_HOME="$work/xdg" HOME="$work/home" \
-        bash "${BASH_SOURCE[0]}" 2>&1)
+        bash "$script" 2>&1)
     want="$work/xdg/opencode/opencode.db"
     [ "$out" = "$want" ] && printf 'PASS XDG before HOME\n' || {
         printf 'FAIL XDG before HOME (%s)\n' "$out"; fails=$((fails + 1)); }
 
-    OPENCODE_DB="$work/xdg/opencode/opencode.db" bash "${BASH_SOURCE[0]}" --exists
+    OPENCODE_DB="$work/xdg/opencode/opencode.db" bash "$script" --exists
     [ "$?" -eq 0 ] && printf 'PASS --exists found\n' || {
         printf 'FAIL --exists found\n'; fails=$((fails + 1)); }
-    DB_PATH_STRICT=1 OPENCODE_DB="$work/nope.db" bash "${BASH_SOURCE[0]}" --exists
+    DB_PATH_STRICT=1 OPENCODE_DB="$work/nope.db" bash "$script" --exists
     [ "$?" -eq 1 ] && printf 'PASS --exists missing\n' || {
         printf 'FAIL --exists missing\n'; fails=$((fails + 1)); }
 

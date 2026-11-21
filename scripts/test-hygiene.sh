@@ -436,6 +436,8 @@ PY
         grepo="$(readlink -f "$repo_guard" 2>&1)"
         if [ -n "$gresolved" ] && [ "$gresolved" = "$grepo" ]; then
             ok 'global guard symlink resolves to the repo plugin'
+        elif [ "$SANDBOX" -eq 1 ] && [ -z "$gresolved" ]; then
+            skip 'global guard symlink (sandbox: host link is not mounted)'
         else
             bad "global guard symlink points to ${gresolved:-?}, not $grepo"
             printf '  fix: %s --install\n' "$REPO/scripts/install-global-guard.sh"
