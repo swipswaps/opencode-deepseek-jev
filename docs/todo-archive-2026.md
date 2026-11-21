@@ -6,6 +6,75 @@ corpus is read at every session start, so its size is context cost — see
 `./scripts/doc-budget.sh`). Newest-first. `TODO.md` keeps the queue plus recent
 Done; durable state lives in `HANDOFF.md`. Git history is unchanged.
 
+## Archived 2026-11-21 (moved from TODO.md Queue)
+
+Closed queue items, moved to hold the tier-1 read-first budget. Newest first.
+
+- [x] **APP-UX-1 — 2026-11-11.** React `/app` residual a11y, fixed: Activity/
+      Sessions search fields named, `aria-current="page"` on the active
+      drawer/bottom-nav item, and <=600px 44px targets (buttons, icon buttons,
+      inputs, skip link). `scripts/audit-app-ux.py` now reports **0 findings**;
+      Playwright battery **12/12**.
+
+- [x] **HOTSPOT-1:** `hotspot-reconnect.sh` + `terminal-reset.sh`; self-tests (CLOSED 2026-11-11; open part is the B43-1 measurement: beacon-watch 185 total / 184 pre / 1 post)
+      **2026-11-11 11:22:** rolling 24 h **227 total / 32 pre / 195 post**
+      (127 in the 10:00 hour) → **H1 rejected**; next H2 (different 2.4 AP),
+      then hardware. See `docs/BT-COEXISTENCE-2026-11-10.md` §9.
+      green; live roam proof open.
+      **2026-11-10:** self-test cooldown fixed (stale `alerts.state` throttled
+      the first alert). Cause proven by
+      `scripts/wifi-link-forensics.sh --peer owner@100.70.43.78`: 2.4 GHz-only
+      `b43`/BCM4331 client, 300 `BEACON-LOSS`/24 h; server powersave ON.
+      **ws24 powersave `--fix` DONE 2026-11-10 16:04Z** (`power_save off`,
+      persisted `wifi.powersave=2`, NM reloaded; ledger
+      `wifi-ws24-powersave-fix-20261110T1059`). Next: client
+      `akmod-wl`/wired, NM `rc-manager=unmanaged`.
+      **Popup UX DONE:** bounded TTL + replace-id + recovery clear + server
+      hysteresis; `scripts/peer-health.sh --explain` proves reachability vs
+      link quality. Remaining queue: `docs/OUTSTANDING-ISSUES-2026-11-10.md`.
+
+- [x] NEBULA-1: **closed — the event is a tunnel flap, not a process
+      restart; drop-in reverted.** `scripts/nebula-restart-trace.py` named the
+      parent (systemd, PID 1), but `nebula-systemd-override.sh --show` on the
+      host showed **NRestarts=0, one stable PID (1111684) over minutes**, and the
+      only recurring log signal was a **tunnel teardown to `lighthouse-01`
+      (vpnIp 10.100.0.1)** (`Close tunnel received, tearing down.` / `Taking new
+      handshake` / `tunnelCheck state:dead`). So systemd restarts nothing and the
+      earlier "3 PIDs/10 min crash-loop" was misattributed. `--diagnose`
+      classifies restart-churn vs tunnel-flap (offline self-test). The defensive
+      drop-in was applied then **reverted on the host** (`--revert` + confirm
+      2026-10-17). Evidence: the live `--show` output + logs/pressure-*.log.
+      Carry-forward: the tunnel itself is external (below).
+
+- [x] **TUNNEL-1 WATCH: detector shipped (sentinel T8).** vpnIp `10.100.0.1`
+      (lighthouse-01) tears down / re-handshakes (`state:dead`) while nebula is
+      healthy. T8 trips on >= `SENTINEL_TUNNEL_MIN` (default 4) events since the
+      cursor → stable-key ADVISORY → `triage-alerts.py` (`tunnel_flap` → runbook
+      `tunnel-flap`). Host check: `journalctl -u nebula | grep -E 'Close
+      tunnel|state:dead'` + `nebula-systemd-override.sh --diagnose`.
+
+- [x] G8: host TUI reads the server store — CLOSED as document path.
+      Decision (2026-10-01): `attach -s` proven end to end via tmux
+      pty; README documents auth-carrying attach + transcript fallback;
+      sync job REJECTED (writing to opencode-owned host-local DB risks
+      corruption across versions; no safe merge key exists). The
+      remaining picker/deep-link gaps are upstream UI bugs with filed
+      repros (docs/upstream-opencode-issues.md).
+      Record: `opencode attach http://localhost:4096 -s ses_<id>`
+      (`--continue` last, `--fork` to copy; needs OPENCODE_SERVER_PASSWORD
+      exported — bare attach 401s); `session list/export` are local-store
+      only (host-local 2 vs server 44); transcript resume $0.0004
+      (docs/ux/resume-tour.mp4).
+
+- [x] G3: hand-rolled d3 charts migrated to Plot specs — scatter
+  (`Plot.dot`), gantt (`Plot.barX`), timeline (`Plot.rect` lane
+  strip), burn last as Plot+d3-brush hybrid (drag->FILTER->4 views
+  proven 42->3->42); treemap/sankey/cloud stay d3 (no Plot marks).
+  README.txt->README.md (history preserved) with step-by-step usage
+  guide embedding 7 docs/ux shots (Playwright-captured, <=100KB);
+  whitelist/corpus/registry refs updated. Gates: lint 110, hygiene
+  37, dashboard 116, ux-test 26/0.
+
 ## Archived 2026-11-05 (moved from TODO.md Done)
 
 Older Done entries (2026-10-22 and earlier), moved to hold the tier-1 read-first budget. Newest first.

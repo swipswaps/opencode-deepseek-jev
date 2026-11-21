@@ -45,20 +45,34 @@ resolve_link() {
 }
 
 check_link() {
-    local resolved=""
+    local resolved="" expected=""
     if [ ! -e "$LINK" ] && [ ! -L "$LINK" ]; then
         printf 'WARN: no global guard link at %s\n' "$LINK"
         printf '  fix: %s --install\n' "$0"
         [ "$REQUIRE" -eq 1 ] && return 2
         return 0
     fi
-    resolved="$(resolve_link)"
-    if [ -n "$resolved" ] && [ -f "$resolved" ]; then
-        printf 'PASS: %s -> %s\n' "$LINK" "$resolved"
-        return 0
+    expected="$(readlink -f "$PLUGIN" 2>&1)"
+    if [ -L "$LINK" ]; then
+        resolved="$(resolve_link)"
+        if [ -n "$resolved" ] && [ -f "$resolved" ] && [ "$resolved" = "$expected" ]; then
+            printf 'PASS: %s -> %s\n' "$LINK" "$resolved"
+            return 0
+        fi
+        printf 'FAIL: global guard symlink points to %s, expected %s\n' "${resolved:-?}" "$expected"
+        printf '  fix: %s --install\n' "$0"
+        return 2
     fi
-    printf 'FAIL: dangling global guard link: %s\n' "$LINK"
-    printf '  target: %s\n' "$(readlink "$LINK" 2>&1)"
+    if [ -f "$LINK" ]; then
+        if cmp -s "$LINK" "$PLUGIN"; then
+            printf 'PASS: %s is a content-equal copy of %s\n' "$LINK" "$PLUGIN"
+            return 0
+        fi
+        printf 'FAIL: %s is a copy that differs from %s\n' "$LINK" "$PLUGIN"
+        printf '  fix: %s --install\n' "$0"
+        return 2
+    fi
+    printf 'FAIL: %s exists but is not a regular file or symlink\n' "$LINK"
     printf '  fix: %s --install\n' "$0"
     return 2
 }
@@ -113,16 +127,26 @@ self_test() {
     check_link > /dev/null 2>&1; rc=$?
     [ "$rc" -eq 2 ] || { printf 'FAIL self-test: dangling link should FAIL, got %s\n' "$rc"; fail=1; }
 
+    printf 'not the guard\n' > "$tmp/other"
+    ln -sfn "$tmp/other" "$LINK"
+    check_link > /dev/null 2>&1; rc=$?
+    [ "$rc" -eq 2 ] || { printf 'FAIL self-test: wrong symlink target should FAIL, got %s\n' "$rc"; fail=1; }
+
+    rm -f "$LINK"
+    printf 'not the guard\n' > "$LINK"
+    check_link > /dev/null 2>&1; rc=$?
+    [ "$rc" -eq 2 ] || { printf 'FAIL self-test: differing copy should FAIL, got %s\n' "$rc"; fail=1; }
+
     install_link > /dev/null 2>&1
     uninstall_link > /dev/null 2>&1
     [ ! -L "$LINK" ] || { printf 'FAIL self-test: uninstall left the link\n'; fail=1; }
 
-    rm -f "$LINK" "$HOME/.config/opencode/plugins/.keep" 2>&1
+    rm -f "$LINK" "$tmp/other" "$HOME/.config/opencode/plugins/.keep" 2>&1
     rmdir "$XDG_CONFIG_HOME/opencode/plugins" "$XDG_CONFIG_HOME/opencode" "$XDG_CONFIG_HOME" "$HOME" 2>&1 || true
     rmdir "$tmp" 2>&1 || true
 
     if [ "$fail" -eq 0 ]; then
-        printf 'install-global-guard: self-test PASS (absent + required + install + dangling + uninstall)\n'
+        printf 'install-global-guard: self-test PASS (absent + required + install + dangling + wrong-target + differing-copy + uninstall)\n'
     else
         printf 'install-global-guard: self-test FAIL\n'
     fi

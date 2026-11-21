@@ -431,10 +431,14 @@ PY
     local glink="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/blacklist-guard.js"
     local repo_guard="$REPO/.opencode/plugins/blacklist-guard.js"
     if [ -L "$glink" ]; then
-        if [ "$(readlink -f "$glink")" = "$repo_guard" ]; then
+        local gresolved grepo
+        gresolved="$(readlink -f "$glink" 2>&1)"
+        grepo="$(readlink -f "$repo_guard" 2>&1)"
+        if [ -n "$gresolved" ] && [ "$gresolved" = "$grepo" ]; then
             ok 'global guard symlink resolves to the repo plugin'
         else
-            bad 'global guard symlink dangles or points elsewhere (copy it instead)'
+            bad "global guard symlink points to ${gresolved:-?}, not $grepo"
+            printf '  fix: %s --install\n' "$REPO/scripts/install-global-guard.sh"
         fi
     elif [ -e "$glink" ]; then
         if cmp -s "$glink" "$repo_guard"; then
@@ -1217,7 +1221,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
     fi
 
     # Every tracked top-level shell script must be executable in git: the docs
-    # tell people to run ./scripts/<tool>.sh, and a 100644 entry fails on a
+    # tell people to run ./scripts/TOOL.sh, and a 100644 entry fails on a
     # fresh clone with "Permission denied".
     if command -v git > /dev/null && git -C "$REPO" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         local nonexec=""

@@ -25,8 +25,11 @@
 > **test-hygiene** (a host-only check; the stored tail did not name it, so the
 > failure log now keeps `status=FAIL` lines). Bounds are **pass-only**; the
 > failed 178 s/82 s samples were dropped and archived in
-> `docs/gate-evidence-2026-11-15/`. Next: name the check, seed 3 passes.
-> Deferred: `AUDIT-1`; certs `D` is an `empty-certs` mount.
+> `docs/gate-evidence-2026-11-15/`. **Check named 2026-11-21:** `global guard
+> symlink resolves to the repo plugin` (gate 20261120T235457Z). The check now
+> prints the target + fix; `install-global-guard.sh --check` rejects a wrong
+> symlink or differing copy (self-test covers both). Host: run the install, then
+> `harness.sh --fast` x3. Deferred: `AUDIT-1`; certs `D` is an `empty-certs` mount.
 
 > **Wi-Fi (11c):** H1 rejected — 227 total / 32 pre / 195 post; next H2/H3,
 > see `docs/BT-COEXISTENCE-2026-11-10.md` §9. The settings/UX and 2026-11-11
