@@ -27,3 +27,9 @@ site/
 # keep the skill source + reference docs)
 .opencode/skills/impeccable/scripts/bin/
 .opencode/skills/impeccable/scripts/data/
+
+# Host-side TLS material. Containers mount an empty, read-only certs dir over
+# this path, so the real files are only visible (and must only be ignored) on
+# the host. Added after docker/certs/.gitignore was removed in 8614069, which
+# made the host tree look dirty to push-all.sh.
+docker/certs/*
