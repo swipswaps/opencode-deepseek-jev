@@ -131,7 +131,7 @@ self_test() {
     c="$(mktemp)"
     printf '%s\n' 'timestamp=2026-11-09T19:43:53.657Z level=ERROR message="stream error" providerID=opencode-go modelID=deepseek-v4.1-flash session.id=x error.error="AI_APICallError: Invalid credential"' > "$w"
     printf '{\n  "model": "opencode-go/deepseek-v4.1-flash"\n}\n' > "$c"
-    out="$(CRED_LOG="$w" CRED_CONF="$c" bash "$0" 2>&1)"
+    out="$(CRED_LOG="$w" CRED_CONF="$c" bash "$0" --diagnose 2>&1)"
     printf '%s' "$out" | grep -q 'failing provider : opencode-go' || { printf 'FAIL provider parse\n'; fail=1; }
     printf '%s' "$out" | grep -q 'switch the project model' || { printf 'FAIL menu\n'; fail=1; }
     CRED_LOG="$w" CRED_CONF="$c" bash "$0" --apply 2 > /dev/null 2>&1

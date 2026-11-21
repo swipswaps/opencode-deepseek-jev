@@ -80,7 +80,7 @@ for line in text.splitlines():
         cur_role, cur_head, cur_buf = m.group(1), m.group(2), []
     elif cur_role:
         cur_buf.append(line.strip())
-        tm = re.match(r"\[(\w[\w-]*)\s+call_", line.strip())
+        tm = re.match(r"\[([a-z][\w-]*)\s+(?:call_|prt_)", line.strip())
         if tm:
             tools.append(tm.group(1))
 flush()
@@ -181,11 +181,15 @@ FIXEOF
     printf '%s' "$o" | grep -q 'finding alpha' || { printf 'FAIL findings text\n'; fail=1; }
     printf '%s' "$o" | grep -q 'open question here' || { printf 'FAIL open question\n'; fail=1; }
     printf '%s' "$o" | grep -q 'Do NOT --fork/--continue' || { printf 'FAIL no-fork rule\n'; fail=1; }
+    printf '%s' "$o" | grep -q '## State' || { printf 'FAIL state section\n'; fail=1; }
+    printf '%s' "$o" | grep -q '## Next command' || { printf 'FAIL next-command section\n'; fail=1; }
+    printf '%s' "$o" | grep -q '## Tools used' || { printf 'FAIL tools section\n'; fail=1; }
     bash "${BASH_SOURCE[0]}" s_does_not_exist > /dev/null 2>&1
     [ "$?" -eq 1 ] || { printf 'FAIL missing transcript exits 1\n'; fail=1; }
     o=$(bash "${BASH_SOURCE[0]}" --transcript "$work/transcript-s_fix.md" s_fix --model "opencode/muse-spark-1.3-contributor-free" 2>&1 || true)
     printf '%s' "$o" | grep -q 'refusing: model .* not ALLOW' || { printf 'FAIL deny-listed model refused\n'; fail=1; }
-    printf '%s\n' '## user m9 2026-10-12 11:00:00 UTC' 'leak check' 'DEEPSEEK_API_KEY=sk-cccccccccccccccccccccccccccccc' >> "$work/transcript-s_fix.md"
+    local fake_key="sk-$(printf 'c%.0s' {1..30})"
+    printf '%s\n' '## user m9 2026-10-12 11:00:00 UTC' 'leak check' "DEEPSEEK_API_KEY=$fake_key" >> "$work/transcript-s_fix.md"
     o=$(bash "${BASH_SOURCE[0]}" --transcript "$work/transcript-s_fix.md" s_fix 2>&1 || true)
     printf '%s' "$o" | grep -q 'WARNING: .* holds secret-shaped lines at rest' || { printf 'FAIL at-rest warning\n'; fail=1; }
     printf '%s' "$o" | grep -q 'rotate-api-keys.sh' || { printf 'FAIL rotation guidance\n'; fail=1; }
@@ -246,6 +250,30 @@ main() {
     have python3 || { printf 'GATE FAIL: python3 required\n'; return 1; }
     local brief=""
     brief=$(extract_brief "$TR" "$SESSION")
+    # Fixed contract sections: a fresh session must be able to execute this
+    # without opening the transcript. State is machine facts, not a summary.
+    local rev gate_line todo_next
+    rev=$(git -C "$REPO" rev-parse --short HEAD 2>&1)
+    gate_line="(no last-gate.json)"
+    if [ -f "$REPO/data/observability/last-gate.json" ]; then
+        gate_line=$(python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+print("gate ts=%s pass=%s fail=%s state=%s" % (d.get("ts","?"),d.get("passed","?"),d.get("failed","?"),d.get("state","complete")))' "$REPO/data/observability/last-gate.json" 2>&1)
+    fi
+    todo_next=$(grep -E '^- \[~\] ' "$REPO/TODO.md" | head -n 1)
+    brief="$brief
+
+## State
+- git rev: ${rev:-unknown}
+- ${gate_line}
+- transcript: $TR (link it; do not paste it)
+
+## Next command
+${todo_next:-- (none marked in progress; see TODO.md)}
+
+## Do not
+- Do NOT --fork/--continue $SESSION (it copies the context back)
+- Do NOT paste the transcript into the new session"
     if have node && [ -f "$REPO/scripts/redact.mjs" ]; then
         brief=$(printf '%s' "$brief" | node "$REPO/scripts/redact.mjs" 2>&1 || printf '%s' "$brief")
     fi

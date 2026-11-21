@@ -12,8 +12,8 @@
 # and >=1 bigram across the whole corpus. It also reports the error-tool
 # share, which feeds the "error-prone chains" view.
 #
-# Runs in the container and on the host (the database is mounted at
-# data/opencode/opencode.db from either side). Requires node.
+# Runs in the container and on the host (scripts/db-path.sh resolves the store
+# on either side). Requires node.
 #
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
 #   no rm -rf, no subprocess.run, no bare kill, printf only, main() wrapper.
@@ -74,7 +74,12 @@ main() {
         return 2
     fi
 
-    local db="$REPO/data/opencode/opencode.db"
+    local db
+    if [ -x "$REPO/scripts/db-path.sh" ]; then
+        db=$("$REPO/scripts/db-path.sh" 2>&1)
+    else
+        db="$REPO/data/opencode/opencode.db"
+    fi
     if [ ! -f "$db" ]; then
         printf 'FAIL: no database at %s\n' "$db"
         return 1

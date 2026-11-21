@@ -105,13 +105,29 @@ main() {
         return 2
     fi
 
-    local db="$REPO/data/opencode/opencode.db"
-    local envf="$REPO/.env.local"
-    local marker="$REPO/data/observability/last-gate.json"
+    local SANDBOX=0
+    if [ -x "$REPO/scripts/sandbox-detect.sh" ] && "$REPO/scripts/sandbox-detect.sh" --quiet; then SANDBOX=1; fi
+    local db envf marker
+    if [ -x "$REPO/scripts/db-path.sh" ]; then
+        db=$("$REPO/scripts/db-path.sh" 2>&1)
+    else
+        db="$REPO/data/opencode/opencode.db"
+    fi
+    envf="$REPO/.env.local"
+    marker="$REPO/data/observability/last-gate.json"
 
     [ "$JSON" -eq 1 ] || printf '=== preflight.sh ===\n'
+    [ "$SANDBOX" -eq 1 ] && warn "sandbox detected: host-only checks are downgraded with a reason"
 
-    [ -f "$db" ] && good "database present" || crit "no database at $db"
+    if [ -f "$db" ]; then
+        if [ "$SANDBOX" -eq 1 ] && [ "$db" != "$REPO/data/opencode/opencode.db" ]; then
+            good "database present (sandbox store: $db)"
+        else
+            good "database present"
+        fi
+    else
+        crit "no database at $db"
+    fi
 
     if [ -f "$envf" ]; then
         local k
@@ -124,13 +140,25 @@ main() {
             good "JEV cloud disabled (no JEV_API_KEY required)"
         fi
     else
-        crit "no .env.local at $envf"
+        if [ "$SANDBOX" -eq 1 ]; then
+            warn ".env.local is masked in the sandbox ($envf); checking the process environment instead"
+            local k
+            for k in DEEPSEEK_API_KEY OPENCODE_SERVER_PASSWORD; do
+                if [ -n "$(printenv "$k" 2>&1)" ]; then good "$k set in environment (sandbox)"; else warn "$k absent from environment (sandbox: host-side)"; fi
+            done
+        else
+            crit "no .env.local at $envf"
+        fi
     fi
 
     if [ -f "$marker" ]; then
-        local failed
+        local failed state gate_name
         failed=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("failed",0))' "$marker" 2>&1)
-        if [ "$failed" = "0" ]; then
+        state=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("state","complete"))' "$marker" 2>&1)
+        gate_name=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("gate",""))' "$marker" 2>&1)
+        if [ "$state" = "aborted" ]; then
+            crit "last gate run was ABORTED at ${gate_name:-a gate} — rerun ./scripts/harness.sh"
+        elif [ "$failed" = "0" ]; then
             good "last gate run passed"
         else
             crit "last gate run recorded $failed failing gate(s) — resolve before spending"
@@ -162,6 +190,10 @@ except Exception:
                 fi
             fi
         fi
+    fi
+
+    if [ "$SANDBOX" -eq 1 ] && [ ! -f "$envf" ]; then
+        warn "balance check skipped (sandbox: key is host-side; host preflight owns spend)"
     fi
 
     if [ "$ALLOW_PRO" -eq 0 ]; then
@@ -246,7 +278,11 @@ except Exception:
         if "$REPO/scripts/guard-health.sh" --check > /tmp/preflight-guard-health 2>&1; then
             good "guard health (strict, irreversible, output hook, loaded)"
         else
-            crit "guard health: $(tail -1 /tmp/preflight-guard-health)"
+            if [ "$SANDBOX" -eq 1 ]; then
+                warn "guard health (sandbox: host link not mounted): $(tail -1 /tmp/preflight-guard-health)"
+            else
+                crit "guard health: $(tail -1 /tmp/preflight-guard-health)"
+            fi
         fi
     else
         crit "guard-health.sh missing"

@@ -102,6 +102,35 @@ gate-watch.sh
     line and elapsed seconds every HEARTBEAT; the exit code is the child's.
     Use when a gate is slow or the host is loaded, instead of a blind timer.
 
+diag-harness-stall.sh
+    Read-only answer to "harness.sh printed lint PASS then went silent: wait,
+    slow, or wedged?". Finds the LIVE run's log via /proc/<pid>/fd (not the
+    newest /tmp file), samples growth with inotify (poll fallback), and
+    attributes the block from /proc: state, wchan, I/O counters, CPU delta,
+    plus host load/PSI. Verdicts PROGRESSING/BUSY/BLOCKED_IO/BLOCKED_LOCK/
+    STALLED/STALE; exit 0/0/3/3/4/5, and --json for machines. STALLED writes one
+    ADVISORY ledger row per incident (stable key; --no-ledger opts out).
+    --sample SECONDS, --tmp DIR, --self-test. No ps/pgrep (absent in container).
+
+db-path.sh
+    One resolver for the opencode SQLite store: --db / OPENCODE_DB, then the
+    repo path, XDG, $HOME, and the container/host stores. --exists for gates
+    (DB_PATH_STRICT=1 ignores globals), --list shows precedence. Fixes the
+    container's false "no database at data/opencode/opencode.db" STOP.
+
+sandbox-detect.sh
+    Prints "sandbox: <reason>" or "host: host" (and --quiet exits 0/1; --json).
+    Signals: pid 1 is `opencode web`, the repo `.env.local` is a masked device,
+    or pid 1's cgroup is a container. preflight and test-hygiene use it to
+    downgrade host-only checks to SKIP with a reason instead of a red FAIL.
+
+gate-bound.py
+    Measured per-gate deadline for harness.sh: p95*2 of that gate's own
+    successful durations (floor 120 s; a disclosed 1800 s ceiling until three
+    samples; GATE_TIMEOUT overrides). harness.sh records PASS-only samples; a
+    failed run never teaches the deadline. --record appends; store is
+    data/observability/gate-timings.json (last 30 per gate). --self-test.
+
 Monitor cost and activity
 -------------------------
 
@@ -329,14 +358,30 @@ logs.sh
     only), packet (the exact tcpdump command; not run). --source S, --since
     MIN, --tail N, --grep RE.
 
+harness-other.sh
+    Run THIS workspace's harness against another repo: points HARNESS_REPO at
+    the target so the tooling stays here (harness.sh, gate-bound.py, ledger.py,
+    lib/heartbeat.sh) while the gates run from <repo>/scripts/. Verdict, timings
+    and ledger land inside the target by default, so its preflight/next-action
+    can read them; --shadow-state writes them to a temp dir for a read-only
+    target. Prints target, rev, which gates exist, and the state dir first.
+    ./scripts/harness-other.sh <repo> --fast
+
 harness.sh
     One command for the whole state: every gate (lint, test-hygiene,
     test-patterns, test-dashboard), live telemetry, the cost headline and the
     TODO "in flight" list, then a summary. --fast skips the slow dashboard
     gate; --export writes logs/harness-<UTC>.md; --json emits ONLY
-    {ts,rev,passed,failed,gates[]}. A failing gate is reported and the run
-    continues; a missing gate is SKIP, not pass. Records
-    data/observability/last-gate.json for preflight.sh.
+    {ts,rev,passed,failed,gates[]}; --keep-work retains per-gate logs.
+    Each gate runs under a MEASURED bound (gate-bound.py: p95*2, floor 120 s,
+    disclosed 1800 s ceiling; GATE_TIMEOUT overrides) and prints a heartbeat
+    (HEARTBEAT=N seconds), so silence has context. A timeout fails only that
+    gate and keeps its log; SIGINT/SIGTERM records GATE_ABORT and marks
+    last-gate.json state=aborted. Only PASSING runs seed the bound (a failure
+    prints "not recorded (pass-only samples)"); a failure keeps the
+    status=FAIL check lines AND the last 30 lines in logs/harness-failures.log.
+    A missing gate is SKIP, not pass. Records
+    data/observability/last-gate.json (with failed_gates) for preflight.sh.
 
 preflight.sh
     Fail-closed spend gate (exit 1) unless: repo+database exist, .env.local
@@ -618,6 +663,33 @@ browser_bench.py
     cdp_tab ~1.3s < playwright ~11s < browser_use ~25s; selenium FAIL. --json,
     --runs N, --pick (exit 2 if none).
 
+chromium-video-audit.sh
+    RUN ON THE HOST. Read-only audit of a running Chromium's video path:
+    effective flags, Fedora GRAPHIC_DRIVER, VA-API driver, renderer/GPU/CDM
+    CPU, and the kernel decode-engine delta (/proc/<gpu-pid>/fdinfo,
+    drm-engine-dec) over --sample seconds. Prints a ranked verdict; the
+    default --dry-run writes and restarts nothing. --apply backs up
+    /etc/chromium/chromium.conf, sets GRAPHIC_DRIVER=amd (the branch Fedora
+    gates the AMD VA-API switches on), and prints the restart plus the exact
+    --revert; --verify re-checks hardware decode after a restart. Stock Linux
+    Chromium refuses VA-API for encrypted configs (a build-time gate, not a
+    runtime flag), so DRM video stays software-decoded; a patched/other player
+    can differ. --json, --self-test.
+
+chromium-video-priority.sh
+    RUN ON THE HOST. Finds the processes that actually decode video (Widevine
+    CDM, GPU process, busiest renderer) and raises their CPU share,
+    reversibly. On this host they sit in session-2.scope (cpu.weight=100)
+    while the browser main process is in a 500-weight branch, and all run at
+    nice 0; the CDM is usually the busy one. --apply (root) renames every
+    thread to --nice (default -10) and can raise the containing scope to
+    --weight 500; --revert restores the saved nices and weights; --status
+    shows the targets. A scratch probe showed an unprivileged user cannot
+    migrate a PID out of session-2.scope and the user manager does not apply
+    CPUWeight to transient scopes, so effective priority is root-only. The
+    no-root fallback is to renice a same-user competitor (e.g. opencode) +10.
+    --self-test.
+
 ux-smoke.py
     Live UX smoke for the six :5099 pages through the host browser over CDP
     (RULES #62). Per page: loads, lang, one <h1>, <main>+skip, no leftover
@@ -726,6 +798,14 @@ redact.mjs
     dashboard.mjs for /api/export/session and the sessions/patterns/guard
     CSVs; `node scripts/redact.mjs` filters stdin->stdout. Defence in depth
     (no replacement for not leaking). --self-test (gated in test-hygiene.sh).
+
+check-placeholders.sh
+    Gate for RULES #99: no unresolved placeholders in copy-paste commands.
+    Runs the detector self-test, then scans assistant shell fences in the
+    chat DB after a cursor (logs/placeholder-cursor). First run baselines;
+    later runs fail on a new `<run-id>`/`YOUR_TOKEN`, and only a clean run
+    advances the cursor. The helper (check-placeholders.py) also supports
+    --text, --file and --since-hours for ad-hoc audits.
 
 test-patterns.sh
     Read-only proof of the tool-sequence substrate behind the "patterns view

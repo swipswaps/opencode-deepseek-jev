@@ -1,0 +1,62 @@
+Handoff prompt — 2026-11-15
+===========================
+
+Open a FRESH session (a large one re-sends its whole history every turn). Paste
+everything between the two markers. It is written as an interface contract:
+outcome, context, constraints, deliverables, checkable acceptance, evidence.
+Read HANDOFF.md, TODO.md, RULES.md, and docs/HANDOFF-2026-11-15.md first.
+
+RULE-OUTER-BEGIN
+--------------------------------------------------------------------------------
+Objective
+  Close HARNESS-STALL-1 on the host by seeding the measured gate bounds, then
+  bound each self-test inside test-hygiene. Falsifiable outcome: three
+  consecutive `./scripts/harness.sh --fast` runs are green with heartbeat lines,
+  `data/observability/gate-timings.json` holds >=3 samples per gate, and the
+  fourth run prints `basis=p95*2` instead of `basis=ceiling(<3)`.
+
+Context (read first)
+  HANDOFF.md                     — current pinned state
+  TODO.md                        — queue (HARNESS-STALL-1, AUDIT-1)
+  RULES.md                       — #76 (watch budget every turn), #90 (read the
+                                   error at the layer it names), #91 (a deadline
+                                   is telemetry, never a blind constant)
+  docs/HANDOFF-2026-11-15.md     — evidence, decisions, known limits
+  scripts/harness.sh             — run_gate (heartbeat + measured bound)
+  scripts/gate-bound.py          — p95*2, floor 120 s, ceiling until 3 samples
+  scripts/lib/heartbeat.sh       — shared hb_alive/hb_last/hb_watch
+  scripts/diag-harness-stall.sh  — live-log diagnosis (exit 0/2/3/4/5)
+  scripts/test-hygiene.sh        — the gate to bound per self-test
+
+Constraints
+  - No blind timeouts; derive the bound from measured history (RULES #91).
+  - No ps/pgrep/strace/inotifywait dependencies (absent in the container).
+  - Never write data/opencode/opencode.db; never --fork/--continue a session.
+  - docker/certs/.gitignore is a read-only empty-certs mount artifact: leave it.
+  - Run `./scripts/preflight.sh` first; if it STOPs on budget, hand off again.
+
+Deliverables
+  1. Host evidence pasted (raw, not summarized) into a dated addendum under
+     docs/: the three runs, the bounds, and the timings.
+  2. CHECK-TIMEOUT-1: a measured per-self-test bound in test-hygiene.sh, with the
+     offending check named in the failure line.
+  3. AUDIT-1 status, per docs/AUDIT-TRIAGE-2026-11-10.md (P0 first).
+
+Acceptance
+  - `./scripts/harness.sh --fast` green x3 on the host; no output gap longer
+    than HEARTBEAT.
+  - `python3 scripts/gate-bound.py --gate test-hygiene` prints `basis=p95*2`
+    after three recorded samples.
+  - A fixture self-test that sleeps past its bound is named and fails only
+    itself; the gate still completes inside its own bound.
+  - A fresh session's `./scripts/preflight.sh` is READY; `./scripts/lint.sh` and
+    `./scripts/test-hygiene.sh` are green.
+
+Evidence
+  For each acceptance line, paste the exact command and its raw output. A
+  passing assertion quoted from memory is not evidence.
+
+Out of scope
+  Dashboard UX changes, new providers/models, committing secrets, and the
+  AUDIT-1 P0 rotations without the operator present.
+RULE-OUTER-END

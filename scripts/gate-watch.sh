@@ -16,6 +16,15 @@ SCRIPT_NAME="gate-watch.sh"
 HEARTBEAT="${HEARTBEAT:-10}"
 LOG="${LOG:-/tmp/gate-watch-$(date -u +%Y%m%dT%H%M%SZ).log}"
 CMD=()
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# Shared, zombie-safe primitives (same ones harness.sh uses).
+if [ -f "$SCRIPT_DIR/lib/heartbeat.sh" ]; then
+  . "$SCRIPT_DIR/lib/heartbeat.sh"
+else
+  hb_alive() { [ -d "/proc/$1" ]; }
+  hb_last() { tail -n 1 "$1" 2>&1; }
+fi
 
 log() { printf '%s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; }
@@ -46,11 +55,11 @@ main() {
   "${CMD[@]}" > >(tee -a "$LOG") 2>&1 &
   pid=$!
   log "gate-watch: pid=$pid log=$LOG heartbeat=${HEARTBEAT}s"
-  while [ -e "/proc/$pid" ]; do
+  while hb_alive "$pid"; do
     sleep 1
     elapsed=$(( $(date +%s) - start ))
     if [ $((elapsed % HEARTBEAT)) -eq 0 ]; then
-      last=$(tail -n 1 "$LOG" 2>&1)
+      last=$(hb_last "$LOG")
       log "heartbeat elapsed=${elapsed}s last=${last}"
     fi
   done

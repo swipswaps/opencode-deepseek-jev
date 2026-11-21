@@ -4,10 +4,14 @@ Living backlog so momentum survives a session boundary. **HANDOFF.md** holds
 the durable state; **this file holds the queue.** Update the statuses and the
 date each session. Legend: `[x]` done · `[~]` in progress · `[ ]` todo.
 
-Last updated: 2026-11-11
+Last updated: 2026-11-20
 
 ## Done (most recent first)
 
+- [x] **PLACEHOLDERS-1 — 2026-11-20.** Rule #99 + `check-placeholders.sh`
+      gate + detector `check-placeholders.py` (self-test; cursor over assistant
+      shell fences). Wired into `harness.sh`; skills updated. Evidence: the
+      `<run-id>` paste in chat part `prt_1fb3ed842001YVny3TQwCtYIyV`.
 - [x] **ROTATE-GUIDED-1 — 2026-11-11.** `rotate-guided.py`: Playwright-guided
       revoke/create/rotate with a persistent login profile and a learned
       `rotation_memory`/`rotation_run` DB (candidate pick on drift, remembers
@@ -207,6 +211,17 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
       drawer/bottom-nav item, and <=600px 44px targets (buttons, icon buttons,
       inputs, skip link). `scripts/audit-app-ux.py` now reports **0 findings**;
       Playwright battery **12/12**.
+- [~] **HARNESS-STALL-1 — 2026-11-15.** A 5m42s silent gate (it PASSed at
+      17:07:04Z) was silence, not a hang. Landed: heartbeats, measured bound,
+      `GATE_ABORT`, failure logs, `diag-harness-stall.sh` (`/proc` log + inotify
+      + attribution), sandbox/db resolvers, ledger `ts_epoch`, brief State/Next.
+      **The 22:30Z host run named it: `test-hygiene`, 112 pass / 1 fail, a
+      host-only check.** Bounds are **pass-only** now (failed 178s/82s samples
+      dropped; `docs/gate-evidence-2026-11-15/`). Remaining: name the host-only
+      check, then host `--fast` x3 (hygiene n=1). Next:
+      `docs/HANDOFF-2026-11-15.md`.
+- [ ] **CHECK-TIMEOUT-1.** Bound each self-test inside test-hygiene (one hung
+      test can still consume the whole gate bound); name the offender.
 - [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`; handoff `docs/HANDOFF-2026-11-11.md`.
       P0: rotate the 4 `../notes/` secrets; patch OpenSSH. P1: B43 24–48 h
       measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1 external #5, stale

@@ -19,6 +19,7 @@ set -o pipefail
 
 PASS=0
 FAIL=0
+SKIP=0
 
 resolve_repo() {
     local c="$1"
@@ -53,6 +54,7 @@ _stamp() {
 }
 ok()  { PASS=$((PASS+1)); _stamp "$1"; printf 'ts=%s ms=%s level=INFO  status=PASS msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
 bad() { FAIL=$((FAIL+1)); _stamp "$1"; printf 'ts=%s ms=%s level=ERROR status=FAIL msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
+skip() { SKIP=$((SKIP+1)); _stamp "$1"; printf 'ts=%s ms=%s level=WARN status=SKIP msg=%s\n' "$(date -u +%H:%M:%S)" "$D" "$1"; }
 
 main() {
     local REPO
@@ -67,7 +69,13 @@ main() {
         return 1
     fi
 
-    local db="$REPO/data/opencode/opencode.db"
+    local db SANDBOX=0
+    if [ -x "$REPO/scripts/sandbox-detect.sh" ] && "$REPO/scripts/sandbox-detect.sh" --quiet; then SANDBOX=1; fi
+    if [ -x "$REPO/scripts/db-path.sh" ]; then
+        db=$("$REPO/scripts/db-path.sh" 2>&1)
+    else
+        db="$REPO/data/opencode/opencode.db"
+    fi
     local work
     work=$(mktemp -d)
 
@@ -273,8 +281,12 @@ PY
         if bash "$REPO/scripts/install-global-guard.sh" --check > "$work/igg_check.txt" 2>&1; then
             ok 'global guard link is not dangling (or absent)'
         else
-            bad 'global guard link is not dangling (or absent)'
-            cat "$work/igg_check.txt"
+            if [ "$SANDBOX" -eq 1 ]; then
+                skip 'global guard link (sandbox: host link is not mounted)'
+            else
+                bad 'global guard link is not dangling (or absent)'
+                cat "$work/igg_check.txt"
+            fi
         fi
     else
         bad 'install-global-guard.sh present'
@@ -291,6 +303,61 @@ PY
         bad 're-extract-session.sh present'
     fi
 
+    if [ -f "$REPO/scripts/diag-harness-stall.sh" ]; then
+        if bash "$REPO/scripts/diag-harness-stall.sh" --self-test > "$work/dhs_st.txt" 2>&1; then
+            ok 'diag-harness-stall: self-test (found + empty + bad args + no ps/pgrep hang)'
+        else
+            bad 'diag-harness-stall: self-test (found + empty + bad args + no ps/pgrep hang)'
+            cat "$work/dhs_st.txt"
+        fi
+    else
+        bad 'diag-harness-stall.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/gate-bound.py" ]; then
+        if python3 "$REPO/scripts/gate-bound.py" --self-test > "$work/gb_st.txt" 2>&1; then
+            ok 'gate-bound: self-test (ceiling + p95 + override + trim)'
+        else
+            bad 'gate-bound: self-test (ceiling + p95 + override + trim)'
+            cat "$work/gb_st.txt"
+        fi
+    else
+        bad 'gate-bound.py present'
+    fi
+
+    if [ -f "$REPO/scripts/db-path.sh" ]; then
+        if bash "$REPO/scripts/db-path.sh" --self-test > "$work/dbp_st.txt" 2>&1; then
+            ok 'db-path: self-test (override + XDG + exists)'
+        else
+            bad 'db-path: self-test (override + XDG + exists)'
+            cat "$work/dbp_st.txt"
+        fi
+    else
+        bad 'db-path.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/sandbox-detect.sh" ]; then
+        if bash "$REPO/scripts/sandbox-detect.sh" --self-test > "$work/sbd_st.txt" 2>&1; then
+            ok 'sandbox-detect: self-test (masked file + cgroup)'
+        else
+            bad 'sandbox-detect: self-test (masked file + cgroup)'
+            cat "$work/sbd_st.txt"
+        fi
+    else
+        bad 'sandbox-detect.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/ledger.py" ]; then
+        if python3 "$REPO/scripts/ledger.py" --self-test > "$work/led_st.txt" 2>&1; then
+            ok 'ledger: self-test (schema + ts_epoch + idempotent ingest)'
+        else
+            bad 'ledger: self-test (schema + ts_epoch + idempotent ingest)'
+            cat "$work/led_st.txt"
+        fi
+    else
+        bad 'ledger.py present'
+    fi
+
     if have node && [ -f "$REPO/scripts/session-health.mjs" ]; then
         if node --experimental-sqlite "$REPO/scripts/session-health.mjs" --self-test > "$work/sh_st.txt" 2>&1; then
             ok 'session-health: self-test (offline fixtures)'
@@ -298,10 +365,10 @@ PY
             bad 'session-health: self-test (offline fixtures)'
             cat "$work/sh_st.txt"
         fi
-        if node --experimental-sqlite "$REPO/scripts/session-health.mjs" > "$work/sh_default.txt" 2>&1; then
-            ok 'session-health: default DB path resolves (repo-relative)'
+        if node --experimental-sqlite "$REPO/scripts/session-health.mjs" "$db" > "$work/sh_default.txt" 2>&1; then
+            ok 'session-health: resolved DB opens (host or sandbox)'
         else
-            bad 'session-health: default DB path resolves (repo-relative)'
+            bad 'session-health: resolved DB opens (host or sandbox)'
             cat "$work/sh_default.txt"
         fi
     else
@@ -352,23 +419,31 @@ PY
 
     # Regression: the web UI creates sessions rooted at $HOME/.opencode, not
     # /workspace, so the project-scoped plugin glob misses the guard. The
-    # entrypoint must link it into the GLOBAL plugin dir. Assert the wiring is
-    # present (static) and, when it exists, that the symlink resolves to the
-    # repo guard (runtime).
+    # entrypoint must place it in the GLOBAL plugin dir. A symlink to the repo
+    # path dangles inside the container (the 2026-11-20 outage), so a
+    # content-equal COPY is also valid; either way the runtime guard must match
+    # the repo guard. A dangling symlink is a failure, not "not present".
     if grep -qF 'GUARD_DIR' "$REPO/docker/web-entrypoint.sh"; then
         ok 'web-entrypoint installs the guard globally'
     else
         bad 'web-entrypoint installs the guard globally'
     fi
     local glink="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/blacklist-guard.js"
-    if [ -e "$glink" ]; then
-        if [ "$(readlink -f "$glink")" = "$REPO/.opencode/plugins/blacklist-guard.js" ]; then
+    local repo_guard="$REPO/.opencode/plugins/blacklist-guard.js"
+    if [ -L "$glink" ]; then
+        if [ "$(readlink -f "$glink")" = "$repo_guard" ]; then
             ok 'global guard symlink resolves to the repo plugin'
         else
-            bad 'global guard symlink resolves to the repo plugin'
+            bad 'global guard symlink dangles or points elsewhere (copy it instead)'
+        fi
+    elif [ -e "$glink" ]; then
+        if cmp -s "$glink" "$repo_guard"; then
+            ok 'global guard copy matches the repo plugin (content-equal)'
+        else
+            bad 'global guard copy differs from the repo plugin'
         fi
     else
-        ok 'global guard symlink not present yet (entrypoint creates it at start)'
+        ok 'global guard not present yet (entrypoint installs it at start)'
     fi
 
     if grep -qF 'SKILL_DIR' "$REPO/docker/web-entrypoint.sh"; then
@@ -509,7 +584,9 @@ PY
     fi
 
     if [ -f "$REPO/scripts/client-setup.sh" ]; then
-        if bash "$REPO/scripts/client-setup.sh" --self-test > "$work/cs_st.txt" 2>&1; then
+        if [ "$SANDBOX" -eq 1 ]; then
+            skip 'client-setup: self-test (sandbox: needs host ssh + units)'
+        elif bash "$REPO/scripts/client-setup.sh" --self-test > "$work/cs_st.txt" 2>&1; then
             ok 'client-setup: self-test (discovery + config + units + heal + uninstall)'
         else
             bad 'client-setup: self-test (discovery + config + units + heal + uninstall)'
@@ -553,7 +630,9 @@ PY
     fi
 
     if [ -f "$REPO/scripts/wifi-link-forensics.sh" ]; then
-        if bash "$REPO/scripts/wifi-link-forensics.sh" --self-test > "$work/wlf_st.txt" 2>&1; then
+        if [ "$SANDBOX" -eq 1 ]; then
+            skip 'wifi-link-forensics: self-test (sandbox: needs host wifi tooling)'
+        elif bash "$REPO/scripts/wifi-link-forensics.sh" --self-test > "$work/wlf_st.txt" 2>&1; then
             ok 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
         else
             bad 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
@@ -630,7 +709,9 @@ PY
     fi
 
     if [ -f "$REPO/scripts/host-cert-sign.sh" ]; then
-        if bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
+        if [ "$SANDBOX" -eq 1 ]; then
+            skip 'host-cert-sign: self-test (sandbox: needs host CA/principal)'
+        elif bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
             ok 'host-cert-sign: self-test (temp CA + host key + principal)'
         else
             bad 'host-cert-sign: self-test (temp CA + host key + principal)'
@@ -1200,7 +1281,7 @@ PY
     if [ -n "$SLOW_MSG" ]; then
         printf 'slowest: %s (%sms)\n' "$SLOW_MSG" "$SLOW_MS"
     fi
-    printf '\n=== result: %d pass, %d fail ===\n' "$PASS" "$FAIL"
+    printf '\n=== result: %d pass, %d fail, %d skip ===\n' "$PASS" "$FAIL" "$SKIP"
     [ "$FAIL" -eq 0 ] && return 0 || return 1
 }
 

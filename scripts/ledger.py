@@ -43,6 +43,7 @@ import sys
 SCHEMA = """CREATE TABLE IF NOT EXISTS ledger(
   id INTEGER PRIMARY KEY,
   ts TEXT NOT NULL,
+  ts_epoch INTEGER DEFAULT 0,
   type TEXT NOT NULL,
   actor TEXT DEFAULT '',
   tool TEXT DEFAULT '',
@@ -74,10 +75,47 @@ def db_path() -> str:
     return os.path.join(repo_root(), "data", "observability", "observability.db")
 
 
+def parse_ts(s: str) -> int:
+    """Epoch seconds from either ledger format; 0 when unparseable.
+
+    History mixes compact (20260929T224442Z) and ISO (2026-11-15T17:07:04Z)
+    stamps, so ORDER BY ts is lexically wrong. ts_epoch makes ordering total.
+    """
+    t = (s or "").strip()
+    if not t:
+        return 0
+    try:
+        if re.fullmatch(r"\d{8}T\d{6}Z", t):
+            d = datetime.datetime.strptime(t, "%Y%m%dT%H%M%SZ")
+        else:
+            d = datetime.datetime.fromisoformat(t.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=datetime.timezone.utc)
+        return int(d.timestamp())
+    except (ValueError, TypeError):
+        return 0
+
+
+def migrate(con: sqlite3.Connection) -> None:
+    """Idempotent: add ts_epoch + indexes, backfill pre-existing rows once."""
+    cols = [r[1] for r in con.execute("PRAGMA table_info(ledger)")]
+    if "ts_epoch" not in cols:
+        con.execute("ALTER TABLE ledger ADD COLUMN ts_epoch INTEGER DEFAULT 0")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_ledger_ts_epoch ON ledger(ts_epoch)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_ledger_type_ts ON ledger(type, ts_epoch)")
+    rows = con.execute(
+        "SELECT id,ts FROM ledger WHERE ts_epoch IS NULL OR ts_epoch=0").fetchall()
+    if rows:
+        con.executemany("UPDATE ledger SET ts_epoch=? WHERE id=?",
+                        [(parse_ts(t), i) for i, t in rows])
+    con.commit()
+
+
 def connect(db: str) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(os.path.abspath(db)), exist_ok=True)
     con = sqlite3.connect(db)
     con.execute(SCHEMA)
+    migrate(con)
     return con
 
 
@@ -93,10 +131,11 @@ def cmd_init(_args: argparse.Namespace) -> int:
 
 def insert(con: sqlite3.Connection, row: dict) -> bool:
     """Insert-or-ignore. Returns True when the row was new."""
+    ts = row.get("ts") or utcnow()
     cur = con.execute(
-        "INSERT OR IGNORE INTO ledger(ts,type,actor,tool,resource,verdict,"
-        "detail,rev,source,source_key) VALUES(?,?,?,?,?,?,?,?,?,?)",
-        (row.get("ts") or utcnow(), row.get("type", ""), row.get("actor", ""),
+        "INSERT OR IGNORE INTO ledger(ts,ts_epoch,type,actor,tool,resource,verdict,"
+        "detail,rev,source,source_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (ts, parse_ts(ts), row.get("type", ""), row.get("actor", ""),
          row.get("tool", ""), row.get("resource", ""), row.get("verdict", ""),
          row.get("detail", ""), row.get("rev", ""), row.get("source", ""),
          row.get("source_key", "")))
@@ -301,9 +340,11 @@ def self_test() -> int:
         try:
             con = connect(db)
             cols = [r[1] for r in con.execute("PRAGMA table_info(ledger)")]
-            check(cols == ["id", "ts", "type", "actor", "tool", "resource",
-                           "verdict", "detail", "rev", "source", "source_key"],
-                  "schema columns")
+            required = ["id", "ts", "ts_epoch", "type", "actor", "tool",
+                        "resource", "verdict", "detail", "rev", "source",
+                        "source_key"]
+            check(all(c in cols for c in required) and "ts_epoch" in cols,
+                  "schema columns (+ ts_epoch)")
             check(insert(con, {"ts": "2026-01-01T00:00:00Z", "type": "GATE",
                                "verdict": "PASS", "source": "t",
                                "source_key": "k1"}), "record inserts")
@@ -323,6 +364,18 @@ def self_test() -> int:
             check(n2 == 0, "re-ingest inserts 0 (idempotent)")
             check(con.execute("SELECT COUNT(*) FROM ledger").fetchone()[0] == 3,
                   "row count")
+            check(parse_ts("20260929T224442Z") == parse_ts("2026-09-29T22:44:42Z"),
+                  "both ts formats map to one epoch")
+            check(insert(con, {"ts": "2026-01-03T00:00:00Z", "type": "GATE",
+                               "source": "t", "source_key": "k2"}),
+                  "late row inserts")
+            check(insert(con, {"ts": "20260929T224442Z", "type": "GATE",
+                               "source": "t", "source_key": "k3"}),
+                  "old-format row inserts")
+            newest = con.execute(
+                "SELECT ts FROM ledger ORDER BY ts_epoch DESC LIMIT 1").fetchone()[0]
+            check(newest == "20260929T224442Z",
+                  "ts_epoch ordering beats lexical (compact Sep > ISO Jan)")
             con.close()
             del os.environ["LEDGER_DB"]
         except Exception as e:  # noqa: BLE001 — self-test must report, not crash

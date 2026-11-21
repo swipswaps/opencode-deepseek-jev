@@ -1,10 +1,10 @@
 Handoff prompt — opencode-deepseek-jev
 =======================================
 
-> **Historical prompt.** The current handoff is
-> [`docs/HANDOFF-2026-11-05.md`](docs/HANDOFF-2026-11-05.md) and
-> [`docs/HANDOFF-PROMPT-2026-11-05.txt`](docs/HANDOFF-PROMPT-2026-11-05.txt).
-> The patterns task below is retained for history.
+> **Current handoff (2026-11-15):**
+> [`docs/HANDOFF-2026-11-15.md`](docs/HANDOFF-2026-11-15.md) and
+> [`docs/HANDOFF-PROMPT-2026-11-15.txt`](docs/HANDOFF-PROMPT-2026-11-15.txt).
+> The 2026-11-05 prompt below is retained for history.
 
 Open a fresh session (a large one re-sends its whole history every turn and
 spikes cost — see HANDOFF.md "Cost model"), then paste everything between the

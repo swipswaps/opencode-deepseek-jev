@@ -122,7 +122,12 @@ main() {
         return 2
     fi
     local JSON=0 SELFTEST=0 DOLOG=1 SESSION="" HANDOFF=0 OUTF="" TRANSCRIPT=""
-    local DB="$REPO/data/opencode/opencode.db" REV=""
+    local DB="" REV=""
+    if [ -x "$REPO/scripts/db-path.sh" ]; then
+        DB=$("$REPO/scripts/db-path.sh" 2>&1)
+    else
+        DB="$REPO/data/opencode/opencode.db"
+    fi
     while [ $# -gt 0 ]; do
         case "$1" in
             --json) JSON=1; shift ;;
@@ -158,7 +163,7 @@ main() {
     health=$(node --experimental-sqlite "$REPO/scripts/session-health.mjs" "$DB" --json 2>&1 || true)
     local rc
     rc=$(HEALTH_JSON="$health" python3 - "$SESSION" "$JSON" "$REV" "$RUN_TS" "$DB" "$REPO" << 'PYEOF'
-import json, os, re, sqlite3, sys
+import json, math, os, re, sqlite3, sys
 want, as_json, rev, ts, dbp, repo = sys.argv[1], sys.argv[2] == "1", sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
 raw = os.environ.get("HEALTH_JSON", "")
 if "{" not in raw:
@@ -221,13 +226,29 @@ steps = [
 ]
 meaning = ("action due now: this session cannot continue efficiently; the prescription is a routine handoff (step 3) \u2014 nothing is broken, nothing is anyone's fault"
            if verdict == "FAIL" else ("watch: approaching budget; plan the handoff soon" if verdict == "WARN" else "clean: keep working"))
+# Per-turn projection (RULE #76: watch every turn, not when asked). Each turn
+# re-sends the whole context, so turns of headroom = (budget - in) / in.
+try:
+    budget_f = float(os.environ.get("CONTEXT_BUDGET", "200000") or 200000)
+    intok_f = float(focus.get("in_tok") or 0)
+except Exception:
+    budget_f, intok_f = 200000.0, 0.0
+turns_left = int((budget_f - intok_f) // intok_f) if intok_f > 0 and budget_f > intok_f else 0
+projection = ("~%d turn(s) of headroom at the current per-turn cost (%d/%d input)"
+              % (turns_left, int(intok_f), int(budget_f))) if intok_f > 0 else "no per-turn cost recorded"
+if verdict == "PASS" and intok_f > 0 and budget_f > intok_f and turns_left <= 3:
+    verdict = "WARN"
+    meaning = "watch: %s; plan the handoff now" % projection
 if as_json:
     print(json.dumps({"ts": ts, "rev": rev, "session": sid, "verdict": verdict,
                       "meaning": meaning, "guidance": steps,
+                      "projection": projection, "turns_left": turns_left,
+                      "budget": int(budget_f),
                       "risks": {"over": len(over), "denied": len(denied)}}))
 else:
     print("=== session-guard: %s ===" % sid)
     print("verdict: %s \u2014 %s" % (verdict, meaning))
+    print("projection: %s" % projection)
     for i, s in enumerate(steps, 1):
         print("%d. %s" % (i, s))
 print("RC=" + ("1" if verdict == "FAIL" else "0"))

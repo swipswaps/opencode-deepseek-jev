@@ -1860,5 +1860,37 @@
       "bash scripts/hardening-gate.sh",
       "bash scripts/hardening-gate.sh --self-test"
     ]
+  },
+  {
+    "id": "chromium-video-audit",
+    "title": "Audit a stuttering Chromium video path",
+    "where": "host",
+    "purpose": "Read-only audit of the running Chromium video path (flags, Fedora GRAPHIC_DRIVER, VA-API, CDM CPU, kernel decode-engine delta) with a reversible one-line --apply, --revert, and a post-restart --verify. DRM/Widevine L3 is reported as software-only rather than promising a flag fix.",
+    "commands": [
+      "./scripts/chromium-video-audit.sh --dry-run",
+      "./scripts/chromium-video-audit.sh --self-test"
+    ]
+  },
+  {
+    "id": "check-placeholders",
+    "title": "Reject placeholders in copy-paste commands (RULES #99)",
+    "where": "container",
+    "purpose": "Scans shell fences in assistant chat parts after a cursor and fails on <run-id>, YOUR_TOKEN, or similar unresolved values. Self-test proves discrimination; --text/--file/--since-hours support manual audits.",
+    "commands": [
+      "./scripts/check-placeholders.sh",
+      "python3 scripts/check-placeholders.py --text 'gh run watch <run-id>'",
+      "python3 scripts/check-placeholders.py --db --since-hours 24"
+    ]
+  },
+  {
+    "id": "chromium-video-priority",
+    "title": "Prioritize the Chromium video process",
+    "where": "host",
+    "purpose": "Find the CDM/GPU/renderer that actually decode video and raise their CPU priority reversibly: per-thread nice (root) and optional cgroup cpu.weight, with --revert. Reports the no-root limits (cannot migrate out of a logind session scope).",
+    "commands": [
+      "./scripts/chromium-video-priority.sh --dry-run",
+      "sudo ./scripts/chromium-video-priority.sh --apply",
+      "sudo ./scripts/chromium-video-priority.sh --revert"
+    ]
   }
 ]

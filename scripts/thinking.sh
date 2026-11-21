@@ -36,7 +36,13 @@ resolve_repo() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-db_path() { printf '%s' "$REPO/data/opencode/opencode.db"; }
+db_path() {
+    if [ -x "$REPO/scripts/db-path.sh" ]; then
+        "$REPO/scripts/db-path.sh"
+    else
+        printf '%s' "$REPO/data/opencode/opencode.db"
+    fi
+}
 
 state_dump() {
     node --no-warnings --experimental-sqlite -e '

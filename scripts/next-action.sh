@@ -51,6 +51,7 @@ report() {
     local REPO="$1" HEAD="$2" AHEAD="$3" DIRTY="$4" UNTRACKED="$5" COMMITS="$6"
     NEXT_ACTION_REPO="$REPO" NA_HEAD="$HEAD" NA_AHEAD="$AHEAD" NA_DIRTY="$DIRTY" \
     NA_UNTRACKED="$UNTRACKED" NA_COMMITS="$COMMITS" NA_JSON="$JSON" \
+    NA_MASKED="${MASKED:-0}" \
     LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" \
     python3 - <<'PY'
 import json, os, sqlite3, datetime, re, time
@@ -62,6 +63,7 @@ dirty = os.environ.get("NA_DIRTY", "?")
 untracked = os.environ.get("NA_UNTRACKED", "0")
 commits = [c for c in (os.environ.get("NA_COMMITS", "") or "").splitlines() if c.strip()]
 as_json = os.environ.get("NA_JSON") == "1"
+masked = os.environ.get("NA_MASKED", "0")
 
 def load(path):
     try:
@@ -102,12 +104,13 @@ db = os.environ.get("LEDGER_DB", "")
 if db and os.path.exists(db):
     try:
         con = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
-        rows = con.execute("SELECT ts,type,verdict,detail,rev FROM ledger ORDER BY ts").fetchall()
-        for ts, typ, verdict, detail, rev in rows:
+        rows = con.execute("SELECT ts,type,verdict,detail,rev FROM ledger ORDER BY id").fetchall()
+        gate_idx = -1
+        for i, (ts, typ, verdict, detail, rev) in enumerate(rows):
             if typ == "GATE_START":
-                gate_rev, gate_ts = rev or "", ts or ""
-        if gate_ts:
-            events_since = sum(1 for (ts, *_rest) in rows if ts and ts > gate_ts)
+                gate_rev, gate_ts, gate_idx = rev or "", ts or "", i
+        if gate_idx >= 0:
+            events_since = len(rows) - gate_idx - 1
     except Exception:
         pass
 
@@ -170,8 +173,11 @@ budget = docs.get("budget")
 docs_over = bool(tier1 is not None and budget and tier1 > budget)
 
 blockers = []
+if gate.get("state") == "aborted":
+    blockers.append("last gate ABORTED at %s — rerun ./scripts/harness.sh" % (gate.get("gate") or "a gate"))
 if gate.get("failed"):
-    blockers.append("last gate FAILED (%s) — run ./scripts/harness.sh and fix it" % gate.get("failed"))
+    blockers.append("last gate FAILED %s gate(s) [%s] — run ./scripts/harness.sh and fix it"
+                    % (gate.get("failed"), gate.get("failed_gates") or "?"))
 if docs_over:
     blockers.append("tier-1 docs over budget (~%s > %s) — ./scripts/doc-budget.sh" % (tier1, budget))
 try:
@@ -219,7 +225,9 @@ except Exception:
 out = {
     "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "rev": head, "ahead": ahead, "dirty": dirty, "untracked": untracked,
-    "last_gate": {"ts": gate.get("ts", "?"), "passed": gate.get("passed"), "failed": gate.get("failed")},
+    "masked": masked,
+    "last_gate": {"ts": gate.get("ts", "?"), "passed": gate.get("passed"), "failed": gate.get("failed"),
+                  "failed_gates": gate.get("failed_gates", "")},
     "docs": {"tier1_tokens": tier1, "budget": budget, "over": docs_over},
     "since_gate": {"rev": gate_rev, "commits": commits, "n_commits": len(commits), "events": events_since},
     "next": {"text": next_text, "source": next_source},
@@ -236,8 +244,12 @@ if as_json:
 
 print("=== next-action @ %s ===" % out["ts"])
 print("rev:  %s  ahead=%s  dirty=%s  untracked=%s" % (head, ahead, dirty, untracked))
+if masked not in ("", "0", None):
+    print("masked:    %s mount-masked path(s) not counted as changes" % masked)
 lg = out["last_gate"]
-print("last gate: %s pass / %s fail  @%s" % (lg["passed"], lg["failed"], lg["ts"]))
+print("last gate: %s pass / %s fail  @%s%s" % (
+    lg["passed"], lg["failed"], lg["ts"],
+    ("  [%s]" % gate.get("failed_gates")) if gate.get("failed_gates") else ""))
 if tier1 is not None:
     print("docs:      tier-1 ~%s tok / budget %s  [%s]" % (tier1, budget, "OVER" if docs_over else "OK"))
 sg = out["since_gate"]
@@ -331,7 +343,8 @@ main() {
         return 2
     fi
 
-    local HEAD AHEAD MODIFIED UNTRACKED COMMITS
+    local HEAD AHEAD MODIFIED UNTRACKED COMMITS MASKED
+    MASKED=0
     HEAD=$(git -C "$REPO" rev-parse --short HEAD 2>&1 || printf 'unknown')
     AHEAD=$(git -C "$REPO" rev-list --count origin/main..HEAD 2>&1 || printf 0)
     case "$AHEAD" in ''|*[!0-9]*) AHEAD=0 ;; esac
@@ -339,6 +352,24 @@ main() {
     case "$MODIFIED" in ''|*[!0-9]*) MODIFIED=0 ;; esac
     UNTRACKED=$(git -C "$REPO" status --porcelain 2>&1 | grep -c '^??' || true)
     case "$UNTRACKED" in ''|*[!0-9]*) UNTRACKED=0 ;; esac
+    # A tracked file can read as deleted when its directory is a read-only bind
+    # mount (docker/certs -> empty-certs in the container). Do not count those
+    # as work: they are an artifact of the mount, not an edit.
+    local mp p d
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        d=$(dirname "$p")
+        while [ "$d" != "." ] && [ "$d" != "/" ]; do
+            mp=$(readlink -f "$REPO/$d" 2>&1)
+            if [ -n "$mp" ] && awk -v m="$mp" '$2 == m { f = 1 } END { exit !f }' /proc/mounts; then
+                MASKED=$((MASKED + 1)); break
+            fi
+            d=$(dirname "$d")
+        done
+    done < <(git -C "$REPO" status --porcelain 2>&1 | grep -v '^??' | awk '{ print $2 }')
+    case "$MASKED" in ''|*[!0-9]*) MASKED=0 ;; esac
+    MODIFIED=$((MODIFIED - MASKED))
+    [ "$MODIFIED" -lt 0 ] && MODIFIED=0
     local grev=""
     grev=$(LEDGER_DB="${LEDGER_DB:-$REPO/data/observability/observability.db}" python3 "$REPO/scripts/ledger.py" show --json --tail 300 2>&1 | python3 -c 'import json,sys
 try:

@@ -3,7 +3,51 @@
 Older `HANDOFF.md` PIN blocks, moved here to hold the tier-1 read-first doc
 budget (RULE #77). `HANDOFF.md` keeps the current state; this file is reference
 history (tier-2, not budgeted). Newest first among the archived blocks is the
-2026-10-18 pair.
+2026-11-15 settings/UX + audit set.
+
+## Archived 2026-11-15 (moved from HANDOFF.md)
+
+Moved to hold the tier-1 budget after the 2026-11-15 harness work. Newest first.
+
+> **PIN 2026-11-11c (B43 H1 rejected):** 24 h window at 11:22 EST =
+> **227 total / 32 pre / 195 post** (17 h post; **127** beacon-losses in the
+> 10:00 hour). Post ≈ 11.5/h, at or above the clustered pre rate → the
+> Bluetooth-off / `btcoex=0` / BSSID-pin intervention did **not** fix it.
+> Next: H2 (different 2.4 GHz AP: `14ef1c9` ch6, `SpectrumSetup-00` ch1, phone
+> hotspot), then H3/hardware (USB Wi-Fi/Ethernet). 24 h-post gate: 18:20 local.
+> Evidence: `docs/BT-COEXISTENCE-2026-11-10.md` §9.
+
+> **PIN 2026-11-11b (settings + UX):** `/settings` and `/app/#settings` now
+> show a redacted provider matrix (config/env/auth/policy/state) and safe
+> pause/resume (typed confirm, `SETTINGS` ledger row, pending-host-apply badge,
+> console + rotate-command links; no secret in the browser).
+> `scripts/settings-apply.sh` comments/restores the env key, logs out the
+> provider, recreates `opencode-web`, and verifies (dry-run default; `--apply
+> --yes`; `--self-test`). Anthropic hard-paused and verified absent from the
+> container. `/app/#usability` simplified to evidence + link to `/usability`;
+> `/recovery` a11y fixed (skip target, focus-visible, styled layout); global
+> focus-visible + `pre` overflow; React tables scroll on mobile; reduced-motion
+> `audit-app-ux.py` (Playwright) found **no h1** on the React views; fixed:
+> every view now renders one h1 (AppBar brand demoted). Residual UX findings
+> Guided rotation: `rotate-guided.py` (Playwright, login-once profile) learns
+> revoke/create locators in `rotation_memory`/`rotation_run`, writes the new key
+> to `.env.local` without printing it, and never screenshots after reveal.
+> Then fixed **APP-UX-1**: Activity/Sessions search fields named, active nav
+> `aria-current="page"`, and <=600px 44px targets (buttons, icon buttons,
+> inputs, skip link). `audit-app-ux.py` now reports **0 findings**; Playwright
+> battery **12/12**.
+> honored. a11y audit 11/11 on every classic page; lint 419/0. Playwright
+> `/app` battery **12/12** (desktop 1280x900 + mobile 390x844, 10 s); `.24`
+> posture **23/0**, secret-scan clean, guard link fixed, OpenSSH patched and
+> running the new binary. Pushed `b8bf26c`.
+
+> **PIN 2026-11-11 (audit/triage):** full report in
+> `docs/AUDIT-TRIAGE-2026-11-10.md`; durable handoff in
+> `docs/HANDOFF-2026-11-11.md`. P0: rotate the 4 `../notes/` secrets; patch
+> OpenSSH. P1: B43 24–48 h measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1
+> external #5, stale sessions, JEV key. Fixed: `session-health` default DB path,
+> `issue-bridge.py` exec bit, SEC-3 closed (container secret binds are
+> `/dev/null`/`empty-certs`). Gates: fast 3/0, dashboard 161/0, posture 22/1.
 
 ## Archived 2026-11-05 (moved from HANDOFF.md)
 
