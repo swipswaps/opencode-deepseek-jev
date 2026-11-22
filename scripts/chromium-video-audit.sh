@@ -74,9 +74,15 @@ chromium_pids() {
   done
 }
 
+# Zombies and dying processes still have /proc/PID/comm and /proc/PID/cmdline,
+# but their exe symlink is gone. Selecting one prints empty rss/swap/cpu and a
+# raw "/proc/PID/exe: No such file" in the version field (seen 2026-11-22).
+have_exe() { test -e "/proc/$1/exe"; }
+
 main_pid() {
   local p
   for p in $(chromium_pids); do
+    have_exe "$p" || continue
     if ! tr '\000' ' ' < "/proc/$p/cmdline" | grep -q -- '--type='; then
       printf '%s\n' "$p"
       return 0
@@ -183,13 +189,26 @@ section_identity() {
 
 section_chromium() {
   head2 'chromium'
-  local p
-  p=$(main_pid) || { say 'not running (no browser process found)'; return 1; }
-  local bin
+  local p bin rss tries=0
+  while test "$tries" -lt 3; do
+    p=$(main_pid) || { say 'not running (no browser process found)'; return 1; }
+    rss=$(proc_status "$p" VmRSS)
+    test -n "$rss" && break
+    tries=$((tries + 1))
+    sleep 0.2
+  done
+  if test -z "$rss"; then
+    printf 'pid=%s vanished during sampling; rerun the audit\n' "$p"
+    return 1
+  fi
   bin=$(readlink -f "/proc/$p/exe")
   printf 'pid=%s rss_kb=%s swap_kb=%s cpu_s=%s\n' \
-    "$p" "$(proc_status "$p" VmRSS)" "$(proc_status "$p" VmSwap)" "$(proc_cpu_s "$p")"
-  printf 'version=%s\n' "$("$bin" --version 2>&1 | head -n 1)"
+    "$p" "$rss" "$(proc_status "$p" VmSwap)" "$(proc_cpu_s "$p")"
+  if test -n "$bin" && test -x "$bin"; then
+    printf 'version=%s\n' "$("$bin" --version 2>&1 | head -n 1)"
+  else
+    printf 'version=unavailable (binary disappeared during sampling)\n'
+  fi
   printf 'flags=\n'
   argv_lines "$p" | grep -aE '^--' | awk '{print "  " $0}'
   return 0
@@ -484,6 +503,12 @@ do_selftest() {
     printf 'PASS argv NUL split\n'
   else
     printf 'FAIL argv NUL split\n'
+    rc=1
+  fi
+  if have_exe "$$" && ! have_exe 99999999; then
+    printf 'PASS exe filter (live pid yes, phantom no)\n'
+  else
+    printf 'FAIL exe filter\n'
     rc=1
   fi
   printf '# keep\nGRAPHIC_DRIVER=default\n# tail\n' > "$tmp/conf"
