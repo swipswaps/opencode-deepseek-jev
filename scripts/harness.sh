@@ -21,8 +21,10 @@
 #
 # Every gate runs under a MEASURED bound (scripts/gate-bound.py: p95*2, floor
 # 120s, disclosed 1800s ceiling until 3 samples; GATE_TIMEOUT overrides) and
-# prints a live heartbeat, so silence now has context. Only PASSING runs seed
-# the bound; a failed or timed-out run is never a timing sample. A timeout fails only
+# prints a live heartbeat, so silence now has context. Bounds are per
+# environment: a sandbox/container sample never teaches the host's deadline,
+# and untagged legacy samples are ignored. Only PASSING runs seed the bound; a
+# failed or timed-out run is never a timing sample. A timeout fails only
 # that gate and keeps its log.
 #
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
@@ -44,6 +46,7 @@ TS=""
 REV=""
 TOOLHOME=""
 STATE=""
+GATE_ENV=""
 
 resolve_repo() {
     local c="$1"
@@ -103,7 +106,7 @@ run_gate() {
 
     if have python3 && [ -f "$TOOLHOME/gate-bound.py" ]; then
         local b
-        b=$(python3 "$TOOLHOME/gate-bound.py" --gate "$name" 2>&1)
+        b=$(python3 "$TOOLHOME/gate-bound.py" --gate "$name" --env "$GATE_ENV" 2>&1)
         bound=$(printf '%s' "$b" | awk '{ for (i = 1; i <= NF; i++) if (index($i, "bound=") == 1) { sub("bound=", "", $i); printf "%s", $i } }')
         basis=$(printf '%s' "$b" | awk '{ for (i = 1; i <= NF; i++) if (index($i, "basis=") == 1) { sub("basis=", "", $i); printf "%s", $i } }')
     fi
@@ -111,7 +114,7 @@ run_gate() {
     [ -n "$basis" ] || basis=none
     [ "$JSON" -eq 0 ] && style=harness
 
-    run "gate $name start bound=${bound}s basis=$basis"
+    run "gate $name start bound=${bound}s basis=$basis env=$GATE_ENV"
     CURRENT_GATE="$name"
     start=$(date +%s)
     timeout "$bound" "$script" > "$out" 2>&1 &
@@ -151,7 +154,7 @@ run_gate() {
             # failure teach the deadline (e.g. a 178s failure would become the
             # p95 sample), which defeats the measurement it is meant to be.
             if have python3 && [ -f "$TOOLHOME/gate-bound.py" ]; then
-                python3 "$TOOLHOME/gate-bound.py" --gate "$name" --record "$elapsed" 2>&1 \
+                python3 "$TOOLHOME/gate-bound.py" --gate "$name" --record "$elapsed" --env "$GATE_ENV" 2>&1 \
                     | awk '{ print "timing: " $0 }' || printf 'timing: record failed (non-fatal)\n'
             fi
         else
@@ -234,6 +237,10 @@ main() {
     # them. HARNESS_STATE=<dir> keeps a read-only target untouched.
     STATE="${HARNESS_STATE:-$REPO}"
     export GATE_TIMINGS="${GATE_TIMINGS:-$STATE/data/observability/gate-timings.json}"
+    GATE_ENV=host
+    if [ -x "$REPO/scripts/sandbox-detect.sh" ] && "$REPO/scripts/sandbox-detect.sh" --quiet; then
+        GATE_ENV=sandbox
+    fi
     WORK=$(mktemp -d)
     local TS REV
     TS=$(date -u +%Y%m%dT%H%M%SZ)

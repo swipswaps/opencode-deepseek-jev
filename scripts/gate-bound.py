@@ -14,7 +14,10 @@ three samples exist and GATE_TIMEOUT as the explicit operator override.
         recorded gate=test-hygiene seconds=342 n=4
     python3 scripts/gate-bound.py --self-test
 
-Store: data/observability/gate-timings.json  {gate: [seconds, ...]} (last 30).
+Store: data/observability/gate-timings.json  {gate: {env: [seconds, ...]}}
+(last 30 per env). Envs are "host" and "sandbox"; a container run is much
+slower than the host, so its samples must not teach the host's deadline.
+Untagged legacy lists are ignored (they mixed both and inflated the bound).
 Exit 0 always: this is advisory telemetry, never a gate.
 """
 
@@ -76,24 +79,40 @@ def p95(values: list) -> int:
     return xs[idx]
 
 
-def bound_for(gate: str) -> tuple[int, str, int]:
-    env = os.environ.get("GATE_TIMEOUT", "")
-    if env.isdigit() and int(env) > 0:
-        return int(env), "GATE_TIMEOUT", 0
-    xs = [int(v) for v in load(store_path()).get(gate, []) if str(v).isdigit()]
+ENVS = ("host", "sandbox")
+
+
+def sample_env(raw: str) -> str:
+    return raw if raw in ENVS else "host"
+
+
+def by_env(value) -> dict:
+    out = {env: [] for env in ENVS}
+    if isinstance(value, dict):
+        for env in ENVS:
+            out[env] = [int(v) for v in value.get(env, []) if str(v).isdigit()]
+    return out
+
+
+def bound_for(gate: str, env: str = "host") -> tuple[int, str, int]:
+    override = os.environ.get("GATE_TIMEOUT", "")
+    if override.isdigit() and int(override) > 0:
+        return int(override), "GATE_TIMEOUT", 0
+    xs = by_env(load(store_path()).get(gate))[sample_env(env)]
     if len(xs) < 3:
         return CEILING, "ceiling(<3)", len(xs)
     return max(FLOOR, int(math.ceil(p95(xs) * 2))), "p95*2", len(xs)
 
 
-def record(gate: str, seconds: int) -> int:
+def record(gate: str, seconds: int, env: str = "host") -> int:
     path = store_path()
     data = load(path)
-    xs = [int(v) for v in data.get(gate, []) if str(v).isdigit()]
-    xs.append(max(0, seconds))
-    data[gate] = xs[-KEEP:]
+    env = sample_env(env)
+    samples = by_env(data.get(gate))
+    samples[env] = (samples[env] + [max(0, seconds)])[-KEEP:]
+    data[gate] = samples
     save(path, data)
-    return len(data[gate])
+    return len(samples[env])
 
 
 def self_test() -> int:
@@ -121,12 +140,22 @@ def self_test() -> int:
             record("g", 500)
         b, _, n = bound_for("g")
         check(b == 1000, f"p95=500 -> 1000 (got {b})")
+        for _ in range(3):
+            record("g", 700, "sandbox")
+        check(bound_for("g", "host")[0] == 1000, "sandbox samples do not move the host bound")
+        check(bound_for("g", "sandbox")[0] == 1400, "sandbox is bounded by its own samples")
         os.environ["GATE_TIMEOUT"] = "42"
         check(bound_for("g")[0] == 42, "GATE_TIMEOUT overrides")
         os.environ.pop("GATE_TIMEOUT", None)
+        path = store_path()
+        data = load(path)
+        data["legacy"] = [61, 286, 700]
+        save(path, data)
+        b, basis, n = bound_for("legacy")
+        check(b == CEILING and n == 0, f"untagged legacy samples are ignored (got {b}/{n})")
         for i in range(40):
             record("g", i)
-        check(len(load(store_path())["g"]) == KEEP, "history is trimmed")
+        check(len(load(store_path())["g"]["host"]) == KEEP, "history is trimmed per env")
         del os.environ["GATE_TIMINGS"]
     print(f"self-test: {'PASS' if fails == 0 else 'FAIL'} ({fails} failures)")
     return 0 if fails == 0 else 1
@@ -136,6 +165,7 @@ def main(argv: list | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--gate", default="")
     ap.add_argument("--record", default="")
+    ap.add_argument("--env", default="host")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv if argv is not None else sys.argv[1:])
@@ -144,18 +174,19 @@ def main(argv: list | None = None) -> int:
     if not args.gate:
         print("gate-bound: --gate is required", file=sys.stderr)
         return 2
+    env = sample_env(args.env)
     if args.record != "":
         if not str(args.record).isdigit():
             print("gate-bound: --record must be integer seconds", file=sys.stderr)
             return 2
-        n = record(args.gate, int(args.record))
-        print(f"recorded gate={args.gate} seconds={args.record} n={n}")
+        n = record(args.gate, int(args.record), env)
+        print(f"recorded gate={args.gate} env={env} seconds={args.record} n={n}")
         return 0
-    b, basis, n = bound_for(args.gate)
+    b, basis, n = bound_for(args.gate, env)
     if args.json:
-        print(json.dumps({"gate": args.gate, "bound": b, "basis": basis, "n": n}))
+        print(json.dumps({"gate": args.gate, "env": env, "bound": b, "basis": basis, "n": n}))
     else:
-        print(f"bound={b} basis={basis} n={n}")
+        print(f"bound={b} basis={basis} n={n} env={env}")
     return 0
 
 

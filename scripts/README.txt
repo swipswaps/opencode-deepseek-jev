@@ -127,9 +127,11 @@ sandbox-detect.sh
 gate-bound.py
     Measured per-gate deadline for harness.sh: p95*2 of that gate's own
     successful durations (floor 120 s; a disclosed 1800 s ceiling until three
-    samples; GATE_TIMEOUT overrides). harness.sh records PASS-only samples; a
-    failed run never teaches the deadline. --record appends; store is
-    data/observability/gate-timings.json (last 30 per gate). --self-test.
+    samples; GATE_TIMEOUT overrides). Samples are tagged host or sandbox, so a
+    slower container run cannot teach the host's deadline; untagged legacy
+    samples are ignored. harness.sh records PASS-only samples; a failed run
+    never teaches the deadline. --record appends; store is
+    data/observability/gate-timings.json (last 30 per gate per env). --self-test.
 
 Monitor cost and activity
 -------------------------
@@ -375,11 +377,13 @@ harness.sh
     {ts,rev,passed,failed,gates[]}; --keep-work retains per-gate logs.
     Each gate runs under a MEASURED bound (gate-bound.py: p95*2, floor 120 s,
     disclosed 1800 s ceiling; GATE_TIMEOUT overrides) and prints a heartbeat
-    (HEARTBEAT=N seconds), so silence has context. A timeout fails only that
-    gate and keeps its log; SIGINT/SIGTERM records GATE_ABORT and marks
-    last-gate.json state=aborted. Only PASSING runs seed the bound (a failure
-    prints "not recorded (pass-only samples)"); a failure keeps the
-    status=FAIL check lines AND the last 30 lines in logs/harness-failures.log.
+    (HEARTBEAT=N seconds), so silence has context. Bounds are per environment
+    (host vs sandbox), so a container run cannot inflate the host's deadline.
+    A timeout fails only that gate and keeps its log; SIGINT/SIGTERM records
+    GATE_ABORT and marks last-gate.json state=aborted. Only PASSING runs seed
+    the bound (a failure prints "not recorded (pass-only samples)"); a failure
+    keeps the status=FAIL check lines AND the last 30 lines in
+    logs/harness-failures.log.
     A missing gate is SKIP, not pass. Records
     data/observability/last-gate.json (with failed_gates) for preflight.sh.
 
@@ -1233,7 +1237,9 @@ grafana-up.sh
 test-durable.sh
     Proves the durable properties offline (RULES #73/#74): triage reads the
     durable source, durable-run checkpoints + resumes, derived state rebuilds,
-    a read-only client attaches. Wired into test-hygiene.
+    a read-only client attaches. Each self-test runs under a named bound
+    (DURABLE_STEP_TIMEOUT, default 60 s) and prints its elapsed seconds, so a
+    slow check is visible without waiting for a hang. Wired into test-hygiene.
 
 free-port.sh
     Find / test a free TCP port (never assume one; conflicts recur). Prints

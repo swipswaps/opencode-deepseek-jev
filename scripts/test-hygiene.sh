@@ -316,9 +316,9 @@ PY
 
     if [ -f "$REPO/scripts/gate-bound.py" ]; then
         if python3 "$REPO/scripts/gate-bound.py" --self-test > "$work/gb_st.txt" 2>&1; then
-            ok 'gate-bound: self-test (ceiling + p95 + override + trim)'
+            ok 'gate-bound: self-test (ceiling + p95 + override + trim + env isolation)'
         else
-            bad 'gate-bound: self-test (ceiling + p95 + override + trim)'
+            bad 'gate-bound: self-test (ceiling + p95 + override + trim + env isolation)'
             cat "$work/gb_st.txt"
         fi
     else

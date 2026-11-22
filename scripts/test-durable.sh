@@ -23,14 +23,14 @@ chk() { # chk "name" cmd...  (bounded; names the hung sub-check)
     # print the sub-check name, elapsed, and its last lines instead of a silent
     # 60s gate failure. https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html
     local name="$1"; shift
-    local tmp rc t0 dt step="${DURABLE_STEP_TIMEOUT:-30}"
+    local tmp rc t0 dt step="${DURABLE_STEP_TIMEOUT:-60}"
     tmp=$(mktemp)
     t0=$(date +%s)
     timeout -k 5 "$step" "$@" > "$tmp" 2>&1
     rc=$?
     dt=$(( $(date +%s) - t0 ))
     if [ "$rc" -eq 0 ]; then
-        ok "$name"
+        ok "$name (${dt}s)"
     else
         if [ "$rc" -eq 124 ]; then
             no "$name (timeout ${step}s, elapsed ${dt}s)"

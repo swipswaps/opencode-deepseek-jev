@@ -217,8 +217,10 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
       (`logs/harness-failures.log`, gate 20261120T235457Z). The check now prints
       the actual target + `install-global-guard.sh --install`; that script's
       `--check` now rejects a wrong symlink or a differing copy (self-test
-      covers both). Remaining: on the host run the install, then
-      `harness.sh --fast` x3 (hygiene n=2; timings already at n=4). Next:
+      covers both). Bounds are now env-tagged (`host` vs `sandbox`) and
+      untagged samples are ignored, so a 700 s container run cannot inflate the
+      host bound. Remaining on the host: run the install, then
+      `harness.sh --fast` x3 to seed host n=0..3. Next:
       `docs/HANDOFF-2026-11-15.md`.
 - [ ] **CHECK-TIMEOUT-1.** Bound each self-test inside test-hygiene (one hung
       test can still consume the whole gate bound); name the offender.
