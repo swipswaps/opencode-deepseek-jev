@@ -880,6 +880,17 @@ PY
         bad 'secret-scan.sh present'
     fi
 
+    if [ -f "$REPO/scripts/authorize-container-key.sh" ]; then
+        if bash "$REPO/scripts/authorize-container-key.sh" --self-test > "$work/ack_st.txt" 2>&1; then
+            ok 'authorize-container-key: self-test (tighten + idempotent + fails closed)'
+        else
+            bad 'authorize-container-key: self-test (tighten + idempotent + fails closed)'
+            cat "$work/ack_st.txt"
+        fi
+    else
+        bad 'authorize-container-key.sh present'
+    fi
+
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
         if bash "$REPO/scripts/sentinel.sh" --self-test > "$work/sen_st.txt" 2>&1; then
             ok 'sentinel: self-test (fixture trips + cursor + ledger seam)'
