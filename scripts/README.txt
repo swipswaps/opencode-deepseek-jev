@@ -688,6 +688,17 @@ chromium-video-audit.sh
     can differ. Discovery scans /proc by comm (no pgrep dependency). --json,
     --self-test.
 
+chromium-video-ab.sh
+    RUN ON THE HOST. Controlled A/B for the decode switch, replacing the
+    one-sample narrative with a pre-registered rule. `plan` prints the exact
+    procedure; `measure --label A|B` records switch state, the drm-engine-dec
+    rate, GPU CPU, load/PSI, and (via CDP) the video's dropped/total frame
+    counters; `compare a.json b.json` applies: A must be switch-off with zero
+    decode, B switch-on with decode, and drop_B <= drop_A - 0.5pp and <= 1%.
+    Reports PASS/FAIL/INCONCLUSIVE (SKIP is not PASS). --self-test covers the
+    PASS, confounded-control, no-engagement, sub-margin, no-counters, and
+    label-mismatch branches.
+
 chromium-video-priority.sh
     RUN ON THE HOST. Finds the processes that actually decode video (Widevine
     CDM, GPU process, busiest renderer) and raises their CPU share,

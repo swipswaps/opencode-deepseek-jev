@@ -206,7 +206,7 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
 
 ## Queue (ranked, top first)
 
-- [~] **HARNESS-STALL-1 — 2026-11-15.** A 5m42s silent gate (it PASSed at
+- [x] **HARNESS-STALL-1 — DONE 2026-11-22.** A 5m42s silent gate (it PASSed at
       17:07:04Z) was silence, not a hang. Landed: heartbeats, measured bound,
       `GATE_ABORT`, failure logs, `diag-harness-stall.sh` (`/proc` log + inotify
       + attribution), sandbox/db resolvers, ledger `ts_epoch`, brief State/Next.
@@ -219,15 +219,26 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
       `--check` now rejects a wrong symlink or a differing copy (self-test
       covers both). Bounds are now env-tagged (`host` vs `sandbox`) and
       untagged samples are ignored, so a 700 s container run cannot inflate the
-      host bound. Remaining on the host: run the install, then
-      `harness.sh --fast` x3 to seed host n=0..3. Next:
-      `docs/HANDOFF-2026-11-15.md`.
-- [ ] **CHROMIUM-VERIFY-1.** Host, after `GRAPHIC_DRIVER=amd` was applied: close and
-      reopen Chromium, then `./scripts/chromium-video-audit.sh --verify --sample 5`.
-      The 403 zombies are children of the `opencode web` server; restart it when
-      convenient. Evidence: `logs/ses_ses_dffa547cbffez35MwR621SrjGR.txt`.
-- [ ] **CHECK-TIMEOUT-1.** Bound each self-test inside test-hygiene (one hung
-      test can still consume the whole gate bound); name the offender.
+      host bound. **Closed 2026-11-22:** guard installed and `--check` PASS;
+      host `harness.sh --fast` is green (`4 pass / 0 fail`,
+      `last-gate.json state=complete`) with `test-hygiene` host `n=3`. The
+      `lint` silence was also explained: the parallel shellcheck barrier emits
+      nothing until `wait`, which is why a 190 s window looked like a hang
+      (the 848 s p95*2 bound was correct).
+- [x] **CHROMIUM-VERIFY-1 — DONE 2026-11-22.** Host, after
+      `GRAPHIC_DRIVER=amd`: playback verify returned `dec_delta_s=0.109`,
+      `verdict=PASS hardware decode is running`. Idle now reports
+      `verdict=INCONCLUSIVE` (exit 2) instead of a misleading failure; the
+      dying-PID `cat /proc/<pid>/comm` race is closed. Controlled A/B:
+      `scripts/chromium-video-ab.sh` (measure/compare, pre-registered rule).
+- [x] **CHECK-TIMEOUT-1 — DONE 2026-11-22.** Every `--self-test` in
+      `test-hygiene.sh` is wrapped in
+      `timeout "${CHECK_TIMEOUT:-120}"`, so one hung test cannot consume the
+      gate bound; the existing `bad '<name>'` line names the offender. Also
+      fixed the cause of a real 60 s contract timeout found while enabling it:
+      `audit-tool-calls.py --recent` filtered in Python after `json_extract`
+      over every part row (~15 s live); the session filter is now pushed into
+      SQL (0.00 s).
 - [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`; handoff `docs/HANDOFF-2026-11-11.md`.
       P0: rotate the 4 `../notes/` secrets; patch OpenSSH. P1: B43 24–48 h
       measurement (185 total / 184 pre / 1 post at 20:54), TUNNEL-1 external #5, stale

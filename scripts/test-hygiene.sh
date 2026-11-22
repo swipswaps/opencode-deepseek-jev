@@ -17,6 +17,11 @@
 #
 set -o pipefail
 
+# CHECK-TIMEOUT-1: every --self-test is wrapped in `timeout` so one hung test
+# cannot consume the whole gate bound. A timeout returns 124 and the existing
+# `bad '<name>'` line names the offender (there is no anonymous check here).
+CHECK_TIMEOUT="${CHECK_TIMEOUT:-120}"
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -144,7 +149,7 @@ PY
         bad 'database present for audit-tool-calls/prompt-lint'
     fi
 
-    if python3 "$REPO/scripts/audit-tool-calls.py" --self-test > "$work/atc_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/audit-tool-calls.py" --self-test > "$work/atc_st.txt" 2>&1; then
         ok 'audit-tool-calls: self-test'
     else
         bad 'audit-tool-calls: self-test'
@@ -152,7 +157,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/tool-call-contract-gate.py" ]; then
-        if python3 "$REPO/scripts/tool-call-contract-gate.py" --self-test > "$work/tcg_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/tool-call-contract-gate.py" --self-test > "$work/tcg_st.txt" 2>&1; then
             ok 'tool-call-contract-gate: self-test (seed/ratchet/new-hits)'
         else
             bad 'tool-call-contract-gate: self-test'
@@ -177,7 +182,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/web-restart.sh" ]; then
-        if bash "$REPO/scripts/web-restart.sh" --self-test > "$work/wr_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/web-restart.sh" --self-test > "$work/wr_st.txt" 2>&1; then
             ok 'web-restart: self-test (guard-loaded wait + sha match + ANSI strip)'
         else
             bad 'web-restart: self-test'
@@ -188,7 +193,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/chromium-video-audit.sh" ]; then
-        if bash "$REPO/scripts/chromium-video-audit.sh" --self-test > "$work/cv_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/chromium-video-audit.sh" --self-test > "$work/cv_st.txt" 2>&1; then
             ok 'chromium-video-audit: self-test (idle fd + dying-pid tolerance)'
         else
             bad 'chromium-video-audit: self-test'
@@ -198,21 +203,32 @@ PY
         bad 'chromium-video-audit.sh present'
     fi
 
-    if python3 "$REPO/scripts/prompt-lint.py" --self-test > "$work/pl_st.txt" 2>&1; then
+    if [ -f "$REPO/scripts/chromium-video-ab.sh" ]; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/chromium-video-ab.sh" --self-test > "$work/cab_st.txt" 2>&1; then
+            ok 'chromium-video-ab: self-test (A/B decision branches)'
+        else
+            bad 'chromium-video-ab: self-test'
+            tail -4 "$work/cab_st.txt"
+        fi
+    else
+        bad 'chromium-video-ab.sh present'
+    fi
+
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/prompt-lint.py" --self-test > "$work/pl_st.txt" 2>&1; then
         ok 'prompt-lint: self-test'
     else
         bad 'prompt-lint: self-test'
         cat "$work/pl_st.txt"
     fi
 
-    if python3 "$REPO/scripts/acronym-lint.py" --self-test > "$work/al_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/acronym-lint.py" --self-test > "$work/al_st.txt" 2>&1; then
         ok 'acronym-lint: self-test (expand + undefined + allowlist + strict + glossary)'
     else
         bad 'acronym-lint: self-test (expand + undefined + allowlist + strict + glossary)'
         cat "$work/al_st.txt"
     fi
 
-    if python3 "$REPO/scripts/issue-solutions.py" --self-test > "$work/is_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/issue-solutions.py" --self-test > "$work/is_st.txt" 2>&1; then
         ok 'issue-solutions: self-test'
     else
         bad 'issue-solutions: self-test'
@@ -221,7 +237,7 @@ PY
 
     local bench_tool
     for bench_tool in issue-benchmark choice-gate pulse; do
-        if python3 "$REPO/scripts/$bench_tool.py" --self-test > "$work/${bench_tool}_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/$bench_tool.py" --self-test > "$work/${bench_tool}_st.txt" 2>&1; then
             ok "$bench_tool: self-test"
         else
             bad "$bench_tool: self-test"
@@ -229,56 +245,56 @@ PY
         fi
     done
 
-    if python3 "$REPO/scripts/usability-suite.py" --self-test > "$work/usability_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/usability-suite.py" --self-test > "$work/usability_st.txt" 2>&1; then
         ok 'usability-suite: self-test'
     else
         bad 'usability-suite: self-test'
         cat "$work/usability_st.txt"
     fi
 
-    if python3 "$REPO/scripts/usability-guided.py" --self-test > "$work/usability_guided_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/usability-guided.py" --self-test > "$work/usability_guided_st.txt" 2>&1; then
         ok 'usability-guided: self-test'
     else
         bad 'usability-guided: self-test'
         cat "$work/usability_guided_st.txt"
     fi
 
-    if bash "$REPO/scripts/usability-install.sh" --self-test > "$work/usability_inst.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/usability-install.sh" --self-test > "$work/usability_inst.txt" 2>&1; then
         ok 'usability-install: self-test'
     else
         bad 'usability-install: self-test'
         cat "$work/usability_inst.txt"
     fi
 
-    if bash "$REPO/scripts/usability-guide.sh" --self-test > "$work/usability_guide.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/usability-guide.sh" --self-test > "$work/usability_guide.txt" 2>&1; then
         ok 'usability-guide: self-test'
     else
         bad 'usability-guide: self-test'
         cat "$work/usability_guide.txt"
     fi
 
-    if python3 "$REPO/scripts/closeout-gate.py" --self-test > "$work/closeout_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/closeout-gate.py" --self-test > "$work/closeout_st.txt" 2>&1; then
         ok 'closeout-gate: self-test'
     else
         bad 'closeout-gate: self-test'
         cat "$work/closeout_st.txt"
     fi
 
-    if bash "$REPO/scripts/web-build-restart.sh" --self-test > "$work/wbr_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/web-build-restart.sh" --self-test > "$work/wbr_st.txt" 2>&1; then
         ok 'web-build-restart: self-test'
     else
         bad 'web-build-restart: self-test'
         cat "$work/wbr_st.txt"
     fi
 
-    if bash "$REPO/scripts/usability-proceed.sh" --self-test > "$work/proceed_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/usability-proceed.sh" --self-test > "$work/proceed_st.txt" 2>&1; then
         ok 'usability-proceed: self-test'
     else
         bad 'usability-proceed: self-test'
         cat "$work/proceed_st.txt"
     fi
 
-    if bash "$REPO/scripts/usability-autopilot.sh" --self-test > "$work/autopilot_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/usability-autopilot.sh" --self-test > "$work/autopilot_st.txt" 2>&1; then
         ok 'usability-autopilot: self-test'
     else
         bad 'usability-autopilot: self-test'
@@ -286,7 +302,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/guard-evasion-scan.py" ]; then
-        if python3 "$REPO/scripts/guard-evasion-scan.py" --self-test > "$work/ges_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/guard-evasion-scan.py" --self-test > "$work/ges_st.txt" 2>&1; then
             ok 'guard-evasion-scan: self-test (command + file + quoted/comment)'
         else
             bad 'guard-evasion-scan: self-test (command + file + quoted/comment)'
@@ -319,7 +335,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/install-global-guard.sh" ]; then
-        if bash "$REPO/scripts/install-global-guard.sh" --self-test > "$work/igg_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/install-global-guard.sh" --self-test > "$work/igg_st.txt" 2>&1; then
             ok 'install-global-guard: self-test (absent + required + install + dangling + uninstall)'
         else
             bad 'install-global-guard: self-test (absent + required + install + dangling + uninstall)'
@@ -340,7 +356,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/re-extract-session.sh" ]; then
-        if bash "$REPO/scripts/re-extract-session.sh" --self-test > "$work/rx_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/re-extract-session.sh" --self-test > "$work/rx_st.txt" 2>&1; then
             ok 're-extract-session: self-test (stub node + fixtures)'
         else
             bad 're-extract-session: self-test (stub node + fixtures)'
@@ -351,7 +367,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/diag-harness-stall.sh" ]; then
-        if bash "$REPO/scripts/diag-harness-stall.sh" --self-test > "$work/dhs_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/diag-harness-stall.sh" --self-test > "$work/dhs_st.txt" 2>&1; then
             ok 'diag-harness-stall: self-test (found + empty + bad args + no ps/pgrep hang)'
         else
             bad 'diag-harness-stall: self-test (found + empty + bad args + no ps/pgrep hang)'
@@ -362,7 +378,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/gate-bound.py" ]; then
-        if python3 "$REPO/scripts/gate-bound.py" --self-test > "$work/gb_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/gate-bound.py" --self-test > "$work/gb_st.txt" 2>&1; then
             ok 'gate-bound: self-test (ceiling + p95 + override + trim + env isolation)'
         else
             bad 'gate-bound: self-test (ceiling + p95 + override + trim + env isolation)'
@@ -373,7 +389,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/db-path.sh" ]; then
-        if bash "$REPO/scripts/db-path.sh" --self-test > "$work/dbp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/db-path.sh" --self-test > "$work/dbp_st.txt" 2>&1; then
             ok 'db-path: self-test (override + XDG + exists)'
         else
             bad 'db-path: self-test (override + XDG + exists)'
@@ -384,7 +400,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/sandbox-detect.sh" ]; then
-        if bash "$REPO/scripts/sandbox-detect.sh" --self-test > "$work/sbd_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/sandbox-detect.sh" --self-test > "$work/sbd_st.txt" 2>&1; then
             ok 'sandbox-detect: self-test (masked file + cgroup)'
         else
             bad 'sandbox-detect: self-test (masked file + cgroup)'
@@ -395,7 +411,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/ledger.py" ]; then
-        if python3 "$REPO/scripts/ledger.py" --self-test > "$work/led_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/ledger.py" --self-test > "$work/led_st.txt" 2>&1; then
             ok 'ledger: self-test (schema + ts_epoch + idempotent ingest)'
         else
             bad 'ledger: self-test (schema + ts_epoch + idempotent ingest)'
@@ -406,7 +422,7 @@ PY
     fi
 
     if have node && [ -f "$REPO/scripts/session-health.mjs" ]; then
-        if node --experimental-sqlite "$REPO/scripts/session-health.mjs" --self-test > "$work/sh_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" node --experimental-sqlite "$REPO/scripts/session-health.mjs" --self-test > "$work/sh_st.txt" 2>&1; then
             ok 'session-health: self-test (offline fixtures)'
         else
             bad 'session-health: self-test (offline fixtures)'
@@ -423,7 +439,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/tunnel-link-probe.sh" ]; then
-        if bash "$REPO/scripts/tunnel-link-probe.sh" --self-test > "$work/tlp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/tunnel-link-probe.sh" --self-test > "$work/tlp_st.txt" 2>&1; then
             ok 'tunnel-link-probe: self-test (fixtures classify flap/churn/clean)'
         else
             bad 'tunnel-link-probe: self-test'
@@ -434,7 +450,7 @@ PY
     fi
 
     if have node && [ -f "$REPO/scripts/quirks.mjs" ]; then
-        if node --experimental-sqlite "$REPO/scripts/quirks.mjs" --self-test > "$work/qk_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" node --experimental-sqlite "$REPO/scripts/quirks.mjs" --self-test > "$work/qk_st.txt" 2>&1; then
             ok 'quirks: self-test (fuzzy matcher + corpus counters)'
         else
             bad 'quirks: self-test (fuzzy matcher + corpus counters)'
@@ -454,7 +470,7 @@ PY
     fi
 
     if have node && [ -f "$REPO/scripts/rerank.mjs" ]; then
-        if node --experimental-sqlite "$REPO/scripts/rerank.mjs" --self-test > "$work/rr_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" node --experimental-sqlite "$REPO/scripts/rerank.mjs" --self-test > "$work/rr_st.txt" 2>&1; then
             ok 'rerank: self-test (local embed + redaction-mandatory external + FTS5 pull + caps)'
         else
             bad 'rerank: self-test (local embed + redaction-mandatory external + FTS5 pull + caps)'
@@ -517,7 +533,7 @@ PY
     fi
 
     if have node && [ -f "$REPO/scripts/redact.mjs" ]; then
-        if node "$REPO/scripts/redact.mjs" --self-test > "$work/rd_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" node "$REPO/scripts/redact.mjs" --self-test > "$work/rd_st.txt" 2>&1; then
             ok 'redact: self-test (egress redaction)'
         else
             bad 'redact: self-test (egress redaction)'
@@ -539,7 +555,7 @@ PY
     fi
 
     if have node && [ -f "$REPO/scripts/capabilities.mjs" ]; then
-        if node "$REPO/scripts/capabilities.mjs" --self-test > "$work/cap_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" node "$REPO/scripts/capabilities.mjs" --self-test > "$work/cap_st.txt" 2>&1; then
             ok 'capabilities: self-test (GREEN/DEGRADED/MISSING)'
         else
             bad 'capabilities: self-test (GREEN/DEGRADED/MISSING)'
@@ -560,7 +576,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/watch.sh" ]; then
-        if bash "$REPO/scripts/watch.sh" --self-test > "$work/wt.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/watch.sh" --self-test > "$work/wt.txt" 2>&1; then
             ok 'watch: self-test (cursor init + new-detection)'
         else
             bad 'watch: self-test (cursor init + new-detection)'
@@ -571,7 +587,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/monitor-snapshot.sh" ]; then
-        if bash "$REPO/scripts/monitor-snapshot.sh" --self-test > "$work/ms.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/monitor-snapshot.sh" --self-test > "$work/ms.txt" 2>&1; then
             ok 'monitor-snapshot: self-test'
         else
             bad 'monitor-snapshot: self-test'
@@ -582,7 +598,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/recover-4096.sh" ]; then
-        if bash "$REPO/scripts/recover-4096.sh" --self-test > "$work/rc_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/recover-4096.sh" --self-test > "$work/rc_st.txt" 2>&1; then
             ok 'recover-4096: self-test (classifier + fixture + ledger seam)'
         else
             bad 'recover-4096: self-test (classifier + fixture + ledger seam)'
@@ -593,7 +609,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/web-health.sh" ]; then
-        if bash "$REPO/scripts/web-health.sh" --self-test > "$work/wh_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/web-health.sh" --self-test > "$work/wh_st.txt" 2>&1; then
             ok 'web-health: self-test (settle + threshold + cooldown + clear + dashboard-only)'
         else
             bad 'web-health: self-test (settle + threshold + cooldown + clear + dashboard-only)'
@@ -604,7 +620,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/web-install.sh" ]; then
-        if bash "$REPO/scripts/web-install.sh" --self-test > "$work/wi_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/web-install.sh" --self-test > "$work/wi_st.txt" 2>&1; then
             ok 'web-install: self-test (units baked + timer semantics)'
         else
             bad 'web-install: self-test (units baked + timer semantics)'
@@ -615,7 +631,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/clipboard-preflight.sh" ]; then
-        if bash "$REPO/scripts/clipboard-preflight.sh" --self-test > "$work/cp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/clipboard-preflight.sh" --self-test > "$work/cp_st.txt" 2>&1; then
             ok 'clipboard-preflight: self-test (backend + image/text gate)'
         else
             bad 'clipboard-preflight: self-test (backend + image/text gate)'
@@ -626,7 +642,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/ssh-x11-setup.sh" ]; then
-        if bash "$REPO/scripts/ssh-x11-setup.sh" --self-test > "$work/sx_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/ssh-x11-setup.sh" --self-test > "$work/sx_st.txt" 2>&1; then
             ok 'ssh-x11-setup: self-test (block shape + idempotent managed region)'
         else
             bad 'ssh-x11-setup: self-test (block shape + idempotent managed region)'
@@ -639,7 +655,7 @@ PY
     if [ -f "$REPO/scripts/client-setup.sh" ]; then
         if [ "$SANDBOX" -eq 1 ]; then
             skip 'client-setup: self-test (sandbox: needs host ssh + units)'
-        elif bash "$REPO/scripts/client-setup.sh" --self-test > "$work/cs_st.txt" 2>&1; then
+        elif timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/client-setup.sh" --self-test > "$work/cs_st.txt" 2>&1; then
             ok 'client-setup: self-test (discovery + config + units + heal + uninstall)'
         else
             bad 'client-setup: self-test (discovery + config + units + heal + uninstall)'
@@ -650,7 +666,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/display-env.sh" ]; then
-        if bash "$REPO/scripts/display-env.sh" --self-test > "$work/de_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/display-env.sh" --self-test > "$work/de_st.txt" 2>&1; then
             ok 'display-env: self-test (install + idempotent + print)'
         else
             bad 'display-env: self-test (install + idempotent + print)'
@@ -661,7 +677,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/hotspot-test.sh" ]; then
-        if bash "$REPO/scripts/hotspot-test.sh" --self-test > "$work/ht_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/hotspot-test.sh" --self-test > "$work/ht_st.txt" 2>&1; then
             ok 'hotspot-test: self-test (before/after + fallback + lighthouse + json)'
         else
             bad 'hotspot-test: self-test (before/after + fallback + lighthouse + json)'
@@ -672,7 +688,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/hotspot-reconnect.sh" ]; then
-        if bash "$REPO/scripts/hotspot-reconnect.sh" --self-test > "$work/hr_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/hotspot-reconnect.sh" --self-test > "$work/hr_st.txt" 2>&1; then
             ok 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json + inhibit)'
         else
             bad 'hotspot-reconnect: self-test (check + lost + alert + server + reconnect + plan + json + inhibit)'
@@ -685,7 +701,7 @@ PY
     if [ -f "$REPO/scripts/wifi-link-forensics.sh" ]; then
         if [ "$SANDBOX" -eq 1 ]; then
             skip 'wifi-link-forensics: self-test (sandbox: needs host wifi tooling)'
-        elif bash "$REPO/scripts/wifi-link-forensics.sh" --self-test > "$work/wlf_st.txt" 2>&1; then
+        elif timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/wifi-link-forensics.sh" --self-test > "$work/wlf_st.txt" 2>&1; then
             ok 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
         else
             bad 'wifi-link-forensics: self-test (beacon-loss + powersave + 2.4-only + json + fix-dry-run)'
@@ -696,7 +712,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/peer-health.sh" ]; then
-        if bash "$REPO/scripts/peer-health.sh" --self-test > "$work/ph_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/peer-health.sh" --self-test > "$work/ph_st.txt" 2>&1; then
             ok 'peer-health: self-test (hysteresis down + recover + lossy + evidence + json)'
         else
             bad 'peer-health: self-test (hysteresis down + recover + lossy + evidence + json)'
@@ -707,7 +723,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/wifi-durable-fix.sh" ]; then
-        if bash "$REPO/scripts/wifi-durable-fix.sh" --self-test > "$work/wdf_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/wifi-durable-fix.sh" --self-test > "$work/wdf_st.txt" 2>&1; then
             ok 'wifi-durable-fix: self-test (state + apply + guard rollback + guard success + rollback)'
         else
             bad 'wifi-durable-fix: self-test (state + apply + guard rollback + guard success + rollback)'
@@ -718,7 +734,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/wifi-ab-benchmark.sh" ]; then
-        if bash "$REPO/scripts/wifi-ab-benchmark.sh" --self-test > "$work/wab_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/wifi-ab-benchmark.sh" --self-test > "$work/wab_st.txt" 2>&1; then
             ok 'wifi-ab-benchmark: self-test (BT improvement + inconclusive)'
         else
             bad 'wifi-ab-benchmark: self-test (BT improvement + inconclusive)'
@@ -729,7 +745,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/b43-tune.sh" ]; then
-        if bash "$REPO/scripts/b43-tune.sh" --self-test > "$work/b43t_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/b43-tune.sh" --self-test > "$work/b43t_st.txt" 2>&1; then
             ok 'b43-tune: self-test (conf write + apply + rollback)'
         else
             bad 'b43-tune: self-test (conf write + apply + rollback)'
@@ -740,7 +756,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/bluetooth-off.sh" ]; then
-        if bash "$REPO/scripts/bluetooth-off.sh" --self-test > "$work/btoff_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/bluetooth-off.sh" --self-test > "$work/btoff_st.txt" 2>&1; then
             ok 'bluetooth-off: self-test (unit + apply + rollback)'
         else
             bad 'bluetooth-off: self-test (unit + apply + rollback)'
@@ -751,7 +767,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/beacon-watch.sh" ]; then
-        if bash "$REPO/scripts/beacon-watch.sh" --self-test > "$work/bw_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/beacon-watch.sh" --self-test > "$work/bw_st.txt" 2>&1; then
             ok 'beacon-watch: self-test (per-hour + pre/post split)'
         else
             bad 'beacon-watch: self-test (per-hour + pre/post split)'
@@ -764,7 +780,7 @@ PY
     if [ -f "$REPO/scripts/host-cert-sign.sh" ]; then
         if [ "$SANDBOX" -eq 1 ]; then
             skip 'host-cert-sign: self-test (sandbox: needs host CA/principal)'
-        elif bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
+        elif timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/host-cert-sign.sh" --self-test > "$work/hcs_st.txt" 2>&1; then
             ok 'host-cert-sign: self-test (temp CA + host key + principal)'
         else
             bad 'host-cert-sign: self-test (temp CA + host key + principal)'
@@ -785,7 +801,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/recovery-status.sh" ]; then
-        if bash "$REPO/scripts/recovery-status.sh" --self-test > "$work/rs_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/recovery-status.sh" --self-test > "$work/rs_st.txt" 2>&1; then
             ok 'recovery-status: self-test (healthy + expected-roam + degraded)'
         else
             bad 'recovery-status: self-test (healthy + expected-roam + degraded)'
@@ -796,7 +812,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/terminal-reset.sh" ]; then
-        if bash "$REPO/scripts/terminal-reset.sh" --self-test > "$work/tr_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/terminal-reset.sh" --self-test > "$work/tr_st.txt" 2>&1; then
             ok 'terminal-reset: self-test (install + idempotent + soft + print + uninstall)'
         else
             bad 'terminal-reset: self-test (install + idempotent + soft + print + uninstall)'
@@ -807,7 +823,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/node-diag.sh" ]; then
-        if bash "$REPO/scripts/node-diag.sh" --self-test > "$work/nd_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/node-diag.sh" --self-test > "$work/nd_st.txt" 2>&1; then
             ok 'node-diag: self-test (fixture routing + list + args)'
         else
             bad 'node-diag: self-test (fixture routing + list + args)'
@@ -818,7 +834,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/node-fix.sh" ]; then
-        if bash "$REPO/scripts/node-fix.sh" --self-test > "$work/nf_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/node-fix.sh" --self-test > "$work/nf_st.txt" 2>&1; then
             ok 'node-fix: self-test (dry-run + apply + backup + idempotent)'
         else
             bad 'node-fix: self-test (dry-run + apply + backup + idempotent)'
@@ -829,7 +845,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/nebula-ipv4-only.sh" ]; then
-        if bash "$REPO/scripts/nebula-ipv4-only.sh" --self-test > "$work/nip_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/nebula-ipv4-only.sh" --self-test > "$work/nip_st.txt" 2>&1; then
             ok 'nebula-ipv4-only: self-test (insert allow lists, idempotent)'
         else
             bad 'nebula-ipv4-only: self-test (insert allow lists, idempotent)'
@@ -840,7 +856,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/credential-fix.sh" ]; then
-        if bash "$REPO/scripts/credential-fix.sh" --self-test > "$work/cf_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/credential-fix.sh" --self-test > "$work/cf_st.txt" 2>&1; then
             ok 'credential-fix: self-test (parse + menu + model switch)'
         else
             bad 'credential-fix: self-test (parse + menu + model switch)'
@@ -851,7 +867,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/overlay-status.sh" ]; then
-        if bash "$REPO/scripts/overlay-status.sh" --self-test > "$work/os_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/overlay-status.sh" --self-test > "$work/os_st.txt" 2>&1; then
             ok 'overlay-status: self-test (parse + audit + role/peer)'
         else
             bad 'overlay-status: self-test (parse + audit + role/peer)'
@@ -862,7 +878,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/network-change-probe.sh" ]; then
-        if bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/network-change-probe.sh" --self-test > "$work/ncp_st.txt" 2>&1; then
             ok 'network-change-probe: self-test (matrix + peer + certs/bind seams)'
         else
             bad 'network-change-probe: self-test (matrix + peer + certs/bind seams)'
@@ -873,7 +889,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/session-guard.sh" ]; then
-        if bash "$REPO/scripts/session-guard.sh" --self-test > "$work/sg_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/session-guard.sh" --self-test > "$work/sg_st.txt" 2>&1; then
             ok 'session-guard: self-test (fixture + guidance + ledger seam)'
         else
             bad 'session-guard: self-test (fixture + guidance + ledger seam)'
@@ -884,7 +900,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/handoff-brief.sh" ]; then
-        if bash "$REPO/scripts/handoff-brief.sh" --self-test > "$work/hb_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/handoff-brief.sh" --self-test > "$work/hb_st.txt" 2>&1; then
             ok 'handoff-brief: self-test (fixture + redaction path)'
         else
             bad 'handoff-brief: self-test (fixture + redaction path)'
@@ -895,7 +911,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/session-digest.sh" ]; then
-        if bash "$REPO/scripts/session-digest.sh" --self-test > "$work/sd_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/session-digest.sh" --self-test > "$work/sd_st.txt" 2>&1; then
             ok 'session-digest: self-test (DB-only digest + over-budget directive)'
         else
             bad 'session-digest: self-test (DB-only digest + over-budget directive)'
@@ -906,7 +922,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/subq_snap.py" ]; then
-        if python3 "$REPO/scripts/subq_snap.py" --self-test > "$work/sq_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/subq_snap.py" --self-test > "$work/sq_st.txt" 2>&1; then
             ok 'subq_snap: self-test (decisions body + answer format)'
         else
             bad 'subq_snap: self-test (decisions body + answer format)'
@@ -917,7 +933,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/secret-scan.sh" ]; then
-        if bash "$REPO/scripts/secret-scan.sh" --self-test > "$work/ss_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/secret-scan.sh" --self-test > "$work/ss_st.txt" 2>&1; then
             ok 'secret-scan: self-test (fixture + value-free report)'
         else
             bad 'secret-scan: self-test (fixture + value-free report)'
@@ -928,7 +944,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/authorize-container-key.sh" ]; then
-        if bash "$REPO/scripts/authorize-container-key.sh" --self-test > "$work/ack_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/authorize-container-key.sh" --self-test > "$work/ack_st.txt" 2>&1; then
             ok 'authorize-container-key: self-test (tighten + unrestricted + fails closed)'
         else
             bad 'authorize-container-key: self-test (tighten + unrestricted + fails closed)'
@@ -939,7 +955,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/sentinel.sh" ]; then
-        if bash "$REPO/scripts/sentinel.sh" --self-test > "$work/sen_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/sentinel.sh" --self-test > "$work/sen_st.txt" 2>&1; then
             ok 'sentinel: self-test (fixture trips + cursor + ledger seam)'
         else
             bad 'sentinel: self-test (fixture trips + cursor + ledger seam)'
@@ -950,7 +966,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/sentinel-install.sh" ]; then
-        if bash "$REPO/scripts/sentinel-install.sh" --self-test > "$work/sen_ins.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/sentinel-install.sh" --self-test > "$work/sen_ins.txt" 2>&1; then
             ok 'sentinel-install: self-test (unit bake, no systemd)'
         else
             bad 'sentinel-install: self-test (unit bake, no systemd)'
@@ -972,7 +988,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/snapshot-audit.sh" ]; then
-        if bash "$REPO/scripts/snapshot-audit.sh" --self-test > "$work/snap_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/snapshot-audit.sh" --self-test > "$work/snap_st.txt" 2>&1; then
             ok 'snapshot-audit: self-test (btrfs/snapper probes present)'
         else
             bad 'snapshot-audit: self-test (btrfs/snapper probes present)'
@@ -983,7 +999,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/locate-prune-snapshots.sh" ]; then
-        if bash "$REPO/scripts/locate-prune-snapshots.sh" --self-test > "$work/lps_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/locate-prune-snapshots.sh" --self-test > "$work/lps_st.txt" 2>&1; then
             ok 'locate-prune-snapshots: self-test (idempotent PRUNEPATHS edit)'
         else
             bad 'locate-prune-snapshots: self-test (idempotent PRUNEPATHS edit)'
@@ -994,7 +1010,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/nebula-restart-trace.py" ]; then
-        if python3 "$REPO/scripts/nebula-restart-trace.py" --self-test > "$work/nrt_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/nebula-restart-trace.py" --self-test > "$work/nrt_st.txt" 2>&1; then
             ok 'nebula-restart-trace: self-test (parent-chain restarter id)'
         else
             bad 'nebula-restart-trace: self-test (parent-chain restarter id)'
@@ -1005,7 +1021,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/nebula-systemd-override.sh" ]; then
-        if bash "$REPO/scripts/nebula-systemd-override.sh" --self-test > "$work/nso_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/nebula-systemd-override.sh" --self-test > "$work/nso_st.txt" 2>&1; then
             ok 'nebula-systemd-override: self-test (idempotent drop-in apply/revert)'
         else
             bad 'nebula-systemd-override: self-test (idempotent drop-in apply/revert)'
@@ -1016,7 +1032,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/proc-progress.sh" ]; then
-        if bash "$REPO/scripts/proc-progress.sh" --self-test > "$work/pp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/proc-progress.sh" --self-test > "$work/pp_st.txt" 2>&1; then
             ok 'proc-progress: self-test (silent-process monitor)'
         else
             bad 'proc-progress: self-test (silent-process monitor)'
@@ -1027,7 +1043,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/rotate-server-password.sh" ]; then
-        if bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/rotate-server-password.sh" --self-test > "$work/rsp_st.txt" 2>&1; then
             ok 'rotate-server-password: self-test (generate + atomic rewrite)'
         else
             bad 'rotate-server-password: self-test (generate + atomic rewrite)'
@@ -1038,7 +1054,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/latency-timeline.sh" ]; then
-        if bash "$REPO/scripts/latency-timeline.sh" --self-test > "$work/lt_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/latency-timeline.sh" --self-test > "$work/lt_st.txt" 2>&1; then
             ok 'latency-timeline: self-test (fixture Gantt + JSON)'
         else
             bad 'latency-timeline: self-test (fixture Gantt + JSON)'
@@ -1049,7 +1065,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/state-snapshot.sh" ]; then
-        if bash "$REPO/scripts/state-snapshot.sh" --self-test > "$work/ssnap_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/state-snapshot.sh" --self-test > "$work/ssnap_st.txt" 2>&1; then
             ok 'state-snapshot: self-test (snapshot + verified restore + tamper catch)'
         else
             bad 'state-snapshot: self-test (snapshot + verified restore + tamper catch)'
@@ -1060,7 +1076,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/extract-transcript.sh" ]; then
-        if bash "$REPO/scripts/extract-transcript.sh" --self-test > "$work/ext_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/extract-transcript.sh" --self-test > "$work/ext_st.txt" 2>&1; then
             ok 'extract-transcript: self-test (DB-direct shape + caps)'
         else
             bad 'extract-transcript: self-test (DB-direct shape + caps)'
@@ -1071,7 +1087,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/deploy.sh" ]; then
-        if bash "$REPO/scripts/deploy.sh" --self-test > "$work/dep_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/deploy.sh" --self-test > "$work/dep_st.txt" 2>&1; then
             ok 'deploy: self-test (serve-rev parse + UI gate present)'
         else
             bad 'deploy: self-test (serve-rev parse + UI gate present)'
@@ -1128,7 +1144,7 @@ PY
     fi
 
     if [ -x "$REPO/scripts/learn-rules.py" ]; then
-        if "$REPO/scripts/learn-rules.py" --self-test > "$work/lr.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" "$REPO/scripts/learn-rules.py" --self-test > "$work/lr.txt" 2>&1; then
             ok 'learn-rules: self-test'
         else
             bad 'learn-rules: self-test'
@@ -1139,7 +1155,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/fuzzy-search.py" ]; then
-        if python3 "$REPO/scripts/fuzzy-search.py" --self-test > "$work/fz.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/fuzzy-search.py" --self-test > "$work/fz.txt" 2>&1; then
             ok 'fuzzy-search: self-test'
         else
             bad 'fuzzy-search: self-test'
@@ -1150,7 +1166,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/code-index.py" ]; then
-        if python3 "$REPO/scripts/code-index.py" --self-test > "$work/ci.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/code-index.py" --self-test > "$work/ci.txt" 2>&1; then
             ok 'code-index: self-test'
         else
             bad 'code-index: self-test'
@@ -1161,7 +1177,7 @@ PY
     fi
 
     if [ -f "$REPO/scripts/models.py" ]; then
-        if python3 "$REPO/scripts/models.py" --self-test > "$work/mo.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/models.py" --self-test > "$work/mo.txt" 2>&1; then
             ok 'models.py: self-test'
         else
             bad 'models.py: self-test'
@@ -1270,7 +1286,7 @@ sys.exit(0 if (m and "description:" in m.group(1)) else 1)
     fi
 
     if [ -f "$REPO/scripts/ux-trace.py" ]; then
-        if python3 "$REPO/scripts/ux-trace.py" --self-test > "$work/uxt_st.txt" 2>&1; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/ux-trace.py" --self-test > "$work/uxt_st.txt" 2>&1; then
             ok 'ux-trace: self-test'
         else
             bad 'ux-trace: self-test'
@@ -1332,7 +1348,7 @@ PY
         printf 'ts=%s level=WARN status=SKIP script catalog (no git worktree)\n' "$(date -u +%H:%M:%S)"
     fi
 
-    if bash "$REPO/scripts/hardening-gate.sh" --self-test > "$work/hardening_st.txt" 2>&1; then
+    if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/hardening-gate.sh" --self-test > "$work/hardening_st.txt" 2>&1; then
         ok 'hardening-gate: self-test (review/evidence/handoff/guard)'
     else
         bad 'hardening-gate: self-test'

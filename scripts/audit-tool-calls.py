@@ -90,13 +90,21 @@ def load_commands(db_path: Path, recent: int | None) -> list[tuple[str, int, str
             "FROM part WHERE json_extract(data,'$.type')='tool' "
             "AND json_extract(data,'$.state.input.command') IS NOT NULL"
         )
-        rows = con.execute(sql).fetchall()
+        params: tuple = ()
         if recent:
+            # Push the session filter into SQL. Filtering AFTER json_extract over
+            # every part row made --recent scan the whole (growing) table: ~15s
+            # on the live DB, which pushed preflight past its contract bound.
             latest = con.execute(
                 "SELECT id FROM session ORDER BY time_created DESC LIMIT ?", (recent,)
             ).fetchall()
-            keep = {r[0] for r in latest}
-            rows = [r for r in rows if r[0] in keep]
+            keep = [r[0] for r in latest]
+            if not keep:
+                return []
+            marks = ",".join("?" * len(keep))
+            sql = sql + f" AND session_id IN ({marks})"
+            params = tuple(keep)
+        rows = con.execute(sql, params).fetchall()
         return [(r[0], int(r[1]), str(r[2])) for r in rows]
     finally:
         con.close()

@@ -1875,6 +1875,18 @@
     ]
   },
   {
+    "id": "chromium-video-ab",
+    "title": "Controlled A/B for the AMD decode switch",
+    "where": "host",
+    "purpose": "Replaces the one-sample narrative with a pre-registered comparison. `measure --label A|B` records the switch state, drm-engine-dec rate, GPU CPU, load/PSI, and the video dropped/total frame counters over CDP; `compare` requires A (default driver) to be switch-off with zero decode and B (amd) switch-on with decode, and drop_B at least 0.5pp below drop_A and at most 1%. Emits PASS/FAIL/INCONCLUSIVE; a confounded control or missing frame counters is INCONCLUSIVE, never PASS. --self-test covers all decision branches.",
+    "commands": [
+      "./scripts/chromium-video-ab.sh plan",
+      "./scripts/chromium-video-ab.sh measure --label A --url file:///v/clear-1080p30.mp4 --duration 20",
+      "./scripts/chromium-video-ab.sh compare logs/ab-A.json logs/ab-B.json",
+      "./scripts/chromium-video-ab.sh --self-test"
+    ]
+  },
+  {
     "id": "check-placeholders",
     "title": "Reject placeholders in copy-paste commands (RULES #99)",
     "where": "container",
