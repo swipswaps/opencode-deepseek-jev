@@ -36,22 +36,26 @@ tighten_key() {
   python3 - "$AUTH" "$KEY" <<'PY'
 import sys
 auth, key = sys.argv[1], sys.argv[2]
-with open(key, encoding="utf-8") as fh:
-    body = fh.read().strip()
-lines = open(auth, encoding="utf-8").read().splitlines(keepends=True)
-hits = [i for i, line in enumerate(lines) if body in line]
-if len(hits) != 1:
-    sys.stderr.write("expected exactly one key line, found %d\n" % len(hits))
+parts = open(key, encoding="utf-8").read().split()
+if len(parts) < 2:
+    sys.stderr.write("key file is not a public key (need type + base64)\n")
     raise SystemExit(3)
-i = hits[0]
-stripped = lines[i].lstrip()
-if stripped.split()[0].startswith("restrict"):
+blob = parts[0] + " " + parts[1]
+lines = open(auth, encoding="utf-8").read().splitlines(keepends=True)
+hits = [i for i, line in enumerate(lines) if blob in line]
+if not hits:
+    sys.stderr.write("key not found in authorized_keys\n")
+    raise SystemExit(3)
+loose = [i for i in hits if not lines[i].lstrip().split()[0].startswith("restrict")]
+if not loose:
     raise SystemExit(4)
-prefix = lines[i][:len(lines[i]) - len(stripped)]
-if stripped.split()[0].startswith(("ssh-", "ecdsa-", "sk-")):
-    lines[i] = prefix + "restrict " + stripped
-else:
-    lines[i] = prefix + "restrict," + stripped
+for i in loose:
+    stripped = lines[i].lstrip()
+    prefix = lines[i][:len(lines[i]) - len(stripped)]
+    if stripped.split()[0].startswith(("ssh-", "ecdsa-", "sk-")):
+        lines[i] = prefix + "restrict " + stripped
+    else:
+        lines[i] = prefix + "restrict," + stripped
 with open(auth, "w", encoding="utf-8") as fh:
     fh.writelines(lines)
 PY
@@ -60,10 +64,10 @@ PY
 verify_tight() {
   python3 - "$AUTH" "$KEY" <<'PY'
 import sys
-with open(sys.argv[2], encoding="utf-8") as fh:
-    body = fh.read().strip()
-hits = [l for l in open(sys.argv[1], encoding="utf-8").read().splitlines() if body in l]
-assert len(hits) == 1 and hits[0].lstrip().split()[0].startswith("restrict"), "verification failed"
+parts = open(sys.argv[2], encoding="utf-8").read().split()
+blob = parts[0] + " " + parts[1]
+hits = [l for l in open(sys.argv[1], encoding="utf-8").read().splitlines() if blob in l]
+assert hits and all(l.lstrip().split()[0].startswith("restrict") for l in hits), "verification failed"
 PY
 }
 
@@ -163,7 +167,7 @@ do_selftest() {
   local tmp trc rc=0 out
   tmp=$(mktemp -d) || return 2
   printf 'ssh-ed25519 AAAAfromrepo owner@host\n' > "$tmp/key.pub"
-  printf '# keep\nssh-ed25519 AAAAold old@host\nssh-ed25519 AAAAfromrepo owner@host\n' > "$tmp/authorized_keys"
+  printf '# keep\nssh-ed25519 AAAAold old@host\nssh-ed25519 AAAAfromrepo owner@renamed\n' > "$tmp/authorized_keys"
   AUTH="$tmp/authorized_keys"
   KEY="$tmp/key.pub"
   out=$(tighten_key 2>&1)
