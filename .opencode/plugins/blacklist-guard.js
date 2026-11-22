@@ -11,7 +11,9 @@
 //          hand the model the substitute so it retries correctly.
 //   fix    `2>/dev/null`: *remove the redirect* so stderr — the proof of what
 //          went wrong — flows into the tool result. Failing silently is the
-//          bug; hiding the failure is what blocks access to the solution.
+//          bug; hiding the failure is what blocks access to the solution. The
+//          rewrite is also echoed into the tool result as an advisory so the
+//          MODEL sees it (a silent rewrite is telemetry, not a correction).
 //   warn   `echo`: log only (RULES #38 is a script rule; ad-hoc echoes are
 //          benign).
 //
@@ -32,17 +34,33 @@
 
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
-// The observability directory is anchored to THIS file's location, not to the
-// session/project `directory` opencode passes in. Interactive sessions can run
-// with a different project root (e.g. /home/node/.opencode), which made the
-// guard write its log somewhere that never got read — making a mis-load
-// indistinguishable from "no matches yet". Anchor to <repo>/data/observability.
-const DEFAULT_OBS = fileURLToPath(new URL("../../data/observability/", import.meta.url)).replace(/\/+$/, "");
+// The observability directory must be the REPO's, not wherever this module
+// happens to live. Two load paths exist: the repo file (<repo>/.opencode/
+// plugins/) and a COPY installed into the global plugin dir so sessions rooted
+// outside the repo still get the guard (docker/web-entrypoint.sh). For a copy,
+// `../../data/observability` resolves to `$HOME/.config/data/observability` —
+// a log nothing reads — which made a live, current guard look stale and split
+// the fix/advisory telemetry away from the dashboards. Resolve by repo markers,
+// with an explicit env override so the entrypoint can pin it.
+function resolveObs() {
+  const envDir = process.env.OPENCODE_GUARD_LOG_DIR;
+  if (envDir) return String(envDir).replace(/\/+$/, "");
+  const anchor = fileURLToPath(new URL("../../", import.meta.url)).replace(/\/+$/, "");
+  const candidates = [anchor, "/workspace", process.cwd()];
+  for (const root of candidates) {
+    if (!root) continue;
+    if (existsSync(root + "/opencode.json") && existsSync(root + "/docker/Dockerfile")) {
+      return root + "/data/observability";
+    }
+  }
+  return anchor + "/data/observability";
+}
+const DEFAULT_OBS = resolveObs();
 
 // Semantic layer (durable-pi's beforeTool guard): beyond the fixed PATTERN
 // rules below, ask the cheap SubQ classifier whether a command is
@@ -454,6 +472,18 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
     record("learned", "advisory: shape has a high historical failure rate", { shape: sh });
   }
 
+  // `fix` rewrites the command before execution, which means the model only
+  // ever sees the cleaned command in its own transcript and repeats the banned
+  // shape: a silent rewrite is telemetry for the operator, not a correction
+  // signal for the model. Remember the rewrite for this call and surface it in
+  // the tool result (tool.execute.after), which IS the model's feedback channel.
+  const PENDING_FIX = new Map();
+  function callKey(input) {
+    if (!input) return "?";
+    if (input.callID) return String(input.callID);
+    return String(input.sessionID || "?") + ":" + String(input.tool || "?");
+  }
+
   return {
     "tool.execute.before": async (input, output) => {
       const m = mode();
@@ -557,6 +587,10 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         const r = remediate2devnull(output.args.command);
         if (r.count) {
           output.args.command = r.cmd;
+          try {
+            if (PENDING_FIX.size > 500) PENDING_FIX.clear();
+            PENDING_FIX.set(callKey(input), { removed: r.count, at: Date.now() });
+          } catch { /* fail open: advisory is best-effort */ }
           await log("warn", "removed 2>/dev/null so stderr (the proof) is visible", { removed: r.count, command: r.cmd.slice(0, 200) });
           record("fix", "removed 2>/dev/null (stderr restored)", { removed: r.count, command: r.cmd.slice(0, 200) });
         }
@@ -569,6 +603,21 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
       }
     },
     "tool.execute.after": async (input, output) => {
+      // Feedback loop for `fix`: tell the MODEL what was rewritten, so the
+      // silent remediation also becomes a correction. Consumed once per call.
+      try {
+        const key = callKey(input);
+        const fix = PENDING_FIX.get(key);
+        if (fix) {
+          PENDING_FIX.delete(key);
+          const note = "\n\n[blacklist-guard] RULES #8: " + fix.removed +
+            " stderr-suppressing redirect(s) were removed before this command ran. " +
+            "The command was rewritten, not blocked. Do not emit that redirect again; " +
+            "branch on the exit status and let stderr reach the tool result.";
+          if (output && typeof output.output === "string") output.output = output.output + note;
+          record("fix-advisory", "surfaced the rewrite to the model in the tool result", { removed: fix.removed });
+        }
+      } catch { /* fail open */ }
       try {
         const text = String((output && (output.result || output.output || output.text)) || "");
         const marker = injectionVerdict(text);

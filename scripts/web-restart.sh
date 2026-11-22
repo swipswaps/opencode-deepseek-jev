@@ -8,6 +8,7 @@
 # wrapper is the command. Run it from anywhere inside the repo checkout:
 #
 #   ./scripts/web-restart.sh
+#   ./scripts/web-restart.sh --self-test
 #
 # Three modes:
 #   docker present        -> `docker compose restart opencode-web` (the host path)
@@ -17,6 +18,14 @@
 #   docker absent         -> restart the local `dashboard.mjs` process (the
 #                            sandbox path; this is why :5099 goes STALE after
 #                            every commit here — nothing was restarting it)
+#
+# Two failure modes this script now closes instead of leaving to the operator:
+#   * compose's TTY progress UI emits cursor-move/colour escapes that leak into
+#     the shell after the prompt returns. Force plain, no-ANSI output.
+#   * `restart` returns when compose says "running", NOT when opencode has
+#     loaded the guard (~30s later). A guard-health run in that window reports a
+#     false "loaded hash differs". Wait for the `loaded` marker with the current
+#     plugin sha before declaring success.
 #
 # Plain ASCII. No sed. No rm -rf. No set -e. No exit 1.
 # No 2>/dev/null. No subprocess.run. No kill without signal.
@@ -104,11 +113,116 @@ dashboard_pids() {
     printf '%s' "${out# }"
 }
 
+plugin_sha() {
+    sha256sum "$REPO_DIR/.opencode/plugins/blacklist-guard.js" | awk '{print $1}'
+}
+
+# Print the log whose newest "loaded" marker carries $1, or nothing. The guard
+# is loaded from the repo file or the global copy, and an older build anchored
+# its log to the copy; check both so a healthy load is found either way.
+guard_loaded_log() {
+    local want="$1" log
+    for log in "$REPO_DIR/data/observability/guard.log" \
+               "${XDG_CONFIG_HOME:-$HOME/.config}/data/observability/guard.log" \
+               "/home/node/.config/data/observability/guard.log"; do
+        [ -f "$log" ] || continue
+        if grep '"verdict":"loaded"' "$log" | tail -1 | grep -q "$want"; then
+            printf '%s' "$log"
+            return 0
+        fi
+    done
+    return 1
+}
+
+self_test() {
+    printf '=== web-restart.sh --self-test ===\n'
+    local tmp fails=0 want hit miss log
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/webrestart.XXXXXX" 2>&1) || { printf 'FAIL mktemp\n'; return 2; }
+    want="abc123def456"
+    mkdir -p "$tmp/data/observability"
+    printf '{"verdict":"loaded","sha":"%s"}\n' "$want" > "$tmp/data/observability/guard.log"
+    REPO_DIR="$tmp"
+    log=$(guard_loaded_log "$want") && [ "$log" = "$tmp/data/observability/guard.log" ] && hit=1 || hit=0
+    miss=0
+    if guard_loaded_log "000000000000" > /dev/null; then miss=1; fi
+    [ "$hit" -eq 1 ] && printf '  PASS found a matching loaded marker\n' || { fails=$((fails + 1)); printf '  FAIL matching marker not found\n'; }
+    [ "$miss" -eq 0 ] && printf '  PASS rejects a stale/mismatched sha\n' || { fails=$((fails + 1)); printf '  FAIL accepted a mismatched sha\n'; }
+    if printf '{"verdict":"loaded","sha":"%s"}\n' "$want" | grep -q "$want"; then
+        printf '  PASS sha compare works on the real log shape\n'
+    else
+        fails=$((fails + 1)); printf '  FAIL sha compare on the real log shape\n'
+    fi
+    local stripped
+    stripped=$(printf '\033[35;59;1Mok\033[0m\r\n' | strip_ansi)
+    if [ "$stripped" = "ok" ]; then
+        printf '  PASS strip_ansi removes the 35;59;1M residue\n'
+    else
+        fails=$((fails + 1)); printf '  FAIL strip_ansi left: %s\n' "$stripped"
+    fi
+    if [ "$(printf 'plain line\n' | strip_ansi)" = "plain line" ]; then
+        printf '  PASS strip_ansi keeps plain output\n'
+    else
+        fails=$((fails + 1)); printf '  FAIL strip_ansi altered plain output\n'
+    fi
+    find "$tmp" -depth -delete 2>&1
+    printf 'result: %s\n' "$([ "$fails" -eq 0 ] && printf PASS || printf FAIL)"
+    [ "$fails" -eq 0 ] && return 0 || return 1
+}
+
+# Never let a TTY progress renderer write bytes to the operator's terminal.
+# Compose's interactive UI uses cursor-move/colour escapes (the `35;59;1M…`
+# residue). Run it with output redirected to a file — no TTY, so it falls back
+# to plain — then print an ANSI-stripped copy as a belt-and-suspenders.
+strip_ansi() {
+    python3 -c 'import re,sys
+for line in sys.stdin:
+    line = re.sub("\x1b\\[[0-9;?]*[ -/]*[@-~]", "", line)
+    line = re.sub("\x1b\\][^\x07]*\x07", "", line)
+    line = line.replace("\r", "")
+    sys.stdout.write(line)'
+}
+
+run_compose() {
+    local out rc
+    out=$(mktemp) || return 1
+    COMPOSE_PROGRESS=plain COMPOSE_ANSI=never docker compose "$@" > "$out" 2>&1
+    rc=$?
+    strip_ansi < "$out"
+    rm -f "$out"
+    return "$rc"
+}
+
+# `docker compose restart` returns when compose says "running", not when the
+# guard has been imported (~30s later). A guard-health run in that window is a
+# false FAIL. Poll for the loaded marker carrying the CURRENT plugin sha.
+wait_guard() {
+    local want log i=0 iters="${WEB_RESTART_GUARD_ITERS:-24}"
+    case "$iters" in '' | *[!0-9]*) iters=24 ;; esac
+    want=$(plugin_sha)
+    if [ -z "$want" ]; then
+        printf 'WARN: cannot hash the plugin; cannot verify the guard load\n'
+        return 1
+    fi
+    while [ "$i" -lt "$iters" ]; do
+        if log=$(guard_loaded_log "$want"); then
+            printf 'PASS: guard loaded (%s…) from %s\n' "${want:0:12}" "$log"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 5
+    done
+    printf 'FAIL: guard did not register %s within %ss; serving without it is the #98 outage\n' \
+        "${want:0:12}" "$((iters * 5))"
+    printf 'hint: docker logs --tail 40 opencode-deepseek-web (look for blacklist-guard)\n'
+    return 1
+}
+
 main() {
     local MODE="restart"
     case "${1:-}" in
         --recreate) MODE="recreate" ;;
-        -h | --help) printf 'usage: %s [--recreate]\n' "$0"; return 0 ;;
+        --self-test) self_test; return "$?" ;;
+        -h | --help) printf 'usage: %s [--recreate|--self-test]\n' "$0"; return 0 ;;
         "") ;;
         *) printf 'unknown arg: %s\n' "$1"; return 2 ;;
     esac
@@ -120,14 +234,14 @@ main() {
     if have docker; then
         if [ "$MODE" = "recreate" ]; then
             printf 'mode: docker compose up -d --force-recreate opencode-web\n'
-            ( cd "$REPO_DIR/docker" && docker compose up -d --force-recreate opencode-web ) || {
+            ( cd "$REPO_DIR/docker" && run_compose up -d --force-recreate opencode-web ) || {
                 printf 'FAIL: docker compose up --force-recreate failed\n'
                 printf 'hint: is the docker daemon reachable? try: docker ps\n'
                 return 1
             }
         else
             printf 'mode: docker compose restart opencode-web\n'
-            ( cd "$REPO_DIR/docker" && docker compose restart opencode-web ) || {
+            ( cd "$REPO_DIR/docker" && run_compose restart opencode-web ) || {
                 printf 'FAIL: docker compose restart failed\n'
                 printf 'hint: is the docker daemon reachable? try: docker ps\n'
                 return 1
@@ -177,7 +291,10 @@ main() {
         if [ -n "$served" ]; then
             printf 'rev: %s (HEAD %s)\n' "$served" "$head"
             case "$served" in
-                "$head"*stale=False*) printf 'PASS: :5099 serves current checkout\n'; return 0 ;;
+                "$head"*stale=False*)
+                    printf 'PASS: :5099 serves current checkout\n'
+                    wait_guard || return 1
+                    return 0 ;;
             esac
         fi
         i=$((i + 1))

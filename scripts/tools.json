@@ -13,9 +13,11 @@
     "id": "web-restart",
     "title": "Restart the :5099 dashboard container",
     "where": "host",
-    "purpose": "opencode-web is a compose service, not a command. Restarts it so :5099 serves the current checkout, then polls /api/rev until served==HEAD (stale=False) or fails loudly.",
+    "purpose": "opencode-web is a compose service, not a command. Restarts it so :5099 serves the current checkout, then polls /api/rev until served==HEAD (stale=False). Forces plain, no-ANSI compose output (the TTY progress UI leaked escape codes into the shell) and waits for the blacklist guard's `loaded` marker with the current plugin sha, because compose returns ~30s before opencode imports the plugin and an early guard-health run then false-FAILs.",
     "commands": [
-      "./scripts/web-restart.sh"
+      "./scripts/web-restart.sh",
+      "./scripts/web-restart.sh --recreate",
+      "./scripts/web-restart.sh --self-test"
     ]
   },
   {
@@ -1865,9 +1867,10 @@
     "id": "chromium-video-audit",
     "title": "Audit a stuttering Chromium video path",
     "where": "host",
-    "purpose": "Read-only audit of the running Chromium video path (flags, Fedora GRAPHIC_DRIVER, VA-API, CDM CPU, kernel decode-engine delta) with a reversible one-line --apply, --revert, and a post-restart --verify. DRM/Widevine L3 is reported as software-only rather than promising a flag fix.",
+    "purpose": "Read-only audit of the running Chromium video path (flags, Fedora GRAPHIC_DRIVER, VA-API, CDM CPU, kernel decode-engine delta) with a reversible one-line --apply, --revert, and a post-restart --verify. --verify polls for the lazily-opened drm-engine-dec fd and reports INCONCLUSIVE (exit 2) at idle instead of FAIL; DRM/Widevine L3 is reported as software-only rather than promising a flag fix.",
     "commands": [
       "./scripts/chromium-video-audit.sh --dry-run",
+      "./scripts/chromium-video-audit.sh --verify --sample 5",
       "./scripts/chromium-video-audit.sh --self-test"
     ]
   },
@@ -1891,6 +1894,17 @@
       "./scripts/chromium-video-priority.sh --dry-run",
       "sudo ./scripts/chromium-video-priority.sh --apply",
       "sudo ./scripts/chromium-video-priority.sh --revert"
+    ]
+  },
+  {
+    "id": "tool-call-contract-gate",
+    "title": "New-hits ratchet over the agent's own tool calls",
+    "where": "container",
+    "purpose": "Turns audit-tool-calls.py from a report into a gate. Reuses the same matcher (load_commands + scan): seeds a baseline on the session's first run, fails closed when the current session's blacklist count grows, records shrinkage, and reseeds on a fresh session so one bad session does not brick the repo. preflight.sh STOPs on a new hit so the operator hands off.",
+    "commands": [
+      "./scripts/tool-call-contract-gate.py",
+      "./scripts/tool-call-contract-gate.py --json",
+      "./scripts/tool-call-contract-gate.py --self-test"
     ]
   }
 ]

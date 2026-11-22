@@ -246,6 +246,40 @@ if (!editHitOk) fail++;
 console.log((editMissOk ? "  PASS " : "  FAIL ") + "edit oldString pre-check records an advisory when absent");
 console.log((editHitOk ? "  PASS " : "  FAIL ") + "edit pre-check is silent when oldString is present");
 
+// fix -> advisory: the model must SEE the rewrite in the tool result, exactly
+// once, and a clean call must get no appended text. Without this the `fix`
+// verdict is silent telemetry and the model repeats the banned shape.
+const advIn = { tool: "bash", sessionID: "s", callID: "advisory-call-1" };
+const advArgs = { args: { command: "ls /nope 2>/dev/null" } };
+await before(advIn, advArgs);
+const advRes = { output: "original tool output" };
+await after(advIn, advRes);
+const advText = String(advRes.output);
+const advOk = advText.startsWith("original tool output") &&
+  advText.includes("[blacklist-guard]") && advText.includes("RULES #8") &&
+  advText.includes("rewritten, not blocked");
+const advRes2 = { output: "next output" };
+await after(advIn, advRes2);
+const onceOk = advRes2.output === "next output";
+const cleanIn = { tool: "bash", sessionID: "s", callID: "clean-call-1" };
+const cleanArgs = { args: { command: "ls /workspace" } };
+await before(cleanIn, cleanArgs);
+const cleanRes = { output: "clean output" };
+await after(cleanIn, cleanRes);
+const cleanOk = cleanRes.output === "clean output";
+let advLogOk = false;
+try { advLogOk = readFileSync(guardLogPath, "utf8").includes('"verdict":"fix-advisory"'); } catch {}
+const advisoryChecks = [
+  ["fix advisory reaches the tool result", advOk],
+  ["fix advisory is surfaced once per call", onceOk],
+  ["clean call gets no advisory", cleanOk],
+  ["guard.log records the fix advisory", advLogOk],
+];
+for (const [name, ok] of advisoryChecks) {
+  if (!ok) fail++;
+  console.log((ok ? "  PASS " : "  FAIL ") + name);
+}
+
 // Assistant OUTPUT (prose) enforcement: code spans only, same RULES.
 const proseCases = [
   ["run:\n```bash\nstrace 2>/dev/null; true\n```\n", true, "2>/dev/null"],

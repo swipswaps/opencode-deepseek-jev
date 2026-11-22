@@ -337,6 +337,13 @@ audit-tool-calls.py
     Prints counts, sessions, samples, the sanctioned substitute. --recent N,
     --json, --fail.
 
+tool-call-contract-gate.py
+    New-hits ratchet over the same matcher: seeds the baseline on a session's
+    first run, fails closed when the current session's count grows, records a
+    shrink, and resets on a fresh session (handoff). Wired into preflight.sh so
+    a blacklisted call stops the session instead of only appearing in a report.
+    --check, --json, --self-test, --db, --baseline, --recent.
+
 prompt-lint.py
     Fuzzy classifier + preference linter for user prompts. Reads the DB and
     the repo's preference sources (RULES.md, HANDOFF.md, README.txt,

@@ -288,6 +288,23 @@ except Exception:
         crit "guard-health.sh missing"
     fi
 
+    # Tool-call contract ratchet (RULES #8/#92/#98): audit-tool-calls.py had no
+    # --fail caller, so blacklist uses accumulated as a report instead of a
+    # gate. Fail only on NEW hits in the current session; a fresh session
+    # reseeds (handoff doctrine), so old debt does not brick the repo.
+    if [ -x "$REPO/scripts/tool-call-contract-gate.py" ]; then
+        local tcout="" tcrc=0
+        tcout=$("$REPO/scripts/tool-call-contract-gate.py" 2>&1)
+        tcrc=$?
+        case "$tcrc" in
+            0) good "tool-call contract: $(printf '%s' "$tcout" | tail -1)" ;;
+            3) warn "tool-call contract: no transcript DB; ratchet skipped" ;;
+            *) crit "tool-call contract: new blacklisted call in this session — $(printf '%s' "$tcout" | tail -1); hand off (./scripts/session-guard.sh --handoff)" ;;
+        esac
+    else
+        crit "tool-call-contract-gate.py missing"
+    fi
+
     local ready=1
     [ "$CRIT" -gt 0 ] && ready=0
 

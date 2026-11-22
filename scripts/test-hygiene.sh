@@ -151,6 +151,53 @@ PY
         cat "$work/atc_st.txt"
     fi
 
+    if [ -f "$REPO/scripts/tool-call-contract-gate.py" ]; then
+        if python3 "$REPO/scripts/tool-call-contract-gate.py" --self-test > "$work/tcg_st.txt" 2>&1; then
+            ok 'tool-call-contract-gate: self-test (seed/ratchet/new-hits)'
+        else
+            bad 'tool-call-contract-gate: self-test'
+            tail -6 "$work/tcg_st.txt"
+        fi
+        if [ -f "$db" ]; then
+            if python3 "$REPO/scripts/tool-call-contract-gate.py" --db "${fixdb:-$db}" \
+                    --recent 0 --baseline "$work/tcg-base.json" --json > "$work/tcg_live.json" 2>&1; then
+                ok 'tool-call-contract-gate: runs (JSON)'
+            else
+                bad 'tool-call-contract-gate: runs (JSON)'
+                tail -4 "$work/tcg_live.json"
+            fi
+            if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("status") in ("PASS","FAIL") and "hits" in d and "baseline" in d' "$work/tcg_live.json"; then
+                ok 'tool-call-contract-gate: JSON schema'
+            else
+                bad 'tool-call-contract-gate: JSON schema'
+            fi
+        fi
+    else
+        bad 'tool-call-contract-gate.py present'
+    fi
+
+    if [ -f "$REPO/scripts/web-restart.sh" ]; then
+        if bash "$REPO/scripts/web-restart.sh" --self-test > "$work/wr_st.txt" 2>&1; then
+            ok 'web-restart: self-test (guard-loaded wait + sha match + ANSI strip)'
+        else
+            bad 'web-restart: self-test'
+            tail -4 "$work/wr_st.txt"
+        fi
+    else
+        bad 'web-restart.sh present'
+    fi
+
+    if [ -f "$REPO/scripts/chromium-video-audit.sh" ]; then
+        if bash "$REPO/scripts/chromium-video-audit.sh" --self-test > "$work/cv_st.txt" 2>&1; then
+            ok 'chromium-video-audit: self-test (idle fd + dying-pid tolerance)'
+        else
+            bad 'chromium-video-audit: self-test'
+            tail -4 "$work/cv_st.txt"
+        fi
+    else
+        bad 'chromium-video-audit.sh present'
+    fi
+
     if python3 "$REPO/scripts/prompt-lint.py" --self-test > "$work/pl_st.txt" 2>&1; then
         ok 'prompt-lint: self-test'
     else

@@ -101,6 +101,10 @@ if ! chmod 0644 "$GUARD_DIR/blacklist-guard.js"; then
     printf '[web-entrypoint] WARN: could not chmod the guard copy (continuing)\n' >&2
 fi
 printf '[web-entrypoint] blacklist-guard copied and verified into %s\n' "$GUARD_DIR" >&2
+# The plugin normally anchors its log to its own file location. Loaded from the
+# COPY above, that resolves to $HOME/.config/data/observability (which nothing
+# reads) and a current guard looks stale. Pin the repo log explicitly.
+export OPENCODE_GUARD_LOG_DIR="/workspace/data/observability"
 
 # Same root-cause fix for the process SKILLs: interactive sessions open at
 # $HOME/.opencode, so the project-scoped `{skill,skills}/**/SKILL.md` glob

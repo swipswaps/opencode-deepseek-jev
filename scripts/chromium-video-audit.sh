@@ -19,6 +19,8 @@
 #   /proc/PID/fdinfo/FD  drm-engine-dec: ns
 # A nonzero delta during playback means the VCN decode engine is working.
 # Renderer thread names (VaapiDecoder / VideoDecodeThread) corroborate it.
+# The fd exists only while a video decodes, so --verify polls briefly and
+# reports INCONCLUSIVE (exit 2) at idle instead of a misleading failure.
 #
 # Usage:
 #   ./scripts/chromium-video-audit.sh                 # dry-run, 5 s sample
@@ -29,7 +31,8 @@
 #   ./scripts/chromium-video-audit.sh --verify        # after restart
 #   ./scripts/chromium-video-audit.sh --self-test
 #
-# Exit: 0 audit ran; 1 reserved for a failed apply/revert/verify; 3 usage.
+# Exit: 0 audit ran / verify PASS; 1 failed apply/revert/verify; 2 verify
+#   INCONCLUSIVE (idle, no decode fd); 3 usage.
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
 #   no rm -rf, no subprocess.run, printf only, main() wrapper.
 
@@ -67,7 +70,7 @@ chromium_pids() {
   for d in /proc/[0-9]*; do
     p=${d##*/}
     test -r "$d/comm" || continue
-    comm=$(cat "$d/comm") || continue
+    comm=$(cat "$d/comm" 2>&1) || continue
     case "$comm" in
       *chromium*|*chrome*) printf '%s\n' "$p" ;;
     esac
@@ -148,7 +151,7 @@ find_dec_fd() {
 decoder_threads() {
   local t
   for t in "/proc/$1/task/"*/comm; do
-    cat "$t"
+    cat "$t" 2>&1
   done | grep -Eic 'vaapi|videodecode|videodecoder' || true
 }
 
@@ -461,6 +464,23 @@ do_revert() {
   return 1
 }
 
+# Chromium opens the decode ring (and therefore the drm-engine-dec fd) lazily,
+# only while a video is actually decoding. At idle there is no fd: that is
+# "not observable", not "hardware decode failed". Poll briefly for an active fd
+# before deciding, then report INCONCLUSIVE rather than FAIL.
+wait_dec_fd() {
+  local g="$1" tries="${2:-6}" i=0 fd
+  while test "$i" -lt "$tries"; do
+    if fd=$(find_dec_fd "$g"); then
+      printf '%s' "$fd"
+      return 0
+    fi
+    i=$((i + 1))
+    test "$i" -lt "$tries" && sleep 1
+  done
+  return 1
+}
+
 do_verify() {
   head2 'verify (after restart)'
   local main g fd d0 d1
@@ -472,7 +492,11 @@ do_verify() {
   fi
   g=$(gpu_pid) || { say 'gpu process not found'; return 1; }
   printf 'decoder_threads=%s\n' "$(decoder_threads "$g")"
-  fd=$(find_dec_fd "$g") || { say 'no decode counter'; return 1; }
+  fd=$(wait_dec_fd "$g" "${DEC_FD_TRIES:-6}")
+  if test -z "$fd"; then
+    printf 'verdict=INCONCLUSIVE no active drm-engine-dec fd during %ss; Chromium opens it only while a video decodes. Play a non-DRM H.264/VP9 video and re-run.\n' "${DEC_FD_TRIES:-6}"
+    return 2
+  fi
   d0=$(engine_values "/proc/$g/fdinfo/$fd" | awk '{print $1}')
   sleep "$SAMPLE"
   d1=$(engine_values "/proc/$g/fdinfo/$fd" | awk '{print $1}')
@@ -509,6 +533,18 @@ do_selftest() {
     printf 'PASS exe filter (live pid yes, phantom no)\n'
   else
     printf 'FAIL exe filter\n'
+    rc=1
+  fi
+  if ! wait_dec_fd 99999999 1 > /dev/null; then
+    printf 'PASS wait_dec_fd gives up for a missing pid\n'
+  else
+    printf 'FAIL wait_dec_fd claimed an fd for a missing pid\n'
+    rc=1
+  fi
+  if test "$(decoder_threads 99999999 2>&1)" = "0"; then
+    printf 'PASS decoder_threads tolerates a dying pid (no stderr leak)\n'
+  else
+    printf 'FAIL decoder_threads leaked or miscounted on a dead pid\n'
     rc=1
   fi
   printf '# keep\nGRAPHIC_DRIVER=default\n# tail\n' > "$tmp/conf"
