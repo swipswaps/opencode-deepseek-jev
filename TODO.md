@@ -222,6 +222,10 @@ See [`docs/todo-archive-2026.md`](docs/todo-archive-2026.md) (newest-first).
       host bound. Remaining on the host: run the install, then
       `harness.sh --fast` x3 to seed host n=0..3. Next:
       `docs/HANDOFF-2026-11-15.md`.
+- [ ] **CHROMIUM-VERIFY-1.** Host, after `GRAPHIC_DRIVER=amd` was applied: close and
+      reopen Chromium, then `./scripts/chromium-video-audit.sh --verify --sample 5`.
+      The 403 zombies are children of the `opencode web` server; restart it when
+      convenient. Evidence: `logs/ses_ses_dffa547cbffez35MwR621SrjGR.txt`.
 - [ ] **CHECK-TIMEOUT-1.** Bound each self-test inside test-hygiene (one hung
       test can still consume the whole gate bound); name the offender.
 - [ ] **AUDIT-1 — full triage 2026-11-11.** `docs/AUDIT-TRIAGE-2026-11-10.md`; handoff `docs/HANDOFF-2026-11-11.md`.
