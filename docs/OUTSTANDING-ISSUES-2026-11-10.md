@@ -269,8 +269,10 @@ the dominant amplifier. Identify the host holder with
 - OPS-4 — still open: `eval` at `scripts/test-tools.sh:102,105` and `bash -c`
   at `scripts/runbook.sh:107`. Inputs remain repo-owned; deferred as a refactor.
 - OPS-6 — **fixed 2026-11-22**: `authorize-container-key.sh --tighten` adds
-  `restrict` to an already-present key, with a timestamped backup and
-  exact-line verification; its self-test is wired into `test-hygiene.sh`.
+  `restrict` to an already-present key, and `--tighten-unrestricted` handles
+  the case where the `.pub` file was deleted after the first run. Both use a
+  timestamped backup and exact-line verification, fail closed on ambiguity,
+  and are self-tested in `test-hygiene.sh`.
 - OPS-9 — resolved: tier-1 corpus within budget (~380 tokens headroom).
 - OPS-10 — still open: floating images/actions need digest and commit-SHA
   resolution, which requires host registry access.

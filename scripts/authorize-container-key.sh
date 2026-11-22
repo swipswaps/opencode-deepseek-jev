@@ -12,6 +12,7 @@
 #   ./scripts/authorize-container-key.sh /path/to/key.pub
 #   RESTRICT=0 ./scripts/authorize-container-key.sh /path/to/key.pub
 #   ./scripts/authorize-container-key.sh --tighten /path/to/key.pub
+#   ./scripts/authorize-container-key.sh --tighten-unrestricted
 #   ./scripts/authorize-container-key.sh --self-test
 #
 # Default is RESTRICT=1: OpenSSH `restrict` disables port/agent/X11/pty
@@ -26,6 +27,7 @@ RESTRICT="${RESTRICT:-1}"
 WANT=add
 case "${1:-}" in
     --tighten) WANT=tighten; shift ;;
+    --tighten-unrestricted) WANT=tightenall; shift ;;
     --self-test) WANT=selftest; shift ;;
 esac
 KEY="${1:-$REPO/container-key.pub}"
@@ -63,6 +65,65 @@ with open(sys.argv[2], encoding="utf-8") as fh:
 hits = [l for l in open(sys.argv[1], encoding="utf-8").read().splitlines() if body in l]
 assert len(hits) == 1 and hits[0].lstrip().split()[0].startswith("restrict"), "verification failed"
 PY
+}
+
+tighten_unrestricted() {
+  python3 - "$AUTH" <<'PY'
+import sys
+auth = sys.argv[1]
+lines = open(auth, encoding="utf-8").read().splitlines(keepends=True)
+def loose(line):
+    s = line.lstrip()
+    return bool(s) and not s.startswith("#") and not s.split()[0].startswith("restrict")
+hits = [i for i, line in enumerate(lines) if loose(line)]
+if len(hits) != 1:
+    sys.stderr.write("expected exactly one unrestricted key line, found %d\n" % len(hits))
+    raise SystemExit(3)
+i = hits[0]
+stripped = lines[i].lstrip()
+prefix = lines[i][:len(lines[i]) - len(stripped)]
+if stripped.split()[0].startswith(("ssh-", "ecdsa-", "sk-")):
+    lines[i] = prefix + "restrict " + stripped
+else:
+    lines[i] = prefix + "restrict," + stripped
+with open(auth, "w", encoding="utf-8") as fh:
+    fh.writelines(lines)
+PY
+}
+
+verify_no_unrestricted() {
+  python3 - "$AUTH" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+bad = [l for l in lines if l.strip() and not l.lstrip().startswith("#")
+       and not l.lstrip().split()[0].startswith("restrict")]
+assert not bad, "verification failed: %d unrestricted line(s)" % len(bad)
+PY
+}
+
+do_tighten_all() {
+  local bak ts trc
+  [ -f "$AUTH" ] || { printf 'no authorized_keys at %s\n' "$AUTH" >&2; return 2; }
+  ts=$(date -u +%Y%m%dT%H%M%SZ)
+  bak="$AUTH.$ts.bak"
+  cp -a "$AUTH" "$bak" || return 2
+  tighten_unrestricted
+  trc=$?
+  if [ "$trc" -ne 0 ]; then
+    printf 'expected exactly one unrestricted key line; no change (backup %s)\n' "$bak" >&2
+    rm -f "$bak"
+    return 2
+  fi
+  chmod 600 "$AUTH"
+  if verify_no_unrestricted; then
+    printf 'tightened unrestricted key: %s (backup %s)\n' "$AUTH" "$bak"
+  else
+    printf 'verification failed; restored %s\n' "$AUTH" >&2
+    cp -a "$bak" "$AUTH"
+    rm -f "$bak"
+    return 2
+  fi
+  return 0
 }
 
 do_tighten() {
@@ -131,13 +192,34 @@ do_selftest() {
     printf 'FAIL tighten missing (%s %s)\n' "$trc" "$out"
     rc=1
   fi
-  rm -f "$tmp/key.pub" "$tmp/authorized_keys" "$tmp/empty"
+  printf '# keep\nrestrict ssh-ed25519 AAAArestricted ok@host\nssh-ed25519 AAAAloose loose@host\n' > "$tmp/loose"
+  AUTH="$tmp/loose"
+  out=$(tighten_unrestricted 2>&1)
+  trc=$?
+  if [ "$trc" -eq 0 ] && verify_no_unrestricted && grep -q '^restrict ssh-ed25519 AAAAloose' "$AUTH"; then
+    printf 'PASS tighten-unrestricted targets the loose line\n'
+  else
+    printf 'FAIL tighten-unrestricted (%s %s)\n' "$trc" "$out"
+    rc=1
+  fi
+  printf 'ssh-ed25519 AAAAa a@host\nssh-ed25519 AAAAb b@host\n' > "$tmp/two"
+  AUTH="$tmp/two"
+  out=$(tighten_unrestricted 2>&1)
+  trc=$?
+  if [ "$trc" -eq 3 ] && grep -q '^ssh-ed25519 AAAAa a@host$' "$AUTH"; then
+    printf 'PASS tighten-unrestricted fails closed on ambiguity\n'
+  else
+    printf 'FAIL tighten-unrestricted ambiguity (%s %s)\n' "$trc" "$out"
+    rc=1
+  fi
+  rm -f "$tmp/key.pub" "$tmp/authorized_keys" "$tmp/empty" "$tmp/loose" "$tmp/two"
   rmdir "$tmp"
   return "$rc"
 }
 
 if [ "$WANT" = selftest ]; then do_selftest; exit $?; fi
 if [ "$WANT" = tighten ]; then do_tighten; exit $?; fi
+if [ "$WANT" = tightenall ]; then do_tighten_all; exit $?; fi
 
 [ -f "$KEY" ] || { printf 'missing public key: %s\n' "$KEY" >&2; exit 2; }
 command -v ssh-keygen >/dev/null || { printf 'ssh-keygen missing on host\n' >&2; exit 2; }

@@ -882,9 +882,9 @@ PY
 
     if [ -f "$REPO/scripts/authorize-container-key.sh" ]; then
         if bash "$REPO/scripts/authorize-container-key.sh" --self-test > "$work/ack_st.txt" 2>&1; then
-            ok 'authorize-container-key: self-test (tighten + idempotent + fails closed)'
+            ok 'authorize-container-key: self-test (tighten + unrestricted + fails closed)'
         else
-            bad 'authorize-container-key: self-test (tighten + idempotent + fails closed)'
+            bad 'authorize-container-key: self-test (tighten + unrestricted + fails closed)'
             cat "$work/ack_st.txt"
         fi
     else
