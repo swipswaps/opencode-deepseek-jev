@@ -89,13 +89,14 @@ dated handoffs under `docs/`, especially
   `--base=/`. Both fixes are committed and pushed as `2d8ac9e`; the live e2e
   then passed **2 passed, 0 skipped, 0 flaky** with `--retries=0` in 41.2s, and
   the same-origin dist was rebuilt with `--base=/` afterwards. The `2d8ac9e`
-  CI/deploy is green (run `45390923942`). Tailscale Serve was blocked because
-  HTTPS Certificates were disabled; the admin DNS page now shows them enabled
-  (the button reads "Disable HTTPS"), so Serve needs a re-run. That page showed
-  tailnet `tail427659.ts.net` and account `ihydrocarbon@gmail.com`, while `ws24`
-  reports `ws24.taile17668.ts.net` and owner `swipswaps@`; confirm the console
-  tailnet contains `ws24` before trusting the setting. Until Serve verifies, the
-  API path is HTTP over WireGuard.
+  CI/deploy is green (run `45390923942`). Tailscale Serve is blocked by a wrong
+  admin-console tailnet, not by the device: `ws24` reports
+  `CurrentTailnet.Name = swipswaps.github` with DNS `ws24.taile17668.ts.net`,
+  while the page that enabled HTTPS showed `tail427659.ts.net` and
+  `ihydrocarbon@gmail.com`. Those are different tailnets, so the setting does
+  not apply. Switch the console to `swipswaps.github`, enable HTTPS there, and
+  re-run Serve. If there is no admin access to that tailnet, the verified API
+  path is HTTP over WireGuard.
 - The container has no GitHub credential, so `git push` cannot authenticate
   here, and it has no Docker socket and no Secure Shell (SSH) client.
   `/workspace` and `/audit` are bind mounts of the host JEF and foil trees, so
@@ -109,16 +110,19 @@ ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
 are proven. The losing option is to start a new feature while Serve and the ACL
 are open: its failures would be ambiguous between the old and new layers.
 
-1. **Enable Serve/TLS** (host and tailnet console). HTTPS Certificates now show
-   as enabled. First confirm the console tailnet is the one that contains `ws24`:
-   `tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name")); print("owner", (d.get("User") or {}).get("LoginName"))'`
-   The admin page showed `tail427659.ts.net` and `ihydrocarbon@gmail.com`, while
-   `ws24` reported `ws24.taile17668.ts.net` and owner `swipswaps@`. If the names
-   do not match, switch the console to the correct tailnet or re-run
-   `sudo tailscale up`. Then run `sudo tailscale up` and re-run
+1. **Enable Serve/TLS** (host and tailnet console). Switch the admin console to
+   the `swipswaps.github` tailnet, the one the device reports:
+   `tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name"))'`
+   The page used earlier showed `tail427659.ts.net` and
+   `ihydrocarbon@gmail.com`, a different tailnet, so its HTTPS setting does not
+   apply. If the signed-in account cannot see `swipswaps.github`, ask its owner
+   for admin access; do not move the device to the other tailnet. In the correct
+   tailnet enable MagicDNS and HTTPS Certificates, then run `sudo tailscale up`
+   and re-run
    `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`.
    The node-specific `login.tailscale.com/f/serve` link can return
-   `404 node not found`; do not rely on it. Accept: `tailscale serve status`
+   `404 node not found`; do not rely on it. If there is no admin access, stop at
+   the verified HTTP-over-WireGuard fallback. Accept: `tailscale serve status`
    shows the 443 mapping and a health request over the resolved Tailscale DNS
    Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
