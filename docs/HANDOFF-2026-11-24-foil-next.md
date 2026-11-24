@@ -176,8 +176,15 @@ the build output is the bundler's chunk-size hint, not an action item.
 Run in the foil checkout after step 2. The spec fails closed: with
 `TAILNET_APP_URL` unset it reports two skips, which is not a pass.
 
+The same-origin app must be built with `--base=/`. The repo's `vite.config.ts`
+sets `base: '/foil-cfd-site/'` for GitHub Pages, and `npm run build` writes that
+base; served from `/` it makes every asset path 404 (the proxy returns
+`index.html` with 200, so the app never boots and there is no badge). The secure
+script already builds with `--base=/`; a later Pages build overwrites it.
+
 ```bash
 cd /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site
+npx vite build --base=/
 TSIP="$(tailscale ip -4 | awk 'NR==1{print $1}')"
 TAILNET_APP_URL="http://$TSIP:4174/" npx playwright test tests/e2e/tailnet.spec.ts --project=desktop-chrome --retries=0
 ```
@@ -211,8 +218,17 @@ Fix in `src/hooks/useBackendProbe.ts`:
 - the same-origin candidate gets a 10s deadline, while loopback candidates keep
   the 2.5s deadline.
 
-Rebuild and rerun Step 3 with `--retries=0`. If it still shows a retry, treat
-the fix as insufficient and diagnose the new trace before committing.
+A second run with `--retries=0` failed differently: the badge was absent for the
+whole 20s. The trace showed the index loading assets from `/foil-cfd-site/assets`
+while the proxy serves `/assets`; every JS request got `index.html` with 200 and
+the app never booted. Cause: `npm run build` used the Pages base
+`/foil-cfd-site/`. Fix: build the same-origin app with `npx vite build --base=/`
+before the e2e. This is a different failure from the first-paint race; both
+fixes are required.
+
+Rebuild with `--base=/` and rerun Step 3 with `--retries=0`. If it still shows a
+retry or no badge, treat the fix as insufficient and diagnose the new trace
+before committing.
 
 ## Step 4 — gate and push the foil follow-up (host)
 
@@ -236,8 +252,11 @@ npm run typecheck
 npm run build
 ```
 
-Accept: all three exit 0; `oxlint` reports no errors. Then commit on pass and
-push:
+Accept: all three exit 0; `oxlint` reports no errors. `npm run build` here is
+the GitHub Pages base (`/foil-cfd-site/`) and is correct for CI and deploy, but
+it overwrites the same-origin dist. Run the Step 3 tailnet e2e before this
+build, or re-run the secure script (which rebuilds with `--base=/`) before
+serving the tailnet app again. Then commit on pass and push:
 
 ```bash
 git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site add src/hooks/useBackendProbe.ts src/hydro-main.tsx src/sections/HydroLab.tsx tests/e2e/tailnet.spec.ts docker-compose.openfoam.yml

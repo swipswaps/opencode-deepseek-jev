@@ -84,7 +84,9 @@ dated handoffs under `docs/`, especially
   e2e was flaky: the trace shows health 200 in 101ms while the badge timed out,
   because the 2.5s probe deadline fired during a ~6s first-paint block. The fix
   gives the same-origin probe a 10s deadline and tries the page origin before
-  the baked URL; the proof run must use `--retries=0`. Tailscale Serve is
+  the baked URL; the proof run must use `--retries=0`. A second run exposed a
+  build-base trap: `npm run build` uses the GitHub Pages base and breaks the
+  same-origin app, which must be built with `--base=/`. Tailscale Serve is
   blocked because HTTPS Certificates are disabled
   for the tailnet, so the verified API path is HTTP over WireGuard until HTTPS
   is enabled. The
