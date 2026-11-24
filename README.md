@@ -93,16 +93,15 @@ dated handoffs under `docs/`, especially
   the console is signed in as **GitHub `swipswaps`**, and the machines page lists
   `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16), both
   `swipswaps@github`; the DNS page shows `taile17668.ts.net` with MagicDNS and
-  HTTPS Certificates on. Serve is verified end-to-end:
-  `https://ws24.taile17668.ts.net:8443/` reaches FastAPI (the root returns
-  `{"detail":"Not Found"}`; the route is `/api/health`). The host's own-IP
-  `--resolve` times out (hairpin to self) and the plain host curl may not
-  resolve; neither is Serve. Final check from a client or browser:
-  `https://ws24.taile17668.ts.net:8443/api/health` should return 200. Fix host
-  MagicDNS with `sudo tailscale up --accept-dns --operator=owner` plus a
-  `tailscaled` restart. The same-origin app is HTTP at
-  `http://100.119.125.16:4174/`; opening https on 4174 is expected to fail. The
-  Google `ihydrocarbon@gmail.com` account is a separate tailnet
+  HTTPS Certificates on. Serve/TLS is verified:
+  `https://ws24.taile17668.ts.net:8443/api/health` returns **200**, and the
+  secure root is the API (`{"detail":"Not Found"}` for `/`). The app still runs
+  over HTTP at `http://100.119.125.16:4174/`; the first UX project is to serve
+  the app at the secure root, per
+  [`docs/HANDOFF-2026-11-24-foil-ux.md`](docs/HANDOFF-2026-11-24-foil-ux.md).
+  The host MagicDNS fix used `sudo tailscale up --accept-dns --operator=owner`
+  plus a `tailscaled` restart. The Google `ihydrocarbon@gmail.com` account is a
+  separate tailnet
   (`tail427659.ts.net`); invite it as a user if both logins are wanted. For
   future machines, use an auth key with a `tag:server` tag in the
   `swipswaps.github` tailnet rather than a user login. Do not split a host
@@ -116,36 +115,27 @@ dated handoffs under `docs/`, especially
 
 ### Best next steps (ranked by gain per unit of irreversible risk)
 
-Decision rule: finish the remaining open acceptance tests (Serve/TLS and the
-ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
-are proven. The losing option is to start a new feature while Serve and the ACL
-are open: its failures would be ambiguous between the old and new layers.
+Decision rule: the infrastructure path is proven, so the highest user gain is
+the UX pass. Start with the one secure origin and honest status copy. The losing
+option is more visual polish while the secure root still returns the API 404 and
+the primary badge still tells users to run Docker. The full audit and acceptance
+criteria are in [`docs/HANDOFF-2026-11-24-foil-ux.md`](docs/HANDOFF-2026-11-24-foil-ux.md).
 
-1. **Finish Serve/TLS.** Serve is verified end-to-end: the root returns FastAPI
-   `{"detail":"Not Found"}` over `https://ws24.taile17668.ts.net:8443/`; the
-   route is `/api/health`. Run from a client or browser:
-   `curl -sS -m 15 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
-   Expect 200. If the client cannot resolve the name, use `--resolve` from that
-   client (not from `ws24`):
-   `curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
-   The host's own-IP `--resolve` times out (hairpin). Fix host MagicDNS with the
-   exact flags Tailscale requires:
-   `sudo systemctl enable --now systemd-resolved`, then
-   `sudo tailscale up --accept-dns --operator=owner`, then
-   `sudo systemctl restart tailscaled`, then `getent hosts ws24.taile17668.ts.net`.
-   Do not use `--accept-dns=false` when tailnet names must resolve. Port 8443
-   avoids JEF Caddy on 443. The app is HTTP at `http://100.119.125.16:4174/`;
-   opening https on 4174 is expected to fail. For future approved machines,
-   invite `ihydrocarbon@gmail.com` as a user (and admin if wanted) of the
-   `swipswaps.github` tailnet, generate an auth key there, and join with a
-   `tag:server` tag; define `tagOwners` in the ACL so the node belongs to the
-   tailnet rather than one user login. Do not join a host to both tailnets.
-2. **Narrow the tailnet ACL** in the admin console to tag and port scope. Keep a
-   verified device session open while applying so you cannot lock yourself out.
-3. **Make `e2e` a hard gate** by removing the admin bypass on `main` or
-   requiring changes through a pull request. Repository policy, not code.
-4. **Dispose of the placeholder cursor** by reviewing the four historical part
-   IDs or explicitly baselining them. Never advance it to make the gate green.
+1. **UX P0 — one secure origin.** Serve the app at
+   `https://ws24.taile17668.ts.net:8443/` and keep `/api` on the same origin via
+   the loopback app proxy; verify the app HTML and `/api/health` both return 200,
+   then re-run the tailnet e2e at the HTTPS URL with `--retries=0`. Exact
+   commands and the Serve-target constraint are in the UX handoff.
+2. **UX P0 — honest status copy.** Remove `docker compose`, `127.0.0.1`, and
+   `OpenFOAM` from the primary badge and controls; use `Live solver ready`,
+   `Preview mode`, and `Static demo`, and move self-host instructions behind a
+   disclosure. Add a Playwright assertion that the primary UI contains none of
+   those strings.
+3. **UX P1** — solve progress/elapsed/retry, honest 2D-channel labeling,
+   closed-sidebar focus, keyboard probe plus chart summary, first-run guidance.
+4. **Infrastructure residuals** — narrow the tailnet ACL, invite the Google
+   account, use auth keys with `tag:server` for future machines, make `e2e` a
+   hard gate, and dispose of the placeholder cursor.
 
 ### Re-run the evidence
 

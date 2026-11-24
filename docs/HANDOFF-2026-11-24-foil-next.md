@@ -16,20 +16,18 @@ green (run `45390923942`). The Tailscale identity mismatch is **resolved**: the
 console is signed in as GitHub `swipswaps`, the machines page lists
 `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16) as
 `swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
-MagicDNS and HTTPS Certificates enabled. Serve is **verified end-to-end**:
-`https://ws24.taile17668.ts.net:8443/` reaches FastAPI (the root returns
-`{"detail":"Not Found"}`; the route is `/api/health`). The host's own-IP
-`--resolve` still times out (hairpin to self) and the plain host curl may not
-resolve; neither is a Serve failure. Final acceptance is a 200 from
-`/api/health` on a tailnet device (browser or client). The host MagicDNS fix
-ran with `sudo tailscale up --accept-dns --operator=owner` plus a `tailscaled`
-restart; confirm with `getent hosts`. The app is HTTP at
-`http://100.119.125.16:4174/`; https on 4174 is expected to fail. The Google
+MagicDNS and HTTPS Certificates enabled. Serve/TLS is **verified**:
+`https://ws24.taile17668.ts.net:8443/api/health` returns **200**; Serve is
+tailnet-only on 8443. The app currently runs over HTTP at
+`http://100.119.125.16:4174/`, and the secure root is the API (which returns
+`{"detail":"Not Found"}`), so the first UX project is to put the app on the
+same secure origin. That is the first item of
+[`HANDOFF-2026-11-24-foil-ux.md`](HANDOFF-2026-11-24-foil-ux.md). The Google
 `ihydrocarbon@gmail.com` account remains a separate tailnet
 (`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
-are wanted. Remaining after this DNS check: the Access Control List (ACL),
-future-machine auth keys and tags, and the placeholder cursor. The exact
-commands are in Step 2.
+are wanted. Remaining infrastructure after TLS: the Access Control List (ACL),
+future-machine auth keys and tags, and the placeholder cursor. The next project
+is the UX pass, not another TLS change.
 
 Important: the container **can** reach the foil tree. `/audit` is a bind mount of
 `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
@@ -444,16 +442,12 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **Serve/TLS.** Identity and HTTPS Certificates are done (GitHub
-   `swipswaps`, tailnet `taile17668.ts.net`). Run
-   `sudo tailscale set --operator=owner`, then
-   `tailscale serve --bg --https=8443 http://127.0.0.1:8002` (JEF Caddy owns
-   443). Accept: `tailscale serve status` shows the 8443 mapping and the health
-   request over the resolved Tailscale DNS Name returns 200:
-   `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
-   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"`
-   The app is HTTP at `http://100.119.125.16:4174/`; https on 4174 is expected
-   to fail.
+1. **Serve/TLS — done.** Identity and HTTPS Certificates are verified (GitHub
+   `swipswaps`, tailnet `taile17668.ts.net`); `https://ws24.taile17668.ts.net:8443/api/health`
+   returns 200. The app is still HTTP at `http://100.119.125.16:4174/`; putting
+   the app on the same secure origin is the first P0 in
+   [`HANDOFF-2026-11-24-foil-ux.md`](HANDOFF-2026-11-24-foil-ux.md), not another
+   infrastructure change.
 2. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
    `grants` entry with tag and port scope for `ws24` and the client. This is
    admin-console work, not reachable from either repo. Do not lock yourself out:
@@ -464,6 +458,10 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 4. **Placeholder cursor.** Review the four historical part IDs from the JEF scan
    and either accept them or baseline them explicitly. Never run `--advance` to
    make a red gate green.
+5. **Account consolidation.** Invite `ihydrocarbon@gmail.com` as a user/admin of
+   `swipswaps.github`, and use auth keys with a `tag:server` tag for future
+   machines. The extra `fedora` in the Google tailnet should be removed or
+   documented.
 
 ## Do not
 
