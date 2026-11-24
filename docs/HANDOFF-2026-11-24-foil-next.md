@@ -179,21 +179,53 @@ Run in the foil checkout after step 2. The spec fails closed: with
 ```bash
 cd /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site
 TSIP="$(tailscale ip -4 | awk 'NR==1{print $1}')"
-TAILNET_APP_URL="http://$TSIP:4174/" npx playwright test tests/e2e/tailnet.spec.ts --project=desktop-chrome
+TAILNET_APP_URL="http://$TSIP:4174/" npx playwright test tests/e2e/tailnet.spec.ts --project=desktop-chrome --retries=0
 ```
 
 Accept: **2 passed, 0 skipped**, "Backend online" with no Connect click, and
-`/api/health` answered on the page origin. A skip is a failure for this step.
+`/api/health` answered on the page origin. A skip or a retry is a failure for
+this step. `--retries=0` is deliberate: the default config retries once and can
+report a flake as "1 flaky / 1 passed", which hides a first-paint race.
+
+### Cold-start flake found and fixed (2026-11-24)
+
+The first live run (config `retries: 1`) reported **1 flaky, 1 passed**: the
+auto-connect test failed on the first attempt after 58.1s with
+`Static mode — backend unreachable`, then passed on the retry in 12.1s. The
+trace proves the network was healthy:
+
+- `GET /api/health` returned **200 in 101ms** at 05:41:30.745Z;
+- the badge was still "Checking local backend" at 05:41:30.684Z and showed
+  "Static mode" at 05:41:36.898Z.
+
+Root cause: the private-page same-origin probe used the 2.5s local deadline. The
+first paint blocks the main thread for ~6s while the 3D scene compiles, so the
+abort timer fired before the already-arrived fetch microtask ran. The build also
+baked `VITE_BACKEND_URL` and returned only that URL, so the same-origin
+candidate list was dead code.
+
+Fix in `src/hooks/useBackendProbe.ts`:
+
+- a private/tailnet page tries its own origin **first**, then the build-time
+  URL, then loopback; a public page still uses the build-time URL only;
+- the same-origin candidate gets a 10s deadline, while loopback candidates keep
+  the 2.5s deadline.
+
+Rebuild and rerun Step 3 with `--retries=0`. If it still shows a retry, treat
+the fix as insufficient and diagnose the new trace before committing.
 
 ## Step 4 — gate and push the foil follow-up (host)
 
 The follow-up is already written but uncommitted:
 
 - `src/hooks/useBackendProbe.ts` (private and tailnet pages probe the page origin
-  first; the loopback permission gate applies to public pages only)
+  first; the loopback permission gate applies to public pages only; the
+  same-origin candidate has a 10s deadline to survive the first-paint block)
 - `src/hydro-main.tsx` (small entry that renders the existing `HydroApp`)
 - `src/sections/HydroLab.tsx` (deterministic particle helper reused)
 - `tests/e2e/tailnet.spec.ts` (opt-in, gated by `TAILNET_APP_URL`)
+- `docker-compose.openfoam.yml` (bind `127.0.0.1:8002` and the Tailscale IPv4
+  address; the host script applied this, so include it in the same commit)
 
 Gate it in the checkout:
 
@@ -208,8 +240,8 @@ Accept: all three exit 0; `oxlint` reports no errors. Then commit on pass and
 push:
 
 ```bash
-git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site add src/hooks/useBackendProbe.ts src/hydro-main.tsx src/sections/HydroLab.tsx tests/e2e/tailnet.spec.ts
-git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site commit -m "frontend: same-origin tailnet auto-connect + gated tailnet e2e"
+git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site add src/hooks/useBackendProbe.ts src/hydro-main.tsx src/sections/HydroLab.tsx tests/e2e/tailnet.spec.ts docker-compose.openfoam.yml
+git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site commit -m "frontend: same-origin tailnet auto-connect; cold-start probe deadline"
 bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 ```
 
