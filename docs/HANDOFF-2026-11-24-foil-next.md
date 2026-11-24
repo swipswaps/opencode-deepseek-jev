@@ -18,11 +18,13 @@ console is signed in as GitHub `swipswaps`, the machines page lists
 `swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
 MagicDNS and HTTPS Certificates enabled. Serve is now **configured**:
 `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
-tailnet-only. The follow-up curl on the host failed with
-`curl: (6) Could not resolve host`, which is a **host MagicDNS/DNS problem**, not
-a Serve failure (`tailscale serve status` shows the mapping). Verify with
-`--resolve` on the host and directly from the client; if the client also cannot
-resolve the name, fix MagicDNS on that device. The app is HTTP at
+tailnet-only. Two host-only checks are misleading: the plain curl fails with
+`Could not resolve host`, and `--resolve` to the host's own tailnet IP hangs
+(hairpin to self). Neither is a Serve failure. Test from the client with
+`--resolve` first; if that returns 200, TLS is working and only the host's local
+MagicDNS is broken. The host fix needs the existing non-default flags:
+`sudo tailscale up --accept-dns --operator=owner`, then restart `tailscaled`.
+The app is HTTP at
 `http://100.119.125.16:4174/`; https on 4174 is expected to fail. The Google
 `ihydrocarbon@gmail.com` account remains a separate tailnet
 (`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
@@ -63,7 +65,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | configured on 8443, tailnet-only | `tailscale serve status` shows `https://ws24.taile17668.ts.net:8443` to `127.0.0.1:8002`; host curl failed with `Could not resolve host`, so local MagicDNS is the open issue |
+| Tailscale Serve | configured on 8443, tailnet-only; client proof pending | `tailscale serve status` shows `https://ws24.taile17668.ts.net:8443` to `127.0.0.1:8002`; host plain curl is DNS-broken and host `--resolve` hairpins, so test from the client |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -283,31 +285,34 @@ status` shows no public config, and the health request returns 200. The
 same-origin app is HTTP: open `http://100.119.125.16:4174/`. Opening `https` on
 4174 gives `ERR_SSL_PROTOCOL_ERROR` by design; TLS is on the API via the TSN.
 
-If the host says `Could not resolve host`, Serve is still fine; the local
-MagicDNS is broken. Verify without DNS:
+Host self-checks are misleading: the plain curl is DNS-broken, and `--resolve`
+to the host's own tailnet IP can hang (hairpin to self). Do not use the host
+curl as the acceptance. Test from the client `100.70.43.78`, with `--resolve` to
+bypass DNS:
 
 ```bash
-curl -sS --resolve ws24.taile17668.ts.net:8443:100.119.125.16 \
+curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 \
   -o /dev/null -w 'http=%{http_code}\n' \
   https://ws24.taile17668.ts.net:8443/api/health
 ```
 
-Expect 200. From the client `100.70.43.78`, run the plain `curl` against the
-name. If the client also fails, fix MagicDNS there; the 2026-10-12 incident had
-the same shape (tailscaled owned `resolv.conf`, `systemd-resolved` was inactive,
-MagicDNS forwarded to zero upstreams). Host fix:
+Expect 200; that proves Serve and the certificate. Then test plain resolution on
+the client: `getent hosts ws24.taile17668.ts.net` and the same curl without
+`--resolve`. If DNS fails, fix MagicDNS on that device. Host fix uses the exact
+flags Tailscale demands (the earlier `tailscale up --accept-dns=true` failed
+because `--operator` is non-default):
 
 ```bash
 cat /etc/resolv.conf
 systemctl is-active systemd-resolved tailscaled
 sudo systemctl enable --now systemd-resolved
-sudo tailscale up --accept-dns=true
+sudo tailscale up --accept-dns --operator=owner
 sudo systemctl restart tailscaled
 getent hosts ws24.taile17668.ts.net
 ```
 
 Do not use `--accept-dns=false` if tailnet names must resolve. Restarting
-`tailscaled` briefly drops the tailnet; run it from the host console.
+`tailscaled` briefly drops the tailnet.
 
 The `https://rolldown.rs/reference/InputOptions.checks#bundlertimings` URL in
 the build output is the bundler's chunk-size hint, not an action item.

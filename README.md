@@ -95,10 +95,12 @@ dated handoffs under `docs/`, especially
   `swipswaps@github`; the DNS page shows `taile17668.ts.net` with MagicDNS and
   HTTPS Certificates on. Serve is now configured:
   `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
-  tailnet-only. The host curl failed with `Could not resolve host`, which is a
-  local MagicDNS/DNS problem, not Serve; `tailscale serve status` confirms the
-  mapping. Verify with `curl --resolve` on the host and directly from the
-  client; fix MagicDNS if the client also fails. The same-origin app is HTTP at
+  tailnet-only. The host plain curl failed with `Could not resolve host`, and
+  `--resolve` to the host's own tailnet IP hangs (hairpin); both are local
+  issues, not Serve. Test from the client `100.70.43.78` with `--resolve` to
+  bypass DNS; if that returns 200, TLS is working. Then fix the host's local
+  MagicDNS with `sudo tailscale up --accept-dns --operator=owner` and a
+  `tailscaled` restart. The same-origin app is HTTP at
   `http://100.119.125.16:4174/`; opening https on 4174 is expected to fail. The
   Google `ihydrocarbon@gmail.com` account is a separate tailnet
   (`tail427659.ts.net`); invite it as a user if both logins are wanted. For
@@ -121,13 +123,13 @@ are open: its failures would be ambiguous between the old and new layers.
 
 1. **Finish Serve/TLS.** The identity, HTTPS setting, and Serve mapping are
    done: `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002`.
-   The host curl failed with `Could not resolve host`; that is local MagicDNS,
-   not Serve. Verify without DNS:
-   `curl -sS --resolve ws24.taile17668.ts.net:8443:100.119.125.16 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
-   Then from the client `100.70.43.78` run the plain curl against the name. If
-   resolution fails, fix MagicDNS:
+   The host's plain curl is DNS-broken, and `--resolve` to its own tailnet IP
+   hangs (hairpin). Test from the client `100.70.43.78` with `--resolve`:
+   `curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
+   If that returns 200, TLS is working. Then fix the host's MagicDNS with the
+   exact flags Tailscale requires:
    `sudo systemctl enable --now systemd-resolved`, then
-   `sudo tailscale up --accept-dns=true`, then
+   `sudo tailscale up --accept-dns --operator=owner`, then
    `sudo systemctl restart tailscaled`, then `getent hosts ws24.taile17668.ts.net`.
    Do not use `--accept-dns=false` when tailnet names must resolve. Port 8443
    avoids JEF Caddy on 443. The app is HTTP at `http://100.119.125.16:4174/`;
