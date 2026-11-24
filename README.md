@@ -6,7 +6,136 @@ through a local guard. A separate RAG repo provides local document retrieval.
 The stack runs on one host (`ws24`, `192.168.4.24`); there is no cloud control
 plane.
 
-## Latest verified state (2026-11-05)
+## State of the system — 2026-11-24
+
+This section is the evidence-first index for the current cycle (2026-11-20 to
+2026-11-24). It records what changed, what is proven, and the next step with the
+highest expected gain per unit of irreversible risk. The full trail is in the
+dated handoffs under `docs/`, especially
+[`HANDOFF-2026-11-24-guard-body.md`](docs/HANDOFF-2026-11-24-guard-body.md) and
+[`HANDOFF-2026-11-24-foil-next.md`](docs/HANDOFF-2026-11-24-foil-next.md).
+
+### How we got here
+
+- **The guard could not see the program it executed.** The session database
+  showed the same signature 67 times: `blacklist-guard blocked this command`,
+  and the recorded recovery was a `cd` plus the same shape, so the block taught
+  nothing. Root cause: only the command line was inspected, so `bash script.sh`
+  carried a banned construct inside the file. Fixed in
+  `.opencode/plugins/blacklist-guard.js`: `scriptTargets()` resolves the local
+  files a command executes or sources; `inspectScriptBody()` reports the rule
+  and line; `liveCode()` blanks comments and quoted strings. The body set is the
+  destructive/opaque rules only: `sed`, `rm -rf`, irreversible, secret reads,
+  `subprocess.run`, config dump, and download-pipe-to-shell. The scope was
+  measured, not assumed: that narrow set returned **0 hits across 257 repo
+  scripts** and **1 genuine hit across 39 skill files**, while the wider
+  command-line convention rules fired on 145 repo scripts. The check is live:
+  the loaded plugin SHA-256 equals the repo and global copies, and a temporary
+  script was blocked at its file and line.
+- **A `--self-test` that never ran.** `guard-health.sh --self-test` advertised
+  four cases and exited 0 without executing them, because `main` skipped the
+  call. `scripts/self-test-contract.py` now forbids that class two ways: static
+  (a defined `self_test()` must be called in code with a non-empty body) and
+  trace (`--trace` requires the named script's entrypoint and an assertion to
+  appear under `bash -x`). It is wired into `test-hygiene.sh` and
+  `hardening-gate.sh`.
+- **Silence was mistaken for a hang.** A 5m42s gate that had already passed was
+  investigated as a stall. The harness now emits heartbeats, names the failing
+  check, tags latency bounds by environment (`host` versus `sandbox`), and
+  `diag-harness-stall.sh` attributes `/proc` and inotify evidence. The named
+  offender was a host-only check: the global guard symlink.
+  `install-global-guard.sh --check` now rejects a wrong symlink or a differing
+  copy.
+- **Chromium decode was measured, not assumed.** `scripts/chromium-video-ab.sh`
+  pre-registers the decision rule before data collection, and
+  `scripts/chromium-video-ab-run.sh` drives A-B-B-A ordered pairs with a
+  throwaway profile per sample, so the user's browser is untouched. Host
+  evidence:
+  `dec_delta_s=0.109`, `verdict=PASS hardware decode is running`. Both
+  `GRAPHIC_DRIVER=default` and `GRAPHIC_DRIVER=amd` hardware-decode H.264, so
+  the switch is redundant for decode; the remaining question is frame pacing,
+  which the both-hardware rule (`compare-pace`) now states falsifiably.
+- **foil.cfd moved from a static demo to a verified backend plus tailnet story.**
+  Backend route order and analysis were repaired; the OpenFOAM solver was
+  enabled (`solver_available=true`, `scripts/test_cfd_tools.sh` PASS=16 FAIL=0);
+  stale hashed-chunk recovery landed through a `vite:preloadError` reload;
+  component and offline end-to-end (e2e) specs cover every surface; the Private
+  Network Access (PNA) preflight now returns
+  `Access-Control-Allow-Private-Network`; and the backend is bound to loopback
+  plus the Tailscale IPv4 address, with Tailscale Funnel revoked. Tailscale
+  Serve and Access Control List (ACL) narrowing remain host and admin work.
+
+### Where we are (verified 2026-11-24)
+
+- This repo (JEF) is at the close-out for the guard-body and self-test contract
+  work, with a clean working tree. Gates observed this session:
+  `lint` **453 pass / 0 fail**; `test-hygiene` **119 pass / 0 fail / 3 skip**;
+  `test-patterns` **6 pass / 0 fail**; `guard-health --check` PASS (loaded
+  SHA-256 equals the file and a hook fired after the load); doc budget
+  **~34939 of 35000** tier-1 tokens, so the read-first corpus still fits.
+- `check-placeholders` is red on historical assistant text only: 18 flags
+  across 4 part IDs, all from earlier sessions. The cursor is deliberately not
+  advanced, because advancing asserts that a person reviewed the findings.
+- foil.cfd is live as a static site on GitHub Pages at its last green deploy;
+  the OpenFOAM backend runs on `ws24` as a FastAPI service on `127.0.0.1:8002`
+  plus the Tailscale address, not on Pages. The same-origin and tailnet
+  follow-up exists uncommitted in the foil checkout and still needs its host
+  gates and push.
+- The container has no GitHub credential, so `git push` cannot authenticate
+  here, and it has no Docker socket and no Secure Shell (SSH) client.
+  `/workspace` is a bind mount of the host repository, so commits made here are
+  already in the host tree; only the push must run on the host.
+
+### Best next steps (ranked by gain per unit of irreversible risk)
+
+Decision rule: finish the unblocked host acceptance test that closes an open
+claim before adding surface. The losing option is to start a new feature while
+three host-only acceptance tests (Tailscale Serve, live tailnet e2e, and the
+foil follow-up push) are still unproven: it adds unverified surface and hides
+which layer failed.
+
+1. **Push this repo from the host** (the commit is already in the host tree).
+   Host command:
+   `bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"`.
+   Accept: `PASS: jef pushed`, then
+   `git -C /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo status -sb`
+   prints `## main...origin/main` with no `ahead` count.
+2. **Close the foil tailnet exposure** (host). Refresh the daemon, then run the
+   existing dry-run-by-default script in apply mode:
+   `sudo tailscale up`
+   `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`
+   Accept: `tailscale serve status` shows the tailnet-only HTTPS mapping, and a
+   health request over the resolved Tailscale DNS Name (TSN) returns 200:
+   `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
+   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
+3. **Run the live tailnet e2e on the host** after step 2. In the foil checkout,
+   resolve the Tailscale IPv4 address inline:
+   `TAILNET_APP_URL="http://$(tailscale ip -4 | awk 'NR==1{print $1}'):4174/" npx playwright test tests/e2e/tailnet.spec.ts --project=desktop-chrome`
+   Accept: 2 passed, 0 skipped, "Backend online" with no Connect click.
+4. **Gate and push the foil follow-up** after its own checks. In the foil
+   checkout run `npm run lint`, `npm run typecheck`, and `npm run build`, then
+   push from the host with
+   `bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"`.
+   The exact uncommitted files and their acceptance criteria are listed in
+   `docs/HANDOFF-2026-11-24-foil-next.md`.
+5. **Human-only residuals.** Dispose of the placeholder-scan cursor (review the
+   four historical part IDs, or explicitly baseline them) and narrow the
+   tailnet ACL in the admin console to tag and port scope. Neither is a code
+   change; do not mark either green without the review.
+
+### Re-run the evidence
+
+```bash
+./scripts/guard-health.sh --check
+./scripts/blacklist-guard-self-test.mjs
+./scripts/test-hygiene.sh
+./scripts/test-patterns.sh
+./scripts/lint.sh
+./scripts/doc-budget.sh
+python3 scripts/check-placeholders.py --db --cursor logs/placeholder-cursor
+```
+
+## Earlier verified state (2026-11-05)
 
 - The web UI, legacy dashboard `/`, and MUI app `/app/` are live. Canonical
   access: `https://10.100.0.24:5099/app/` (MUI), `https://10.100.0.24:5099`
@@ -531,6 +660,7 @@ out at its first prose use where the abbreviation could be ambiguous):
 
 | Acronym | Expansion |
 |---|---|
+| ACL | Access Control List |
 | API | Application Programming Interface |
 | ARIA | Accessible Rich Internet Applications (W3C specification) |
 | ASK | Ask-tier: a model policy verdict that requires human approval |
@@ -542,6 +672,7 @@ out at its first prose use where the abbreviation could be ambiguous):
 | DB | Database |
 | DNS | Domain Name System |
 | DOM | Document Object Model |
+| e2e | End-to-end (a test that exercises the whole path) |
 | ECC | The external ECC skills catalog (`github.com/affaan-m/ECC`) |
 | FTS5 | Full-Text Search version 5 (SQLite extension) |
 | HTTP / HTTPS | Hypertext Transfer Protocol / HTTP Secure |
@@ -551,12 +682,15 @@ out at its first prose use where the abbreviation could be ambiguous):
 | MCP | Model Context Protocol |
 | NSS | Network Security Services (Mozilla certificate store) |
 | OCR | Optical Character Recognition |
+| PNA | Private Network Access |
 | REST | Representational State Transfer |
 | RFC | Request for Comments (IETF standards document) |
 | SAN | Subject Alternative Name (TLS certificate field) |
 | SQL | Structured Query Language |
+| SSH | Secure Shell |
 | SSE | Server-Sent Events |
 | TLS | Transport Layer Security |
+| TSN | Tailscale DNS Name |
 | TTL | Time To Live |
 | TUI | Terminal User Interface |
 | UI / UX | User Interface / User Experience |
