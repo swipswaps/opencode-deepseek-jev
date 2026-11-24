@@ -16,15 +16,14 @@ green (run `45390923942`). The Tailscale identity mismatch is **resolved**: the
 console is signed in as GitHub `swipswaps`, the machines page lists
 `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16) as
 `swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
-MagicDNS and HTTPS Certificates enabled. Serve is now **configured**:
-`https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
-tailnet-only. Two host-only checks are misleading: the plain curl fails with
-`Could not resolve host`, and `--resolve` to the host's own tailnet IP hangs
-(hairpin to self). Neither is a Serve failure. Test from the client with
-`--resolve` first; if that returns 200, TLS is working and only the host's local
-MagicDNS is broken. The host fix needs the existing non-default flags:
-`sudo tailscale up --accept-dns --operator=owner`, then restart `tailscaled`.
-The app is HTTP at
+MagicDNS and HTTPS Certificates enabled. Serve is **verified end-to-end**:
+`https://ws24.taile17668.ts.net:8443/` reaches FastAPI (the root returns
+`{"detail":"Not Found"}`; the route is `/api/health`). The host's own-IP
+`--resolve` still times out (hairpin to self) and the plain host curl may not
+resolve; neither is a Serve failure. Final acceptance is a 200 from
+`/api/health` on a tailnet device (browser or client). The host MagicDNS fix
+ran with `sudo tailscale up --accept-dns --operator=owner` plus a `tailscaled`
+restart; confirm with `getent hosts`. The app is HTTP at
 `http://100.119.125.16:4174/`; https on 4174 is expected to fail. The Google
 `ihydrocarbon@gmail.com` account remains a separate tailnet
 (`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
@@ -65,7 +64,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | configured on 8443, tailnet-only; client proof pending | `tailscale serve status` shows `https://ws24.taile17668.ts.net:8443` to `127.0.0.1:8002`; host plain curl is DNS-broken and host `--resolve` hairpins, so test from the client |
+| Tailscale Serve | verified end-to-end; `/api/health` 200 to confirm | TLS + proxy reach FastAPI: the root returns `{"detail":"Not Found"}`. Host self-IP `--resolve` hairpins; use a client or browser for the health check |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -285,10 +284,17 @@ status` shows no public config, and the health request returns 200. The
 same-origin app is HTTP: open `http://100.119.125.16:4174/`. Opening `https` on
 4174 gives `ERR_SSL_PROTOCOL_ERROR` by design; TLS is on the API via the TSN.
 
-Host self-checks are misleading: the plain curl is DNS-broken, and `--resolve`
-to the host's own tailnet IP can hang (hairpin to self). Do not use the host
-curl as the acceptance. Test from the client `100.70.43.78`, with `--resolve` to
-bypass DNS:
+`{"detail":"Not Found"}` at the root is a **success**: TLS terminated and the
+request reached FastAPI. The route is `/api/health`, not `/`. Final acceptance
+from a tailnet device (browser or client):
+
+```bash
+curl -sS -m 15 -o /dev/null -w 'http=%{http_code}\n' \
+  https://ws24.taile17668.ts.net:8443/api/health
+```
+
+Expect 200. If that device cannot resolve the name, use `--resolve` from that
+device (not from `ws24`):
 
 ```bash
 curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 \
@@ -296,11 +302,9 @@ curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 \
   https://ws24.taile17668.ts.net:8443/api/health
 ```
 
-Expect 200; that proves Serve and the certificate. Then test plain resolution on
-the client: `getent hosts ws24.taile17668.ts.net` and the same curl without
-`--resolve`. If DNS fails, fix MagicDNS on that device. Host fix uses the exact
-flags Tailscale demands (the earlier `tailscale up --accept-dns=true` failed
-because `--operator` is non-default):
+The host's own `--resolve` to `100.119.125.16:8443` times out (hairpin to self);
+ignore it. Host MagicDNS fix, using the exact flags Tailscale demands because
+`--operator` is non-default:
 
 ```bash
 cat /etc/resolv.conf

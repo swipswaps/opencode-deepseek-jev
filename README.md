@@ -93,13 +93,13 @@ dated handoffs under `docs/`, especially
   the console is signed in as **GitHub `swipswaps`**, and the machines page lists
   `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16), both
   `swipswaps@github`; the DNS page shows `taile17668.ts.net` with MagicDNS and
-  HTTPS Certificates on. Serve is now configured:
-  `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
-  tailnet-only. The host plain curl failed with `Could not resolve host`, and
-  `--resolve` to the host's own tailnet IP hangs (hairpin); both are local
-  issues, not Serve. Test from the client `100.70.43.78` with `--resolve` to
-  bypass DNS; if that returns 200, TLS is working. Then fix the host's local
-  MagicDNS with `sudo tailscale up --accept-dns --operator=owner` and a
+  HTTPS Certificates on. Serve is verified end-to-end:
+  `https://ws24.taile17668.ts.net:8443/` reaches FastAPI (the root returns
+  `{"detail":"Not Found"}`; the route is `/api/health`). The host's own-IP
+  `--resolve` times out (hairpin to self) and the plain host curl may not
+  resolve; neither is Serve. Final check from a client or browser:
+  `https://ws24.taile17668.ts.net:8443/api/health` should return 200. Fix host
+  MagicDNS with `sudo tailscale up --accept-dns --operator=owner` plus a
   `tailscaled` restart. The same-origin app is HTTP at
   `http://100.119.125.16:4174/`; opening https on 4174 is expected to fail. The
   Google `ihydrocarbon@gmail.com` account is a separate tailnet
@@ -121,12 +121,14 @@ ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
 are proven. The losing option is to start a new feature while Serve and the ACL
 are open: its failures would be ambiguous between the old and new layers.
 
-1. **Finish Serve/TLS.** The identity, HTTPS setting, and Serve mapping are
-   done: `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002`.
-   The host's plain curl is DNS-broken, and `--resolve` to its own tailnet IP
-   hangs (hairpin). Test from the client `100.70.43.78` with `--resolve`:
+1. **Finish Serve/TLS.** Serve is verified end-to-end: the root returns FastAPI
+   `{"detail":"Not Found"}` over `https://ws24.taile17668.ts.net:8443/`; the
+   route is `/api/health`. Run from a client or browser:
+   `curl -sS -m 15 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
+   Expect 200. If the client cannot resolve the name, use `--resolve` from that
+   client (not from `ws24`):
    `curl -sS -m 15 --resolve ws24.taile17668.ts.net:8443:100.119.125.16 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
-   If that returns 200, TLS is working. Then fix the host's MagicDNS with the
+   The host's own-IP `--resolve` times out (hairpin). Fix host MagicDNS with the
    exact flags Tailscale requires:
    `sudo systemctl enable --now systemd-resolved`, then
    `sudo tailscale up --accept-dns --operator=owner`, then
