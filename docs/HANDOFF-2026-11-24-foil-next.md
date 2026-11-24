@@ -6,26 +6,34 @@ re-deriving the history. Read this file, then the two prior foil handoffs:
 [`HANDOFF-2026-11-23-foil-tailnet.md`](HANDOFF-2026-11-23-foil-tailnet.md).
 Do not fork or continue the source session.
 
-Status: JEF (this repository) is pushed and level with `origin/main`. foil.cfd is
-live as a static site; its backend is host-only and healthy; the same-origin app
-is built and serving on the tailnet IP; the follow-up is uncommitted in the foil
-checkout. Tailscale Serve is blocked because HTTPS Certificates are disabled for
-the tailnet (a console setting, not a code defect), so the verified path is the
-tailnet-IP fallback over WireGuard.
-The remaining acceptance tests are: enable Serve and re-run for HTTPS, run the
-live tailnet e2e, gate and push the foil follow-up, then narrow the Access
-Control List (ACL).
+Status: JEF and foil are pushed; `2d8ac9e` is the foil follow-up, and this file
+is in the JEF docs commit. Verify with `git status -sb` in both trees.
+foil.cfd is live as a static site; its backend is host-only and healthy; the
+same-origin app is built and serving on the tailnet IP; the follow-up and the
+cold-start fix are committed as `2d8ac9e`. The live tailnet e2e passed **2
+passed, 0 skipped, 0 flaky** with `--retries=0`. Tailscale Serve is still
+blocked because HTTPS Certificates are disabled for the tailnet (a console
+setting, not a code defect), so the verified API path is the tailnet-IP fallback
+over WireGuard. Remaining: verify the `2d8ac9e` CI/deploy, enable Serve for
+Transport Layer Security (TLS), narrow the Access Control List (ACL), and dispose
+of the placeholder cursor.
+
+Important: the container **can** reach the foil tree. `/audit` is a bind mount of
+`/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
+`/audit/foil-cfd-site` is the host working tree. Inspect, edit, and run
+`lint`/`typecheck`/`build` there. Only Playwright (Chromium libraries) and
+`git push` are host-only.
 
 ## Hard boundary: where you can act
 
-- The container **cannot read** `/home/owner`, has **no Docker socket**, and
-  has **no Secure Shell (SSH) client**. It also has **no GitHub credential**, so
-  it cannot push.
-- `/workspace` is a bind mount of the host repository
-  `/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo`. Commits
-  made in the container are already in the host tree.
-- The foil checkout is **host-only**:
-  `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site`.
+- The container has **no Docker socket**, **no Secure Shell (SSH) client**, and
+  **no GitHub credential**, so it cannot run the host stack or push.
+- `/workspace` is a bind mount of the JEF host repository
+  `/home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo`.
+- `/audit` is a bind mount of
+  `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so the foil
+  checkout is available at `/audit/foil-cfd-site` for reads, edits,
+  `lint`, `typecheck`, and `build`. Playwright and push still need the host.
 - The host-ops skill (same files as the container copy at
   `/home/node/.config/opencode/skills/agent-host-ops`) is the execution layer:
   `$HOME/.config/opencode/skills/agent-host-ops`.
@@ -46,8 +54,10 @@ either (a) run the host block if the operator has given you host execution, or
 | Tailscale Serve | blocked: HTTPS Certificates disabled | CLI node link returned `404 node not found`; enable HTTPS in the admin console DNS page |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
-| CI e2e | not a hard gate | branch protection allows admin bypass; pushes printed "Bypassed rule violations" |
-| foil follow-up | uncommitted | `src/hooks/useBackendProbe.ts`, `src/hydro-main.tsx`, `src/sections/HydroLab.tsx`, `tests/e2e/tailnet.spec.ts` |
+| CI e2e | not a hard gate | `2d8ac9e` push printed "Bypassed rule violations"; verify its run separately |
+| foil follow-up | committed and pushed `2d8ac9e` | `src/hooks/useBackendProbe.ts`, `src/hydro-main.tsx`, `src/sections/HydroLab.tsx`, `tests/e2e/tailnet.spec.ts`, `docker-compose.openfoam.yml` |
+| live tailnet e2e | passed 2026-11-24 | 2 passed, 0 skipped, 0 flaky in 41.2s with `--retries=0` |
+| same-origin dist | restored with `--base=/` | `dist/index.html` references `/assets`; `npm run build` reverts it to the Pages base |
 
 The container-side JEF gates that were green at handoff: `lint` 453 pass / 0
 fail; `test-hygiene` 119 pass / 0 fail / 3 skip; `test-patterns` 6 pass / 0
@@ -80,11 +90,12 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/lint-all.sh"
 If `push-all.sh` reports no token and no `gh`, that is expected in the
 container. Do not treat it as a defect; the push runs on the host.
 
-## Step 1 — push JEF (host, one command)
+## Step 1 — push JEF (host, one command) — done
 
-The JEF commit is already in the host tree. Run this on `ws24`
-(192.168.4.24), not on the client `100.70.43.78`: the client has no copy of the
-skill and fails with `No such file or directory`.
+Result 2026-11-24: `1f4b2e5..da2731f` pushed for JEF and `04281df..2d8ac9e` for
+foil. Re-run this command only to verify or to push new commits. Run it on
+`ws24` (192.168.4.24), not on the client `100.70.43.78`: the client has no copy
+of the skill and fails with `No such file or directory`.
 
 ```bash
 bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
@@ -102,7 +113,7 @@ If it refuses because foil is dirty with ahead/behind drift, push JEF alone:
 git -C /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo push origin main
 ```
 
-## Step 2 — close the foil tailnet exposure (host)
+## Step 2 — close the foil tailnet exposure (host; fallback verified, TLS pending)
 
 Refresh the daemon, then apply the existing script. It is dry-run by default;
 `--apply --with-app` makes it effective, including the same-origin app proxy.
@@ -201,7 +212,7 @@ auto-connect test failed on the first attempt after 58.1s with
 `Static mode — backend unreachable`, then passed on the retry in 12.1s. The
 trace proves the network was healthy:
 
-- `GET /api/health` returned **200 in 101ms** at 05:41:30.745Z;
+- the `/api/health` request returned **200 in 101ms** at 05:41:30.745Z;
 - the badge was still "Checking local backend" at 05:41:30.684Z and showed
   "Static mode" at 05:41:36.898Z.
 
@@ -220,7 +231,7 @@ Fix in `src/hooks/useBackendProbe.ts`:
 
 A second run with `--retries=0` failed differently: the badge was absent for the
 whole 20s. The trace showed the index loading assets from `/foil-cfd-site/assets`
-while the proxy serves `/assets`; every JS request got `index.html` with 200 and
+while the proxy serves `/assets`; every JavaScript request got `index.html` with 200 and
 the app never booted. Cause: `npm run build` used the Pages base
 `/foil-cfd-site/`. Fix: build the same-origin app with `npx vite build --base=/`
 before the e2e. This is a different failure from the first-paint race; both
@@ -230,9 +241,20 @@ Rebuild with `--base=/` and rerun Step 3 with `--retries=0`. If it still shows a
 retry or no badge, treat the fix as insufficient and diagnose the new trace
 before committing.
 
-## Step 4 — gate and push the foil follow-up (host)
+**Result 2026-11-24 05:22Z: 2 passed, 0 skipped, 0 flaky** (17.3s and 11.4s;
+41.2s total) with `--retries=0`. The first-paint race and the build-base trap
+are both closed.
 
-The follow-up is already written but uncommitted:
+## Step 4 — gate and push the foil follow-up (host) — done
+
+Commit `2d8ac9e` is pushed to `origin/main`; `lint` (0 warnings / 0 errors),
+`typecheck`, and `build` all passed before the commit. The push printed
+"Bypassed rule violations" because the required `e2e` check was still pending;
+verify the run separately. The host's `npm run build` restored the Pages base,
+so the same-origin dist was rebuilt with `--base=/` afterwards to keep the
+tailnet app working.
+
+The follow-up commit contains:
 
 - `src/hooks/useBackendProbe.ts` (private and tailnet pages probe the page origin
   first; the loopback permission gate applies to public pages only; the
@@ -243,29 +265,28 @@ The follow-up is already written but uncommitted:
 - `docker-compose.openfoam.yml` (bind `127.0.0.1:8002` and the Tailscale IPv4
   address; the host script applied this, so include it in the same commit)
 
-Gate it in the checkout:
+For reference, the exact sequence was:
 
 ```bash
 cd /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site
 npm run lint
 npm run typecheck
 npm run build
-```
-
-Accept: all three exit 0; `oxlint` reports no errors. `npm run build` here is
-the GitHub Pages base (`/foil-cfd-site/`) and is correct for CI and deploy, but
-it overwrites the same-origin dist. Run the Step 3 tailnet e2e before this
-build, or re-run the secure script (which rebuilds with `--base=/`) before
-serving the tailnet app again. Then commit on pass and push:
-
-```bash
-git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site add src/hooks/useBackendProbe.ts src/hydro-main.tsx src/sections/HydroLab.tsx tests/e2e/tailnet.spec.ts docker-compose.openfoam.yml
-git -C /home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site commit -m "frontend: same-origin tailnet auto-connect; cold-start probe deadline"
+git add src/hooks/useBackendProbe.ts src/hydro-main.tsx src/sections/HydroLab.tsx tests/e2e/tailnet.spec.ts docker-compose.openfoam.yml
+git commit -m "frontend: same-origin tailnet auto-connect; cold-start probe deadline"
 bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 ```
 
-Accept: `PASS: foil pushed`; the CI run for the new commit has `build`, `e2e`,
-and `deploy` green:
+Accept: all three gates exit 0 (`oxlint` reports 0 warnings / 0 errors), the
+commit is on `main`, and `PASS: foil pushed`. `npm run build` is the GitHub Pages
+base (`/foil-cfd-site/`) and is correct for CI and deploy, but it overwrites the
+same-origin dist. Run the Step 3 tailnet e2e before this build, then rebuild
+with `--base=/` (or re-run the secure script) to keep the tailnet app working.
+The same-origin dist has been restored this way.
+
+Pending: the CI run for `2d8ac9e` has `build`, `e2e`, and `deploy` green. In CI
+the tailnet spec reports two skips because `TAILNET_APP_URL` is unset; that is
+expected there, not a pass for the live check:
 
 ```bash
 gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId,headSha,status,conclusion
@@ -283,21 +304,32 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
+1. **Serve/TLS (human console).** Open
+   `https://console.tailscale.com/admin/dns`, enable MagicDNS, then under
+   **HTTPS Certificates** select **Enable HTTPS** and acknowledge the
+   public-ledger notice. Run `sudo tailscale up` and re-run the secure script.
+   Accept: `tailscale serve status` shows the 443 mapping and
+   `https://ws24.taile17668.ts.net/api/health` returns 200.
+2. **Verify the foil deploy.** `2d8ac9e` was pushed before its required `e2e`
+   check finished, so confirm the run: `gh run list -R swipswaps/foil-cfd-site
+   --limit 1 --json databaseId,headSha,status,conclusion` then watch it. Accept:
+   build, e2e, and deploy green, and `https://foil.cfd` serves the new build.
+3. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
    `grants` entry with tag and port scope for `ws24` and the client. This is
    admin-console work, not reachable from either repo. Do not lock yourself out:
    keep one verified device session open while applying.
-2. **e2e as a hard gate.** Either remove the admin bypass on `main` or require
+4. **e2e as a hard gate.** Either remove the admin bypass on `main` or require
    changes to land through a pull request. This is a repository policy decision,
    not a code defect.
-3. **Placeholder cursor.** Review the four historical part IDs from the JEF scan
+5. **Placeholder cursor.** Review the four historical part IDs from the JEF scan
    and either accept them or baseline them explicitly. Never run `--advance` to
    make a red gate green.
 
 ## Do not
 
-- Do not run the container copy of the host-ops skill against the foil path; the
-  foil repo is host-only.
+- Do not run `push-all.sh` or Playwright from the container. `/audit/foil-cfd-site`
+  is available for reads, edits, `lint`, `typecheck`, and `build`, but push and a
+  real browser need the host.
 - Do not commit or push foil with a failing `npm run build`, and do not report a
   skipped tailnet spec as a pass.
 - Do not expose the backend publicly: Funnel stays revoked; Serve is

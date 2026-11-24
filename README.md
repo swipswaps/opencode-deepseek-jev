@@ -84,62 +84,54 @@ dated handoffs under `docs/`, especially
   e2e was flaky: the trace shows health 200 in 101ms while the badge timed out,
   because the 2.5s probe deadline fired during a ~6s first-paint block. The fix
   gives the same-origin probe a 10s deadline and tries the page origin before
-  the baked URL; the proof run must use `--retries=0`. A second run exposed a
-  build-base trap: `npm run build` uses the GitHub Pages base and breaks the
-  same-origin app, which must be built with `--base=/`. Tailscale Serve is
-  blocked because HTTPS Certificates are disabled
-  for the tailnet, so the verified API path is HTTP over WireGuard until HTTPS
-  is enabled. The
-  same-origin and tailnet follow-up remains uncommitted in the foil checkout and
-  still needs its host gates and push.
+  the baked URL. A second run exposed a build-base trap: `npm run build` uses
+  the GitHub Pages base and breaks the same-origin app, which must be built with
+  `--base=/`. Both fixes are committed and pushed as `2d8ac9e`; the live e2e
+  then passed **2 passed, 0 skipped, 0 flaky** with `--retries=0` in 41.2s, and
+  the same-origin dist was rebuilt with `--base=/` afterwards. Tailscale Serve
+  is blocked because HTTPS Certificates are disabled for the tailnet, so the
+  verified API path is HTTP over WireGuard until HTTPS is enabled. The
+  `2d8ac9e` CI/deploy is still to be verified, because the push bypassed the
+  required `e2e` check.
 - The container has no GitHub credential, so `git push` cannot authenticate
   here, and it has no Docker socket and no Secure Shell (SSH) client.
-  `/workspace` is a bind mount of the host repository, so commits made here are
-  already in the host tree; only the push must run on the host.
+  `/workspace` and `/audit` are bind mounts of the host JEF and foil trees, so
+  reads, edits, and container-side builds act on the host tree; only Playwright
+  and push must run on the host.
 
 ### Best next steps (ranked by gain per unit of irreversible risk)
 
-Decision rule: finish the unblocked host acceptance test that closes an open
-claim before adding surface. The losing option is to start a new feature while
-three host-only acceptance tests (Tailscale Serve, live tailnet e2e, and the
-foil follow-up push) are still unproven: it adds unverified surface and hides
-which layer failed.
+Decision rule: finish the open acceptance tests that close a claim before adding
+surface. The push and the live tailnet e2e are now proven, so the losing option
+has shifted: starting a new foil feature while the `2d8ac9e` deploy is
+unverified and Serve and the ACL are open would add surface whose failures are
+ambiguous between the old and new layers.
 
-1. **Push this repo from the host** (the commit is already in the host tree).
-   Host command:
-   `bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"`.
-   Accept: `PASS: jef pushed`, then
-   `git -C /home/owner/Documents/9e3e0363-0237-4c38-93dc-ce25e2f1ec37/repo status -sb`
-   prints `## main...origin/main` with no `ahead` count.
-2. **Close the foil tailnet exposure** (host). Refresh the daemon, then run the
-   existing dry-run-by-default script in apply mode:
-   `sudo tailscale up`
-   `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`
-   If the script reports that Serve is not enabled, open
+1. **Verify the `2d8ac9e` foil deploy** (host). The push bypassed the required
+   `e2e` check, so read the run rather than assuming it:
+   `gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId,headSha,status,conclusion`
+   `gh run watch -R swipswaps/foil-cfd-site "$(gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId --jq '.[0].databaseId')"`
+   Accept: `build`, `e2e`, and `deploy` green, and `https://foil.cfd` serves the
+   new build. In CI the tailnet spec reports two skips because
+   `TAILNET_APP_URL` is unset; that is expected, not the live check.
+2. **Enable Serve and TLS** (host and tailnet console). Open
    `https://console.tailscale.com/admin/dns`, enable MagicDNS, then under
    **HTTPS Certificates** choose **Enable HTTPS** and acknowledge the
-   public-ledger notice. Run `sudo tailscale up` and re-run. The node-specific
-   `login.tailscale.com/f/serve` link printed by the CLI can return
-   `404 node not found`; do not rely on it. Until HTTPS is enabled the script
-   verifies the tailnet-IP fallback over WireGuard. Accept:
-   `tailscale serve status` shows the tailnet-only HTTPS mapping, and a health
-   request over the resolved Tailscale DNS Name (TSN) returns 200:
+   public-ledger notice. Run `sudo tailscale up` and re-run
+   `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`.
+   The node-specific `login.tailscale.com/f/serve` link printed by the CLI can
+   return `404 node not found`; do not rely on it. Accept:
+   `tailscale serve status` shows the 443 mapping, and a health request over the
+   resolved Tailscale DNS Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
-3. **Run the live tailnet e2e on the host** after step 2. In the foil checkout,
-   resolve the Tailscale IPv4 address inline:
-   `TAILNET_APP_URL="http://$(tailscale ip -4 | awk 'NR==1{print $1}'):4174/" npx playwright test tests/e2e/tailnet.spec.ts --project=desktop-chrome`
-   Accept: 2 passed, 0 skipped, "Backend online" with no Connect click.
-4. **Gate and push the foil follow-up** after its own checks. In the foil
-   checkout run `npm run lint`, `npm run typecheck`, and `npm run build`, then
-   push from the host with
-   `bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"`.
-   The exact uncommitted files and their acceptance criteria are listed in
-   `docs/HANDOFF-2026-11-24-foil-next.md`.
-5. **Human-only residuals.** Dispose of the placeholder-scan cursor (review the
-   four historical part IDs, or explicitly baseline them) and narrow the
-   tailnet ACL in the admin console to tag and port scope. Neither is a code
-   change; do not mark either green without the review.
+   Until then the verified path is HTTP over WireGuard.
+3. **Narrow the tailnet ACL** in the admin console to tag and port scope. Keep a
+   verified device session open while applying so you cannot lock yourself out.
+4. **Make `e2e` a hard gate** by removing the admin bypass on `main` or
+   requiring changes through a pull request. Repository policy, not code.
+5. **Dispose of the placeholder cursor** by reviewing the four historical part
+   IDs or explicitly baselining them. Never advance it to make the gate green.
 
 ### Re-run the evidence
 
