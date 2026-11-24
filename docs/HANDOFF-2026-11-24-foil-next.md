@@ -60,7 +60,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | blocked: browser is in the wrong tailnet | ws24 `CurrentTailnet.Name=swipswaps.github`, DNS `ws24.taile17668.ts.net`; `ihydrocarbon@gmail.com` sees only `fedora` (100.95.53.23), so its HTTPS setting does not apply |
+| Tailscale Serve | blocked: two different Tailscale identities | devices were authorized as GitHub `swipswaps@github` (`swipswaps.github`, DNS `ws24.taile17668.ts.net`); the browser is Google `ihydrocarbon@gmail.com` (`tail427659.ts.net`, only `fedora` at 100.95.53.23) |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -75,12 +75,59 @@ fail; `guard-health --check` PASS; doc budget within 35000 tier-1 tokens.
 its cursor. The uppercase `PASS` and `FAIL` strings below are literal verdict
 labels printed by the scripts, not acronyms.
 
+## Tailscale identity discrepancy — evidence and plan
+
+Two Tailscale identities exist, and the devices are in the one the browser is
+not signed into:
+
+- The client's `tailscale debug prefs` on 2026-10-12 records
+  `UserProfile.LoginName = swipswaps@github`, `DisplayName = #swipswaps`, and
+  the GitHub avatar `u/15093666`. That GitHub identity authorized the nodes.
+- `tailscale status` on `ws24` and the client shows both owned by
+  `swipswaps@`; the current tailnet is `swipswaps.github` with DNS
+  `ws24.taile17668.ts.net`.
+- The browser is signed in with Google `ihydrocarbon@gmail.com`. Its tailnet is
+  `tail427659.ts.net` and its machines page lists only a `fedora` at
+  100.95.53.23; it has no `ws24`.
+- `swipswaps` is the user's GitHub account: it owns the repos and the DuckDNS
+  login is `swipswaps@github`. The Google account is a second Tailscale account,
+  not the one the devices use.
+
+Preferred plan (no address or certificate churn):
+
+1. Sign out of the Tailscale admin console and sign in at
+   `https://login.tailscale.com/` with **Sign in with GitHub** as `swipswaps`
+   (recover the GitHub password if needed).
+2. In the `swipswaps.github` tailnet, enable HTTPS Certificates, run
+   `sudo tailscale up`, and re-run Serve. The `100.119.125.16` /
+   `100.70.43.78` addresses, the compose bind, and the JEF certificate SANs
+   stay valid.
+3. Invite `ihydrocarbon@gmail.com` as a user (and admin if wanted) of the
+   `swipswaps.github` tailnet, then accept the invitation. Both logins then
+   reach the same tailnet.
+4. For future approved machines, generate an auth key in that tailnet
+   (Settings, Keys) and join with
+   `sudo tailscale up --auth-key=... --advertise-tags=tag:server` (tag names
+   are local choices; define `tagOwners` in the ACL). Tagged nodes are owned by
+   the tailnet, not by one user's login. Alternatively sign in with GitHub
+   `swipswaps`.
+5. Remove or document the extra `fedora` in the Google tailnet. Keep one
+   machine in one tailnet; do not split a host across both.
+
+Fallback (only if the GitHub account is unrecoverable): re-home `ws24` and the
+client to `ihydrocarbon@gmail.com` / `tail427659.ts.net` with
+`sudo tailscale logout` then `sudo tailscale up` (or an auth key). This assigns
+new `100.x` addresses, so update `docker-compose.openfoam.yml`, every doc and
+script that hardcodes `100.119.125.16` or `100.70.43.78`, and the JEF Caddy
+certificate Subject Alternative Names (SANs) and trust. That is a migration,
+not a quick fix; do it only when GitHub access is impossible.
+
 ## Decision rule
 
-Finish the unblocked host acceptance test that closes an open claim before
-adding surface. The losing option is to start a new foil feature now: three
-acceptance tests (Serve, live tailnet e2e, follow-up push) would remain
-unproven, and a new failure would be ambiguous between the old and new layers.
+Finish the remaining open acceptance tests (Serve/TLS and the ACL) before
+adding surface. The losing option is to start a new foil feature while Serve
+and the ACL are open: a new failure would be ambiguous between the old and new
+layers.
 
 ## Step 0 — prove the local state (container, read-only)
 
@@ -189,10 +236,10 @@ tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s
 
 Human step for TLS:
 
-1. Sign out of the Tailscale admin console and sign in as the account that owns
-   `swipswaps.github` (the `swipswaps` login), or use the tailnet selector if
-   that account is already a member. The `ihydrocarbon@gmail.com` account cannot
-   see `ws24`; its machines page has only `fedora`.
+1. Sign out of the Tailscale admin console and sign in with **GitHub** as
+   `swipswaps` (the identity the nodes were authorized with), or use the tailnet
+   selector if that account is already a member. The `ihydrocarbon@gmail.com`
+   account cannot see `ws24`; its machines page has only `fedora`.
 2. Open that tailnet's DNS page: `https://console.tailscale.com/admin/dns`.
    The tailnet DNS name must match the `ws24.taile17668.ts.net` suffix, not
    `tail427659.ts.net`.
@@ -345,8 +392,8 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **Serve/TLS (human console).** Sign out of the console and sign in as the
-   `swipswaps.github` owner (the `swipswaps` login). The open
+1. **Serve/TLS (human console).** Sign out of the console and sign in with
+   **GitHub** as `swipswaps` (the identity the nodes use). The open
    `ihydrocarbon@gmail.com` account sees only `fedora` and its HTTPS setting does
    not apply. In the correct tailnet (DNS suffix `taile17668.ts.net`), enable
    HTTPS Certificates, run `sudo tailscale up`, and re-run the secure script. If

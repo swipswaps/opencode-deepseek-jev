@@ -89,14 +89,20 @@ dated handoffs under `docs/`, especially
   `--base=/`. Both fixes are committed and pushed as `2d8ac9e`; the live e2e
   then passed **2 passed, 0 skipped, 0 flaky** with `--retries=0` in 41.2s, and
   the same-origin dist was rebuilt with `--base=/` afterwards. The `2d8ac9e`
-  CI/deploy is green (run `45390923942`). Tailscale Serve is blocked by a wrong
-  browser tailnet, not by the device: `ws24` reports
-  `CurrentTailnet.Name = swipswaps.github` with DNS `ws24.taile17668.ts.net`,
-  while the open console account is `ihydrocarbon@gmail.com`, whose machines
-  page lists only `fedora` (100.95.53.23). Those are different tailnets, so the
-  HTTPS setting does not apply. Sign out and sign in as the `swipswaps.github`
-  owner, enable HTTPS there, and re-run Serve. If that account is unavailable,
-  the verified API path is HTTP over WireGuard; do not move the device.
+  CI/deploy is green (run `45390923942`). Tailscale Serve is blocked by **two
+  Tailscale identities**, not by the device. The session database records the
+  client's `UserProfile.LoginName = swipswaps@github` (GitHub `swipswaps`, the
+  same account that owns the repos and DuckDNS); both nodes are owned by
+  `swipswaps@` in the `swipswaps.github` tailnet with DNS
+  `ws24.taile17668.ts.net`. The browser is signed in with Google
+  `ihydrocarbon@gmail.com`, a separate tailnet (`tail427659.ts.net`) that lists
+  only a different `fedora` at 100.95.53.23. Sign in at
+  `https://login.tailscale.com/` with **Sign in with GitHub** as `swipswaps` to
+  manage the devices; then enable HTTPS and re-run Serve. For future machines,
+  generate an auth key in that tailnet and join with a `tag:server` tag rather
+  than a user login. If the GitHub account is unrecoverable, the fallback is to
+  re-home the devices to the Google tailnet, which changes the `100.x` addresses
+  and the JEF certificate SANs; do not split a host across both tailnets.
 - The container has no GitHub credential, so `git push` cannot authenticate
   here, and it has no Docker socket and no Secure Shell (SSH) client.
   `/workspace` and `/audit` are bind mounts of the host JEF and foil trees, so
@@ -111,9 +117,11 @@ are proven. The losing option is to start a new feature while Serve and the ACL
 are open: its failures would be ambiguous between the old and new layers.
 
 1. **Enable Serve/TLS** (host and tailnet console). Sign out of the admin
-   console and sign in as the account that owns `swipswaps.github` (the
-   `swipswaps` login). The currently open `ihydrocarbon@gmail.com` account sees
-   only `fedora` (100.95.53.23), so its HTTPS setting cannot apply to `ws24`.
+   console and sign in at `https://login.tailscale.com/` with **Sign in with
+   GitHub** as `swipswaps` (the identity recorded in the client's Tailscale
+   preferences and the one that owns the repos). The open
+   `ihydrocarbon@gmail.com` account is a separate tailnet that sees only
+   `fedora` (100.95.53.23), so its HTTPS setting cannot apply to `ws24`.
    Verify the device tailnet on the host:
    `tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name"))'`
    In the correct tailnet enable MagicDNS and HTTPS Certificates, then run
@@ -126,7 +134,11 @@ are open: its failures would be ambiguous between the old and new layers.
    resolved Tailscale DNS Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
-   Until then the verified path is HTTP over WireGuard.
+   Until then the verified path is HTTP over WireGuard. For future approved
+   machines, invite `ihydrocarbon@gmail.com` as a user (and admin if wanted) of
+   the `swipswaps.github` tailnet, generate an auth key there, and join with a
+   `tag:server` tag; define `tagOwners` in the ACL so the node belongs to the
+   tailnet rather than one user login. Do not join a host to both tailnets.
 2. **Narrow the tailnet ACL** in the admin console to tag and port scope. Keep a
    verified device session open while applying so you cannot lock yourself out.
 3. **Make `e2e` a hard gate** by removing the admin bypass on `main` or
