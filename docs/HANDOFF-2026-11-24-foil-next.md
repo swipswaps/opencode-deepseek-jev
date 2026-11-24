@@ -16,16 +16,19 @@ green (run `45390923942`). The Tailscale identity mismatch is **resolved**: the
 console is signed in as GitHub `swipswaps`, the machines page lists
 `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16) as
 `swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
-MagicDNS and HTTPS Certificates enabled. The script's first Serve attempt failed
-with `Access denied: serve config denied`, not a tailnet issue: `owner` is not
-the tailscaled operator. Set it once with `sudo tailscale set --operator=owner`,
-then use `tailscale serve --bg --https=8443 http://127.0.0.1:8002` because JEF
-Caddy owns 443. Verify `https://ws24.taile17668.ts.net:8443/api/health`. The
-Google `ihydrocarbon@gmail.com` account remains a separate tailnet
+MagicDNS and HTTPS Certificates enabled. Serve is now **configured**:
+`https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
+tailnet-only. The follow-up curl on the host failed with
+`curl: (6) Could not resolve host`, which is a **host MagicDNS/DNS problem**, not
+a Serve failure (`tailscale serve status` shows the mapping). Verify with
+`--resolve` on the host and directly from the client; if the client also cannot
+resolve the name, fix MagicDNS on that device. The app is HTTP at
+`http://100.119.125.16:4174/`; https on 4174 is expected to fail. The Google
+`ihydrocarbon@gmail.com` account remains a separate tailnet
 (`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
-are wanted. Remaining after Serve: the Access Control List (ACL), future-machine
-auth keys and tags, and the placeholder cursor. The exact commands are in
-Step 2.
+are wanted. Remaining after this DNS check: the Access Control List (ACL),
+future-machine auth keys and tags, and the placeholder cursor. The exact
+commands are in Step 2.
 
 Important: the container **can** reach the foil tree. `/audit` is a bind mount of
 `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
@@ -60,7 +63,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | identity resolved; blocked by operator permission | HTTPS enabled in `swipswaps.github`; `serve config denied` because `owner` is not the tailscaled operator. Set `sudo tailscale set --operator=owner`, then serve on 8443 (Caddy owns 443) |
+| Tailscale Serve | configured on 8443, tailnet-only | `tailscale serve status` shows `https://ws24.taile17668.ts.net:8443` to `127.0.0.1:8002`; host curl failed with `Could not resolve host`, so local MagicDNS is the open issue |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -279,6 +282,32 @@ Accept: `tailscale serve status` shows the 8443 mapping, `tailscale funnel
 status` shows no public config, and the health request returns 200. The
 same-origin app is HTTP: open `http://100.119.125.16:4174/`. Opening `https` on
 4174 gives `ERR_SSL_PROTOCOL_ERROR` by design; TLS is on the API via the TSN.
+
+If the host says `Could not resolve host`, Serve is still fine; the local
+MagicDNS is broken. Verify without DNS:
+
+```bash
+curl -sS --resolve ws24.taile17668.ts.net:8443:100.119.125.16 \
+  -o /dev/null -w 'http=%{http_code}\n' \
+  https://ws24.taile17668.ts.net:8443/api/health
+```
+
+Expect 200. From the client `100.70.43.78`, run the plain `curl` against the
+name. If the client also fails, fix MagicDNS there; the 2026-10-12 incident had
+the same shape (tailscaled owned `resolv.conf`, `systemd-resolved` was inactive,
+MagicDNS forwarded to zero upstreams). Host fix:
+
+```bash
+cat /etc/resolv.conf
+systemctl is-active systemd-resolved tailscaled
+sudo systemctl enable --now systemd-resolved
+sudo tailscale up --accept-dns=true
+sudo systemctl restart tailscaled
+getent hosts ws24.taile17668.ts.net
+```
+
+Do not use `--accept-dns=false` if tailnet names must resolve. Restarting
+`tailscaled` briefly drops the tailnet; run it from the host console.
 
 The `https://rolldown.rs/reference/InputOptions.checks#bundlertimings` URL in
 the build output is the bundler's chunk-size hint, not an action item.

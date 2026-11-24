@@ -93,11 +93,12 @@ dated handoffs under `docs/`, especially
   the console is signed in as **GitHub `swipswaps`**, and the machines page lists
   `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16), both
   `swipswaps@github`; the DNS page shows `taile17668.ts.net` with MagicDNS and
-  HTTPS Certificates on. The script's Serve attempt then failed with
-  `Access denied: serve config denied`: Serve is enabled, but `owner` is not the
-  tailscaled operator. Fix once with `sudo tailscale set --operator=owner`, then
-  serve on 8443 (`tailscale serve --bg --https=8443 http://127.0.0.1:8002`)
-  because JEF Caddy owns 443. The same-origin app is HTTP at
+  HTTPS Certificates on. Serve is now configured:
+  `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002` and is
+  tailnet-only. The host curl failed with `Could not resolve host`, which is a
+  local MagicDNS/DNS problem, not Serve; `tailscale serve status` confirms the
+  mapping. Verify with `curl --resolve` on the host and directly from the
+  client; fix MagicDNS if the client also fails. The same-origin app is HTTP at
   `http://100.119.125.16:4174/`; opening https on 4174 is expected to fail. The
   Google `ihydrocarbon@gmail.com` account is a separate tailnet
   (`tail427659.ts.net`); invite it as a user if both logins are wanted. For
@@ -118,21 +119,19 @@ ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
 are proven. The losing option is to start a new feature while Serve and the ACL
 are open: its failures would be ambiguous between the old and new layers.
 
-1. **Finish Serve/TLS.** The identity and HTTPS setting are done: signed in as
-   GitHub `swipswaps`, machines `a663c75b9e9b` and `ws24`, tailnet
-   `taile17668.ts.net`, HTTPS Certificates on. The script's Serve call hit
-   `Access denied: serve config denied`, because `owner` is not the tailscaled
-   operator. On the host run:
-   `sudo tailscale set --operator=owner`
-   `tailscale serve --bg --https=8443 http://127.0.0.1:8002`
-   Accept: `tailscale serve status` shows the 8443 mapping and a health request
-   over the resolved Tailscale DNS Name (TSN) returns 200:
-   `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
-   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"`
-   Port 8443 avoids JEF Caddy on 443. The node-specific
-   `login.tailscale.com/f/serve` link can return `404 node not found`; do not
-   rely on it. The app is HTTP at `http://100.119.125.16:4174/`; opening https
-   on 4174 is expected to fail. For future approved machines,
+1. **Finish Serve/TLS.** The identity, HTTPS setting, and Serve mapping are
+   done: `https://ws24.taile17668.ts.net:8443` proxies to `127.0.0.1:8002`.
+   The host curl failed with `Could not resolve host`; that is local MagicDNS,
+   not Serve. Verify without DNS:
+   `curl -sS --resolve ws24.taile17668.ts.net:8443:100.119.125.16 -o /dev/null -w 'http=%{http_code}\n' https://ws24.taile17668.ts.net:8443/api/health`
+   Then from the client `100.70.43.78` run the plain curl against the name. If
+   resolution fails, fix MagicDNS:
+   `sudo systemctl enable --now systemd-resolved`, then
+   `sudo tailscale up --accept-dns=true`, then
+   `sudo systemctl restart tailscaled`, then `getent hosts ws24.taile17668.ts.net`.
+   Do not use `--accept-dns=false` when tailnet names must resolve. Port 8443
+   avoids JEF Caddy on 443. The app is HTTP at `http://100.119.125.16:4174/`;
+   opening https on 4174 is expected to fail. For future approved machines,
    invite `ihydrocarbon@gmail.com` as a user (and admin if wanted) of the
    `swipswaps.github` tailnet, generate an auth key there, and join with a
    `tag:server` tag; define `tagOwners` in the ACL so the node belongs to the
