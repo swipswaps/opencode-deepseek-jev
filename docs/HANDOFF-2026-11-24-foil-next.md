@@ -6,11 +6,14 @@ re-deriving the history. Read this file, then the two prior foil handoffs:
 [`HANDOFF-2026-11-23-foil-tailnet.md`](HANDOFF-2026-11-23-foil-tailnet.md).
 Do not fork or continue the source session.
 
-Status: JEF (this repository) is closed out, committed, and ready to push from
-the host. foil.cfd is live as a static site; its backend is host-only and
-healthy; the same-origin and tailnet follow-up is uncommitted in the foil
-checkout; Tailscale Serve and Access Control List (ACL) narrowing are the two
-remaining acceptance tests.
+Status: JEF (this repository) is pushed and level with `origin/main`. foil.cfd is
+live as a static site; its backend is host-only and healthy; the same-origin app
+is built and serving on the tailnet IP; the follow-up is uncommitted in the foil
+checkout. Tailscale Serve is blocked at the tailnet console (enablement link, not
+a code defect), so the verified path is the tailnet-IP fallback over WireGuard.
+The remaining acceptance tests are: enable Serve and re-run for HTTPS, run the
+live tailnet e2e, gate and push the foil follow-up, then narrow the Access
+Control List (ACL).
 
 ## Hard boundary: where you can act
 
@@ -39,7 +42,8 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | not yet configured | daemon has not seen the console-side enablement |
+| Tailscale Serve | blocked at the tailnet console | script printed "Serve is not enabled on your tailnet" plus a login.tailscale.com/f/serve enablement link |
+| tailnet-IP fallback | verified 2026-11-24 | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | not a hard gate | branch protection allows admin bypass; pushes printed "Bypassed rule violations" |
 | foil follow-up | uncommitted | `src/hooks/useBackendProbe.ts`, `src/hydro-main.tsx`, `src/sections/HydroLab.tsx`, `tests/e2e/tailnet.spec.ts` |
@@ -127,6 +131,28 @@ Rollback: `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-bac
 removes the Serve mapping; `sudo tailscale serve reset` is the manual fallback.
 Re-bind the container to loopback only if needed. Funnel stays off in every case.
 
+### Host run 2026-11-24T00:00Z
+
+`sudo tailscale up` completed. `secure-tailnet-backend.sh --apply --with-app`
+then:
+
+- re-applied the loopback bind and restarted the backend container;
+- `tailscale serve` reported `Serve is not enabled on your tailnet` and printed
+  the enablement link
+  `https://login.tailscale.com/f/serve?node=nDBSrGVMTm11CNTRL`, so it fell back
+  to the tailnet-IP bind;
+- health over the tailnet IP returned 200 with `solver_available=true` and
+  `blockMesh_available=true`;
+- built the frontend (vite 8.3.8, 21.79s; the known large-chunk warnings are
+  present) and started the same-origin proxy on `http://100.119.125.16:4174/`.
+
+Human step for TLS: open the enablement link, enable Serve in the console, run
+`sudo tailscale up` (or restart tailscaled), then re-run the apply script. TLS
+acceptance: `tailscale serve status` shows the 443 mapping and
+`https://ws24.taile17668.ts.net/api/health` returns 200. Until then the
+tailnet-IP fallback is the verified path, and the Step 3 e2e can run now against
+`http://100.119.125.16:4174/`.
+
 ## Step 3 — live tailnet e2e (host)
 
 Run in the foil checkout after step 2. The spec fails closed: with
@@ -180,9 +206,9 @@ gh run watch -R swipswaps/foil-cfd-site "$(gh run list -R swipswaps/foil-cfd-sit
 Rollback: resolve the commit SHA and revert it, then push again:
 
 ```bash
-FOIL=/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site
-SHA="$(git -C "$FOIL" rev-parse HEAD)"
-git -C "$FOIL" revert "$SHA"
+foil=/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839/foil-cfd-site
+SHA="$(git -C "$foil" rev-parse HEAD)"
+git -C "$foil" revert "$SHA"
 bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 ```
 
