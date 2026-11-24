@@ -12,20 +12,17 @@ foil.cfd is live as a static site; its backend is host-only and healthy; the
 same-origin app is built and serving on the tailnet IP; the follow-up and the
 cold-start fix are committed as `2d8ac9e`. The live tailnet e2e passed **2
 passed, 0 skipped, 0 flaky** with `--retries=0`, and the `2d8ac9e` CI/deploy is
-green (run `45390923942`). Tailscale Serve is blocked by a **wrong tailnet in the
-admin console**, not by the device. The device reports
-`CurrentTailnet.Name = swipswaps.github` and DNS `ws24.taile17668.ts.net`; the
-console page that enabled HTTPS showed `tail427659.ts.net` and
-`ihydrocarbon@gmail.com`. The machines page for `ihydrocarbon@gmail.com` lists
-only `fedora` (100.95.53.23), not `ws24`; it is a different tailnet. The browser
-is signed into the wrong account. Sign out and sign in as the account that owns
-`swipswaps.github` (the `swipswaps` login), then enable HTTPS in that tailnet and
-re-run Serve. If that account is unavailable, accept the verified tailnet-IP
-fallback over WireGuard. Do not move `ws24` or the client to the
-`ihydrocarbon@gmail.com` tailnet: it changes both addresses and breaks the Access Control List (ACL)
-scope. Remaining: Serve for Transport Layer Security (TLS) after the account
-switch, the Access Control List (ACL), and the placeholder cursor. The exact
-status command and switches are in Step 2.
+green (run `45390923942`). The Tailscale identity mismatch is **resolved**: the
+console is signed in as GitHub `swipswaps`, the machines page lists
+`a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16) as
+`swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
+MagicDNS and HTTPS Certificates enabled. The only remaining Serve step is to
+refresh the daemon and run the secure script; verify the 443 mapping and HTTPS
+health. The Google `ihydrocarbon@gmail.com` account remains a separate tailnet
+(`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
+are wanted. Remaining after Serve: the Access Control List (ACL), future-machine
+auth keys and tags, and the placeholder cursor. The exact commands are in
+Step 2.
 
 Important: the container **can** reach the foil tree. `/audit` is a bind mount of
 `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
@@ -93,26 +90,30 @@ not signed into:
   login is `swipswaps@github`. The Google account is a second Tailscale account,
   not the one the devices use.
 
+Resolved 2026-11-24: the console is signed in as GitHub `swipswaps`; the
+machines page shows `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16),
+both `swipswaps@github`; the DNS page shows `taile17668.ts.net`, MagicDNS on,
+and HTTPS Certificates on.
+
 Preferred plan (no address or certificate churn):
 
-1. Sign out of the Tailscale admin console and sign in at
-   `https://login.tailscale.com/` with **Sign in with GitHub** as `swipswaps`
-   (recover the GitHub password if needed).
-2. In the `swipswaps.github` tailnet, enable HTTPS Certificates, run
-   `sudo tailscale up`, and re-run Serve. The `100.119.125.16` /
-   `100.70.43.78` addresses, the compose bind, and the JEF certificate SANs
-   stay valid.
-3. Invite `ihydrocarbon@gmail.com` as a user (and admin if wanted) of the
-   `swipswaps.github` tailnet, then accept the invitation. Both logins then
-   reach the same tailnet.
-4. For future approved machines, generate an auth key in that tailnet
-   (Settings, Keys) and join with
+1. **Done** — signed in at `https://login.tailscale.com/` with **Sign in with
+   GitHub** as `swipswaps`.
+2. **Done except the Serve re-run** — HTTPS Certificates are enabled in
+   `swipswaps.github`; run `sudo tailscale up` and re-run Serve. The
+   `100.119.125.16` / `100.70.43.78` addresses, the compose bind, and the JEF
+   certificate SANs stay valid.
+3. **Pending** — invite `ihydrocarbon@gmail.com` as a user (and admin if
+   wanted) of the `swipswaps.github` tailnet, then accept the invitation. Both
+   logins then reach the same tailnet.
+4. **Pending** — for future approved machines, generate an auth key in that
+   tailnet (Settings, Keys) and join with
    `sudo tailscale up --auth-key=... --advertise-tags=tag:server` (tag names
    are local choices; define `tagOwners` in the ACL). Tagged nodes are owned by
    the tailnet, not by one user's login. Alternatively sign in with GitHub
    `swipswaps`.
-5. Remove or document the extra `fedora` in the Google tailnet. Keep one
-   machine in one tailnet; do not split a host across both.
+5. **Pending cleanup** — remove or document the extra `fedora` in the Google
+   tailnet. Keep one machine in one tailnet; do not split a host across both.
 
 Fallback (only if the GitHub account is unrecoverable): re-home `ws24` and the
 client to `ihydrocarbon@gmail.com` / `tail427659.ts.net` with
@@ -234,22 +235,32 @@ Confirm on the host:
 tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name"))'
 ```
 
-Human step for TLS:
+Human step for TLS — identity and HTTPS setting are done:
 
-1. Sign out of the Tailscale admin console and sign in with **GitHub** as
-   `swipswaps` (the identity the nodes were authorized with), or use the tailnet
-   selector if that account is already a member. The `ihydrocarbon@gmail.com`
-   account cannot see `ws24`; its machines page has only `fedora`.
-2. Open that tailnet's DNS page: `https://console.tailscale.com/admin/dns`.
-   The tailnet DNS name must match the `ws24.taile17668.ts.net` suffix, not
-   `tail427659.ts.net`.
-3. Enable MagicDNS, then under **HTTPS Certificates** enable HTTPS and
-   acknowledge the Certificate Transparency notice.
-4. On the host run `sudo tailscale up` (or restart `tailscaled`), then re-run
-   the apply script.
+1. **Done** — signed in with **GitHub** as `swipswaps`; the machines page shows
+   `a663c75b9e9b` and `ws24` as `swipswaps@github`.
+2. **Done** — the DNS page shows tailnet `taile17668.ts.net`, MagicDNS on, and
+   HTTPS Certificates on (the button reads "Disable HTTPS").
+3. Run on the host:
 
-If there is no admin access to the `swipswaps.github` tailnet, stop: the
-verified tailnet-IP fallback over WireGuard is the accepted state.
+```bash
+sudo tailscale up
+bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app
+```
+
+If the script still reports that Serve is not enabled, `tailscaled` has not
+refreshed: run `sudo systemctl restart tailscaled` and re-run. The script falls
+back to the verified tailnet-IP path if the Serve call fails. Port 443 is
+already used by the JEF Caddy listener on `100.119.125.16`; if `tailscale serve`
+fails with `address already in use`, use 8443 instead of stopping Caddy:
+
+```bash
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8002
+TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"
+curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"
+```
+
+Accept 200 on the 8443 health check. The JEF dashboard on 443 is untouched.
 
 TLS acceptance (resolve the name; do not hardcode the suffix):
 
@@ -392,14 +403,11 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **Serve/TLS (human console).** Sign out of the console and sign in with
-   **GitHub** as `swipswaps` (the identity the nodes use). The open
-   `ihydrocarbon@gmail.com` account sees only `fedora` and its HTTPS setting does
-   not apply. In the correct tailnet (DNS suffix `taile17668.ts.net`), enable
-   HTTPS Certificates, run `sudo tailscale up`, and re-run the secure script. If
-   that account is unavailable, accept the tailnet-IP fallback. Accept:
-   `tailscale serve status` shows the 443 mapping and the health request over the
-   resolved Tailscale DNS Name returns 200:
+1. **Serve/TLS.** Identity and HTTPS Certificates are done (GitHub
+   `swipswaps`, tailnet `taile17668.ts.net`). Run `sudo tailscale up` and re-run
+   the secure script. If Serve still reports not enabled, restart `tailscaled`.
+   Accept: `tailscale serve status` shows the 443 mapping and the health request
+   over the resolved Tailscale DNS Name returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
 2. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
