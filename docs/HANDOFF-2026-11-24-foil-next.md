@@ -35,7 +35,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Layer | State | Evidence |
 |---|---|---|
 | foil.cfd public site | static, live | GitHub Pages; last recorded green CI run `45164015498` (build, e2e, deploy) |
-| backend | healthy, host-only | `solver_available=true`; `scripts/test_cfd_tools.sh` 16 pass / 0 fail; `/api/health` 200; `/api/jobs/default/surface.vtp` 200 |
+| backend | healthy at the last host check (2026-11-23) | `solver_available=true`; `scripts/test_cfd_tools.sh` 16 pass / 0 fail; `/api/health` 200; `/api/jobs/default/surface.vtp` 200 |
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
