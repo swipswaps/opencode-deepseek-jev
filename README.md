@@ -88,11 +88,14 @@ dated handoffs under `docs/`, especially
   the GitHub Pages base and breaks the same-origin app, which must be built with
   `--base=/`. Both fixes are committed and pushed as `2d8ac9e`; the live e2e
   then passed **2 passed, 0 skipped, 0 flaky** with `--retries=0` in 41.2s, and
-  the same-origin dist was rebuilt with `--base=/` afterwards. Tailscale Serve
-  is blocked because HTTPS Certificates are disabled for the tailnet, so the
-  verified API path is HTTP over WireGuard until HTTPS is enabled. The
-  `2d8ac9e` CI/deploy is still to be verified, because the push bypassed the
-  required `e2e` check.
+  the same-origin dist was rebuilt with `--base=/` afterwards. The `2d8ac9e`
+  CI/deploy is green (run `45390923942`). Tailscale Serve was blocked because
+  HTTPS Certificates were disabled; the admin DNS page now shows them enabled
+  (the button reads "Disable HTTPS"), so Serve needs a re-run. That page showed
+  tailnet `tail427659.ts.net` and account `ihydrocarbon@gmail.com`, while `ws24`
+  reports `ws24.taile17668.ts.net` and owner `swipswaps@`; confirm the console
+  tailnet contains `ws24` before trusting the setting. Until Serve verifies, the
+  API path is HTTP over WireGuard.
 - The container has no GitHub credential, so `git push` cannot authenticate
   here, and it has no Docker socket and no Secure Shell (SSH) client.
   `/workspace` and `/audit` are bind mounts of the host JEF and foil trees, so
@@ -101,36 +104,31 @@ dated handoffs under `docs/`, especially
 
 ### Best next steps (ranked by gain per unit of irreversible risk)
 
-Decision rule: finish the open acceptance tests that close a claim before adding
-surface. The push and the live tailnet e2e are now proven, so the losing option
-has shifted: starting a new foil feature while the `2d8ac9e` deploy is
-unverified and Serve and the ACL are open would add surface whose failures are
-ambiguous between the old and new layers.
+Decision rule: finish the remaining open acceptance tests (Serve/TLS and the
+ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
+are proven. The losing option is to start a new feature while Serve and the ACL
+are open: its failures would be ambiguous between the old and new layers.
 
-1. **Verify the `2d8ac9e` foil deploy** (host). The push bypassed the required
-   `e2e` check, so read the run rather than assuming it:
-   `gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId,headSha,status,conclusion`
-   `gh run watch -R swipswaps/foil-cfd-site "$(gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId --jq '.[0].databaseId')"`
-   Accept: `build`, `e2e`, and `deploy` green, and `https://foil.cfd` serves the
-   new build. In CI the tailnet spec reports two skips because
-   `TAILNET_APP_URL` is unset; that is expected, not the live check.
-2. **Enable Serve and TLS** (host and tailnet console). Open
-   `https://console.tailscale.com/admin/dns`, enable MagicDNS, then under
-   **HTTPS Certificates** choose **Enable HTTPS** and acknowledge the
-   public-ledger notice. Run `sudo tailscale up` and re-run
+1. **Enable Serve/TLS** (host and tailnet console). HTTPS Certificates now show
+   as enabled. First confirm the console tailnet is the one that contains `ws24`:
+   `tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name")); print("owner", (d.get("User") or {}).get("LoginName"))'`
+   The admin page showed `tail427659.ts.net` and `ihydrocarbon@gmail.com`, while
+   `ws24` reported `ws24.taile17668.ts.net` and owner `swipswaps@`. If the names
+   do not match, switch the console to the correct tailnet or re-run
+   `sudo tailscale up`. Then run `sudo tailscale up` and re-run
    `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`.
-   The node-specific `login.tailscale.com/f/serve` link printed by the CLI can
-   return `404 node not found`; do not rely on it. Accept:
-   `tailscale serve status` shows the 443 mapping, and a health request over the
-   resolved Tailscale DNS Name (TSN) returns 200:
+   The node-specific `login.tailscale.com/f/serve` link can return
+   `404 node not found`; do not rely on it. Accept: `tailscale serve status`
+   shows the 443 mapping and a health request over the resolved Tailscale DNS
+   Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
    Until then the verified path is HTTP over WireGuard.
-3. **Narrow the tailnet ACL** in the admin console to tag and port scope. Keep a
+2. **Narrow the tailnet ACL** in the admin console to tag and port scope. Keep a
    verified device session open while applying so you cannot lock yourself out.
-4. **Make `e2e` a hard gate** by removing the admin bypass on `main` or
+3. **Make `e2e` a hard gate** by removing the admin bypass on `main` or
    requiring changes through a pull request. Repository policy, not code.
-5. **Dispose of the placeholder cursor** by reviewing the four historical part
+4. **Dispose of the placeholder cursor** by reviewing the four historical part
    IDs or explicitly baselining them. Never advance it to make the gate green.
 
 ### Re-run the evidence

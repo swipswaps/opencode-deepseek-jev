@@ -6,17 +6,22 @@ re-deriving the history. Read this file, then the two prior foil handoffs:
 [`HANDOFF-2026-11-23-foil-tailnet.md`](HANDOFF-2026-11-23-foil-tailnet.md).
 Do not fork or continue the source session.
 
-Status: JEF and foil are pushed; `2d8ac9e` is the foil follow-up, and this file
+Status: JEF (this repository) and foil are pushed; `2d8ac9e` is the foil follow-up, and this file
 is in the JEF docs commit. Verify with `git status -sb` in both trees.
 foil.cfd is live as a static site; its backend is host-only and healthy; the
 same-origin app is built and serving on the tailnet IP; the follow-up and the
 cold-start fix are committed as `2d8ac9e`. The live tailnet e2e passed **2
-passed, 0 skipped, 0 flaky** with `--retries=0`. Tailscale Serve is still
-blocked because HTTPS Certificates are disabled for the tailnet (a console
-setting, not a code defect), so the verified API path is the tailnet-IP fallback
-over WireGuard. Remaining: verify the `2d8ac9e` CI/deploy, enable Serve for
-Transport Layer Security (TLS), narrow the Access Control List (ACL), and dispose
-of the placeholder cursor.
+passed, 0 skipped, 0 flaky** with `--retries=0`, and the `2d8ac9e` CI/deploy is
+green (run `45390923942`). Tailscale Serve was blocked because HTTPS Certificates
+were disabled; the admin DNS page now shows **Disable HTTPS**, so they are
+enabled and Serve should be re-run. One identity check first: the DNS page showed
+tailnet `tail427659.ts.net` and account `ihydrocarbon@gmail.com`, while `ws24`
+reported `ws24.taile17668.ts.net` and node owner `swipswaps@`. Confirm the console
+tailnet actually contains `ws24` before trusting the setting; otherwise the
+enabled HTTPS applies to a different tailnet. Until Serve verifies, the API path
+is the tailnet-IP fallback over WireGuard. Remaining: re-run Serve for Transport
+Layer Security (TLS) after that check, narrow the Access Control List (ACL), and
+dispose of the placeholder cursor.
 
 Important: the container **can** reach the foil tree. `/audit` is a bind mount of
 `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
@@ -46,15 +51,15 @@ either (a) run the host block if the operator has given you host execution, or
 
 | Layer | State | Evidence |
 |---|---|---|
-| foil.cfd public site | static, live | GitHub Pages; last recorded green CI run `45164015498` (build, e2e, deploy) |
+| foil.cfd public site | static, live | GitHub Pages; `2d8ac9e` CI run `45390923942` success (build, e2e, deploy) |
 | backend | healthy at the last host check (2026-11-23) | `solver_available=true`; `scripts/test_cfd_tools.sh` 16 pass / 0 fail; `/api/health` 200; `/api/jobs/default/surface.vtp` 200 |
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | blocked: HTTPS Certificates disabled | CLI node link returned `404 node not found`; enable HTTPS in the admin console DNS page |
+| Tailscale Serve | HTTPS Certificates now enabled; Serve re-run pending | admin DNS page button reads "Disable HTTPS"; console shows tailnet `tail427659.ts.net` / account `ihydrocarbon@gmail.com`, while ws24 reports `ws24.taile17668.ts.net` / owner `swipswaps@` |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
-| CI e2e | not a hard gate | `2d8ac9e` push printed "Bypassed rule violations"; verify its run separately |
+| CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
 | foil follow-up | committed and pushed `2d8ac9e` | `src/hooks/useBackendProbe.ts`, `src/hydro-main.tsx`, `src/sections/HydroLab.tsx`, `tests/e2e/tailnet.spec.ts`, `docker-compose.openfoam.yml` |
 | live tailnet e2e | passed 2026-11-24 | 2 passed, 0 skipped, 0 flaky in 41.2s with `--retries=0` |
 | same-origin dist | restored with `--base=/` | `dist/index.html` references `/assets`; `npm run build` reverts it to the Pages base |
@@ -163,21 +168,48 @@ then:
 - built the frontend (vite 8.3.8, 21.79s; the known large-chunk warnings are
   present) and started the same-origin proxy on `http://100.119.125.16:4174/`.
 
+Update 2026-11-24T08:06Z: the admin DNS page now shows MagicDNS on (the button
+reads "Disable MagicDNS") and HTTPS Certificates on (the button reads
+"Disable HTTPS"). The page showed tailnet `tail427659.ts.net` and account
+`ihydrocarbon@gmail.com`, while `ws24` reported `ws24.taile17668.ts.net` and node
+owner `swipswaps@`. Confirm the console tailnet actually contains `ws24` before
+trusting the setting. On the host:
+
+```bash
+tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name")); print("owner", (d.get("User") or {}).get("LoginName"))'
+```
+
+If the tailnet name does not match the DNS suffix, switch the admin console to
+the tailnet that contains `ws24`, or re-run `sudo tailscale up` if the name
+changed.
+
 Human step for TLS (verified against the Tailscale HTTPS documentation):
 
 1. Open the DNS page of the Tailscale admin console:
    `https://console.tailscale.com/admin/dns`
-2. Enable MagicDNS if it is not already on.
-3. Under **HTTPS Certificates**, select **Enable HTTPS** and acknowledge that
-   machine names and the tailnet DNS name are published in the Certificate
-   Transparency ledger.
+2. MagicDNS: if the button reads "Enable MagicDNS", enable it; if it reads
+   "Disable MagicDNS", it is already on.
+3. HTTPS Certificates: if the button reads "Enable HTTPS", enable it and
+   acknowledge that machine names and the tailnet DNS name are published in the
+   Certificate Transparency ledger; if it reads "Disable HTTPS", it is already
+   on.
 4. On the host run `sudo tailscale up` (or restart `tailscaled`), then re-run
    the apply script.
 
-TLS acceptance: `tailscale serve status` shows the 443 mapping and
-`https://ws24.taile17668.ts.net/api/health` returns 200. Until then the
-tailnet-IP fallback is the verified path, and the Step 3 e2e can run now against
-`http://100.119.125.16:4174/`.
+TLS acceptance (resolve the name; do not hardcode the suffix):
+
+```bash
+TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"
+printf '%s\n' "$TSN"
+tailscale serve status
+curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"
+```
+
+Accept: `tailscale serve status` shows the 443 mapping and the health request
+returns 200. If Serve still says it is not enabled, the console tailnet is not
+the device's tailnet or `tailscaled` has not refreshed; fix that before retrying.
+Until then the tailnet-IP fallback is the verified path, and the Step 3 e2e can
+run against `http://100.119.125.16:4174/`.
 
 The `https://rolldown.rs/reference/InputOptions.checks#bundlertimings` URL in
 the build output is the bundler's chunk-size hint, not an action item.
@@ -284,9 +316,10 @@ same-origin dist. Run the Step 3 tailnet e2e before this build, then rebuild
 with `--base=/` (or re-run the secure script) to keep the tailnet app working.
 The same-origin dist has been restored this way.
 
-Pending: the CI run for `2d8ac9e` has `build`, `e2e`, and `deploy` green. In CI
-the tailnet spec reports two skips because `TAILNET_APP_URL` is unset; that is
-expected there, not a pass for the live check:
+Verified: CI run `45390923942` for `2d8ac9e` has `build`, `e2e`, and `deploy`
+green. In CI the tailnet spec reports two skips because `TAILNET_APP_URL` is
+unset; that is expected there, not a pass for the live check. Re-run only to
+check a new commit:
 
 ```bash
 gh run list -R swipswaps/foil-cfd-site --limit 1 --json databaseId,headSha,status,conclusion
@@ -304,24 +337,22 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **Serve/TLS (human console).** Open
-   `https://console.tailscale.com/admin/dns`, enable MagicDNS, then under
-   **HTTPS Certificates** select **Enable HTTPS** and acknowledge the
-   public-ledger notice. Run `sudo tailscale up` and re-run the secure script.
-   Accept: `tailscale serve status` shows the 443 mapping and
-   `https://ws24.taile17668.ts.net/api/health` returns 200.
-2. **Verify the foil deploy.** `2d8ac9e` was pushed before its required `e2e`
-   check finished, so confirm the run: `gh run list -R swipswaps/foil-cfd-site
-   --limit 1 --json databaseId,headSha,status,conclusion` then watch it. Accept:
-   build, e2e, and deploy green, and `https://foil.cfd` serves the new build.
-3. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
+1. **Serve/TLS (human console).** The DNS page now shows MagicDNS on and
+   HTTPS Certificates on (the buttons read "Disable ..."). First confirm the
+   console tailnet contains `ws24` (the page showed `tail427659.ts.net`, while
+   `ws24` reported `taile17668.ts.net`). Then run `sudo tailscale up` and re-run
+   the secure script. Accept: `tailscale serve status` shows the 443 mapping and
+   the health request over the resolved Tailscale DNS Name returns 200:
+   `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
+   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
+2. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
    `grants` entry with tag and port scope for `ws24` and the client. This is
    admin-console work, not reachable from either repo. Do not lock yourself out:
    keep one verified device session open while applying.
-4. **e2e as a hard gate.** Either remove the admin bypass on `main` or require
+3. **e2e as a hard gate.** Either remove the admin bypass on `main` or require
    changes to land through a pull request. This is a repository policy decision,
    not a code defect.
-5. **Placeholder cursor.** Review the four historical part IDs from the JEF scan
+4. **Placeholder cursor.** Review the four historical part IDs from the JEF scan
    and either accept them or baseline them explicitly. Never run `--advance` to
    make a red gate green.
 
