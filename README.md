@@ -79,8 +79,9 @@ dated handoffs under `docs/`, especially
 - foil.cfd is live as a static site on GitHub Pages at its last green deploy;
   the OpenFOAM backend runs on `ws24` as a FastAPI service on `127.0.0.1:8002`
   plus the Tailscale address, not on Pages. The host run on 2026-11-24 built and
-  started the same-origin app on the tailnet IP and verified health over the
-  fallback. Tailscale Serve is blocked because HTTPS Certificates are disabled
+  started the same-origin app on the tailnet IP, and health over the fallback
+  returned 200 from both `ws24` and the client `100.70.43.78`. Tailscale Serve
+  is blocked because HTTPS Certificates are disabled
   for the tailnet, so the verified API path is HTTP over WireGuard until HTTPS
   is enabled. The
   same-origin and tailnet follow-up remains uncommitted in the foil checkout and

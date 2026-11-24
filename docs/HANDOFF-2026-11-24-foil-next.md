@@ -44,7 +44,7 @@ either (a) run the host block if the operator has given you host execution, or
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
 | Tailscale Serve | blocked: HTTPS Certificates disabled | CLI node link returned `404 node not found`; enable HTTPS in the admin console DNS page |
-| tailnet-IP fallback | verified 2026-11-24 | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002`; app served on `http://100.119.125.16:4174/` |
+| tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | not a hard gate | branch protection allows admin bypass; pushes printed "Bypassed rule violations" |
 | foil follow-up | uncommitted | `src/hooks/useBackendProbe.ts`, `src/hydro-main.tsx`, `src/sections/HydroLab.tsx`, `tests/e2e/tailnet.spec.ts` |
@@ -82,7 +82,9 @@ container. Do not treat it as a defect; the push runs on the host.
 
 ## Step 1 — push JEF (host, one command)
 
-The JEF commit is already in the host tree. Run:
+The JEF commit is already in the host tree. Run this on `ws24`
+(192.168.4.24), not on the client `100.70.43.78`: the client has no copy of the
+skill and fails with `No such file or directory`.
 
 ```bash
 bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
@@ -145,7 +147,8 @@ then:
   console (see the corrected human step below). The script fell back to the
   tailnet-IP bind;
 - health over the tailnet IP returned 200 with `solver_available=true` and
-  `blockMesh_available=true`;
+  `blockMesh_available=true`; the same request from the second tailnet device
+  `100.70.43.78` also returned 200, so the path is proven across devices;
 - built the frontend (vite 8.3.8, 21.79s; the known large-chunk warnings are
   present) and started the same-origin proxy on `http://100.119.125.16:4174/`.
 
