@@ -22,7 +22,7 @@ is signed into the wrong account. Sign out and sign in as the account that owns
 `swipswaps.github` (the `swipswaps` login), then enable HTTPS in that tailnet and
 re-run Serve. If that account is unavailable, accept the verified tailnet-IP
 fallback over WireGuard. Do not move `ws24` or the client to the
-`ihydrocarbon@gmail.com` tailnet: it changes both addresses and breaks the ACL
+`ihydrocarbon@gmail.com` tailnet: it changes both addresses and breaks the Access Control List (ACL)
 scope. Remaining: Serve for Transport Layer Security (TLS) after the account
 switch, the Access Control List (ACL), and the placeholder cursor. The exact
 status command and switches are in Step 2.
