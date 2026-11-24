@@ -16,13 +16,16 @@ green (run `45390923942`). Tailscale Serve is blocked by a **wrong tailnet in th
 admin console**, not by the device. The device reports
 `CurrentTailnet.Name = swipswaps.github` and DNS `ws24.taile17668.ts.net`; the
 console page that enabled HTTPS showed `tail427659.ts.net` and
-`ihydrocarbon@gmail.com`. Those are different tailnets, so the enabled HTTPS
-does not apply and the CLI node link 404s. Switch the console to the
-`swipswaps.github` tailnet, enable HTTPS there, then re-run Serve. If the
-operator has no admin access to that tailnet, accept the verified tailnet-IP
-fallback over WireGuard. Remaining: Serve for Transport Layer Security (TLS)
-after the tailnet switch, the Access Control List (ACL), and the placeholder
-cursor. The exact status command and switches are in Step 2.
+`ihydrocarbon@gmail.com`. The machines page for `ihydrocarbon@gmail.com` lists
+only `fedora` (100.95.53.23), not `ws24`; it is a different tailnet. The browser
+is signed into the wrong account. Sign out and sign in as the account that owns
+`swipswaps.github` (the `swipswaps` login), then enable HTTPS in that tailnet and
+re-run Serve. If that account is unavailable, accept the verified tailnet-IP
+fallback over WireGuard. Do not move `ws24` or the client to the
+`ihydrocarbon@gmail.com` tailnet: it changes both addresses and breaks the ACL
+scope. Remaining: Serve for Transport Layer Security (TLS) after the account
+switch, the Access Control List (ACL), and the placeholder cursor. The exact
+status command and switches are in Step 2.
 
 Important: the container **can** reach the foil tree. `/audit` is a bind mount of
 `/home/owner/Documents/6af8cd4d-b390-83ea-80a1-abdf7f0df839`, so
@@ -57,7 +60,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | blocked: admin console is the wrong tailnet | ws24 `CurrentTailnet.Name=swipswaps.github`, DNS `ws24.taile17668.ts.net`; console showed `tail427659.ts.net` / `ihydrocarbon@gmail.com`, so its HTTPS setting does not apply |
+| Tailscale Serve | blocked: browser is in the wrong tailnet | ws24 `CurrentTailnet.Name=swipswaps.github`, DNS `ws24.taile17668.ts.net`; `ihydrocarbon@gmail.com` sees only `fedora` (100.95.53.23), so its HTTPS setting does not apply |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -172,9 +175,11 @@ then:
 Update 2026-11-24T08:47Z: the device reports
 `CurrentTailnet.Name = swipswaps.github` and DNS `ws24.taile17668.ts.net`. The
 console page that enabled HTTPS showed `tail427659.ts.net` and
-`ihydrocarbon@gmail.com`; that is a **different tailnet**, which is why the
-setting did not apply and the CLI node link returned 404. Do not move the device
-to the other tailnet: it would change the address and the ACL scope.
+`ihydrocarbon@gmail.com`, and its machines page lists only `fedora`
+(100.95.53.23). That is a **different tailnet**, which is why the setting did
+not apply and the CLI node link returned 404. The browser is signed into the
+wrong account. Do not move the device to the other tailnet: it would change the
+address and the ACL scope.
 
 Confirm on the host:
 
@@ -184,9 +189,10 @@ tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s
 
 Human step for TLS:
 
-1. In the Tailscale admin console, switch the account or tailnet selector to
-   `swipswaps.github` (the tailnet that contains `ws24`). If the signed-in
-   account cannot see it, ask its owner for admin access.
+1. Sign out of the Tailscale admin console and sign in as the account that owns
+   `swipswaps.github` (the `swipswaps` login), or use the tailnet selector if
+   that account is already a member. The `ihydrocarbon@gmail.com` account cannot
+   see `ws24`; its machines page has only `fedora`.
 2. Open that tailnet's DNS page: `https://console.tailscale.com/admin/dns`.
    The tailnet DNS name must match the `ws24.taile17668.ts.net` suffix, not
    `tail427659.ts.net`.
@@ -339,13 +345,14 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 
 ## Step 5 — human-only residuals
 
-1. **Serve/TLS (human console).** The console must be switched to the
-   `swipswaps.github` tailnet (DNS suffix `taile17668.ts.net`), not the
-   `tail427659.ts.net` / `ihydrocarbon@gmail.com` tailnet that was open. Enable
-   HTTPS Certificates there, run `sudo tailscale up`, and re-run the secure
-   script. If the account has no admin access to `swipswaps.github`, accept the
-   tailnet-IP fallback. Accept: `tailscale serve status` shows the 443 mapping
-   and the health request over the resolved Tailscale DNS Name returns 200:
+1. **Serve/TLS (human console).** Sign out of the console and sign in as the
+   `swipswaps.github` owner (the `swipswaps` login). The open
+   `ihydrocarbon@gmail.com` account sees only `fedora` and its HTTPS setting does
+   not apply. In the correct tailnet (DNS suffix `taile17668.ts.net`), enable
+   HTTPS Certificates, run `sudo tailscale up`, and re-run the secure script. If
+   that account is unavailable, accept the tailnet-IP fallback. Accept:
+   `tailscale serve status` shows the 443 mapping and the health request over the
+   resolved Tailscale DNS Name returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
 2. **ACL narrowing.** In the Tailscale admin console, replace the allow-all

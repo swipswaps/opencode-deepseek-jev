@@ -90,13 +90,13 @@ dated handoffs under `docs/`, especially
   then passed **2 passed, 0 skipped, 0 flaky** with `--retries=0` in 41.2s, and
   the same-origin dist was rebuilt with `--base=/` afterwards. The `2d8ac9e`
   CI/deploy is green (run `45390923942`). Tailscale Serve is blocked by a wrong
-  admin-console tailnet, not by the device: `ws24` reports
+  browser tailnet, not by the device: `ws24` reports
   `CurrentTailnet.Name = swipswaps.github` with DNS `ws24.taile17668.ts.net`,
-  while the page that enabled HTTPS showed `tail427659.ts.net` and
-  `ihydrocarbon@gmail.com`. Those are different tailnets, so the setting does
-  not apply. Switch the console to `swipswaps.github`, enable HTTPS there, and
-  re-run Serve. If there is no admin access to that tailnet, the verified API
-  path is HTTP over WireGuard.
+  while the open console account is `ihydrocarbon@gmail.com`, whose machines
+  page lists only `fedora` (100.95.53.23). Those are different tailnets, so the
+  HTTPS setting does not apply. Sign out and sign in as the `swipswaps.github`
+  owner, enable HTTPS there, and re-run Serve. If that account is unavailable,
+  the verified API path is HTTP over WireGuard; do not move the device.
 - The container has no GitHub credential, so `git push` cannot authenticate
   here, and it has no Docker socket and no Secure Shell (SSH) client.
   `/workspace` and `/audit` are bind mounts of the host JEF and foil trees, so
@@ -110,21 +110,20 @@ ACL) before adding surface. The push, the live e2e, and the `2d8ac9e` CI/deploy
 are proven. The losing option is to start a new feature while Serve and the ACL
 are open: its failures would be ambiguous between the old and new layers.
 
-1. **Enable Serve/TLS** (host and tailnet console). Switch the admin console to
-   the `swipswaps.github` tailnet, the one the device reports:
+1. **Enable Serve/TLS** (host and tailnet console). Sign out of the admin
+   console and sign in as the account that owns `swipswaps.github` (the
+   `swipswaps` login). The currently open `ihydrocarbon@gmail.com` account sees
+   only `fedora` (100.95.53.23), so its HTTPS setting cannot apply to `ws24`.
+   Verify the device tailnet on the host:
    `tailscale status --json | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("Self") or {}; t=d.get("CurrentTailnet") or {}; print("dns", s.get("DNSName")); print("tailnet", t.get("Name"))'`
-   The page used earlier showed `tail427659.ts.net` and
-   `ihydrocarbon@gmail.com`, a different tailnet, so its HTTPS setting does not
-   apply. If the signed-in account cannot see `swipswaps.github`, ask its owner
-   for admin access; do not move the device to the other tailnet. In the correct
-   tailnet enable MagicDNS and HTTPS Certificates, then run `sudo tailscale up`
-   and re-run
+   In the correct tailnet enable MagicDNS and HTTPS Certificates, then run
+   `sudo tailscale up` and re-run
    `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`.
    The node-specific `login.tailscale.com/f/serve` link can return
-   `404 node not found`; do not rely on it. If there is no admin access, stop at
-   the verified HTTP-over-WireGuard fallback. Accept: `tailscale serve status`
-   shows the 443 mapping and a health request over the resolved Tailscale DNS
-   Name (TSN) returns 200:
+   `404 node not found`; do not rely on it. If the account is unavailable, stop
+   at the verified HTTP-over-WireGuard fallback; do not move the device. Accept:
+   `tailscale serve status` shows the 443 mapping and a health request over the
+   resolved Tailscale DNS Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
    Until then the verified path is HTTP over WireGuard.
