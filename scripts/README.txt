@@ -695,9 +695,52 @@ chromium-video-ab.sh
     rate, GPU CPU, load/PSI, and (via CDP) the video's dropped/total frame
     counters; `compare a.json b.json` applies: A must be switch-off with zero
     decode, B switch-on with decode, and drop_B <= drop_A - 0.5pp and <= 1%.
+    `compare-pace a.json b.json` is the both-hardware rule for hosts where the
+    default driver already hardware-decodes: A may decode, B must, and B's
+    frame pacing must beat A's by the same margin. Frame drops come from
+    getVideoPlaybackQuality, falling back to presented-frame long-gap ratio via
+    requestVideoFrameCallback when that build reports empty quality counters.
     Reports PASS/FAIL/INCONCLUSIVE (SKIP is not PASS). --self-test covers the
-    PASS, confounded-control, no-engagement, sub-margin, no-counters, and
-    label-mismatch branches.
+    PASS, confounded-control, no-engagement, sub-margin, no-counters,
+    label-mismatch, and both-hardware branches.
+
+chromium-video-ab-run.sh
+    RUN ON THE HOST as the desktop user. One-command ABBA driver around
+    chromium-video-ab.sh: for N pairs it sets GRAPHIC_DRIVER (A=default,
+    B=amd) through chromium-video-audit.sh --revert/--apply, launches a FRESH
+    browser each sample with a throwaway profile and its own CDP port, measures,
+    then SIGTERMs it; the user's own browser is untouched (measure filters
+    /proc by --user-data-dir via AB_MATCH). It takes the median of each arm and
+    runs the pre-registered compare rule, then restores the GRAPHIC_DRIVER it
+    found. Default is dry-run (prints the plan); --apply executes. --file points
+    at a LOCAL non-DRM H.264/VP9 clip (symlinked to a `video`-named path so the
+    CDP tab selector matches); --generate makes a 10s 1080p30 testsrc smoke clip
+    (libx264 veryfast, visible progress); --pairs/--duration/--cdp-port/--tab/
+    --outdir/--keep tune the run. The browser is auto-detected (`chromium`, then
+    `chromium-browser`) or set with --chrome/AB_CHROME. It requires an active
+    graphical seat (writable /dev/dri/renderD*; vainfo profiles are printed) —
+    a plain SSH shell usually lacks the logind device ACL and Chromium silently
+    falls back to software, so it fails closed there instead of reporting a false
+    REFUTED. An `ssh -Y` X11-forward is detected and refused: the window opens on
+    the client but the local GPU process crash-loops (exit 8704,
+    MailboxVideoFrameConverter) so decode never starts; `--local-seat` re-points
+    Chromium at the host's own Wayland socket (or X :0). It ffprobes the clip,
+    loops and requires playback to advance before measuring, polls for the
+    drm-engine-dec fd (GPU process, then any process), copies each sample's
+    Chromium log next to its JSON, and returns INCONCLUSIVE (not FAIL) when the
+    treatment produced neither frames nor decode. Default mode is BOTH-HARDWARE
+    pacing (A=default may decode; compare-pace), because default already
+    hardware-decodes H.264 on this Fedora build; --software-control instead
+    forces software decode for A (compare, the classic software-vs-hardware
+    test). Frame drops track host load, so each sample waits for
+    psi_cpu_avg10 <= AB_QUIET_PSI (default 20, up to AB_QUIET_WAIT=45s) before
+    each sample, and a run that cannot get under it is INCONCLUSIVE (a busy
+    host cannot masquerade as REFUTED); --accept-load runs anyway, recording the
+    load so a verdict is read with that caveat. It also returns INCONCLUSIVE when both
+    arms stay below AB_STUTTER_FLOOR (default 0.005, i.e. 0.5%): a clip that does not
+    stutter cannot test the fix. --self-test covers ABBA order, the
+    SSH-forward check, the config transform, median PASS/FAIL, and the
+    confounded-control branch.
 
 chromium-video-priority.sh
     RUN ON THE HOST. Finds the processes that actually decode video (Widevine
@@ -1538,8 +1581,16 @@ handoff-validate.py
 
 guard-health.sh
     Fail closed on a missing/dangling guard, missing assistant-output hook, no
-    strict mode or irreversible rule, a failed self-test, or a loaded instance
-    older than the file. Preflight STOPs on it.
+    strict mode or irreversible rule, a failed self-test, a loaded instance
+    older than the file, or a load with no hook after it (loaded-but-inert).
+    Preflight STOPs on it.
+
+self-test-contract.py
+    Forbid a `--self-test` that never runs its test. Every shell/Python script
+    that defines self_test() must call it in code (comments and quoted strings
+    do not count), the body must be non-empty, and --trace NAME proves under
+    `bash -x` that the entrypoint executed and asserted. Catches the
+    guard-health dead-self-test class. --check, --trace NAME, --json, --self-test.
 
 hardening-gate.sh
     Run review + evidence + handoff + guard health; the closeout requires it.

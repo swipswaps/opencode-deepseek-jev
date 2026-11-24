@@ -181,6 +181,23 @@ PY
         bad 'tool-call-contract-gate.py present'
     fi
 
+    if [ -f "$REPO/scripts/self-test-contract.py" ]; then
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/self-test-contract.py" --check > "$work/stc_check.txt" 2>&1; then
+            ok 'self-test-contract: every --self-test invokes a non-empty test'
+        else
+            bad 'self-test-contract: dead/vacuous --self-test'
+            tail -8 "$work/stc_check.txt"
+        fi
+        if timeout "${CHECK_TIMEOUT:-120}" python3 "$REPO/scripts/self-test-contract.py" --self-test > "$work/stc_st.txt" 2>&1; then
+            ok 'self-test-contract: self-test (dead/vacuous/hidden/no-handler)'
+        else
+            bad 'self-test-contract: self-test'
+            tail -8 "$work/stc_st.txt"
+        fi
+    else
+        bad 'self-test-contract.py present'
+    fi
+
     if [ -f "$REPO/scripts/web-restart.sh" ]; then
         if timeout "${CHECK_TIMEOUT:-120}" bash "$REPO/scripts/web-restart.sh" --self-test > "$work/wr_st.txt" 2>&1; then
             ok 'web-restart: self-test (guard-loaded wait + sha match + ANSI strip)'

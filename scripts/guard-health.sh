@@ -5,8 +5,9 @@
 # A missing/dangling/stale guard is indistinguishable from "no matches": the
 # guard is silently absent. This checks the plugin file, the prose (assistant
 # output) hook, the irreversible rule, strict mode, the guard self-test, the
-# global link, and that the loaded plugin is not older than the file (a stale
-# in-memory guard needs an opencode-web restart).
+# global link, that the loaded plugin is not older than the file (a stale
+# in-memory guard needs an opencode-web restart), and that a hook fired after
+# that load (a loaded-but-inert guard is just as blind).
 #
 #   ./scripts/guard-health.sh            # --check
 #   ./scripts/guard-health.sh --self-test
@@ -46,7 +47,7 @@ self_test() {
 
     # Stale-marker logic: a heartbeat older than the file must FAIL (an old
     # guard is in memory); a heartbeat after the file must PASS.
-    local tmp base_fail old_delta new_delta sha mtime iso_old iso_new
+    local tmp base_fail old_delta new_delta nohook_delta stalehook_delta sha mtime iso_old iso_new iso_hook iso_hook_old
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/guardhealth.XXXXXX" 2>&1) || { printf 'FAIL mktemp\n'; return 2; }
     printf 'plugin body\n' > "$tmp/plugin.js"
     sha=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$tmp/plugin.js" 2>&1)
@@ -57,15 +58,31 @@ print(datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat().repl
     iso_new=$(python3 -c 'import datetime,sys
 t=int(sys.argv[1])+3600
 print(datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat().replace("+00:00","Z"))' "$mtime" 2>&1)
+    iso_hook=$(python3 -c 'import datetime,sys
+t=int(sys.argv[1])+7200
+print(datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat().replace("+00:00","Z"))' "$mtime" 2>&1)
+    iso_hook_old=$(python3 -c 'import datetime,sys
+t=int(sys.argv[1])+1800
+print(datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat().replace("+00:00","Z"))' "$mtime" 2>&1)
     printf '{"verdict":"loaded","ts":"%s","sha":"%s"}\n' "$iso_old" "$sha" > "$tmp/old.log"
     printf '{"verdict":"loaded","ts":"%s","sha":"%s"}\n' "$iso_new" "$sha" > "$tmp/new.log"
+    printf '{"verdict":"hook","ts":"%s"}\n' "$iso_hook" >> "$tmp/new.log"
+    printf '{"verdict":"loaded","ts":"%s","sha":"%s"}\n' "$iso_new" "$sha" > "$tmp/nohook.log"
+    printf '{"verdict":"loaded","ts":"%s","sha":"%s"}\n' "$iso_new" "$sha" > "$tmp/stalehook.log"
+    printf '{"verdict":"hook","ts":"%s"}\n' "$iso_hook_old" >> "$tmp/stalehook.log"
     base_fail=$FAIL
     loaded_check "$tmp/plugin.js" "$tmp/old.log" > "$tmp/old.out" 2>&1
     old_delta=$((FAIL - base_fail)); FAIL=$base_fail
     loaded_check "$tmp/plugin.js" "$tmp/new.log" > "$tmp/new.out" 2>&1
     new_delta=$((FAIL - base_fail)); FAIL=$base_fail
+    loaded_check "$tmp/plugin.js" "$tmp/nohook.log" > "$tmp/nohook.out" 2>&1
+    nohook_delta=$((FAIL - base_fail)); FAIL=$base_fail
+    loaded_check "$tmp/plugin.js" "$tmp/stalehook.log" > "$tmp/stalehook.out" 2>&1
+    stalehook_delta=$((FAIL - base_fail)); FAIL=$base_fail
     if [ "$old_delta" -eq 1 ]; then pass "self-test: stale loaded marker fails"; else fail "self-test: stale loaded marker not caught"; fi
-    if [ "$new_delta" -eq 0 ]; then pass "self-test: fresh loaded marker passes"; else fail "self-test: fresh loaded marker rejected"; fi
+    if [ "$new_delta" -eq 0 ]; then pass "self-test: fresh loaded + hook passes"; else fail "self-test: fresh loaded + hook rejected"; fi
+    if [ "$nohook_delta" -eq 1 ]; then pass "self-test: loaded without a hook fails"; else fail "self-test: loaded without a hook not caught"; fi
+    if [ "$stalehook_delta" -eq 1 ]; then pass "self-test: hook before the loaded marker fails"; else fail "self-test: hook before the loaded marker not caught"; fi
     find "$tmp" -depth -delete 2>&1
 
     printf 'guard-health: self-test %s\n' "$([ "$FAIL" -eq 0 ] && printf PASS || printf FAIL)"
@@ -98,12 +115,12 @@ pick_guard_log() {
 }
 
 # A loaded marker proves a process imported the plugin, but not that it imported
-# the CURRENT file: the marker can predate the last edit (the guard loads once
-# per process). Compare the marker's sha AND its timestamp against the plugin
-# file, so "green" cannot mean "an older guard is in memory".
+# the CURRENT file or that tool.execute.before is wired. Compare the marker's
+# sha and timestamp against the plugin file, then require a `hook` marker at or
+# after the loaded one, so "green" cannot mean "an older or inert guard".
 loaded_check() {
     local plugin="$1" log="$2"
-    local loaded="" loaded_sha="" file_sha="" file_mtime=""
+    local loaded="" loaded_sha="" hook="" file_sha="" file_mtime=""
     if [ -f "$log" ]; then
         loaded_sha=$(grep '"verdict":"loaded"' "$log" 2>&1 | tail -1 | python3 -c 'import json,sys
 try:
@@ -115,11 +132,17 @@ try:
     d=json.load(sys.stdin); print(int(datetime.datetime.fromisoformat(d["ts"].replace("Z","+00:00")).timestamp()))
 except Exception:
     print("")' 2>&1)
+        hook=$(grep '"verdict":"hook"' "$log" 2>&1 | tail -1 | python3 -c 'import json,sys,datetime
+try:
+    d=json.load(sys.stdin); print(int(datetime.datetime.fromisoformat(d["ts"].replace("Z","+00:00")).timestamp()))
+except Exception:
+    print("")' 2>&1)
     fi
     file_sha=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$plugin" 2>&1)
     file_mtime=$(stat -c %Y "$plugin" 2>&1)
     case "$file_mtime" in ''|*[!0-9]*) file_mtime=0 ;; esac
     case "$loaded" in ''|*[!0-9]*) loaded="" ;; esac
+    case "$hook" in ''|*[!0-9]*) hook="" ;; esac
     if [ -z "$loaded" ]; then
         fail "no loaded heartbeat in guard.log (restart opencode-web)"
     elif [ -z "$loaded_sha" ]; then
@@ -128,8 +151,12 @@ except Exception:
         fail "loaded plugin hash differs from file (restart opencode-web to load it)"
     elif [ "$loaded" -lt "$file_mtime" ]; then
         fail "loaded heartbeat predates the plugin file by $((file_mtime - loaded))s; restart opencode-web to load the new rules"
+    elif [ -z "$hook" ]; then
+        fail "loaded but no hook after it (tool.execute.before not wired; restart opencode-web)"
+    elif [ "$hook" -lt "$loaded" ]; then
+        fail "hook predates the loaded instance by $((loaded - hook))s; restart opencode-web to wire the running process"
     else
-        pass "loaded instance is current (hash + loaded after file mtime)"
+        pass "loaded instance is current and its hook fired"
     fi
 }
 
@@ -161,6 +188,10 @@ main() {
     fi
     STATE="$REPO/logs"; mkdir -p "$STATE"
     printf '=== guard-health ===\n'
+    if [ "$selftest" -eq 1 ]; then
+        self_test
+        return $?
+    fi
     plugin_check
     if [ "$selftest" -eq 0 ]; then
         if [ -x "$REPO/scripts/install-global-guard.sh" ]; then

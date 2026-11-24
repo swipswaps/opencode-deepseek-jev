@@ -122,6 +122,14 @@
       "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "extract-transcript.sh" },
       "test": "scripts/extract-transcript.sh",
       "evidence": { "path": "scripts/tools.json", "marker": "extract-transcript" }
+    },
+    {
+      "id": "self-test-contract",
+      "purpose": "forbid a --self-test that exits 0 without executing its test (guard-health dead-self-test class)",
+      "impl": "scripts/self-test-contract.py",
+      "registration": { "kind": "contains", "path": "scripts/test-hygiene.sh", "marker": "self-test-contract.py" },
+      "test": "scripts/self-test-contract.py",
+      "evidence": { "path": "scripts/tools.json", "marker": "self-test-contract" }
     }
   ]
 }

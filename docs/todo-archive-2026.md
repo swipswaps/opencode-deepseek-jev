@@ -6,6 +6,47 @@ corpus is read at every session start, so its size is context cost — see
 `./scripts/doc-budget.sh`). Newest-first. `TODO.md` keeps the queue plus recent
 Done; durable state lives in `HANDOFF.md`. Git history is unchanged.
 
+## Archived 2026-11-24 (moved from TODO.md Done)
+
+- [x] **PLACEHOLDERS-1 — 2026-11-20.** Rule #99 + `check-placeholders.sh`
+      gate + detector `check-placeholders.py` (self-test; cursor over assistant
+      shell fences). Wired into `harness.sh`; skills updated. Evidence: the
+      `run-id` paste in chat part `prt_1fb3ed842001YVny3TQwCtYIyV`.
+- [x] **ROTATE-GUIDED-1 — 2026-11-11.** `rotate-guided.py`: Playwright-guided
+      revoke/create/rotate with a persistent login profile and a learned
+      `rotation_memory`/`rotation_run` DB (candidate pick on drift, remembers
+      success). New key written to `.env.local` 0600 with backup; never printed;
+      no screenshot after reveal. `--self-test` + `--browser-self-test`.
+- [x] **SETTINGS-1 — 2026-11-11.** `/settings` + `/app/#settings` provider
+      matrix with pause/resume (typed confirm, ledger row, pending-host-apply);
+      `scripts/settings-apply.sh` host applier (dry-run/`--apply --yes`/
+      `--self-test`). Anthropic hard-paused. `/app/#usability` simplified to an
+      evidence summary + `/usability` link; `/recovery` and global a11y fixes;
+      React tables scroll on mobile; reduced-motion honored. a11y 11/11 per
+      classic page; lint 419/0. Playwright `/app` battery **12/12** (desktop +
+      mobile); `.24` posture **23/0**; secret-scan clean; pushed `b8bf26c`.
+- [x] **UX-1 — 2026-11-04.** `:5099` readability/copy: larger high-contrast
+      text, selectable content, copy buttons for session IDs, activity
+      text/commands, timeline rows, and timeline JSON; expand only on the
+      control; and a live d3-assisted diagnostic table (last 30 parts: start dot
+      on the time axis, relative-duration bar, full command/text, exact
+      duration, moving now). Screenshots refreshed (`status-home`,
+      `status-timeline`); headless UI test PASS.
+- [x] **UX-2 — 2026-11-04.** Combined Live activity + Diagnostic timeline into
+      one Activity timeline (newest first, filter chips, 30/all, expand/copy,
+      start dot, relative duration, full command/text, exact duration). Moved it
+      under the stats; mobile 390 px layout stacks rows with 44 px controls;
+      added PWA manifest/service worker/icons and verified Chrome installability
+      (`[]`). Decision/sources: `docs/UX-MOBILE-AUDIT.md`. Screenshots
+      `status-timeline` + `status-mobile`.
+- [x] **UX-3 — 2026-11-04.** Added the separate full MUI/React observability
+      app at `/app/` (`web/`: React 19.3 + MUI 9.5 + Vite 8.3; Overview,
+      Activity, Sessions, Todos; permanent drawer + mobile bottom nav; app
+      manifest + shared service worker; Chrome installability `[]`). Build is
+      550 kB minified / 171 kB gzip; legacy `/` remains. Screenshots
+      `status-mui-{desktop,activity-desktop,mobile,activity}.png`; details
+      `web/README.md`, `docs/UX-MOBILE-AUDIT.md`.
+
 ## Archived 2026-11-21 (moved from TODO.md Queue)
 
 Closed queue items, moved to hold the tier-1 read-first budget. Newest first.

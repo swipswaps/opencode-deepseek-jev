@@ -53,12 +53,13 @@ self_test() {
     if python3 "$here/review-gate.py" --self-test > $STATE/hardening-review-st 2>&1 \
        && python3 "$here/evidence-gate.py" --self-test > $STATE/hardening-evidence-st 2>&1 \
        && python3 "$here/handoff-validate.py" --self-test > $STATE/hardening-handoff-st 2>&1 \
-       && bash "$here/guard-health.sh" --self-test > $STATE/hardening-guard-st 2>&1; then
+       && bash "$here/guard-health.sh" --self-test > $STATE/hardening-guard-st 2>&1 \
+       && python3 "$here/self-test-contract.py" --trace guard-health.sh > $STATE/hardening-selftest-contract-st 2>&1; then
         printf 'hardening-gate: self-test PASS\n'
         return 0
     fi
     printf 'hardening-gate: self-test FAIL\n'
-    for f in $STATE/hardening-review-st $STATE/hardening-evidence-st $STATE/hardening-handoff-st $STATE/hardening-guard-st; do
+    for f in $STATE/hardening-review-st $STATE/hardening-evidence-st $STATE/hardening-handoff-st $STATE/hardening-guard-st $STATE/hardening-selftest-contract-st; do
         printf '%s\n' "--- $f"
         tail -n 3 "$f" 2>&1
     done
@@ -81,6 +82,8 @@ main() {
     fi
     step handoff python3 scripts/handoff-validate.py --check
     step guard ./scripts/guard-health.sh --check
+    step selftest python3 scripts/self-test-contract.py --check
+    step selftest-trace python3 scripts/self-test-contract.py --trace guard-health.sh
     printf 'hardening-gate: %s\n' "$([ "$FAIL" -eq 0 ] && printf PASS || printf 'FAIL (%s)' "$FAIL")"
     [ "$FAIL" -eq 0 ] && return 0 || return 2
 }

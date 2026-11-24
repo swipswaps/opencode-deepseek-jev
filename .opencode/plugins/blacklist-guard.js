@@ -31,10 +31,20 @@
 // remediate2devnull() are exported so scripts/blacklist-guard-self-test.mjs
 // can assert the discrimination without opencode. Fail-open: a bug in the
 // guard must never block a tool call.
+//
+// The command line is not the whole program: `bash script.sh` hides whatever
+// the file contains. So the bash hook also resolves the script target(s),
+// reads them under a size limit, strips comments and quoted strings, and
+// inspects each live line. It blocks only the narrow destructive/opaque set
+// (BODY_BLOCK) — the convention and stderr-redirect rules legitimately appear
+// in long-lived scripts, so enforcing them on bodies would false-positive on
+// the repo's own tools. A construct inside a helper function that is never
+// called is unreachable and is not blocked.
 
 // name -> { pattern, sev, fix, rule }. Patterns are strings compiled to RegExp
 // so the file keeps no escaped regex literals.
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -328,6 +338,192 @@ export function remediate2devnull(command) {
 }
 
 // ---------------------------------------------------------------------------
+// Script-BODY inspection. `bash script.sh` passes the command-line check while
+// the banned construct sits in the file, so the guard must read the executed
+// target. Only the destructive/opaque rules are enforced on bodies: the
+// convention rules (`exit N`, `set -e`) and the stderr-redirect family appear
+// legitimately in long-lived repo/skill scripts, so blocking on them would
+// break the operator's own tools. Fail-open at every step.
+// ---------------------------------------------------------------------------
+const SCRIPT_MAX_BYTES = 256 * 1024;
+const SCRIPT_EXT_RE = /\.(?:sh|bash|zsh|ksh|dash|py|js|mjs|cjs)$/i;
+const INTERP_RE = /^(?:bash|sh|zsh|ksh|dash|python3?|node)$/;
+const BODY_BLOCK = new Set([
+  "sed", "rm -rf", "irreversible", "sensitive-read", "secret-interpreter-read",
+  "subprocess.run", "config-dump", "pipe-to-shell",
+]);
+// Never read these as "scripts" (host secrets / kernel interfaces) and never
+// re-inspect vendored or archived code (trusted, already policy-checked).
+const SENSITIVE_ROOT_RE = /^\/(?:etc|proc|sys|dev)(?:\/|$)/;
+const TRUSTED_RE = /(?:^|\/)(?:node_modules|\.git)(?:\/|$)|\/scripts\/archive\//;
+const SCRIPT_WRAPPERS = new Set([...WRAPPERS, "timeout"]);
+
+function expandPath(p, cwd) {
+  let s = String(p || "");
+  const home = process.env.HOME || "";
+  s = s.replace(/^\$\{HOME\}|\$HOME\b/, home);
+  if (s.startsWith("~/")) s = home + s.slice(1);
+  s = s.replace(/^\$\{PWD\}|\$PWD\b/, String(cwd || "."));
+  if (!s.startsWith("/")) s = String(cwd || process.cwd()).replace(/\/+$/, "") + "/" + s;
+  return resolvePath(s);
+}
+
+// Resolve the local files a shell command will execute or source. `bash -c`
+// and heredocs are inline scripts (handled by inspect/innerScripts); this
+// covers the file targets that the command line cannot see.
+export function scriptTargets(command, cwd) {
+  const out = [];
+  const seen = new Set();
+  const add = (p) => {
+    const abs = expandPath(p, cwd);
+    if (!abs || seen.has(abs)) return;
+    if (SENSITIVE_ROOT_RE.test(abs) || TRUSTED_RE.test(abs)) return;
+    try {
+      if (!statSync(abs).isFile()) return;
+    } catch {
+      return;
+    }
+    seen.add(abs);
+    out.push(abs);
+  };
+  for (const seg of segments(command)) {
+    const toks = (seg.match(/"[^"]*"|'[^']*'|\S+/g) || []).map((t) => t.replace(/^["']|["']$/g, ""));
+    let i = 0;
+    while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+    while (i < toks.length && SCRIPT_WRAPPERS.has(toks[i].replace(/^.*\//, ""))) {
+      const w = toks[i].replace(/^.*\//, "");
+      i++;
+      if (w === "timeout") {
+        if (i < toks.length && !toks[i].startsWith("-")) i++;
+        continue;
+      }
+      while (i < toks.length) {
+        const t = toks[i];
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) { i++; continue; }
+        if (t.startsWith("-")) {
+          i++;
+          if (VALUE_FLAGS.has(t) && i < toks.length && !toks[i].startsWith("-")) i++;
+          continue;
+        }
+        break;
+      }
+    }
+    if (i >= toks.length) continue;
+    const exe = toks[i];
+    const name = exe.replace(/^.*\//, "");
+    if (name === "source" || name === ".") {
+      if (i + 1 < toks.length && !toks[i + 1].startsWith("-")) add(toks[i + 1]);
+      continue;
+    }
+    if (INTERP_RE.test(name)) {
+      let j = i + 1, inline = false;
+      while (j < toks.length) {
+        const t = toks[j];
+        if (t === "-c" || (name !== "node" && /^-[A-Za-z]*c[A-Za-z]*$/.test(t))) { inline = true; break; }
+        if (t.startsWith("-")) { j++; continue; }
+        break;
+      }
+      if (!inline && j < toks.length && !toks[j].startsWith("-")) add(toks[j]);
+      continue;
+    }
+    if (SCRIPT_EXT_RE.test(exe)) add(exe);
+  }
+  return out;
+}
+
+// Blank comments and quoted regions so a construct that only appears as data
+// (`# sed`, `grep 'sed'`, a Python string) does not count as executable code.
+// Length is not preserved here; this is for line inspection, not index mapping.
+export function liveCode(text) {
+  let out = "", quote = null;
+  const s = String(text || "");
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === quote && s[i - 1] !== "\\") quote = null;
+      out += " ";
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; out += " "; continue; }
+    if (ch === "#" && (i === 0 || /[\s;&|]/.test(s[i - 1]))) break;
+    out += ch;
+  }
+  return out;
+}
+
+function functionRanges(lines) {
+  const ranges = [];
+  for (let i = 0; i < lines.length; i++) {
+    const live = liveCode(lines[i]);
+    const m = live.match(/^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_-]*)\s*\(\s*\)\s*\{/) ||
+      live.match(/^\s*function\s+([A-Za-z_][A-Za-z0-9_-]*)\s*\{/);
+    if (!m) continue;
+    let depth = 0, started = false, end = i;
+    for (let j = i; j < lines.length; j++) {
+      for (const ch of liveCode(lines[j])) {
+        if (ch === "{") { depth++; started = true; }
+        else if (ch === "}") depth--;
+      }
+      if (started && depth <= 0) { end = j; break; }
+    }
+    ranges.push({ name: m[1], start: i, end });
+  }
+  return ranges;
+}
+
+// Return body hits with 1-based line numbers. A hit inside a function whose
+// name never appears outside its own definition is unreachable and is skipped.
+export function inspectScriptBody(text) {
+  const lines = String(text || "").split("\n");
+  const ranges = functionRanges(lines);
+  const reachable = new Map();
+  for (const r of ranges) {
+    const name = r.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("(?:^|[^A-Za-z0-9_-])" + name + "(?:[^A-Za-z0-9_-]|$)");
+    let used = false;
+    for (let i = 0; i < lines.length && !used; i++) {
+      if (i >= r.start && i <= r.end) continue;
+      if (re.test(liveCode(lines[i]))) used = true;
+    }
+    reachable.set(r.name, used);
+  }
+  const hits = [];
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const live = liveCode(lines[i]);
+    if (!live.trim()) continue;
+    let hs;
+    try { hs = inspect(live); } catch { continue; }
+    for (const h of hs) {
+      if (!BODY_BLOCK.has(h.name)) continue;
+      const fn = ranges.find((r) => i >= r.start && i <= r.end);
+      if (fn && !reachable.get(fn.name)) continue;
+      if (seen.has(h.name)) continue;
+      seen.add(h.name);
+      hits.push({ name: h.name, sev: h.sev, fix: h.fix, rule: h.rule, line: i + 1 });
+    }
+  }
+  return hits;
+}
+
+// Resolve, read, and inspect every executed script target. Best-effort.
+export function inspectScriptTargets(command, cwd) {
+  const out = [];
+  for (const file of scriptTargets(command, cwd)) {
+    let text = "";
+    try {
+      const st = statSync(file);
+      if (!st.isFile() || st.size > SCRIPT_MAX_BYTES) continue;
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const h of inspectScriptBody(text)) out.push(Object.assign({}, h, { file }));
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Assistant OUTPUT (prose) enforcement. `experimental.text.complete` gives the
 // final text part; scan CODE SPANS (fenced blocks + inline code) with the same
 // RULES. Fenced blocks are fully remediated (2>/dev/null removed, block rules
@@ -391,16 +587,9 @@ function mode() {
 }
 
 export const BlacklistGuard = async ({ client, directory }, options) => {
-  // Deduplicate double-loading. For a $HOME-rooted session the same file is
-  // registered twice (the global plugin dir symlink AND /workspace/opencode.json
-  // auto-appending the project plugin), and /config lists both. Without this,
-  // every hook runs twice (double warns, wasted work). `options.force` lets the
-  // self-test build a second, independent instance.
-  if (globalThis.__opencodeBlacklistGuardRegistered && !(options && options.force)) {
-    return {};
-  }
-  globalThis.__opencodeBlacklistGuardRegistered = true;
-
+  // Relative script targets resolve against the session's project directory,
+  // which is also the shell's working directory for bash tool calls.
+  const SESSION_DIR = directory || process.cwd();
   // Durable flag: every verdict is appended to data/observability/guard.log
   // (JSONL) so the dashboard and `scripts/logs.sh --source guard` can surface
   // it. This is how blacklisted code used during "Thinking" becomes visible
@@ -545,9 +734,33 @@ export const BlacklistGuard = async ({ client, directory }, options) => {
         }
         return; // fail open
       }
-      if (!hits.length) return;
+
+      // The command line cannot see inside `bash x.sh`, so resolve and inspect
+      // the executed script's body too. Fail-open: unreadable/too-large targets
+      // are simply skipped (see inspectScriptTargets).
+      let bodyHits = [];
+      try { bodyHits = inspectScriptTargets(command, SESSION_DIR); } catch { /* fail open */ }
+
+      if (!hits.length && !bodyHits.length) return;
 
       const blocking = m === "block" || m === "strict";
+
+      if (blocking && bodyHits.length) {
+        const names = bodyHits.map((h) => h.name);
+        const detail = bodyHits.map((h) => "- " + h.name + " (rule " + h.rule + ") at " + h.file + ":" + h.line + ": use " + h.fix).join("\n");
+        await log("error", "blacklist blocked (script body)", { patterns: names, file: bodyHits[0].file, line: bodyHits[0].line });
+        record("block", "blocked blacklisted construct in an executed script", { patterns: names, file: bodyHits[0].file, line: bodyHits[0].line });
+        throw new Error(
+          "blacklist-guard blocked this command: an executed script contains a banned construct:\n" + detail +
+          "\nPrefer python3, then awk, then grep/find (see RULES.md \"Substitutions for the blacklist\"). " +
+          "Set OPENCODE_BLACKLIST_GUARD=warn to downgrade, or =off to disable."
+        );
+      }
+      if (!blocking && bodyHits.length) {
+        await log("warn", "banned construct in an executed script (not blocked)", { file: bodyHits[0].file });
+        record("warn", "banned construct in an executed script (warn mode)", { patterns: bodyHits.map((h) => h.name), file: bodyHits[0].file, line: bodyHits[0].line });
+      }
+
       const blockers = blocking ? hits.filter((h) => h.sev === "block") : [];
       const warners = hits.filter((h) => h.sev === "warn");
 

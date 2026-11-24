@@ -87,6 +87,30 @@ def scan_shell(text: str) -> list[Finding]:
     return out
 
 
+# A line that is a URL, or an internal/tailnet hostname. On such a line any
+# angle token is an unresolved placeholder. Filename templates like
+# `<verb>-<noun>.sh` are NOT internal domains, so they are not flagged.
+URL_OR_INTERNAL = re.compile(
+    r"https?://|\.(?:ts\.net|local|internal|lan|home|tailnet)\b",
+    re.IGNORECASE,
+)
+
+
+def scan_urls(text: str) -> list[Finding]:
+    out: list[Finding] = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if not URL_OR_INTERNAL.search(line):
+            continue
+        seen: set[str] = set()
+        for match in ANGLE.finditer(line):
+            token = match.group(1)
+            if token in ALLOW or token in seen:
+                continue
+            seen.add(token)
+            out.append(Finding(f"<{token}>", lineno, line))
+    return out
+
+
 def shell_blocks(text: str) -> str:
     blocks = [m.group(1) for m in SHELL_FENCE.finditer(text)]
     return "\n".join(blocks)
@@ -99,7 +123,7 @@ def scan_file(path: Path) -> list[Finding]:
         print(f"status=FAIL file={path} error={exc}", file=sys.stderr)
         return [Finding("<unreadable>", 0, str(exc))]
     haystack = shell_blocks(text) if path.suffix.lower() in {".md", ".txt"} else text
-    return scan_shell(haystack)
+    return scan_shell(haystack) + scan_urls(text)
 
 
 def db_candidates() -> list[Path]:
@@ -186,6 +210,10 @@ def scan_db(cursor_path: Path, since_hours: int, advance: bool) -> tuple[int, li
                 item = finding.as_dict()
                 item.update(part=row["id"], session=row["session_id"], ts=row["ts"])
                 findings.append(item)
+        for finding in scan_urls(text):
+            item = finding.as_dict()
+            item.update(part=row["id"], session=row["session_id"], ts=row["ts"])
+            findings.append(item)
 
     if findings:
         return 1, findings, {"scanned": len(rows), "baseline": baseline, "cursor": cursor}
@@ -208,11 +236,13 @@ def self_test() -> int:
         ),
         ("clean-html-in-prose", "Use <div> in the layout.", False),
         ("bad-here-doc", "cat <<'EOF'\nhello <world>\nEOF", True),
+        ("bad-url-placeholder", "Open https://<ws24>.<tailnet>.ts.net/api/health", True),
     ]
 
     failures = 0
     for name, text, should_find in cases:
-        found = scan_shell(shell_blocks(f"```bash\n{text}\n```") if name.startswith("clean") else text)
+        found = scan_shell(shell_blocks(f"```bash\n{text}\n```")) if name.startswith("clean") else scan_shell(text)
+        found = found + scan_urls(text)
         got = len(found) > 0
         # The heredoc body is still shell input: <world> is an unresolved token.
         if got != should_find:

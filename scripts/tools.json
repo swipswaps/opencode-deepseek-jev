@@ -1883,7 +1883,22 @@
       "./scripts/chromium-video-ab.sh plan",
       "./scripts/chromium-video-ab.sh measure --label A --url file:///v/clear-1080p30.mp4 --duration 20",
       "./scripts/chromium-video-ab.sh compare logs/ab-A.json logs/ab-B.json",
+      "./scripts/chromium-video-ab.sh compare-pace logs/ab-A.json logs/ab-B.json",
       "./scripts/chromium-video-ab.sh --self-test"
+    ]
+  },
+  {
+    "id": "chromium-video-ab-run",
+    "title": "One-command ABBA driver for the decode A/B",
+    "where": "host",
+    "purpose": "Runs the decode A/B end to end: for N pairs (ABBA order) it toggles GRAPHIC_DRIVER through chromium-video-audit.sh --revert/--apply, launches a fresh browser per sample with a throwaway profile and its own CDP port, measures via chromium-video-ab.sh, takes each arm's median, applies the rule, and restores the GRAPHIC_DRIVER it found. Refuses ssh -Y X11 forwards and fails closed without a local seat; --local-seat uses the host's Wayland socket (or X :0). Default mode is both-hardware pacing (default already hardware-decodes H.264; compare-pace); --software-control forces software decode for the classic compare rule. Requires playback to advance, polls the decode fd, copies each sample's Chromium log, and falls back to requestVideoFrameCallback pacing when quality counters are empty. Frame drops track host load, so each sample waits for psi_cpu_avg10 <= AB_QUIET_PSI (default 20%); a run that stays contended is INCONCLUSIVE (or use --accept-load), as is a run where both arms stay below AB_STUTTER_FLOOR (default 0.5%; the clip does not reproduce stutter). --self-test covers ABBA order, the SSH-forward check, the config transform, median PASS/FAIL, both-hardware pacing, and the confounded-control branch.",
+    "commands": [
+      "./scripts/chromium-video-ab-run.sh --file ~/Videos/clip.mp4",
+      "./scripts/chromium-video-ab-run.sh --file ~/Videos/clip.mp4 --apply",
+      "./scripts/chromium-video-ab-run.sh --file ~/Videos/clip.mp4 --local-seat --apply",
+      "./scripts/chromium-video-ab-run.sh --file ~/Videos/clip.mp4 --software-control --apply",
+      "./scripts/chromium-video-ab-run.sh --generate /tmp/video.mp4 --apply",
+      "./scripts/chromium-video-ab-run.sh --self-test"
     ]
   },
   {
@@ -1917,6 +1932,17 @@
       "./scripts/tool-call-contract-gate.py",
       "./scripts/tool-call-contract-gate.py --json",
       "./scripts/tool-call-contract-gate.py --self-test"
+    ]
+  },
+  {
+    "id": "self-test-contract",
+    "title": "Forbid a --self-test that never runs",
+    "where": "container",
+    "purpose": "Static + trace contract for every script that advertises --self-test: a defined self_test() must be called in code with a non-empty body, and --trace NAME proves under bash -x that the entrypoint executed and asserted. Catches the guard-health dead-self-test class where the flag exited 0 without running the cases.",
+    "commands": [
+      "python3 scripts/self-test-contract.py --check",
+      "python3 scripts/self-test-contract.py --trace guard-health.sh",
+      "python3 scripts/self-test-contract.py --self-test"
     ]
   }
 ]

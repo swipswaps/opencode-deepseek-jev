@@ -220,12 +220,23 @@ const anchoredHooks = await BlacklistGuard({ client: { app: { log: async () => {
 if (typeof anchoredHooks["tool.execute.before"] !== "function") fail++;
 console.log((typeof anchoredHooks["tool.execute.before"] === "function" ? "  PASS " : "  FAIL ") + "factory survives a bogus session directory");
 
-// Deduplication: a second non-forced load must return no hooks (so the
-// global + project double-registration does not run the hook twice).
-const dupHooks = await BlacklistGuard({ client: { app: { log: async () => {} } }, directory: tmp });
-const dedupOk = dupHooks["tool.execute.before"] === undefined;
-if (!dedupOk) fail++;
-console.log((dedupOk ? "  PASS " : "  FAIL ") + "second non-forced load is a no-op (dedupe)");
+// A later plugin instance (a new session in the same long-lived server) must
+// still receive a blocking hook. A process-global dedupe silenced every
+// session after the first, so `sed` / `2>/dev/null` / `rm -rf` passed unseen.
+const laterHooks = await BlacklistGuard(
+  { client: { app: { log: async () => {} } }, directory: "/tmp/opencode/guardtest-session2" },
+  { logDir: tmp + "/data/observability" },
+);
+const laterBefore = laterHooks["tool.execute.before"];
+let laterThrew = false;
+try {
+  await laterBefore({ tool: "bash", sessionID: "later" }, { args: { command: "sed -n 1p f" } });
+} catch {
+  laterThrew = true;
+}
+const multiSessionOk = typeof laterBefore === "function" && laterThrew;
+if (!multiSessionOk) fail++;
+console.log((multiSessionOk ? "  PASS " : "  FAIL ") + "a later session still gets a blocking hook (no process-global dedupe)");
 
 // edit pre-check: an `edit` whose oldString is absent must be recorded as an
 // advisory (the recurring "Could not find oldString" class), and a present
@@ -276,6 +287,35 @@ const advisoryChecks = [
   ["guard.log records the fix advisory", advLogOk],
 ];
 for (const [name, ok] of advisoryChecks) {
+  if (!ok) fail++;
+  console.log((ok ? "  PASS " : "  FAIL ") + name);
+}
+
+// Runtime script-BODY inspection: `bash script.sh` must not hide a banned
+// construct in the file. Only the destructive set is enforced on bodies; the
+// convention/redirect rules appear legitimately in long-lived scripts.
+writeFileSync(tmp + "/body-block.sh", "#!/bin/bash\nprintf 'x\\n'\nsed -i s/a/b/ f\n");
+let bodyThrew = false;
+try { await before({ tool: "bash", sessionID: "s" }, { args: { command: "bash body-block.sh" } }); } catch { bodyThrew = true; }
+let directThrew = false;
+try { await before({ tool: "bash", sessionID: "s" }, { args: { command: "./body-block.sh" } }); } catch { directThrew = true; }
+writeFileSync(tmp + "/body-comment.sh", "#!/bin/bash\n# sed -i x\ngrep 'sed' f\nprintf 'ok\\n'\n");
+let bodyCommentOk = true;
+try { await before({ tool: "bash", sessionID: "s" }, { args: { command: "bash body-comment.sh" } }); } catch { bodyCommentOk = false; }
+writeFileSync(tmp + "/body-dead.sh", "#!/bin/bash\ndead() {\n  sed -i x f\n}\nprintf 'done\\n'\n");
+let bodyDeadOk = true;
+try { await before({ tool: "bash", sessionID: "s" }, { args: { command: "bash body-dead.sh" } }); } catch { bodyDeadOk = false; }
+writeFileSync(tmp + "/body-live.sh", "#!/bin/bash\nlive() {\n  sed -i x f\n}\nlive\n");
+let bodyLiveThrew = false;
+try { await before({ tool: "bash", sessionID: "s" }, { args: { command: "bash body-live.sh" } }); } catch { bodyLiveThrew = true; }
+const bodyChecks = [
+  ["script body: banned construct in the executed file blocks", bodyThrew],
+  ["script body: direct ./script.sh execution blocks", directThrew],
+  ["script body: comment-only mention allows", bodyCommentOk],
+  ["script body: unreachable helper does not block", bodyDeadOk],
+  ["script body: reachable helper blocks", bodyLiveThrew],
+];
+for (const [name, ok] of bodyChecks) {
   if (!ok) fail++;
   console.log((ok ? "  PASS " : "  FAIL ") + name);
 }
