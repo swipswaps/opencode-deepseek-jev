@@ -80,8 +80,9 @@ dated handoffs under `docs/`, especially
   the OpenFOAM backend runs on `ws24` as a FastAPI service on `127.0.0.1:8002`
   plus the Tailscale address, not on Pages. The host run on 2026-11-24 built and
   started the same-origin app on the tailnet IP and verified health over the
-  fallback. Tailscale Serve is blocked at the tailnet console (enablement link),
-  so the verified API path is HTTP over WireGuard until Serve is enabled. The
+  fallback. Tailscale Serve is blocked because HTTPS Certificates are disabled
+  for the tailnet, so the verified API path is HTTP over WireGuard until HTTPS
+  is enabled. The
   same-origin and tailnet follow-up remains uncommitted in the foil checkout and
   still needs its host gates and push.
 - The container has no GitHub credential, so `git push` cannot authenticate
@@ -107,12 +108,15 @@ which layer failed.
    existing dry-run-by-default script in apply mode:
    `sudo tailscale up`
    `bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app`
-   If the script reports that Serve is not enabled on the tailnet, open the
-   `login.tailscale.com/f/serve` link it prints, enable Serve, then run
-   `sudo tailscale up` and re-run. Until then the script verifies the tailnet-IP
-   fallback over WireGuard. Accept: `tailscale serve status` shows the
-   tailnet-only HTTPS mapping, and a health request over the resolved Tailscale
-   DNS Name (TSN) returns 200:
+   If the script reports that Serve is not enabled, open
+   `https://console.tailscale.com/admin/dns`, enable MagicDNS, then under
+   **HTTPS Certificates** choose **Enable HTTPS** and acknowledge the
+   public-ledger notice. Run `sudo tailscale up` and re-run. The node-specific
+   `login.tailscale.com/f/serve` link printed by the CLI can return
+   `404 node not found`; do not rely on it. Until HTTPS is enabled the script
+   verifies the tailnet-IP fallback over WireGuard. Accept:
+   `tailscale serve status` shows the tailnet-only HTTPS mapping, and a health
+   request over the resolved Tailscale DNS Name (TSN) returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
    `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
 3. **Run the live tailnet e2e on the host** after step 2. In the foil checkout,

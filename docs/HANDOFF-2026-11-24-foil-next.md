@@ -9,8 +9,9 @@ Do not fork or continue the source session.
 Status: JEF (this repository) is pushed and level with `origin/main`. foil.cfd is
 live as a static site; its backend is host-only and healthy; the same-origin app
 is built and serving on the tailnet IP; the follow-up is uncommitted in the foil
-checkout. Tailscale Serve is blocked at the tailnet console (enablement link, not
-a code defect), so the verified path is the tailnet-IP fallback over WireGuard.
+checkout. Tailscale Serve is blocked because HTTPS Certificates are disabled for
+the tailnet (a console setting, not a code defect), so the verified path is the
+tailnet-IP fallback over WireGuard.
 The remaining acceptance tests are: enable Serve and re-run for HTTPS, run the
 live tailnet e2e, gate and push the foil follow-up, then narrow the Access
 Control List (ACL).
@@ -42,7 +43,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | blocked at the tailnet console | script printed "Serve is not enabled on your tailnet" plus a login.tailscale.com/f/serve enablement link |
+| Tailscale Serve | blocked: HTTPS Certificates disabled | CLI node link returned `404 node not found`; enable HTTPS in the admin console DNS page |
 | tailnet-IP fallback | verified 2026-11-24 | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | not a hard gate | branch protection allows admin bypass; pushes printed "Bypassed rule violations" |
@@ -138,20 +139,34 @@ then:
 
 - re-applied the loopback bind and restarted the backend container;
 - `tailscale serve` reported `Serve is not enabled on your tailnet` and printed
-  the enablement link
-  `https://login.tailscale.com/f/serve?node=nDBSrGVMTm11CNTRL`, so it fell back
-  to the tailnet-IP bind;
+  a node-specific `login.tailscale.com/f/serve` link. That link returned
+  `Error 404 node not found`, so do **not** use it. The durable cause is that
+  HTTPS Certificates are disabled for the tailnet; enable them in the admin
+  console (see the corrected human step below). The script fell back to the
+  tailnet-IP bind;
 - health over the tailnet IP returned 200 with `solver_available=true` and
   `blockMesh_available=true`;
 - built the frontend (vite 8.3.8, 21.79s; the known large-chunk warnings are
   present) and started the same-origin proxy on `http://100.119.125.16:4174/`.
 
-Human step for TLS: open the enablement link, enable Serve in the console, run
-`sudo tailscale up` (or restart tailscaled), then re-run the apply script. TLS
-acceptance: `tailscale serve status` shows the 443 mapping and
+Human step for TLS (verified against the Tailscale HTTPS documentation):
+
+1. Open the DNS page of the Tailscale admin console:
+   `https://console.tailscale.com/admin/dns`
+2. Enable MagicDNS if it is not already on.
+3. Under **HTTPS Certificates**, select **Enable HTTPS** and acknowledge that
+   machine names and the tailnet DNS name are published in the Certificate
+   Transparency ledger.
+4. On the host run `sudo tailscale up` (or restart `tailscaled`), then re-run
+   the apply script.
+
+TLS acceptance: `tailscale serve status` shows the 443 mapping and
 `https://ws24.taile17668.ts.net/api/health` returns 200. Until then the
 tailnet-IP fallback is the verified path, and the Step 3 e2e can run now against
 `http://100.119.125.16:4174/`.
+
+The `https://rolldown.rs/reference/InputOptions.checks#bundlertimings` URL in
+the build output is the bundler's chunk-size hint, not an action item.
 
 ## Step 3 — live tailnet e2e (host)
 
