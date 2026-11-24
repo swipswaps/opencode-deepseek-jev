@@ -16,9 +16,12 @@ green (run `45390923942`). The Tailscale identity mismatch is **resolved**: the
 console is signed in as GitHub `swipswaps`, the machines page lists
 `a663c75b9e9b` (100.70.43.78) and `ws24` (100.119.125.16) as
 `swipswaps@github`, and the DNS page shows tailnet `taile17668.ts.net` with
-MagicDNS and HTTPS Certificates enabled. The only remaining Serve step is to
-refresh the daemon and run the secure script; verify the 443 mapping and HTTPS
-health. The Google `ihydrocarbon@gmail.com` account remains a separate tailnet
+MagicDNS and HTTPS Certificates enabled. The script's first Serve attempt failed
+with `Access denied: serve config denied`, not a tailnet issue: `owner` is not
+the tailscaled operator. Set it once with `sudo tailscale set --operator=owner`,
+then use `tailscale serve --bg --https=8443 http://127.0.0.1:8002` because JEF
+Caddy owns 443. Verify `https://ws24.taile17668.ts.net:8443/api/health`. The
+Google `ihydrocarbon@gmail.com` account remains a separate tailnet
 (`tail427659.ts.net`) and should be invited to `swipswaps.github` if both logins
 are wanted. Remaining after Serve: the Access Control List (ACL), future-machine
 auth keys and tags, and the placeholder cursor. The exact commands are in
@@ -57,7 +60,7 @@ either (a) run the host block if the operator has given you host execution, or
 | Private Network Access (PNA) | fixed | `OPTIONS /api/health` returns `Access-Control-Allow-Private-Network: true` |
 | stale chunks | fixed | `vite:preloadError` plus `unhandledrejection` reload once, cache-busted |
 | exposure | loopback plus Tailscale IPv4 | `127.0.0.1:8002` and `100.119.125.16:8002`; Funnel capability revoked |
-| Tailscale Serve | blocked: two different Tailscale identities | devices were authorized as GitHub `swipswaps@github` (`swipswaps.github`, DNS `ws24.taile17668.ts.net`); the browser is Google `ihydrocarbon@gmail.com` (`tail427659.ts.net`, only `fedora` at 100.95.53.23) |
+| Tailscale Serve | identity resolved; blocked by operator permission | HTTPS enabled in `swipswaps.github`; `serve config denied` because `owner` is not the tailscaled operator. Set `sudo tailscale set --operator=owner`, then serve on 8443 (Caddy owns 443) |
 | tailnet-IP fallback | verified 2026-11-24 from two devices | `/api/health` 200 with `solver_available=true` on `http://100.119.125.16:8002` from `ws24` and from client `100.70.43.78`; app served on `http://100.119.125.16:4174/` |
 | ACL | allow-all | `grants` still permits tailnet-to-tailnet on any port |
 | CI e2e | green but not a hard gate | run `45390923942` success; the push still printed "Bypassed rule violations" |
@@ -248,34 +251,34 @@ sudo tailscale up
 bash "$HOME/.config/opencode/skills/agent-host-ops/secure-tailnet-backend.sh" --apply --with-app
 ```
 
-If the script still reports that Serve is not enabled, `tailscaled` has not
-refreshed: run `sudo systemctl restart tailscaled` and re-run. The script falls
-back to the verified tailnet-IP path if the Serve call fails. Port 443 is
-already used by the JEF Caddy listener on `100.119.125.16`; if `tailscale serve`
-fails with `address already in use`, use 8443 instead of stopping Caddy:
+Two Serve outcomes matter after HTTPS is enabled:
+
+- `Access denied: serve config denied` means Serve **is** enabled, but `owner`
+  is not the tailscaled operator; the script's `tailscale serve` ran without
+  root. Fix once with `sudo tailscale set --operator=owner` (or the current
+  user), then re-run, or run `sudo tailscale serve` directly. This is a
+  permission error, not a tailnet setting. The script's "Serve/HTTPS is off"
+  line is a generic fallback and is misleading here.
+- `address already in use` on 443 means the JEF Caddy listener owns 443 on
+  `100.119.125.16`. Do not stop Caddy; use 8443.
+
+Recommended path (avoids the 443 conflict and the script's service step; the
+app was already built and started by the last `--with-app` run):
 
 ```bash
-sudo tailscale serve --bg --https=8443 http://127.0.0.1:8002
-TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"
-curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"
-```
-
-Accept 200 on the 8443 health check. The JEF dashboard on 443 is untouched.
-
-TLS acceptance (resolve the name; do not hardcode the suffix):
-
-```bash
+sudo tailscale set --operator=owner
+tailscale serve --bg --https=8443 http://127.0.0.1:8002
 TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"
 printf '%s\n' "$TSN"
 tailscale serve status
-curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"
+tailscale funnel status
+curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"
 ```
 
-Accept: `tailscale serve status` shows the 443 mapping and the health request
-returns 200. If Serve still says it is not enabled, the console tailnet is not
-the device's tailnet or `tailscaled` has not refreshed; fix that before retrying.
-Until then the tailnet-IP fallback is the verified path, and the Step 3 e2e can
-run against `http://100.119.125.16:4174/`.
+Accept: `tailscale serve status` shows the 8443 mapping, `tailscale funnel
+status` shows no public config, and the health request returns 200. The
+same-origin app is HTTP: open `http://100.119.125.16:4174/`. Opening `https` on
+4174 gives `ERR_SSL_PROTOCOL_ERROR` by design; TLS is on the API via the TSN.
 
 The `https://rolldown.rs/reference/InputOptions.checks#bundlertimings` URL in
 the build output is the bundler's chunk-size hint, not an action item.
@@ -404,12 +407,15 @@ bash "$HOME/.config/opencode/skills/agent-host-ops/push-all.sh"
 ## Step 5 — human-only residuals
 
 1. **Serve/TLS.** Identity and HTTPS Certificates are done (GitHub
-   `swipswaps`, tailnet `taile17668.ts.net`). Run `sudo tailscale up` and re-run
-   the secure script. If Serve still reports not enabled, restart `tailscaled`.
-   Accept: `tailscale serve status` shows the 443 mapping and the health request
-   over the resolved Tailscale DNS Name returns 200:
+   `swipswaps`, tailnet `taile17668.ts.net`). Run
+   `sudo tailscale set --operator=owner`, then
+   `tailscale serve --bg --https=8443 http://127.0.0.1:8002` (JEF Caddy owns
+   443). Accept: `tailscale serve status` shows the 8443 mapping and the health
+   request over the resolved Tailscale DNS Name returns 200:
    `TSN="$(tailscale status --json | python3 -c 'import sys,json; print((json.load(sys.stdin).get("Self") or {}).get("DNSName","").rstrip("."))')"`
-   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN/api/health"`
+   `curl -sS -o /dev/null -w 'http=%{http_code}\n' "https://$TSN:8443/api/health"`
+   The app is HTTP at `http://100.119.125.16:4174/`; https on 4174 is expected
+   to fail.
 2. **ACL narrowing.** In the Tailscale admin console, replace the allow-all
    `grants` entry with tag and port scope for `ws24` and the client. This is
    admin-console work, not reachable from either repo. Do not lock yourself out:
