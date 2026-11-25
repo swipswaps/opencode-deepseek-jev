@@ -7,11 +7,12 @@
 #   python3 check-placeholders.py --db ...      no NEW assistant shell fence
 #                                                carries <token>/YOUR_TOKEN
 #
-# The DB scan is cursor-based (logs/placeholder-cursor). The first run
-# baselines at the newest part so history is not retroactively red; every run
-# after that fails on a new violation, and only a clean run advances the
-# cursor. This makes the rule enforced for future turns without rewriting the
-# past (RULES #99).
+# The DB scan is cursor-based (logs/placeholder-cursor). Accepted historical
+# findings are listed explicitly in scripts/placeholder-baseline.json; the
+# cursor is NOT advanced by this wrapper, so new messages keep being scanned
+# and only unlisted violations fail. Advancing the cursor is a separate,
+# human-reviewed action (PLACEHOLDER_ADVANCE=1) after reviewing the findings.
+# This enforces rule #99 for future turns without rewriting the past.
 #
 # Constraints: no sed, no 2>/dev/null, no set -e, no top-level exit,
 #   no rm -rf, no subprocess.run, no bare kill, printf only, main() wrapper.
@@ -30,7 +31,7 @@ resolve_repo() {
 }
 
 main() {
-    local repo tool rc cursor
+    local repo tool rc cursor baseline
     repo=$(resolve_repo "$(pwd)")
     [ -n "$repo" ] || repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
     tool="$repo/scripts/check-placeholders.py"
@@ -53,7 +54,12 @@ main() {
     fi
 
     mkdir -p "$repo/logs"
-    python3 "$tool" --db --cursor "$cursor" --advance
+    baseline="$repo/scripts/placeholder-baseline.json"
+    if [ "${PLACEHOLDER_ADVANCE:-0}" = "1" ]; then
+        python3 "$tool" --db --cursor "$cursor" --baseline "$baseline" --advance
+    else
+        python3 "$tool" --db --cursor "$cursor" --baseline "$baseline"
+    fi
     rc=$?
     if [ "$rc" -ne 0 ]; then
         printf 'fix: replace the token with a resolved value, or print the lookup command first\n'

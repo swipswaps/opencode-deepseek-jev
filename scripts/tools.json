@@ -1905,7 +1905,7 @@
     "id": "check-placeholders",
     "title": "Reject placeholders in copy-paste commands (RULES #99)",
     "where": "container",
-    "purpose": "Scans shell fences in assistant chat parts after a cursor and fails on <run-id>, YOUR_TOKEN, or similar unresolved values. Self-test proves discrimination; --text/--file/--since-hours support manual audits.",
+    "purpose": "Scans shell fences in assistant chat parts after a cursor and fails on <run-id>, YOUR_TOKEN, or similar unresolved values. Accepted historical parts are listed explicitly in scripts/placeholder-baseline.json and the cursor is not advanced. Self-test proves discrimination; --text/--file/--since-hours support manual audits.",
     "commands": [
       "./scripts/check-placeholders.sh",
       "python3 scripts/check-placeholders.py --text 'gh run watch <run-id>'",

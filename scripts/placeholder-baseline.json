@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "reviewed": "2026-11-24",
+  "reason": "Historical assistant messages from sessions before the URL/angle-token detector was hardened. Each accepted part id is listed explicitly; anything not listed still fails the gate. The placeholder cursor is intentionally NOT advanced, so new messages keep being scanned.",
+  "parts": [
+    {
+      "id": "prt_2085ca86a001iOqJQT2e2vVHo3",
+      "tokens": ["<tsn>", "<ws24>", "<tailnet>"],
+      "note": "secure-tailnet-backend runbook prose; host tokens were resolved in the later typed-and-scripted version"
+    },
+    {
+      "id": "prt_20865a152001xu3oUYcfK8TSQ6",
+      "tokens": ["<host>", "<run-id>", "<tailnet>", "<ws24>"],
+      "note": "guard-hardening discussion quoting the failure that motivated RULES #96/#99"
+    },
+    {
+      "id": "prt_208666fc0001DkjF7C5aAS4u3D",
+      "tokens": ["<tailnet>", "<ws24>"],
+      "note": "detector-upgrade note explaining why bare URLs slipped past the shell-fence scan"
+    },
+    {
+      "id": "prt_20869dc190016H2WhINahSpJG5",
+      "tokens": ["<tailnet>", "<tsn>", "<ws24>"],
+      "note": "status echo of the placeholder scan itself, repeating the flagged tokens"
+    }
+  ]
+}

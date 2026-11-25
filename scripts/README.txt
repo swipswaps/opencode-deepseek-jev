@@ -870,10 +870,11 @@ redact.mjs
 check-placeholders.sh
     Gate for RULES #99: no unresolved placeholders in copy-paste commands.
     Runs the detector self-test, then scans assistant shell fences in the
-    chat DB after a cursor (logs/placeholder-cursor). First run baselines;
-    later runs fail on a new `<run-id>`/`YOUR_TOKEN`, and only a clean run
-    advances the cursor. The helper (check-placeholders.py) also supports
-    --text, --file and --since-hours for ad-hoc audits.
+    chat DB after a cursor (logs/placeholder-cursor). Accepted historical
+    parts are listed explicitly in scripts/placeholder-baseline.json; the
+    cursor is not advanced, so a new `<run-id>`/`YOUR_TOKEN` still fails. The
+    helper (check-placeholders.py) also supports --text, --file and
+    --since-hours for ad-hoc audits.
 
 test-patterns.sh
     Read-only proof of the tool-sequence substrate behind the "patterns view

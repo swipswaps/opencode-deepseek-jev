@@ -20,6 +20,7 @@ Modes
     --file PATH [--file PATH ...]     scan markdown shell fences (or whole file)
     --db [--since-hours N]            scan assistant messages in the opencode DB
          [--cursor PATH] [--advance]   cursor = last time_created scanned
+         [--baseline PATH]             accepted historical part ids (no advance)
     --json                            machine-readable findings
 
 Exit codes: 0 no findings (or clean self-test), 1 findings/failed self-test,
@@ -156,7 +157,32 @@ def write_cursor(path: Path, value: int) -> None:
     path.write_text(f"{value}\n", encoding="utf-8")
 
 
-def scan_db(cursor_path: Path, since_hours: int, advance: bool) -> tuple[int, list[dict], dict]:
+def load_baseline(path: Path) -> set[str]:
+    """Accepted historical part ids. Missing/invalid file means no baseline."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    ids: set[str] = set()
+    for item in data.get("parts", []):
+        if isinstance(item, str):
+            ids.add(item)
+        elif isinstance(item, dict) and item.get("id"):
+            ids.add(str(item["id"]))
+    return ids
+
+
+def filter_baselined(findings: list[dict], accepted: set[str]) -> tuple[list[dict], int]:
+    """Drop findings from explicitly accepted parts; count what was dropped."""
+    if not accepted:
+        return findings, 0
+    kept = [f for f in findings if f.get("part") not in accepted]
+    return kept, len(findings) - len(kept)
+
+
+def scan_db(
+    cursor_path: Path, since_hours: int, advance: bool, baseline_ids: set[str] | None = None
+) -> tuple[int, list[dict], dict]:
     db = resolve_db()
     if db is None:
         print("status=FAIL error=no opencode.db found (set OPENCODE_DB)", file=sys.stderr)
@@ -215,13 +241,29 @@ def scan_db(cursor_path: Path, since_hours: int, advance: bool) -> tuple[int, li
             item.update(part=row["id"], session=row["session_id"], ts=row["ts"])
             findings.append(item)
 
+    if baseline_ids:
+        findings, baselined = filter_baselined(findings, baseline_ids)
+    else:
+        baselined = 0
+
     if findings:
-        return 1, findings, {"scanned": len(rows), "baseline": baseline, "cursor": cursor}
+        return 1, findings, {
+            "scanned": len(rows),
+            "baseline": baseline,
+            "cursor": cursor,
+            "baselined": baselined,
+        }
 
     if advance and latest > cursor:
         write_cursor(cursor_path, latest)
 
-    return 0, [], {"scanned": len(rows), "baseline": baseline, "cursor": latest, "db": str(db)}
+    return 0, [], {
+        "scanned": len(rows),
+        "baseline": baseline,
+        "cursor": latest,
+        "baselined": baselined,
+        "db": str(db),
+    }
 
 
 def self_test() -> int:
@@ -250,6 +292,15 @@ def self_test() -> int:
             print(f"status=FAIL case={name} expected_finding={should_find} got={got}")
         else:
             print(f"status=PASS case={name} findings={len(found)}")
+
+    sample = [{"part": "p1"}, {"part": "p2"}, {"part": "p3"}]
+    kept, dropped = filter_baselined(sample, {"p1", "p3"})
+    if [f["part"] for f in kept] == ["p2"] and dropped == 2:
+        print("status=PASS case=baseline-filter findings=1 dropped=2")
+    else:
+        failures += 1
+        print(f"status=FAIL case=baseline-filter kept={kept} dropped={dropped}")
+
     return 1 if failures else 0
 
 
@@ -261,6 +312,7 @@ def main() -> int:
     parser.add_argument("--db", action="store_true")
     parser.add_argument("--since-hours", type=int, default=0)
     parser.add_argument("--cursor", default=str(REPO / "logs/placeholder-cursor"))
+    parser.add_argument("--baseline", default=str(REPO / "scripts/placeholder-baseline.json"))
     parser.add_argument("--advance", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -284,7 +336,10 @@ def main() -> int:
         meta.setdefault("mode", "file")
 
     if args.db:
-        rc, db_findings, db_meta = scan_db(Path(args.cursor), args.since_hours, args.advance)
+        baseline_ids = load_baseline(Path(args.baseline)) if args.baseline else set()
+        rc, db_findings, db_meta = scan_db(
+            Path(args.cursor), args.since_hours, args.advance, baseline_ids
+        )
         if rc == 2:
             return 2
         findings += db_findings
